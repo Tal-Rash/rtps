@@ -31,6 +31,7 @@ FIXED_HOLIDAYS = {
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 DB_FILE = DATA_DIR / "grafik_ppr_web.db"
+AUTH_FILE = DATA_DIR / "web_auth.json"
 SOURCE_DB = ROOT.parent / "base" / "common_database.db"
 SOURCE_DIR = ROOT.parent / "src" / "График ППР"
 
@@ -38,13 +39,58 @@ DB_LOCK = Lock()
 SERVER_STARTED_AT = None
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-WEB_USER = os.environ.get("WEB_USER", "admin")
-WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "")
 WEB_SECRET = os.environ.get("WEB_SECRET", "")
-AUTH_ENABLED = bool(WEB_PASSWORD)
 if not WEB_SECRET:
     WEB_SECRET = secrets.token_urlsafe(32)
-SESSIONS: dict[str, float] = {}
+SESSIONS: dict[str, tuple[str, str, float]] = {}
+
+
+def load_auth_config() -> tuple[str, str, str]:
+    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
+    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
+    edit_password = os.environ.get("WEB_EDIT_PASSWORD", "").strip() or os.environ.get("WEB_PASSWORD", "").strip()
+    if view_password and edit_password:
+        return user, view_password, edit_password
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if AUTH_FILE.exists():
+        try:
+            payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+            file_user = str(payload.get("user", user)).strip() or user
+            file_view_password = str(payload.get("view_password", "")).strip()
+            file_edit_password = str(payload.get("edit_password", "")).strip()
+            old_password = str(payload.get("password", "")).strip()
+            if file_view_password and file_edit_password:
+                return file_user, file_view_password, file_edit_password
+            if old_password:
+                file_view_password = file_view_password or secrets.token_urlsafe(8)
+                file_edit_password = file_edit_password or old_password
+                AUTH_FILE.write_text(
+                    json.dumps(
+                        {"user": file_user, "view_password": file_view_password, "edit_password": file_edit_password},
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                return file_user, file_view_password, file_edit_password
+        except Exception:
+            pass
+    view_password = secrets.token_urlsafe(8)
+    edit_password = secrets.token_urlsafe(8)
+    AUTH_FILE.write_text(
+        json.dumps(
+            {"user": user, "view_password": view_password, "edit_password": edit_password},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print(f"Web auth created: user={user} view_password={view_password} edit_password={edit_password}")
+    return user, view_password, edit_password
+
+
+WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
+AUTH_ENABLED = True
 
 
 def ensure_database() -> None:
@@ -259,22 +305,24 @@ def json_response(handler: BaseHTTPRequestHandler, payload: dict, status: int = 
     handler.wfile.write(body)
 
 
-def _cookie_value(username: str) -> str:
-    payload = f"{username}:{int(dt.datetime.now().timestamp())}"
+def _cookie_value(username: str, role: str) -> str:
+    payload = f"{username}:{role}:{int(dt.datetime.now().timestamp())}"
     signature = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{payload}:{signature}"
 
 
-def _verify_cookie(value: str) -> str | None:
+def _verify_cookie(value: str) -> tuple[str, str] | None:
     try:
-        username, ts, signature = value.rsplit(":", 2)
-        payload = f"{username}:{ts}"
+        username, role, ts, signature = value.rsplit(":", 3)
+        payload = f"{username}:{role}:{ts}"
         expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
             return None
         if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
             return None
-        return username
+        if role not in {"view", "edit"}:
+            return None
+        return username, role
     except Exception:
         return None
 
@@ -290,23 +338,25 @@ def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return cookies
 
 
-def current_user(handler: BaseHTTPRequestHandler) -> str | None:
+def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
     if not AUTH_ENABLED:
-        return WEB_USER
+        return WEB_USER, "edit"
     cookies = _parse_cookies(handler)
     token = cookies.get(SESSION_COOKIE)
     if not token:
         return None
-    username = _verify_cookie(token)
-    if username:
-        SESSIONS[token] = dt.datetime.now().timestamp()
-    return username
+    session = _verify_cookie(token)
+    if session:
+        username, role = session
+        SESSIONS[token] = (username, role, dt.datetime.now().timestamp())
+    return session
 
 
-def require_auth(handler: BaseHTTPRequestHandler) -> bool:
+def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
     if not AUTH_ENABLED:
         return True
-    if current_user(handler):
+    session = current_session(handler)
+    if session and (not need_edit or session[1] == "edit"):
         return True
     handler.send_response(HTTPStatus.UNAUTHORIZED)
     handler.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -320,7 +370,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
-    auth_badge = "Редактирование: открыто" if not AUTH_ENABLED else (f"Редактор: {username}" if username else "Режим: просмотр")
+    auth_badge = "Редактирование: открыто" if not AUTH_ENABLED else (f"Редактор: {username}" if can_edit else f"Просмотр: {username}") if username else "Режим: вход"
     return (
         HTML_TEMPLATE.replace("{{STATE_JSON}}", state_json)
         .replace("{{STARTED_AT}}", started_at)
@@ -368,7 +418,7 @@ LOGIN_TEMPLATE = """<!doctype html>
 <body>
   <form class="card" method="post" action="/login">
     <h1 style="margin-top:0;">Вход</h1>
-    <p class="muted">Нужен только для редактирования.</p>
+    <p class="muted">Введите пароль просмотра или редактирования.</p>
     <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
     <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
     <button type="submit">Войти</button>
@@ -399,9 +449,9 @@ def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None
     handler.end_headers()
 
 
-def _login_cookie(username: str) -> str:
-    token = _cookie_value(username)
-    SESSIONS[token] = dt.datetime.now().timestamp()
+def _login_cookie(username: str, role: str) -> str:
+    token = _cookie_value(username, role)
+    SESSIONS[token] = (username, role, dt.datetime.now().timestamp())
     return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax"
 
 HTML_TEMPLATE = """<!doctype html>
@@ -411,7 +461,7 @@ HTML_TEMPLATE = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>График ППР web {{APP_VERSION}}</title>
   <style>
-    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; }
+    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:80px; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
@@ -425,7 +475,7 @@ HTML_TEMPLATE = """<!doctype html>
     .nav { display:flex; gap:8px; flex-wrap:wrap; padding:0; margin:0; }
     .nav button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:10px 14px; font-weight:700; cursor:pointer; }
     .nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
-    .controls { display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
@@ -436,10 +486,18 @@ HTML_TEMPLATE = """<!doctype html>
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:900px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
     th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:10px 6px; text-align:center; white-space:nowrap; }
-    .cell { display:block; width:100%; min-width:0; border:0; margin:0; padding:3px 6px; height:26px; line-height:1; font:inherit; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 6px; height:26px; line-height:1; font:inherit; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cell.center { text-align:center; }
+    .cell.cat-toggle {
+      display:block;
+      box-sizing:border-box;
+      align-items:center;
+      width:100%;
+      text-align:center;
+    }
     .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:24px; }
     .rowbtn { width:22px; height:22px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; }
+    .rowbtn.cat-toggle { width:100%; height:26px; border-radius:0; border:0; background:transparent; }
     .badge { padding:5px 10px; border-radius:999px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { background:#fff3f3; }
@@ -449,10 +507,17 @@ HTML_TEMPLATE = """<!doctype html>
     .excluded-row input { background:#f3f5f8; color:#9aa5b1; }
     .weekend-col { background:#dcf8dc; }
     .weekend-col input { background:#dcf8dc; }
+    .col-idx { width:45px; }
+    .col-series { width:var(--meta-col-width); }
+    .col-number { width:var(--meta-col-width); }
+    .col-cat { width:var(--meta-col-width); }
+    .col-day { width:36px; }
+    .col-note { width:180px; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
     .compact th, .compact td { font-size:13px; }
+    .month-table { table-layout:fixed; width:max-content; }
     .month-table tbody tr { height:26px; }
-    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { align-items:stretch; } }
+    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } }
   </style>
 </head>
 <body>
@@ -564,15 +629,15 @@ function renderMonths(){
 function renderMonthTable(type, title, m, headers){
   const tableRows = m[type].map((row, rIdx) => {
     const rowHtml = [];
-    rowHtml.push(`<td><div class="rownum"><button class="rowbtn" onclick="toggleExcluded(${ui.monthIndex},'${type}',${rIdx})">${row.excluded ? '↺' : '–'}</button><span>${rIdx+1}</span></div></td>`);
-    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.1`, row.cells[1] || '', 'cell', ui.monthIndex, type, rIdx, 1) }</td>`);
-    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.2`, row.cells[2] || '', 'cell', ui.monthIndex, type, rIdx, 2) }</td>`);
-    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.3`, row.cells[3] || '', 'cell', ui.monthIndex, type, rIdx, 3) }</td>`);
+    rowHtml.push(`<td class="col-idx"><div class="rownum"><span>${rIdx+1}</span></div></td>`);
+    rowHtml.push(`<td class="col-series">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.1`, row.cells[1] || '', 'cell', ui.monthIndex, type, rIdx, 1) }</td>`);
+    rowHtml.push(`<td class="col-number">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.2`, row.cells[2] || '', 'cell', ui.monthIndex, type, rIdx, 2) }</td>`);
+    rowHtml.push(`<td class="col-cat">${catButton(ui.monthIndex, type, rIdx, row.excluded)}</td>`);
     for (let d=0; d<m.days; d++) {
       const weekendCls = isWeekend(appState.year, m.month, d + 1) ? 'weekend-col' : '';
-      rowHtml.push(`<td class="${weekendCls}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', 'cell small center', ui.monthIndex, type, rIdx, 4+d) }</td>`);
+      rowHtml.push(`<td class="col-day ${weekendCls}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', 'cell small center', ui.monthIndex, type, rIdx, 4+d) }</td>`);
     }
-    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
+    rowHtml.push(`<td class="col-note">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
     return `<tr class="${row.excluded ? 'excluded-row' : ''}">${rowHtml.join('')}</tr>`;
   }).join('');
   const headHtml = headers.map((h, idx) => {
@@ -580,6 +645,14 @@ function renderMonthTable(type, title, m, headers){
     const day = idx - 3;
     return `<th class="${isWeekend(appState.year, m.month, day) ? 'weekend-col' : ''}">${h}</th>`;
   }).join('');
+  const colHtml = [
+    '<col style="width:45px">',
+    '<col style="width:var(--meta-col-width)">',
+    '<col style="width:var(--meta-col-width)">',
+    '<col style="width:var(--meta-col-width)">',
+    ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${isWeekend(appState.year, m.month, d + 1) ? 'weekend-col' : ''}">`),
+    '<col style="width:180px">'
+  ].join('');
   return `
     <div class="section-head" style="margin-top:16px;">
       <div><div class="section-title">${title}</div></div>
@@ -590,11 +663,16 @@ function renderMonthTable(type, title, m, headers){
     </div>
     <div class="table-wrap">
       <table class="compact month-table" style="min-width:${(4+m.days+2)*34 + 300}px">
+        <colgroup>${colHtml}</colgroup>
         <thead><tr>${headHtml}</tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
     </div>
   `;
+}
+function catButton(monthIndex, type, rowIndex, excluded){
+  const label = excluded ? '↺' : '–';
+  return `<button class="rowbtn cat-toggle" onclick="toggleExcluded(${monthIndex},'${type}',${rowIndex})">${label}</button>`;
 }
 function renderNorms(){
   const headers = ['Категория','Код','Значение'];
@@ -719,8 +797,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        user = current_user(self)
+        session = current_session(self)
+        user = session[0] if session else None
+        role = session[1] if session else None
         if parsed.path == "/":
+            if not user:
+                _redirect(self, "/login")
+                return
             year = dt.date.today().year
             qs = parse_qs(parsed.query)
             if "year" in qs:
@@ -728,7 +811,7 @@ class Handler(BaseHTTPRequestHandler):
                     year = int(qs["year"][0])
                 except ValueError:
                     year = dt.date.today().year
-            _send_html(self, render_page(load_state(year), bool(user), user))
+            _send_html(self, render_page(load_state(year), role == "edit", user))
             return
         if parsed.path == "/login":
             if not AUTH_ENABLED:
@@ -740,9 +823,17 @@ class Handler(BaseHTTPRequestHandler):
             _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER))
             return
         if parsed.path == "/logout":
-            _redirect(self, "/", f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax")
+            handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Set-Cookie", handler_cookie)
+            self.end_headers()
+            self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/">')
             return
         if parsed.path == "/api/state":
+            if not require_auth(self):
+                return
             qs = parse_qs(parsed.query)
             year = dt.date.today().year
             if "year" in qs:
@@ -753,6 +844,8 @@ class Handler(BaseHTTPRequestHandler):
             json_response(self, load_state(year))
             return
         if parsed.path == "/api/export":
+            if not require_auth(self):
+                return
             qs = parse_qs(parsed.query)
             year = dt.date.today().year
             if "year" in qs:
@@ -781,8 +874,11 @@ class Handler(BaseHTTPRequestHandler):
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             username = form.get("user", [""])[0].strip()
             password = form.get("password", [""])[0]
-            if username == WEB_USER and password == WEB_PASSWORD:
-                _redirect(self, "/", _login_cookie(username))
+            if username == WEB_USER and password == WEB_VIEW_PASSWORD:
+                _redirect(self, "/", _login_cookie(username, "view"))
+                return
+            if username == WEB_USER and password == WEB_EDIT_PASSWORD:
+                _redirect(self, "/", _login_cookie(username, "edit"))
                 return
             _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER) + "<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>", status=HTTPStatus.UNAUTHORIZED)
             return
@@ -791,7 +887,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
         if parsed.path in {"/api/state", "/api/import"}:
-            if not require_auth(self):
+            if not require_auth(self, need_edit=True):
                 return
             try:
                 saved = save_state(payload)
