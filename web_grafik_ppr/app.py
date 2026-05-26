@@ -1,0 +1,822 @@
+from __future__ import annotations
+
+import calendar
+import datetime as dt
+import hashlib
+import json
+import os
+import shutil
+import hmac
+import secrets
+import sqlite3
+import threading
+import webbrowser
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from threading import Lock
+from urllib.parse import parse_qs, urlparse
+
+
+APP_VERSION = "web-gpp-0.1"
+MONTHS_RU = [
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+]
+FIXED_HOLIDAYS = {
+    (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
+    (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
+}
+
+ROOT = Path(__file__).resolve().parent
+DATA_DIR = ROOT / "data"
+DB_FILE = DATA_DIR / "grafik_ppr_web.db"
+SOURCE_DB = ROOT.parent / "base" / "common_database.db"
+SOURCE_DIR = ROOT.parent / "src" / "График ППР"
+
+DB_LOCK = Lock()
+SERVER_STARTED_AT = None
+SESSION_COOKIE = "grafik_ppr_session"
+SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+WEB_USER = os.environ.get("WEB_USER", "admin")
+WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "")
+WEB_SECRET = os.environ.get("WEB_SECRET", "")
+AUTH_ENABLED = bool(WEB_PASSWORD)
+if not WEB_SECRET:
+    WEB_SECRET = secrets.token_urlsafe(32)
+SESSIONS: dict[str, float] = {}
+
+
+def ensure_database() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if DB_FILE.exists():
+        return
+    if SOURCE_DB.exists():
+        shutil.copy2(SOURCE_DB, DB_FILE)
+        return
+    with sqlite3.connect(DB_FILE) as conn:
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS repairs (y INT, m TEXT, t TEXT, r INT, c INT, v TEXT, PRIMARY KEY(y,m,t,r,c))")
+        cur.execute("CREATE TABLE IF NOT EXISTS norms (y INT, cat TEXT, k TEXT, v TEXT, PRIMARY KEY(y,cat,k))")
+        cur.execute("CREATE TABLE IF NOT EXISTS inventory (y INT, ser TEXT, num TEXT, inv TEXT, PRIMARY KEY(y,ser,num))")
+        cur.execute("CREATE TABLE IF NOT EXISTS repair_settings (k TEXT PRIMARY KEY, v TEXT)")
+        cur.execute("CREATE TABLE IF NOT EXISTS acts_state (y INT, m TEXT, act_num TEXT, is_done INT, sap_order_done INT DEFAULT 0, PRIMARY KEY(y, m, act_num))")
+        cur.execute("CREATE TABLE IF NOT EXISTS report_notes (y INT, m TEXT, k TEXT, v TEXT, PRIMARY KEY(y,m,k))")
+        conn.commit()
+
+
+def conn() -> sqlite3.Connection:
+    c = sqlite3.connect(DB_FILE)
+    c.row_factory = sqlite3.Row
+    return c
+
+
+def s(value) -> str:
+    return "" if value is None else str(value)
+
+
+def normalize_repair_code(value: str) -> str:
+    text = s(value).strip().upper().replace(" ", "").replace("-", "")
+    if any("А" <= c <= "Я" for c in text):
+        return text
+    if any(c.isdigit() for c in text):
+        return "".join(filter(str.isdigit, text))
+    return text
+
+
+def month_index(month_name: str) -> int:
+    return MONTHS_RU.index(month_name) + 1
+
+
+def default_state(year: int) -> dict:
+    months = []
+    for month_num, month_name in enumerate(MONTHS_RU, 1):
+        days = calendar.monthrange(year, month_num)[1]
+        months.append(
+            {
+                "name": month_name,
+                "month": month_num,
+                "days": days,
+                "plan": _default_table_rows(year, month_num, "plan"),
+                "fact": _default_table_rows(year, month_num, "fact"),
+            }
+        )
+
+    norms = {
+        "h_tep": [],
+        "h_agr": [],
+        "p_tep": [],
+        "p_agr": [],
+    }
+    inventory = []
+    acts = {}
+    notes = {}
+    return {
+        "year": year,
+        "months": months,
+        "norms": norms,
+        "inventory": inventory,
+        "acts": acts,
+        "notes": notes,
+    }
+
+
+def _default_table_rows(year: int, month: int, table_type: str, rows: int = 14) -> list[dict]:
+    days = calendar.monthrange(year, month)[1]
+    result = []
+    for idx in range(rows):
+        result.append(
+            {
+                "excluded": False,
+                "cells": [str(idx + 1), "", "", ""]
+                + ["" for _ in range(days)]
+                + [""],
+            }
+        )
+    return result
+
+
+def load_state(year: int) -> dict:
+    state = default_state(year)
+    with DB_LOCK, conn() as db:
+        cur = db.cursor()
+
+        repairs = cur.execute(
+            "SELECT m, t, r, c, v FROM repairs WHERE y=? ORDER BY m, t, r, c",
+            (year,),
+        ).fetchall()
+        month_map = {m["name"]: m for m in state["months"]}
+        for row in repairs:
+            month_name = s(row["m"])
+            table_type = s(row["t"])
+            if month_name not in month_map or table_type not in {"plan", "fact"}:
+                continue
+            table = month_map[month_name][table_type]
+            r = int(row["r"])
+            c = int(row["c"])
+            value = s(row["v"])
+            while r >= len(table):
+                table.append(_default_table_rows(year, month_index(month_name), table_type, 1)[0])
+            if c == -1:
+                table[r]["excluded"] = True
+                continue
+            if c == 999:
+                table[r]["cells"][-1] = value
+            elif 0 <= c < len(table[r]["cells"]):
+                table[r]["cells"][c] = value
+
+        norms = cur.execute("SELECT cat, k, v FROM norms WHERE y=? ORDER BY cat, k", (year,)).fetchall()
+        for row in norms:
+            cat = s(row["cat"])
+            if cat not in state["norms"]:
+                continue
+            state["norms"][cat].append({"k": s(row["k"]), "v": s(row["v"])})
+
+        inventory = cur.execute("SELECT ser, num, inv FROM inventory WHERE y=? ORDER BY ser, num", (year,)).fetchall()
+        state["inventory"] = [{"ser": s(r["ser"]), "num": s(r["num"]), "inv": s(r["inv"])} for r in inventory]
+
+        acts = cur.execute("SELECT m, act_num, is_done, sap_order_done FROM acts_state WHERE y=? ORDER BY m, act_num", (year,)).fetchall()
+        for row in acts:
+            state["acts"].setdefault(s(row["m"]), {})[s(row["act_num"])] = {
+                "is_done": bool(row["is_done"]),
+                "sap_order_done": bool(row["sap_order_done"]),
+            }
+
+        notes = cur.execute("SELECT m, k, v FROM report_notes WHERE y=? ORDER BY m, k", (year,)).fetchall()
+        for row in notes:
+            state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
+
+        last_year = cur.execute("SELECT v FROM repair_settings WHERE k='last_year'").fetchone()
+        if last_year and last_year["v"]:
+            state["year"] = int(last_year["v"])
+
+    return state
+
+
+def save_state(state: dict) -> dict:
+    year = int(state.get("year") or dt.date.today().year)
+    with DB_LOCK, conn() as db:
+        cur = db.cursor()
+        with db:
+            cur.execute("DELETE FROM repairs WHERE y=?", (year,))
+            cur.execute("DELETE FROM norms WHERE y=?", (year,))
+            cur.execute("DELETE FROM inventory WHERE y=?", (year,))
+            cur.execute("DELETE FROM acts_state WHERE y=?", (year,))
+            cur.execute("DELETE FROM report_notes WHERE y=?", (year,))
+            cur.execute("INSERT OR REPLACE INTO repair_settings VALUES ('last_year', ?)", (str(year),))
+
+            for month in state.get("months", []):
+                month_name = s(month.get("name"))
+                for table_type in ["plan", "fact"]:
+                    for r, row in enumerate(month.get(table_type, [])):
+                        if row.get("excluded"):
+                            cur.execute("INSERT INTO repairs VALUES (?,?,?,?,?,?)", (year, month_name, table_type, r, -1, "EXC"))
+                        cells = row.get("cells", [])
+                        for c, value in enumerate(cells):
+                            value = s(value).strip()
+                            if value:
+                                db_c = 999 if c == len(cells) - 1 else c
+                                cur.execute("INSERT INTO repairs VALUES (?,?,?,?,?,?)", (year, month_name, table_type, r, db_c, value))
+
+            for cat, rows in state.get("norms", {}).items():
+                for row in rows:
+                    k = s(row.get("k")).strip()
+                    v = s(row.get("v")).strip()
+                    if k or v:
+                        cur.execute("INSERT INTO norms VALUES (?,?,?,?)", (year, cat, k, v))
+
+            for row in state.get("inventory", []):
+                ser = s(row.get("ser")).strip()
+                num = s(row.get("num")).strip()
+                inv = s(row.get("inv")).strip()
+                if ser or num or inv:
+                    cur.execute("INSERT INTO inventory VALUES (?,?,?,?)", (year, ser, num, inv))
+
+            for m_name, acts in state.get("acts", {}).items():
+                for act_num, flags in acts.items():
+                    cur.execute(
+                        "INSERT INTO acts_state VALUES (?,?,?,?,?)",
+                        (year, m_name, act_num, 1 if flags.get("is_done") else 0, 1 if flags.get("sap_order_done") else 0),
+                    )
+
+            for m_name, keys in state.get("notes", {}).items():
+                for key, value in keys.items():
+                    value = s(value)
+                    if value:
+                        cur.execute("INSERT INTO report_notes VALUES (?,?,?,?)", (year, m_name, key, value))
+
+    return load_state(year)
+
+
+def json_response(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+    handler.send_header("Pragma", "no-cache")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _cookie_value(username: str) -> str:
+    payload = f"{username}:{int(dt.datetime.now().timestamp())}"
+    signature = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}:{signature}"
+
+
+def _verify_cookie(value: str) -> str | None:
+    try:
+        username, ts, signature = value.rsplit(":", 2)
+        payload = f"{username}:{ts}"
+        expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
+            return None
+        return username
+    except Exception:
+        return None
+
+
+def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
+    raw = handler.headers.get("Cookie", "")
+    cookies: dict[str, str] = {}
+    for part in raw.split(";"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        cookies[key.strip()] = value.strip()
+    return cookies
+
+
+def current_user(handler: BaseHTTPRequestHandler) -> str | None:
+    if not AUTH_ENABLED:
+        return WEB_USER
+    cookies = _parse_cookies(handler)
+    token = cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    username = _verify_cookie(token)
+    if username:
+        SESSIONS[token] = dt.datetime.now().timestamp()
+    return username
+
+
+def require_auth(handler: BaseHTTPRequestHandler) -> bool:
+    if not AUTH_ENABLED:
+        return True
+    if current_user(handler):
+        return True
+    handler.send_response(HTTPStatus.UNAUTHORIZED)
+    handler.send_header("Content-Type", "text/plain; charset=utf-8")
+    handler.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
+    handler.end_headers()
+    handler.wfile.write("Требуется вход".encode("utf-8"))
+    return False
+
+
+def render_page(state: dict, can_edit: bool, username: str | None) -> str:
+    state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
+    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
+    toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
+    auth_badge = "Редактирование: открыто" if not AUTH_ENABLED else (f"Редактор: {username}" if username else "Режим: просмотр")
+    return (
+        HTML_TEMPLATE.replace("{{STATE_JSON}}", state_json)
+        .replace("{{STARTED_AT}}", started_at)
+        .replace("{{APP_VERSION}}", APP_VERSION)
+        .replace("{{TOOLBAR}}", toolbar)
+        .replace("{{AUTH_BADGE}}", auth_badge)
+        .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
+    )
+
+
+EDIT_TOOLBAR = """
+      <div class="toolbar">
+        <label>Год <input id="yearInput" type="number" min="2020" max="2100"></label>
+        <button onclick="loadYearFromInput()">Открыть</button>
+        <button onclick="saveState()">Сохранить</button>
+        <button onclick="downloadJson()">Экспорт JSON</button>
+        <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
+        <a class="badge" href="/logout" style="text-decoration:none;">Выйти</a>
+        <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
+      </div>
+"""
+
+READONLY_TOOLBAR = """
+      <div class="toolbar">
+        <label>Год <input id="yearInput" type="number" min="2020" max="2100"></label>
+        <button onclick="loadYearFromInput()">Открыть</button>
+        <a class="badge" href="/login" style="text-decoration:none;">Войти</a>
+      </div>
+"""
+
+LOGIN_TEMPLATE = """<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход - График ППР</title>
+  <style>
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; }
+    .card { max-width:420px; margin:10vh auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
+    input,button { width:100%; padding:12px; border-radius:12px; border:1px solid #d9e2ef; font:inherit; }
+    button { background:#276ef1; color:#fff; font-weight:700; cursor:pointer; border:0; }
+    .muted { color:#607086; font-size:13px; }
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <h1 style="margin-top:0;">Вход</h1>
+    <p class="muted">Нужен только для редактирования.</p>
+    <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
+    <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
+    <button type="submit">Войти</button>
+  </form>
+</body>
+</html>
+"""
+
+
+def _send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
+    data = body.encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+    handler.send_header("Pragma", "no-cache")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None = None) -> None:
+    handler.send_response(HTTPStatus.SEE_OTHER)
+    handler.send_header("Location", location)
+    handler.send_header("Cache-Control", "no-store")
+    if cookie is not None:
+        handler.send_header("Set-Cookie", cookie)
+    handler.end_headers()
+
+
+def _login_cookie(username: str) -> str:
+    token = _cookie_value(username)
+    SESSIONS[token] = dt.datetime.now().timestamp()
+    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax"
+
+HTML_TEMPLATE = """<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>График ППР web {{APP_VERSION}}</title>
+  <style>
+    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
+    .shell { max-width:1700px; margin:0 auto; padding:18px; }
+    .topbar,.nav,.panel { background:rgba(255,255,255,.88); border:1px solid rgba(217,226,239,.9); border-radius:var(--radius); box-shadow:var(--shadow); }
+    .topbar { display:flex; gap:14px; align-items:center; justify-content:space-between; padding:14px 16px; margin-bottom:14px; flex-wrap:wrap; }
+    .titlebox h1 { margin:0; font-size:22px; }
+    .titlebox .sub { color:var(--muted); font-size:13px; margin-top:2px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .toolbar input,.toolbar button,select,textarea { border:1px solid var(--line); border-radius:12px; background:#fff; padding:10px 12px; font:inherit; }
+    .toolbar button { font-weight:700; cursor:pointer; background:linear-gradient(180deg,#fff,#f3f7ff); }
+    .nav { display:flex; gap:8px; flex-wrap:wrap; padding:0; margin:0; }
+    .nav button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:10px 14px; font-weight:700; cursor:pointer; }
+    .nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .controls { display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+    .panel { padding:14px; }
+    .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .section-title { font-size:18px; font-weight:800; }
+    .month-strip { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 12px; }
+    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
+    table { border-collapse:separate; border-spacing:0; width:100%; min-width:900px; table-layout:fixed; }
+    th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
+    th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:10px 6px; text-align:center; white-space:nowrap; }
+    .cell { display:block; width:100%; min-width:0; border:0; margin:0; padding:3px 6px; height:26px; line-height:1; font:inherit; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cell.center { text-align:center; }
+    .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:24px; }
+    .rowbtn { width:22px; height:22px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; }
+    .badge { padding:5px 10px; border-radius:999px; background:var(--soft); color:#1d4aa6; font-weight:700; }
+    .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
+    .danger { background:#fff3f3; }
+    .small { width:100%; min-width:0; text-align:center; font-size:12px; }
+    .notes { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--line); border-radius:14px; }
+    .excluded-row { color:#9aa5b1; background:#f3f5f8; }
+    .excluded-row input { background:#f3f5f8; color:#9aa5b1; }
+    .weekend-col { background:#dcf8dc; }
+    .weekend-col input { background:#dcf8dc; }
+    .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
+    .compact th, .compact td { font-size:13px; }
+    .month-table tbody tr { height:26px; }
+    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { align-items:stretch; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="titlebox">
+        <h1>График ППР</h1>
+        <div class="sub">Web-копия {{APP_VERSION}}. Отдельная база, исходный PyQt-файл не тронут.</div>
+      </div>
+      <div class="controls">
+      <div class="badge">{{AUTH_BADGE}}</div>
+      <div class="nav" id="sectionNav"></div>
+      {{TOOLBAR}}
+      </div>
+    </div>
+    <div class="panel">
+      <div id="content"></div>
+      <div class="footerbar">
+        <div id="serverInfo" class="badge">Сервер: {{STARTED_AT}}</div>
+        <div id="status" class="badge">Готово</div>
+        <div id="dirtyHint">Изменений нет</div>
+      </div>
+    </div>
+  </div>
+<script>
+const BOOT_VERSION = "{{APP_VERSION}}";
+const BOOT_STARTED_AT = "{{STARTED_AT}}";
+let appState = {{STATE_JSON}};
+let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null, inventory: null } };
+let dirty = false;
+const CAN_EDIT = {{CAN_EDIT}};
+const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'inventory',label:'Инвентарь'},{id:'acts',label:'Акты / примечания'}];
+
+function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
+function setStatus(t){ document.getElementById('status').textContent = t; }
+function markDirty(v=true){ dirty=v; document.getElementById('dirtyHint').textContent = v ? 'Есть несохранённые изменения' : 'Изменений нет'; }
+function setPath(path, value){
+  if (!CAN_EDIT) return;
+  const p = path.split('.');
+  let o = appState;
+  for (let i=0; i<p.length-1; i++) o = o[p[i]];
+  const last = p[p.length-1];
+  o[last] = value;
+  markDirty(true);
+}
+function focusCell(el){ if (el) el.focus(); }
+function monthCells(type){
+  return Array.from(document.querySelectorAll(`input[data-month="${ui.monthIndex}"][data-table="${type}"]`));
+}
+function moveCell(current, dx, dy){
+  const table = current.dataset.table;
+  const row = parseInt(current.dataset.row, 10);
+  const col = parseInt(current.dataset.col, 10);
+  const targetRow = row + dy;
+  const targetCol = col + dx;
+  const next = document.querySelector(`input[data-month="${ui.monthIndex}"][data-table="${table}"][data-row="${targetRow}"][data-col="${targetCol}"]`);
+  if (next) next.focus();
+}
+function handleMonthKeydown(e){
+  const keys = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter','Delete','Backspace'];
+  if (!keys.includes(e.key)) return;
+  if (e.key === 'Delete' || e.key === 'Backspace'){
+    e.preventDefault();
+    e.target.value = '';
+    setPath(e.target.dataset.path, '');
+    return;
+  }
+  const step = e.key === 'ArrowLeft' ? [-1,0] : e.key === 'ArrowRight' ? [1,0] : e.key === 'ArrowUp' ? [0,-1] : e.key === 'ArrowDown' ? [0,1] : [0,1];
+  e.preventDefault();
+  moveCell(e.target, step[0], step[1]);
+}
+function bindNav(){
+  document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id?'active':''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
+}
+function setSection(section){ ui.section = section; render(); }
+function setMonth(index){ ui.monthIndex = index; render(); }
+function setMode(mode){ ui.mode = mode; render(); }
+function currentMonth(){ return appState.months[ui.monthIndex]; }
+function isWeekend(year, month, day){
+  const d = new Date(year, month - 1, day);
+  const wd = d.getDay();
+  return wd === 0 || wd === 6;
+}
+function render(){
+  document.getElementById('yearInput').value = appState.year;
+  document.getElementById('serverInfo').textContent = `Сервер: ${BOOT_STARTED_AT}`;
+  document.querySelector('.sub').textContent = `Web-копия ${BOOT_VERSION}. Отдельная база, исходный PyQt-файл не тронут.`;
+  document.title = `График ППР web ${BOOT_VERSION}`;
+  bindNav();
+  const content = document.getElementById('content');
+  if (ui.section === 'months') content.innerHTML = renderMonths();
+  if (ui.section === 'norms') content.innerHTML = renderNorms();
+  if (ui.section === 'inventory') content.innerHTML = renderInventory();
+  if (ui.section === 'acts') content.innerHTML = renderActs();
+}
+function renderMonths(){
+  const m = currentMonth();
+  const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
+  const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
+  return `
+    <div class="section-head">
+      <div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div>
+    </div>
+    <div class="month-strip">${monthButtons}</div>
+    ${renderMonthTable('plan', 'План', m, headers)}
+    ${renderMonthTable('fact', 'Факт', m, headers)}
+  `;
+}
+function renderMonthTable(type, title, m, headers){
+  const tableRows = m[type].map((row, rIdx) => {
+    const rowHtml = [];
+    rowHtml.push(`<td><div class="rownum"><button class="rowbtn" onclick="toggleExcluded(${ui.monthIndex},'${type}',${rIdx})">${row.excluded ? '↺' : '–'}</button><span>${rIdx+1}</span></div></td>`);
+    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.1`, row.cells[1] || '', 'cell', ui.monthIndex, type, rIdx, 1) }</td>`);
+    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.2`, row.cells[2] || '', 'cell', ui.monthIndex, type, rIdx, 2) }</td>`);
+    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.3`, row.cells[3] || '', 'cell', ui.monthIndex, type, rIdx, 3) }</td>`);
+    for (let d=0; d<m.days; d++) {
+      const weekendCls = isWeekend(appState.year, m.month, d + 1) ? 'weekend-col' : '';
+      rowHtml.push(`<td class="${weekendCls}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', 'cell small center', ui.monthIndex, type, rIdx, 4+d) }</td>`);
+    }
+    rowHtml.push(`<td>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
+    return `<tr class="${row.excluded ? 'excluded-row' : ''}">${rowHtml.join('')}</tr>`;
+  }).join('');
+  const headHtml = headers.map((h, idx) => {
+    if (idx < 4 || idx === headers.length - 1) return `<th>${h}</th>`;
+    const day = idx - 3;
+    return `<th class="${isWeekend(appState.year, m.month, day) ? 'weekend-col' : ''}">${h}</th>`;
+  }).join('');
+  return `
+    <div class="section-head" style="margin-top:16px;">
+      <div><div class="section-title">${title}</div></div>
+      <div class="toolbar">
+        <button onclick="addRow('${type}')">Добавить строку</button>
+        <button class="danger" onclick="deleteRow('${type}')">Удалить строку</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="compact month-table" style="min-width:${(4+m.days+2)*34 + 300}px">
+        <thead><tr>${headHtml}</tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+function renderNorms(){
+  const headers = ['Категория','Код','Значение'];
+  const rows = Object.entries(appState.norms).flatMap(([cat, items]) => items.map((row, idx) => ({cat, idx, row})));
+  const htmlRows = rows.map((x, i) => `<tr onclick="selectRow('norms', ${i})"><td>${cell(`norms.${x.cat}.${x.idx}.k`, x.row.k, 'cell')}</td><td>${cell(`norms.${x.cat}.${x.idx}.v`, x.row.v, 'cell center')}</td><td><button class="rowbtn" onclick="removeNorm('${x.cat}', ${x.idx}); event.stopPropagation()">–</button></td></tr>`).join('');
+  return `
+    <div class="section-head">
+      <div><div class="section-title">Нормы / парк</div><div class="sub">Нормативы часов и план парка.</div></div>
+      <div class="toolbar"><button onclick="addNorm()">Добавить строку</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="compact">
+        <thead><tr><th>${headers[0]}</th><th>${headers[1]}</th><th>${headers[2]}</th></tr></thead>
+        <tbody>${htmlRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+function renderInventory(){
+  const rows = appState.inventory.map((r, i) => `<tr onclick="selectRow('inventory', ${i})"><td>${cell(`inventory.${i}.ser`, r.ser, 'cell')}</td><td>${cell(`inventory.${i}.num`, r.num, 'cell')}</td><td>${cell(`inventory.${i}.inv`, r.inv, 'cell')}</td></tr>`).join('');
+  return `
+    <div class="section-head">
+      <div><div class="section-title">Инвентарь</div><div class="sub">Серия, номер, инвентарный номер.</div></div>
+      <div class="toolbar"><button onclick="addInventoryRow()">Добавить строку</button><button class="danger" onclick="removeInventoryRow()">Удалить строку</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="compact">
+        <thead><tr><th>Серия</th><th>Номер</th><th>Инв№</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+function renderActs(){
+  const month = currentMonth().name;
+  const acts = appState.acts[month] || {};
+  const notes = appState.notes[month] || {};
+  const rows = Object.keys(acts).sort().map(act => {
+    const x = acts[act];
+    return `<tr><td>${esc(act)}</td><td><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.is_done', this.checked)"></td><td><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.sap_order_done', this.checked)"></td></tr>`;
+  }).join('');
+  return `
+    <div class="section-head">
+      <div><div class="section-title">Акты / примечания</div><div class="sub">Месяц: ${esc(month)}</div></div>
+    </div>
+    <div class="grid2">
+      <div class="table-wrap">
+        <table class="compact">
+          <thead><tr><th>Акт</th><th>Выполнен</th><th>SAP</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="3">Нет данных</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div>
+        <div class="badge" style="margin-bottom:8px;">Примечания</div>
+        <textarea class="notes" ${CAN_EDIT ? '' : 'readonly'} onchange="setPath('notes.${month}.summary', this.value)">${esc((notes && notes.summary) || '')}</textarea>
+      </div>
+    </div>
+  `;
+}
+function cell(path, value, cls, month, table, row, col){
+  const ro = CAN_EDIT ? '' : 'readonly';
+  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)">`;
+}
+function addRow(type){
+  if (!CAN_EDIT) return;
+  const m = currentMonth();
+  m[type].push({ excluded:false, cells:[String(m[type].length+1),'','','',...Array.from({length:m.days},()=>''),''] });
+  markDirty(true); render();
+}
+function deleteRow(type){ if (!CAN_EDIT) return; const m = currentMonth(); if (m[type].length>0) { m[type].pop(); markDirty(true); render(); } }
+function toggleExcluded(mi, tt, r){ if (!CAN_EDIT) return; appState.months[mi][tt][r].excluded = !appState.months[mi][tt][r].excluded; markDirty(true); render(); }
+function addNorm(){ if (!CAN_EDIT) return; appState.norms.h_tep.push({k:'', v:''}); markDirty(true); render(); }
+function removeNorm(cat, idx){ if (!CAN_EDIT) return; appState.norms[cat].splice(idx,1); markDirty(true); render(); }
+function addInventoryRow(){ if (!CAN_EDIT) return; appState.inventory.push({ser:'',num:'',inv:''}); markDirty(true); render(); }
+function removeInventoryRow(){ if (!CAN_EDIT) return; appState.inventory.pop(); markDirty(true); render(); }
+function selectRow(section, idx){ ui.selected[section] = idx; }
+async function saveState(){
+  if (!CAN_EDIT) { alert('Нужен вход'); return; }
+  setStatus('Сохранение...');
+  const res = await fetch('/api/state', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
+  if (!res.ok) { setStatus('Ошибка'); return; }
+  appState = await res.json();
+  markDirty(false);
+  setStatus('Сохранено');
+  render();
+}
+function downloadJson(){
+  const b = new Blob([JSON.stringify(appState, null, 2)], {type:'application/json;charset=utf-8'});
+  const u = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href = u; a.download = `grafik_ppr_${appState.year}.json`; a.click(); URL.revokeObjectURL(u);
+}
+async function importJson(event){
+  if (!CAN_EDIT) { alert('Нужен вход'); return; }
+  const f = event.target.files[0]; event.target.value = ''; if (!f) return;
+  const payload = JSON.parse(await f.text());
+  const res = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(payload) });
+  if (!res.ok) { alert('Импорт не удался'); return; }
+  appState = await res.json(); markDirty(false); render();
+}
+async function loadYear(year){
+  const res = await fetch(`/api/state?year=${encodeURIComponent(year)}`);
+  if (!res.ok) { alert('Не удалось загрузить год'); return; }
+  appState = await res.json(); markDirty(false); render();
+}
+async function loadYearFromInput(){
+  const year = parseInt(document.getElementById('yearInput').value, 10);
+  if (!year) return;
+  if (dirty && !confirm('Есть несохранённые изменения. Открыть год без сохранения?')) { document.getElementById('yearInput').value = appState.year; return; }
+  await loadYear(year);
+}
+window.addEventListener('beforeunload', (e)=>{ if (dirty) { e.preventDefault(); e.returnValue=''; } });
+render(); setStatus(`Версия ${BOOT_VERSION}`);
+</script>
+</body>
+</html>
+"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):  # noqa: D401
+        return
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        user = current_user(self)
+        if parsed.path == "/":
+            year = dt.date.today().year
+            qs = parse_qs(parsed.query)
+            if "year" in qs:
+                try:
+                    year = int(qs["year"][0])
+                except ValueError:
+                    year = dt.date.today().year
+            _send_html(self, render_page(load_state(year), bool(user), user))
+            return
+        if parsed.path == "/login":
+            if not AUTH_ENABLED:
+                _redirect(self, "/")
+                return
+            if user:
+                _redirect(self, "/")
+                return
+            _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER))
+            return
+        if parsed.path == "/logout":
+            _redirect(self, "/", f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax")
+            return
+        if parsed.path == "/api/state":
+            qs = parse_qs(parsed.query)
+            year = dt.date.today().year
+            if "year" in qs:
+                try:
+                    year = int(qs["year"][0])
+                except ValueError:
+                    year = dt.date.today().year
+            json_response(self, load_state(year))
+            return
+        if parsed.path == "/api/export":
+            qs = parse_qs(parsed.query)
+            year = dt.date.today().year
+            if "year" in qs:
+                try:
+                    year = int(qs["year"][0])
+                except ValueError:
+                    year = dt.date.today().year
+            body = json.dumps(load_state(year), ensure_ascii=False, indent=2).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="grafik_ppr_{year}.json"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        if parsed.path == "/login":
+            if not AUTH_ENABLED:
+                _redirect(self, "/")
+                return
+            form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            username = form.get("user", [""])[0].strip()
+            password = form.get("password", [""])[0]
+            if username == WEB_USER and password == WEB_PASSWORD:
+                _redirect(self, "/", _login_cookie(username))
+                return
+            _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER) + "<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>", status=HTTPStatus.UNAUTHORIZED)
+            return
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except Exception:
+            payload = {}
+        if parsed.path in {"/api/state", "/api/import"}:
+            if not require_auth(self):
+                return
+            try:
+                saved = save_state(payload)
+            except Exception as exc:
+                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            json_response(self, saved)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+
+
+def main() -> None:
+    global SERVER_STARTED_AT
+    SERVER_STARTED_AT = dt.datetime.now()
+    ensure_database()
+    host = os.environ.get("WEB_HOST", "127.0.0.1")
+    port = int(os.environ.get("WEB_PORT", "8000"))
+    server = ThreadingHTTPServer((host, port), Handler)
+    server.daemon_threads = True
+    url = f"http://{host}:{port}"
+    print(f"График ППР web ready: {url} | started at {SERVER_STARTED_AT:%H:%M:%S %d.%m.%Y}")
+    if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
