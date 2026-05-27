@@ -917,7 +917,7 @@ class Handler(BaseHTTPRequestHandler):
             if not user:
                 _redirect(self, "/login")
                 return
-            _send_html(self, render_home(user, role == "edit"))
+            _redirect(self, "/grafik-ppr")
             return
         if parsed.path == "/grafik-ppr":
             if not user:
