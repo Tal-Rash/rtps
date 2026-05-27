@@ -428,6 +428,100 @@ LOGIN_TEMPLATE = """<!doctype html>
 """
 
 
+HOME_TEMPLATE = """<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>РТПС - Главная</title>
+  <style>
+    :root { --bg:#f4f7fb; --card:#ffffff; --line:#d9e2ef; --text:#102033; --muted:#66758a; --blue:#276ef1; --soft:#eef4ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:linear-gradient(180deg,#f8fbff 0%, #eef4fb 100%); color:var(--text); }
+    .wrap { max-width:1180px; margin:0 auto; padding:28px 20px 36px; }
+    .hero { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; background:rgba(255,255,255,.8); border:1px solid var(--line); border-radius:24px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.06); backdrop-filter:blur(8px); }
+    .title { font-size:34px; line-height:1.05; margin:0 0 10px; }
+    .sub { margin:0; color:var(--muted); font-size:14px; max-width:720px; }
+    .badge { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; background:var(--soft); color:#1d4ed8; font-weight:700; text-decoration:none; border:1px solid #cfe0ff; white-space:nowrap; }
+    .top-right { display:flex; flex-direction:column; gap:10px; align-items:flex-end; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; margin-top:18px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:18px; box-shadow:0 10px 28px rgba(16,32,51,.05); min-height:160px; display:flex; flex-direction:column; justify-content:space-between; }
+    .card h2 { margin:0 0 8px; font-size:18px; }
+    .card p { margin:0; color:var(--muted); font-size:13px; line-height:1.4; }
+    .card a { display:inline-flex; margin-top:14px; width:fit-content; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; background:var(--blue); color:#fff; text-decoration:none; font-weight:700; }
+    .card .disabled { opacity:.45; cursor:default; pointer-events:none; }
+    .status { font-size:12px; color:var(--muted); margin-top:12px; }
+    @media (max-width: 720px) {
+      .hero { flex-direction:column; }
+      .top-right { align-items:flex-start; }
+      .title { font-size:28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1 class="title">Участок РТПС</h1>
+        <p class="sub">Стартовая страница для запуска веб-приложений. Сейчас доступен веб-график ППР, остальные модули можно подключать сюда по мере готовности.</p>
+      </div>
+      <div class="top-right">
+        <a class="badge" href="/logout">Выйти</a>
+        <div class="badge">{{AUTH_BADGE}}</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div>
+          <h2>График ППР</h2>
+          <p>План, факт, нормы, инвентарь и акты. Основной рабочий модуль уже перенесён на сервер.</p>
+        </div>
+        <a href="/grafik-ppr">Открыть</a>
+      </div>
+      <div class="card">
+        <div>
+          <h2>Замер КП</h2>
+          <p>Локальный модуль из desktop-версии. Пока не подключён к вебу.</p>
+        </div>
+        <a class="disabled" href="#">Скоро</a>
+      </div>
+      <div class="card">
+        <div>
+          <h2>Табель учета</h2>
+          <p>Отдельное приложение для учёта времени. Подключим следующим шагом.</p>
+        </div>
+        <a class="disabled" href="#">Скоро</a>
+      </div>
+      <div class="card">
+        <div>
+          <h2>АЛСН</h2>
+          <p>Следующий модуль из набора РТПС. Сейчас заглушка.</p>
+        </div>
+        <a class="disabled" href="#">Скоро</a>
+      </div>
+      <div class="card">
+        <div>
+          <h2>Обучение</h2>
+          <p>Веб-доступ появится после переноса приложения на сервер.</p>
+        </div>
+        <a class="disabled" href="#">Скоро</a>
+      </div>
+      <div class="card">
+        <div>
+          <h2>Справочник</h2>
+          <p>Справочные данные и настройки. Будет доступен через этот же хаб.</p>
+        </div>
+        <a class="disabled" href="#">Скоро</a>
+      </div>
+    </div>
+    <div class="status">Сервер запущен: {{STARTED_AT}}</div>
+  </div>
+</body>
+</html>
+"""
+
+
 def _send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
     data = body.encode("utf-8")
     handler.send_response(status)
@@ -447,6 +541,15 @@ def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None
     if cookie is not None:
         handler.send_header("Set-Cookie", cookie)
     handler.end_headers()
+
+
+def render_home(username: str | None, can_edit: bool) -> str:
+    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
+    auth_badge = "Редактирование: открыто" if not AUTH_ENABLED else (f"Редактор: {username}" if can_edit else f"Просмотр: {username}") if username else "Режим: вход"
+    return (
+        HOME_TEMPLATE.replace("{{STARTED_AT}}", started_at)
+        .replace("{{AUTH_BADGE}}", auth_badge)
+    )
 
 
 def _login_cookie(username: str, role: str) -> str:
@@ -804,6 +907,12 @@ class Handler(BaseHTTPRequestHandler):
             if not user:
                 _redirect(self, "/login")
                 return
+            _send_html(self, render_home(user, role == "edit"))
+            return
+        if parsed.path == "/grafik-ppr":
+            if not user:
+                _redirect(self, "/login")
+                return
             year = dt.date.today().year
             qs = parse_qs(parsed.query)
             if "year" in qs:
@@ -829,7 +938,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Set-Cookie", handler_cookie)
             self.end_headers()
-            self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/">')
+            self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/login">')
             return
         if parsed.path == "/api/state":
             if not require_auth(self):
