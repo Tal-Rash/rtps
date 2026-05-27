@@ -45,51 +45,61 @@ if not WEB_SECRET:
 SESSIONS: dict[str, tuple[str, str, float]] = {}
 
 
-def load_auth_config() -> tuple[str, str, str]:
+def load_auth_config() -> tuple[str, str]:
     user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
-    edit_password = os.environ.get("WEB_EDIT_PASSWORD", "").strip() or os.environ.get("WEB_PASSWORD", "").strip()
-    if view_password and edit_password:
-        return user, view_password, edit_password
+    password = (
+        os.environ.get("WEB_PASSWORD", "").strip()
+        or os.environ.get("WEB_EDIT_PASSWORD", "").strip()
+        or os.environ.get("WEB_VIEW_PASSWORD", "").strip()
+    )
+    if password:
+        return user, password
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if AUTH_FILE.exists():
         try:
             payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
             file_user = str(payload.get("user", user)).strip() or user
-            file_view_password = str(payload.get("view_password", "")).strip()
-            file_edit_password = str(payload.get("edit_password", "")).strip()
-            old_password = str(payload.get("password", "")).strip()
-            if file_view_password and file_edit_password:
-                return file_user, file_view_password, file_edit_password
-            if old_password:
-                file_view_password = file_view_password or secrets.token_urlsafe(8)
-                file_edit_password = file_edit_password or old_password
+            file_password = str(payload.get("password", "")).strip()
+            if file_password:
+                return file_user, file_password
+            file_password = str(payload.get("edit_password", "")).strip()
+            if file_password:
                 AUTH_FILE.write_text(
                     json.dumps(
-                        {"user": file_user, "view_password": file_view_password, "edit_password": file_edit_password},
+                        {"user": file_user, "password": file_password},
                         ensure_ascii=False,
                         indent=2,
                     ),
                     encoding="utf-8",
                 )
-                return file_user, file_view_password, file_edit_password
+                return file_user, file_password
+            file_password = str(payload.get("view_password", "")).strip()
+            if file_password:
+                AUTH_FILE.write_text(
+                    json.dumps(
+                        {"user": file_user, "password": file_password},
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                return file_user, file_password
         except Exception:
             pass
-    view_password = secrets.token_urlsafe(8)
-    edit_password = secrets.token_urlsafe(8)
+    password = secrets.token_urlsafe(8)
     AUTH_FILE.write_text(
         json.dumps(
-            {"user": user, "view_password": view_password, "edit_password": edit_password},
+            {"user": user, "password": password},
             ensure_ascii=False,
             indent=2,
         ),
         encoding="utf-8",
     )
-    print(f"Web auth created: user={user} view_password={view_password} edit_password={edit_password}")
-    return user, view_password, edit_password
+    print(f"Web auth created: user={user} password={password}")
+    return user, password
 
 
-WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
+WEB_USER, WEB_PASSWORD = load_auth_config()
 AUTH_ENABLED = True
 
 
@@ -370,7 +380,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
-    auth_badge = "Редактирование: открыто" if not AUTH_ENABLED else (f"Редактор: {username}" if can_edit else f"Просмотр: {username}") if username else "Режим: вход"
+    auth_badge = "Вход открыт" if not AUTH_ENABLED else (f"Пользователь: {username}" if username else "Режим: вход")
     return (
         HTML_TEMPLATE.replace("{{STATE_JSON}}", state_json)
         .replace("{{STARTED_AT}}", started_at)
@@ -418,7 +428,7 @@ LOGIN_TEMPLATE = """<!doctype html>
 <body>
   <form class="card" method="post" action="/login">
     <h1 style="margin-top:0;">Вход</h1>
-    <p class="muted">Введите пароль просмотра или редактирования.</p>
+    <p class="muted">Введите пароль для входа.</p>
     <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
     <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
     <button type="submit">Войти</button>
@@ -545,7 +555,7 @@ def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None
 
 def render_home(username: str | None, can_edit: bool) -> str:
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
-    auth_badge = "Редактирование: открыто" if not AUTH_ENABLED else (f"Редактор: {username}" if can_edit else f"Просмотр: {username}") if username else "Режим: вход"
+    auth_badge = "Вход открыт" if not AUTH_ENABLED else (f"Пользователь: {username}" if username else "Режим: вход")
     return (
         HOME_TEMPLATE.replace("{{STARTED_AT}}", started_at)
         .replace("{{AUTH_BADGE}}", auth_badge)
@@ -983,10 +993,7 @@ class Handler(BaseHTTPRequestHandler):
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             username = form.get("user", [""])[0].strip()
             password = form.get("password", [""])[0]
-            if username == WEB_USER and password == WEB_VIEW_PASSWORD:
-                _redirect(self, "/", _login_cookie(username, "view"))
-                return
-            if username == WEB_USER and password == WEB_EDIT_PASSWORD:
+            if username == WEB_USER and password == WEB_PASSWORD:
                 _redirect(self, "/", _login_cookie(username, "edit"))
                 return
             _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER) + "<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>", status=HTTPStatus.UNAUTHORIZED)
