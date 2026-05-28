@@ -853,17 +853,17 @@ function renderMonths(){
   const m = currentMonth();
   const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
   const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
-  const repairButtons = CAN_EDIT ? `
+  const repairButtons = `
       <div class="repair-strip">
-        <button onclick="insertRepair('ТО2')">ТО2</button>
-        <button onclick="insertRepair('ТО3')">ТО3</button>
-        <button onclick="insertRepair('ТР1')">ТР1</button>
-        <button onclick="insertRepair('ТР2')">ТР2</button>
-        <button onclick="insertRepair('ТР3')">ТР3</button>
-        <button onclick="insertRepair('ТО')">ТО</button>
-        <button onclick="insertRepair('ТР')">ТР</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО2')">ТО2</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО3')">ТО3</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР1')">ТР1</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР2')">ТР2</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР3')">ТР3</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО')">ТО</button>
+        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР')">ТР</button>
       </div>
-    ` : '';
+    `;
   return `
     <div class="section-head">
       <div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div>
