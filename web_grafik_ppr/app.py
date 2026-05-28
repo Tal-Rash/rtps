@@ -391,10 +391,18 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
 
 def _route_path(path: str) -> str:
     if path == APP_PREFIX:
-        return "/"
+        return "/grafik-ppr"
     if path.startswith(APP_PREFIX + "/"):
         return path[len(APP_PREFIX):]
     return path
+
+
+def render_login(extra: str = "") -> str:
+    return (
+        LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER)
+        .replace("{{APP_PREFIX}}", APP_PREFIX)
+        + extra
+    )
 
 
 EDIT_TOOLBAR = """
@@ -921,7 +929,7 @@ class Handler(BaseHTTPRequestHandler):
         user = session[0] if session else None
         role = session[1] if session else None
         if route == "/":
-            _redirect(self, "/grafik-ppr")
+            _redirect(self, APP_PREFIX)
             return
         if route == "/grafik-ppr":
             year = dt.date.today().year
@@ -935,12 +943,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/login":
             if not AUTH_ENABLED:
-                _redirect(self, "/")
+                _redirect(self, APP_PREFIX)
                 return
             if user:
-                _redirect(self, "/")
+                _redirect(self, APP_PREFIX)
                 return
-            _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER))
+            _send_html(self, render_login())
             return
         if route == "/logout":
             handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
@@ -949,7 +957,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Set-Cookie", handler_cookie)
             self.end_headers()
-            self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/login">')
+            self.wfile.write(f'<!doctype html><meta http-equiv="refresh" content="0; url={APP_PREFIX}/login">'.encode("utf-8"))
             return
         if route == "/api/state":
             qs = parse_qs(parsed.query)
@@ -961,7 +969,7 @@ class Handler(BaseHTTPRequestHandler):
                     year = dt.date.today().year
             json_response(self, load_state(year))
             return
-        if parsed.path == "/api/export":
+        if route == "/api/export":
             if not require_auth(self):
                 return
             qs = parse_qs(parsed.query)
@@ -988,15 +996,15 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         if route == "/login":
             if not AUTH_ENABLED:
-                _redirect(self, "/")
+                _redirect(self, APP_PREFIX)
                 return
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             username = form.get("user", [""])[0].strip()
             password = form.get("password", [""])[0]
             if username == WEB_USER and password == WEB_PASSWORD:
-                _redirect(self, "/", _login_cookie(username, "edit"))
+                _redirect(self, APP_PREFIX, _login_cookie(username, "edit"))
                 return
-            _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER) + "<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>", status=HTTPStatus.UNAUTHORIZED)
+            _send_html(self, render_login("<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>"), status=HTTPStatus.UNAUTHORIZED)
             return
         try:
             payload = json.loads(raw.decode("utf-8"))
