@@ -219,8 +219,10 @@ def load_state(year: int) -> dict:
                 continue
             if c == 999:
                 table[r]["cells"][-1] = value
-            elif 0 <= c < len(table[r]["cells"]):
+            elif 0 <= c <= 2:
                 table[r]["cells"][c] = value
+            elif 3 <= c < len(table[r]["cells"]) - 1:
+                table[r]["cells"][c + 1] = value
 
         norms = cur.execute("SELECT cat, k, v FROM norms WHERE y=? ORDER BY cat, k", (year,)).fetchall()
         for row in norms:
@@ -268,7 +270,9 @@ def save_state(state: dict) -> dict:
                         for c, value in enumerate(cells):
                             value = s(value).strip()
                             if value:
-                                db_c = 999 if c == len(cells) - 1 else c
+                                if c == 3:
+                                    continue
+                                db_c = 999 if c == len(cells) - 1 else (c - 1 if c >= 4 else c)
                                 cur.execute("INSERT INTO repairs VALUES (?,?,?,?,?,?)", (year, month_name, table_type, r, db_c, value))
 
             for cat, rows in state.get("norms", {}).items():
