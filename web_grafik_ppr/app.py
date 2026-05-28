@@ -904,7 +904,7 @@ function renderNorms(){
     const agr = appState.norms.p_agr[idx] || {k: month, v: ''};
     return { idx, month, tep, agr };
   });
-  const hoursHtml = hoursRows.map((x, i) => `<tr onclick="selectRow('norms', ${i})"><td>${x.cat === 'h_tep' ? 'ТЭП' : 'АГР'}</td><td>${cell(`norms.${x.cat}.${x.idx}.k`, x.row.k, 'cell')}</td><td>${cell(`norms.${x.cat}.${x.idx}.v`, x.row.v, 'cell center')}</td><td><button class="rowbtn" onclick="removeNorm('${x.cat}', ${x.idx}); event.stopPropagation()">–</button></td></tr>`).join('');
+  const hoursHtml = hoursRows.map((x, i) => `<tr onclick="selectRow('norms', ${i})"><td>${x.cat === 'h_tep' ? 'ТЭМ' : 'АГР'}</td><td>${cell(`norms.${x.cat}.${x.idx}.k`, x.row.k, 'cell')}</td><td>${cell(`norms.${x.cat}.${x.idx}.v`, x.row.v, 'cell center')}</td><td><button class="rowbtn" onclick="removeNorm('${x.cat}', ${x.idx}); event.stopPropagation()">–</button></td></tr>`).join('');
   const parkHtml = parkRows.map((x) => `<tr><td>${x.month}</td><td>${cell(`norms.p_tep.${x.idx}.v`, x.tep.v, 'cell center')}</td><td>${cell(`norms.p_agr.${x.idx}.v`, x.agr.v, 'cell center')}</td></tr>`).join('');
   return `
     <div class="section-head">
