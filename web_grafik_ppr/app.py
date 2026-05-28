@@ -23,6 +23,8 @@ MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
 ]
+TEM_NORM_ROWS = ["ТО2", "ТО3", "ТП1", "ТП2", "ТП3", "СР", "КР"]
+AGR_NORM_ROWS = ["ТО", "ТР", "КР"]
 FIXED_HOLIDAYS = {
     (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
     (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
@@ -202,8 +204,8 @@ def default_state(year: int) -> dict:
         )
 
     norms = {
-        "h_tep": [],
-        "h_agr": [],
+        "h_tep": [{"k": label, "v": ""} for label in TEM_NORM_ROWS],
+        "h_agr": [{"k": label, "v": ""} for label in AGR_NORM_ROWS],
         "p_tep": [{"k": MONTHS_RU[i], "v": ""} for i in range(12)],
         "p_agr": [{"k": MONTHS_RU[i], "v": ""} for i in range(12)],
     }
@@ -274,7 +276,15 @@ def load_state(year: int) -> dict:
                 continue
             key = s(row["k"])
             value = s(row["v"])
-            if cat in {"p_tep", "p_agr"}:
+            if cat == "h_tep":
+                idx = TEM_NORM_ROWS.index(key) if key in TEM_NORM_ROWS else -1
+                if 0 <= idx < len(state["norms"][cat]):
+                    state["norms"][cat][idx] = {"k": key or TEM_NORM_ROWS[idx], "v": value}
+            elif cat == "h_agr":
+                idx = AGR_NORM_ROWS.index(key) if key in AGR_NORM_ROWS else -1
+                if 0 <= idx < len(state["norms"][cat]):
+                    state["norms"][cat][idx] = {"k": key or AGR_NORM_ROWS[idx], "v": value}
+            elif cat in {"p_tep", "p_agr"}:
                 idx = -1
                 if key in MONTHS_RU:
                     idx = MONTHS_RU.index(key)
@@ -447,6 +457,8 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
         .replace("{{AUTH_BADGE}}", auth_badge)
         .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
         .replace("{{APP_PREFIX}}", APP_PREFIX)
+        .replace("{{TEM_NORM_ROWS}}", json.dumps(TEM_NORM_ROWS, ensure_ascii=False))
+        .replace("{{AGR_NORM_ROWS}}", json.dumps(AGR_NORM_ROWS, ensure_ascii=False))
     )
 
 
@@ -709,6 +721,7 @@ HTML_TEMPLATE = """<!doctype html>
     .compact th, .compact td { font-size:13px; }
     .month-table { table-layout:fixed; width:max-content; }
     .month-table tbody tr { height:26px; }
+    .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
     @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { align-items:flex-start; flex-direction:column; } }
   </style>
 </head>
@@ -741,6 +754,8 @@ let appState = {{STATE_JSON}};
 let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null, inventory: null } };
 let dirty = false;
 const CAN_EDIT = {{CAN_EDIT}};
+const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
+const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
 const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'inventory',label:'Инвентарь'},{id:'acts',label:'Акты / примечания'}];
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
@@ -894,9 +909,11 @@ function catButton(monthIndex, type, rowIndex, excluded){
   return `<button class="rowbtn cat-toggle" onclick="toggleExcluded(${monthIndex},'${type}',${rowIndex})">${label}</button>`;
 }
 function renderNorms(){
-  const hoursRows = [
-    ...appState.norms.h_tep.map((row, idx) => ({cat:'h_tep', idx, row})),
-    ...appState.norms.h_agr.map((row, idx) => ({cat:'h_agr', idx, row})),
+  const leftRows = [
+    { kind:'group', label:'Тепловозы' },
+    ...TEM_NORM_ROWS.map((label, idx) => ({ kind:'item', group:'h_tep', idx, label })),
+    { kind:'group', label:'Тяговые агрегаты' },
+    ...AGR_NORM_ROWS.map((label, idx) => ({ kind:'item', group:'h_agr', idx, label })),
   ];
   const parkRows = Array.from({length:12}, (_, idx) => {
     const month = String(idx + 1).padStart(2, '0');
@@ -904,23 +921,34 @@ function renderNorms(){
     const agr = appState.norms.p_agr[idx] || {k: month, v: ''};
     return { idx, month, tep, agr };
   });
-  const hoursHtml = hoursRows.map((x, i) => `<tr onclick="selectRow('norms', ${i})"><td>${x.cat === 'h_tep' ? 'ТЭМ' : 'АГР'}</td><td>${cell(`norms.${x.cat}.${x.idx}.k`, x.row.k, 'cell')}</td><td>${cell(`norms.${x.cat}.${x.idx}.v`, x.row.v, 'cell center')}</td><td><button class="rowbtn" onclick="removeNorm('${x.cat}', ${x.idx}); event.stopPropagation()">–</button></td></tr>`).join('');
-  const parkHtml = parkRows.map((x) => `<tr><td>${x.month}</td><td>${cell(`norms.p_tep.${x.idx}.v`, x.tep.v, 'cell center')}</td><td>${cell(`norms.p_agr.${x.idx}.v`, x.agr.v, 'cell center')}</td></tr>`).join('');
+  const rows = Array.from({length: 12}, (_, idx) => ({ left: leftRows[idx] || null, park: parkRows[idx] }));
+  const bodyHtml = rows.map((entry, rowIndex) => {
+    const left = entry.left;
+    const park = entry.park;
+    const leftHtml = left && left.kind === 'item'
+      ? `<td>${left.label}</td><td>${cell(`norms.${left.group}.${left.idx}.v`, (appState.norms[left.group][left.idx] || {v:''}).v, 'cell center')}</td>`
+      : `<td class="group-row" colspan="2">${left ? left.label : ''}</td>`;
+    return `<tr onclick="selectRow('norms', ${rowIndex})">${leftHtml}<td>${park.month}</td><td>${cell(`norms.p_tep.${park.idx}.v`, park.tep.v, 'cell center')}</td><td>${cell(`norms.p_agr.${park.idx}.v`, park.agr.v, 'cell center')}</td></tr>`;
+  }).join('');
   return `
     <div class="section-head">
       <div><div class="section-title">Нормы / парк</div><div class="sub">Нормативы часов и план парка.</div></div>
-      <div class="toolbar"><button onclick="addNorm()">Добавить строку</button></div>
     </div>
     <div class="table-wrap" style="margin-bottom:14px;">
       <table class="compact">
-        <thead><tr><th>Группа</th><th>Код</th><th>Значение</th><th></th></tr></thead>
-        <tbody>${hoursHtml || '<tr><td colspan="4">Нет строк</td></tr>'}</tbody>
-      </table>
-    </div>
-    <div class="table-wrap">
-      <table class="compact">
-        <thead><tr><th>Месяц</th><th>Парк ТЭП</th><th>Парк АГР</th></tr></thead>
-        <tbody>${parkHtml}</tbody>
+        <thead>
+          <tr>
+            <th rowspan="2">Вид ремонта</th>
+            <th rowspan="2">Часы</th>
+            <th colspan="3">ПЛАН ИСПРАВНЫХ НА ${appState.year} г.</th>
+          </tr>
+          <tr>
+            <th>Месяц</th>
+            <th>Тепловозы</th>
+            <th>Тяговые агрегаты</th>
+          </tr>
+        </thead>
+        <tbody>${bodyHtml}</tbody>
       </table>
     </div>
   `;
