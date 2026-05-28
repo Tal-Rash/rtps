@@ -145,6 +145,48 @@ def month_index(month_name: str) -> int:
     return MONTHS_RU.index(month_name) + 1
 
 
+def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
+    transfer_dates: set[tuple[int, int]] = set()
+    holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
+    if not SOURCE_DB.exists():
+        return {
+            "transfer": sorted(transfer_dates),
+            "holiday": sorted(holiday_dates),
+        }
+
+    try:
+        with sqlite3.connect(SOURCE_DB) as conn:
+            cur = conn.cursor()
+            rows = cur.execute(
+                "SELECT c, v FROM ts_norms_data WHERE y=? AND c IN (6, 7)",
+                (year,),
+            ).fetchall()
+        for col_idx, raw_text in rows:
+            if not raw_text:
+                continue
+            text = str(raw_text).replace(";", "\n").replace(",", "\n")
+            for line in text.splitlines():
+                parts = line.strip().split(".")
+                if len(parts) < 2:
+                    continue
+                try:
+                    day = int(parts[0])
+                    month = int(parts[1])
+                except ValueError:
+                    continue
+                if col_idx == 6:
+                    transfer_dates.add((month, day))
+                else:
+                    holiday_dates.add((month, day))
+    except Exception:
+        pass
+
+    return {
+        "transfer": sorted(transfer_dates),
+        "holiday": sorted(holiday_dates),
+    }
+
+
 def default_state(year: int) -> dict:
     months = []
     for month_num, month_name in enumerate(MONTHS_RU, 1):
@@ -170,6 +212,7 @@ def default_state(year: int) -> dict:
     notes = {}
     return {
         "year": year,
+        "system_dates": load_system_dates(year),
         "months": months,
         "norms": norms,
         "inventory": inventory,
@@ -638,8 +681,10 @@ HTML_TEMPLATE = """<!doctype html>
     .notes { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--line); border-radius:14px; }
     .excluded-row { color:#9aa5b1; background:#f3f5f8; }
     .excluded-row input { background:#f3f5f8; color:#9aa5b1; }
-    .weekend-col { background:#dcf8dc; }
-    .weekend-col input { background:#dcf8dc; }
+    .transfer-col { background:#dcf8dc; }
+    .transfer-col input { background:#dcf8dc; }
+    .holiday-col { background:#ffdede; }
+    .holiday-col input { background:#ffdede; }
     .col-idx { width:45px; }
     .col-series { width:var(--meta-col-width); }
     .col-number { width:var(--meta-col-width); }
@@ -729,6 +774,18 @@ function setSection(section){ ui.section = section; render(); }
 function setMonth(index){ ui.monthIndex = index; render(); }
 function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
+function systemDates(){
+  return appState.system_dates || { transfer: [], holiday: [] };
+}
+function hasSystemDate(kind, month, day){
+  const items = systemDates()[kind] || [];
+  return items.some(([m, d]) => m === month && d === day);
+}
+function dayClass(month, day){
+  if (hasSystemDate('holiday', month, day)) return 'holiday-col';
+  if (hasSystemDate('transfer', month, day) || isWeekend(appState.year, month, day)) return 'transfer-col';
+  return '';
+}
 function isWeekend(year, month, day){
   const d = new Date(year, month - 1, day);
   const wd = d.getDay();
@@ -786,8 +843,8 @@ function renderMonthTable(type, title, m, headers){
     rowHtml.push(`<td class="col-number">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.2`, row.cells[2] || '', 'cell', ui.monthIndex, type, rIdx, 2) }</td>`);
     rowHtml.push(`<td class="col-cat">${catButton(ui.monthIndex, type, rIdx, row.excluded)}</td>`);
     for (let d=0; d<m.days; d++) {
-      const weekendCls = isWeekend(appState.year, m.month, d + 1) ? 'weekend-col' : '';
-      rowHtml.push(`<td class="col-day ${weekendCls}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', 'cell small center', ui.monthIndex, type, rIdx, 4+d) }</td>`);
+      const cls = dayClass(m.month, d + 1);
+      rowHtml.push(`<td class="col-day ${cls}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', `cell small center ${cls}`, ui.monthIndex, type, rIdx, 4+d) }</td>`);
     }
     rowHtml.push(`<td class="col-note">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
     return `<tr class="${row.excluded ? 'excluded-row' : ''}">${rowHtml.join('')}</tr>`;
@@ -795,14 +852,14 @@ function renderMonthTable(type, title, m, headers){
   const headHtml = headers.map((h, idx) => {
     if (idx < 4 || idx === headers.length - 1) return `<th>${h}</th>`;
     const day = idx - 3;
-    return `<th class="${isWeekend(appState.year, m.month, day) ? 'weekend-col' : ''}">${h}</th>`;
+    return `<th class="${dayClass(m.month, day)}">${h}</th>`;
   }).join('');
   const colHtml = [
     '<col style="width:45px">',
     '<col style="width:var(--meta-col-width)">',
     '<col style="width:var(--meta-col-width)">',
     '<col style="width:var(--meta-col-width)">',
-    ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${isWeekend(appState.year, m.month, d + 1) ? 'weekend-col' : ''}">`),
+    ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
     '<col style="width:180px">'
   ].join('');
   return `
