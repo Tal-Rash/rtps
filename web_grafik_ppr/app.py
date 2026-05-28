@@ -25,6 +25,12 @@ MONTHS_RU = [
 ]
 TEM_NORM_ROWS = ["ТО2", "ТО3", "ТР1", "ТР2", "ТР3", "СР", "КР"]
 AGR_NORM_ROWS = ["ТО", "ТР", "КР"]
+REPORT_TEMPLATE_NAME = "Отчет_шаблон.xlsx"
+MONTH_DAY_LIMIT_FOR_REPORT = 25
+TEP_REPORT_FACTORS = {"ТО2": 1, "ТО3": 2, "ТР1": 5, "ТР2": 10, "ТР3": 15}
+AGR_REPORT_FACTORS = {"ТО": 1, "ТР": 5}
+TEP_HOUR_FACTORS = {"ТО2": 1, "ТО3": 2, "ТР1": 5, "ТР2": 10, "ТР3": 15}
+AGR_HOUR_FACTORS = {"ТО": 1, "ТР": 5}
 FIXED_HOLIDAYS = {
     (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
     (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
@@ -341,6 +347,278 @@ def find_act_template_path() -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def find_report_template_path() -> Path | None:
+    candidates = [
+        ROOT / REPORT_TEMPLATE_NAME,
+        SOURCE_DIR / REPORT_TEMPLATE_NAME,
+        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / REPORT_TEMPLATE_NAME,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def read_norm_hours_from_state(items: list[dict]) -> dict[str, float]:
+    norms: dict[str, float] = {}
+    for item in items or []:
+        key = s(item.get("k")).strip()
+        value = s(item.get("v")).strip()
+        if not key or not value:
+            continue
+        try:
+            norms[key] = float(value.replace(",", "."))
+        except Exception:
+            continue
+    return norms
+
+
+def report_unit_key(row: dict) -> tuple[str, str] | None:
+    cells = row.get("cells") or []
+    series = s(cells[1]).strip().upper() if len(cells) > 1 else ""
+    number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
+    if not series or not number:
+        return None
+    return series, number
+
+
+def build_rows_by_unit(month_data: dict, table_type: str) -> dict[tuple[str, str], int]:
+    rows_by_unit: dict[tuple[str, str], int] = {}
+    for idx, row in enumerate(month_data.get(table_type, []) or []):
+        if row.get("excluded"):
+            continue
+        key = report_unit_key(row)
+        if key and key not in rows_by_unit:
+            rows_by_unit[key] = idx
+    return rows_by_unit
+
+
+def collect_row_notes(row: dict, unplanned_starts: list[tuple[int, int]], number: str) -> list[str]:
+    row_notes: list[str] = []
+    cells = row.get("cells") or []
+    note = s(cells[-1]).strip() if cells else ""
+    if note:
+        row_notes.append(note)
+    if not row_notes and unplanned_starts:
+        for day, month in unplanned_starts:
+            row_notes.append(f"Акт № {day:02d}-{month:02d}-{number}")
+    return row_notes
+
+
+def process_report_day(acc, row: dict, day: int, month_num: int, category: str, table_type: str, state: dict) -> None:
+    cells = row.get("cells") or []
+    idx = day + 3
+    val = s(cells[idx]).strip().upper() if idx < len(cells) else ""
+    if val:
+        try:
+            hours = float(val.replace(",", "."))
+        except ValueError:
+            acc.result[table_type][category][val] = acc.result[table_type][category].get(val, 0) + 1
+            state["last_is_num"] = False
+        else:
+            acc.unplanned_hours[table_type][category] += hours
+            if not state["last_is_num"]:
+                acc.unplanned_blocks[table_type][category] += 1
+                state["unplanned_starts"].append((day, month_num))
+            state["last_is_num"] = True
+    else:
+        state["last_is_num"] = False
+
+
+def process_report_row(acc, table_type: str, curr_row: dict, prev_row: dict | None, curr_m: int, prev_m: int | None, fund_days: int) -> None:
+    if curr_row.get("excluded"):
+        return
+    cells = curr_row.get("cells") or []
+    series = s(cells[1]).strip().upper() if len(cells) > 1 else ""
+    number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
+    if not series:
+        return
+    category = "agr" if "ПЭ" in series else "tep"
+    acc.units[table_type][category] += 1
+    state = {"last_is_num": False, "unplanned_starts": []}
+    if prev_row is not None and prev_m is not None:
+        for day in range(MONTH_DAY_LIMIT_FOR_REPORT + 1, fund_days + 1):
+            process_report_day(acc, prev_row, day, prev_m, category, table_type, state)
+    for day in range(1, MONTH_DAY_LIMIT_FOR_REPORT + 1):
+        process_report_day(acc, curr_row, day, curr_m, category, table_type, state)
+    for note in collect_row_notes(curr_row, state["unplanned_starts"], number):
+        if note not in acc.notes[table_type][category]:
+            acc.notes[table_type][category].append(note)
+
+
+def get_report_period(year: int, month_name: str) -> tuple[int, int, int | None, str | None, int]:
+    m_idx = MONTHS_RU.index(month_name)
+    curr_m = m_idx + 1
+    if m_idx == 0:
+        return m_idx, curr_m, None, None, MONTH_DAY_LIMIT_FOR_REPORT
+    prev_m_idx = m_idx - 1
+    prev_month_name = MONTHS_RU[prev_m_idx]
+    fund_days = calendar.monthrange(year, prev_m_idx + 1)[1]
+    return m_idx, curr_m, prev_m_idx + 1, prev_month_name, fund_days
+
+
+def calculate_ok_units(state: dict, year: int, month_name: str, acc, period_hours: int) -> tuple[float, float]:
+    _, curr_m, prev_m, _, fund_days = get_report_period(year, month_name)
+    _ = curr_m, prev_m, fund_days
+    n_tep = read_norm_hours_from_state(state.get("norms", {}).get("h_tep", []))
+    n_agr = read_norm_hours_from_state(state.get("norms", {}).get("h_agr", []))
+    fact_tep_hours = acc.unplanned_hours["fact"]["tep"] + sum(
+        acc.result["fact"]["tep"].get(code, 0) / factor * n_tep.get(code, 0)
+        for code, factor in TEP_HOUR_FACTORS.items()
+    )
+    fact_agr_hours = acc.unplanned_hours["fact"]["agr"] + sum(
+        acc.result["fact"]["agr"].get(code, 0) / factor * n_agr.get(code, 0)
+        for code, factor in AGR_HOUR_FACTORS.items()
+    )
+    fact_tep_ok = acc.units["fact"]["tep"] - (fact_tep_hours / period_hours) if period_hours else 0
+    fact_agr_ok = acc.units["fact"]["agr"] - (fact_agr_hours / period_hours) if period_hours else 0
+    return fact_tep_ok, fact_agr_ok
+
+
+def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
+    m_idx, curr_m, prev_m, prev_month_name, fund_days = get_report_period(int(state.get("year") or dt.date.today().year), month_name)
+    period_hours = fund_days * 24
+    acc = type("ReportAccumulatorLike", (), {})()
+    acc.result = {"plan": {"tep": {}, "agr": {}}, "fact": {"tep": {}, "agr": {}}}
+    acc.unplanned_blocks = {"plan": {"tep": 0, "agr": 0}, "fact": {"tep": 0, "agr": 0}}
+    acc.unplanned_hours = {"plan": {"tep": 0.0, "agr": 0.0}, "fact": {"tep": 0.0, "agr": 0.0}}
+    acc.units = {"plan": {"tep": 0, "agr": 0}, "fact": {"tep": 0, "agr": 0}}
+    acc.notes = {"plan": {"tep": [], "agr": []}, "fact": {"tep": [], "agr": []}}
+
+    months = state.get("months", []) or []
+    if not (0 <= m_idx < len(months)):
+        raise ValueError("Не найден месяц отчета")
+    curr_month = months[m_idx]
+    prev_month = months[m_idx - 1] if prev_month_name and m_idx - 1 >= 0 else None
+    prev_rows_by_unit = build_rows_by_unit(prev_month, "plan") if prev_month else {}
+    prev_rows_by_unit_fact = build_rows_by_unit(prev_month, "fact") if prev_month else {}
+
+    for table_type in ["plan", "fact"]:
+        curr_table = curr_month.get(table_type, []) or []
+        prev_rows = prev_rows_by_unit_fact if table_type == "fact" else prev_rows_by_unit
+        for row in curr_table:
+            key = report_unit_key(row)
+            prev_row = prev_month.get(table_type, [])[prev_rows[key]] if prev_month and key and key in prev_rows else None
+            process_report_row(acc, table_type, row, prev_row, curr_m, prev_m, fund_days)
+
+    fact_tep_ok, fact_agr_ok = calculate_ok_units(state, int(state.get("year") or dt.date.today().year), month_name, acc, period_hours)
+
+    def month_norm_value(key: str, fallback_index: int) -> str:
+        for item in state.get("norms", {}).get(key, []) or []:
+            item_key = s(item.get("k")).strip()
+            item_value = s(item.get("v")).strip()
+            if item_key == month_name:
+                return item_value or "0"
+        items = state.get("norms", {}).get(key, []) or []
+        if 0 <= fallback_index < len(items):
+            return s(items[fallback_index].get("v")).strip() or "0"
+        return "0"
+
+    return {
+        "m": month_name,
+        "y": int(state.get("year") or dt.date.today().year),
+        "tp": month_norm_value("p_tep", m_idx),
+        "tf": fact_tep_ok,
+        "ap": month_norm_value("p_agr", m_idx),
+        "af": fact_agr_ok,
+        "res": acc.result,
+        "ub": acc.unplanned_blocks,
+        "notes": acc.notes,
+    }
+
+
+def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, str]) -> dict[str, str]:
+    def count(section: str, category: str, code: str, factor: int) -> float:
+        return data["res"][section][category].get(code, 0) / factor
+
+    tep_plan = {code: count("plan", "tep", code, factor) for code, factor in TEP_REPORT_FACTORS.items()}
+    tep_fact = {code: count("fact", "tep", code, factor) for code, factor in TEP_REPORT_FACTORS.items()}
+    agr_plan = {code: count("plan", "agr", code, factor) for code, factor in AGR_REPORT_FACTORS.items()}
+    agr_fact = {code: count("fact", "agr", code, factor) for code, factor in AGR_REPORT_FACTORS.items()}
+
+    p_tep_ub = data["ub"]["plan"]["tep"]
+    f_tep_ub = data["ub"]["fact"]["tep"]
+    p_agr_ub = data["ub"]["plan"]["agr"]
+    f_agr_ub = data["ub"]["fact"]["agr"]
+
+    sum_p = sum(tep_plan.values()) + p_tep_ub + sum(agr_plan.values()) + p_agr_ub
+    sum_f = sum(tep_fact.values()) + f_tep_ub + sum(agr_fact.values()) + f_agr_ub
+
+    return {
+        "[МЕСЯЦ]": month_name,
+        "[ГОД]": str(data["y"]),
+        "[ПЛАН_ТЕП_ПАРК]": format_n(data["tp"]),
+        "[ФАКТ_ТЕП_ПАРК]": format_n(data["tf"]),
+        "[ПРИМ_ТЕП_ПАРК]": saved_notes.get("tep_park", ""),
+        "[ПЛАН_ТЕП_ТО2]": format_n(tep_plan["ТО2"]),
+        "[ФАКТ_ТЕП_ТО2]": format_n(tep_fact["ТО2"]),
+        "[ПРИМ_ТЕП_ТО2]": saved_notes.get("tep_ТО2", ""),
+        "[ПЛАН_ТЕП_ТО3]": format_n(tep_plan["ТО3"]),
+        "[ФАКТ_ТЕП_ТО3]": format_n(tep_fact["ТО3"]),
+        "[ПРИМ_ТЕП_ТО3]": saved_notes.get("tep_ТО3", ""),
+        "[ПЛАН_ТЕП_ТР1]": format_n(tep_plan["ТР1"]),
+        "[ФАКТ_ТЕП_ТР1]": format_n(tep_fact["ТР1"]),
+        "[ПРИМ_ТЕП_ТР1]": saved_notes.get("tep_ТР1", ""),
+        "[ПЛАН_ТЕП_ТР2]": format_n(tep_plan["ТР2"]),
+        "[ФАКТ_ТЕП_ТР2]": format_n(tep_fact["ТР2"]),
+        "[ПРИМ_ТЕП_ТР2]": saved_notes.get("tep_ТР2", ""),
+        "[ПЛАН_ТЕП_ТР3]": format_n(tep_plan["ТР3"]),
+        "[ФАКТ_ТЕП_ТР3]": format_n(tep_fact["ТР3"]),
+        "[ПРИМ_ТЕП_ТР3]": saved_notes.get("tep_ТР3", ""),
+        "[ПЛАН_ТЕП_НЕПЛАН]": format_n(p_tep_ub),
+        "[ФАКТ_ТЕП_НЕПЛАН]": format_n(f_tep_ub),
+        "[ПРИМ_ТЕП_НЕПЛАН]": saved_notes.get("tep_ТР_unplan", "\n".join(data["notes"]["fact"]["tep"])),
+        "[ПЛАН_АГР_ПАРК]": format_n(data["ap"]),
+        "[ФАКТ_АГР_ПАРК]": format_n(data["af"]),
+        "[ПРИМ_АГР_ПАРК]": saved_notes.get("agr_park", ""),
+        "[ПЛАН_АГР_ТО]": format_n(agr_plan["ТО"]),
+        "[ФАКТ_АГР_ТО]": format_n(agr_fact["ТО"]),
+        "[ПРИМ_АГР_ТО]": saved_notes.get("agr_ТО", ""),
+        "[ПЛАН_АГР_ТР]": format_n(agr_plan["ТР"]),
+        "[ФАКТ_АГР_ТР]": format_n(agr_fact["ТР"]),
+        "[ПРИМ_АГР_ТР]": saved_notes.get("agr_ТР", ""),
+        "[ПЛАН_АГР_НЕПЛАН]": format_n(p_agr_ub),
+        "[ФАКТ_АГР_НЕПЛАН]": format_n(f_agr_ub),
+        "[ПРИМ_АГР_НЕПЛАН]": saved_notes.get("agr_ТР_unplan", "\n".join(data["notes"]["fact"]["agr"])),
+        "[ПЛАН_СУММА]": format_n(sum_p),
+        "[ФАКТ_СУММА]": format_n(sum_f),
+    }
+
+
+def build_report_workbook(year: int, month_name: str, state: dict | None = None) -> tuple[bytes, str]:
+    try:
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import Alignment, Font
+    except ImportError as exc:
+        raise RuntimeError("На сервере не установлен openpyxl") from exc
+
+    state = state or load_state(year)
+    data = calculate_report_data_from_state(state, month_name)
+    saved_notes = state.get("notes", {}).get(month_name, {}) or {}
+    tags = build_report_excel_tags(month_name, data, saved_notes)
+
+    template_path = find_report_template_path()
+    if template_path:
+        wb = load_workbook(template_path)
+        replace_tags_in_workbook(wb, tags)
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Отчет"
+        for idx, (k, v) in enumerate(tags.items(), start=1):
+            ws[f"A{idx}"] = k
+            ws[f"B{idx}"] = v
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(horizontal="left", vertical="top")
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue(), f"Отчет_{month_name}_{year}.xlsx"
 
 
 def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
@@ -805,6 +1083,17 @@ HTML_TEMPLATE = """<!doctype html>
     .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
+    .act-report {
+      border:1px solid var(--line);
+      background:linear-gradient(180deg,#fff,#f3f7ff);
+      border-radius:8px;
+      padding:6px 10px;
+      font:inherit;
+      font-weight:700;
+      font-size:15px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1211,6 +1500,7 @@ function renderActs(){
       <div style="display:flex; align-items:center; gap:6px; flex-wrap:nowrap; justify-content:center; width:100%;">
         <div class="section-title">Акты</div>
         ${monthSelectHtml()}
+        <button class="act-report" ${CAN_EDIT ? '' : ''} onclick="openReport()">Отчет</button>
       </div>
     </div>
     <div class="table-wrap" style="width:fit-content; max-width:100%; margin:0 auto;">
@@ -1232,6 +1522,18 @@ async function startAct(month, act){
   setPath(`acts.${month}.${act}.is_done`, true);
   await saveState();
   const url = `{{APP_PREFIX}}/api/act-export?month=${encodeURIComponent(month)}&act=${encodeURIComponent(act)}&year=${encodeURIComponent(appState.year)}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.click();
+}
+async function openReport(){
+  if (dirty && CAN_EDIT) {
+    await saveState();
+  }
+  const month = currentMonth().name;
+  const url = `{{APP_PREFIX}}/api/report-export?month=${encodeURIComponent(month)}&year=${encodeURIComponent(appState.year)}`;
   const a = document.createElement('a');
   a.href = url;
   a.target = '_blank';
@@ -1372,6 +1674,29 @@ class Handler(BaseHTTPRequestHandler):
             act = s(qs.get("act", [""])[0]).strip()
             try:
                 body, filename = build_act_workbook(year, act)
+            except Exception as exc:
+                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self.send_header("Content-Disposition", content_disposition_attachment(filename))
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if route == "/api/report-export":
+            if not require_auth(self):
+                return
+            qs = parse_qs(parsed.query)
+            year = dt.date.today().year
+            if "year" in qs:
+                try:
+                    year = int(qs["year"][0])
+                except ValueError:
+                    year = dt.date.today().year
+            month = s(qs.get("month", [""])[0]).strip() or MONTHS_RU[dt.date.today().month - 1]
+            try:
+                body, filename = build_report_workbook(year, month)
             except Exception as exc:
                 json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
