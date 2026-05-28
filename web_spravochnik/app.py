@@ -329,7 +329,7 @@ function renderAll(){
 
 function renderTable(name, rows, editableRows){
   const panel = document.getElementById(name);
-  const rowbar = editableRows ? `<div class="rowbar"><button onclick="addRow('${name}')">Добавить строку</button><button onclick="deleteRow('${name}')">Удалить строку</button></div>` : '';
+  const rowbar = editableRows ? `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>` : '';
   let html = rowbar + '<table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
     html += `<tr onclick="selectRow('${name}', ${r})"><td>${r + 1}</td>`;

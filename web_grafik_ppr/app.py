@@ -907,8 +907,8 @@ function renderMonths(){
       <div class="month-tools">
         ${repairButtons}
         <div class="row-actions">
-          <button onclick="addRow('plan'); addRow('fact')">Добавить строку</button>
-          <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">Удалить строку</button>
+          <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
+          <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
         </div>
       </div>
     </div>
