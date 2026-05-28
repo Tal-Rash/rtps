@@ -128,11 +128,7 @@ def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
 
 
 def current_user(handler: BaseHTTPRequestHandler) -> str | None:
-    token = parse_cookies(handler).get(SESSION_COOKIE)
-    if not token:
-        return None
-    session = verify_cookie(token)
-    return session[0] if session else None
+    return "public"
 
 
 def send_json(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
@@ -421,23 +417,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = route_path(self.path)
-        user = current_user(self)
-        if path == "/login":
-            if user:
-                redirect(self, APP_PREFIX + "/")
-                return
-            send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER))
-            return
-        if path == "/logout":
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax")
-            self.end_headers()
-            self.wfile.write(f'<!doctype html><meta http-equiv="refresh" content="0; url={APP_PREFIX}/login">'.encode("utf-8"))
-            return
-        if not user:
-            redirect(self, APP_PREFIX + "/login")
+        if path in {"/login", "/logout"}:
+            redirect(self, APP_PREFIX + "/")
             return
         parsed = urlparse(self.path)
         if path == "/":
@@ -454,21 +435,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         if path == "/login":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            username = form.get("user", [""])[0].strip()
-            password = form.get("password", [""])[0]
-            if username == WEB_USER and password == WEB_PASSWORD:
-                self.send_response(HTTPStatus.SEE_OTHER)
-                self.send_header("Location", APP_PREFIX + "/")
-                self.send_header("Set-Cookie", login_cookie(username))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                return
-            send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER) + "<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>", HTTPStatus.UNAUTHORIZED)
-            return
-        user = current_user(self)
-        if not user:
-            send_json(self, {"ok": False, "error": "auth"}, HTTPStatus.UNAUTHORIZED)
+            redirect(self, APP_PREFIX + "/")
             return
         if path == "/api/save":
             try:
