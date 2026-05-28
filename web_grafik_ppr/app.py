@@ -695,6 +695,17 @@ HTML_TEMPLATE = """<!doctype html>
     .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
+    .act-start {
+      width:100%;
+      border:1px solid var(--line);
+      background:linear-gradient(180deg,#fff,#f3f7ff);
+      border-radius:8px;
+      padding:4px 7px;
+      font:inherit;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .act-start:disabled { opacity:.5; cursor:default; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:900px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
@@ -1075,10 +1086,14 @@ function renderNorms(){
 function renderActs(){
   const month = currentMonth().name;
   const acts = appState.acts[month] || {};
-  const notes = appState.notes[month] || {};
   const rows = Object.keys(acts).sort().map(act => {
     const x = acts[act];
-    return `<tr><td>${esc(act)}</td><td><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.is_done', this.checked)"></td><td><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.sap_order_done', this.checked)"></td></tr>`;
+    return `<tr>
+      <td>${esc(act)}</td>
+      <td><button class="act-start" ${CAN_EDIT ? '' : 'disabled'} onclick="startAct('${month}', '${act}')">Пуск</button></td>
+      <td class="center"><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.is_done', this.checked)"></td>
+      <td class="center"><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.sap_order_done', this.checked)"></td>
+    </tr>`;
   }).join('');
   return `
     <div class="section-head">
@@ -1087,19 +1102,18 @@ function renderActs(){
         ${monthSelectHtml()}
       </div>
     </div>
-    <div class="grid2">
-      <div class="table-wrap">
-        <table class="compact">
-          <thead><tr><th>Акт</th><th>Выполнен</th><th>SAP</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="3">Нет данных</td></tr>'}</tbody>
-        </table>
-      </div>
-      <div>
-        <div class="badge" style="margin-bottom:8px;">Примечания</div>
-        <textarea class="notes" ${CAN_EDIT ? '' : 'readonly'} onchange="setPath('notes.${month}.summary', this.value)">${esc((notes && notes.summary) || '')}</textarea>
-      </div>
+    <div class="table-wrap">
+      <table class="compact">
+        <thead><tr><th>№ акта</th><th>Сформировать акт</th><th>Акт сформирован</th><th>Создан заказ в SAP</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+      </table>
     </div>
   `;
+}
+function startAct(month, act){
+  if (!CAN_EDIT) return;
+  setPath(`acts.${month}.${act}.is_done`, true);
+  render();
 }
 function cell(path, value, cls, month, table, row, col){
   const ro = CAN_EDIT ? '' : 'readonly';
