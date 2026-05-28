@@ -768,7 +768,7 @@ const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
-const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты / примечания'}];
+const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'}];
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function setStatus(t){ document.getElementById('status').textContent = t; }
@@ -905,6 +905,12 @@ function render(){
   if (ui.section === 'months') content.innerHTML = renderMonths();
   if (ui.section === 'norms') content.innerHTML = renderNorms();
   if (ui.section === 'acts') content.innerHTML = renderActs();
+  if (ui.section === 'acts') {
+    requestAnimationFrame(() => {
+      const select = document.getElementById('actsMonthSelect');
+      if (select) select.focus();
+    });
+  }
 }
 function repairButtonsHtml(){
   return `
@@ -918,6 +924,13 @@ function repairButtonsHtml(){
         <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР')">ТР</button>
       </div>
     `;
+}
+function monthSelectHtml(){
+  return `
+    <select id="actsMonthSelect" onchange="setMonth(parseInt(this.value, 10))" style="border:1px solid var(--line); border-radius:8px; padding:4px 7px; font:inherit; background:#fff;">
+      ${appState.months.map((m, i) => `<option value="${i}" ${i === ui.monthIndex ? 'selected' : ''}>${m.name}</option>`).join('')}
+    </select>
+  `;
 }
 function renderMonths(){
   const m = safeCurrentMonth();
@@ -1069,7 +1082,10 @@ function renderActs(){
   }).join('');
   return `
     <div class="section-head">
-      <div><div class="section-title">Акты / примечания</div><div class="sub">Месяц: ${esc(month)}</div></div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="section-title">Акты</div>
+        ${monthSelectHtml()}
+      </div>
     </div>
     <div class="grid2">
       <div class="table-wrap">
