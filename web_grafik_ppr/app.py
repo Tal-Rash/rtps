@@ -901,9 +901,6 @@ function renderMonths(){
       </div>
     `;
   return `
-    <div class="section-head">
-      <div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div>
-    </div>
     <div class="months-row">
       <div class="month-strip">${monthButtons}</div>
       <div class="row-actions">
