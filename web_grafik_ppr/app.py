@@ -684,15 +684,14 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1.6fr) auto minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
-    .months-row .month-tools { display:flex; justify-content:center; justify-self:center; align-self:start; }
     .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
     .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
     .repair-strip { display:flex; gap:3px; flex-wrap:nowrap; margin:0; justify-content:center; }
     .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
-    .month-tools { display:flex; justify-content:center; }
+    .month-tools { display:none; }
     .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
@@ -734,7 +733,7 @@ HTML_TEMPLATE = """<!doctype html>
     .month-table { table-layout:fixed; width:max-content; }
     .month-table tbody tr { height:26px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
-    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:flex; justify-content:flex-start; flex-wrap:wrap; padding-left:0; } .repair-strip { flex-wrap:wrap; } }
+    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:none; } .repair-strip { flex-wrap:wrap; } }
   </style>
 </head>
 <body>
@@ -907,11 +906,8 @@ function render(){
   if (ui.section === 'norms') content.innerHTML = renderNorms();
   if (ui.section === 'acts') content.innerHTML = renderActs();
 }
-function renderMonths(){
-  const m = safeCurrentMonth();
-  const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
-  const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
-  const repairButtons = `
+function repairButtonsHtml(){
+  return `
       <div class="repair-strip">
         <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО2')">ТО2</button>
         <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО3')">ТО3</button>
@@ -922,10 +918,14 @@ function renderMonths(){
         <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР')">ТР</button>
       </div>
     `;
+}
+function renderMonths(){
+  const m = safeCurrentMonth();
+  const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
+  const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
   return `
     <div class="months-row">
       <div class="month-strip">${monthButtons}</div>
-      <div class="month-tools">${repairButtons}</div>
       <div class="row-actions">
         <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
         <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
@@ -964,7 +964,10 @@ function renderMonthTable(type, title, m, headers){
   ].join('');
   return `
     <div class="section-head" style="margin-top:16px;">
-      <div><div class="section-title">${title}</div></div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="section-title">${title}</div>
+        ${repairButtonsHtml()}
+      </div>
     </div>
     <div class="table-wrap">
       <table class="compact month-table" style="min-width:${(4+m.days+2)*34 + 300}px">
