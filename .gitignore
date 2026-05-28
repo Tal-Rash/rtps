@@ -9,7 +9,10 @@ dist_*/
 .venv/
 venv/
 env/
-src/
+src/*
+!src/График ППР/
+src/График ППР/*
+!src/График ППР/*.xlsx
 web_grafik_ppr/__pycache__/
 web_grafik_ppr/data/
 

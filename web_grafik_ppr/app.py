@@ -5,6 +5,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+from io import BytesIO
 import shutil
 import hmac
 import secrets
@@ -16,6 +17,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, urlparse
+
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font
 
 
 APP_VERSION = "web-gpp-0.1"
@@ -38,6 +42,7 @@ SHARED_DATA_DIR = ROOT.parent / "data"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 SOURCE_DB = ROOT.parent / "base" / "common_database.db"
 SOURCE_DIR = ROOT.parent / "src" / "График ППР"
+ACT_TEMPLATE_NAME = "Акт_шаблон.xlsx"
 
 DB_LOCK = Lock()
 SERVER_STARTED_AT = None
@@ -328,6 +333,104 @@ def load_state(year: int) -> dict:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
 
     return state
+
+
+def find_act_template_path() -> Path | None:
+    candidates = [
+        ROOT / ACT_TEMPLATE_NAME,
+        SOURCE_DIR / ACT_TEMPLATE_NAME,
+        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / ACT_TEMPLATE_NAME,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
+    if not SOURCE_DB.exists():
+        return "", ""
+    try:
+        with sqlite3.connect(SOURCE_DB) as db:
+            cur = db.cursor()
+            row = cur.execute("SELECT ser, inv FROM inventory WHERE y=? AND num=?", (year, number)).fetchone()
+        if not row:
+            return "", ""
+        return s(row[0]), s(row[1])
+    except Exception:
+        return "", ""
+
+
+def replace_tags_in_workbook(wb, tags: dict[str, str]) -> None:
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str) and cell.value:
+                    value = cell.value
+                    for tag, rep in tags.items():
+                        if tag in value:
+                            value = value.replace(tag, s(rep))
+                    cell.value = value
+
+
+def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
+    clean_act_num = act.replace("Акт № ", "").strip()
+    parts = clean_act_num.split("-")
+    if len(parts) != 3:
+        raise ValueError("Не удалось распознать формат акта")
+
+    d_act, m_act, num_act = parts
+    months_ru = {
+        "01": "января", "02": "февраля", "03": "марта",
+        "04": "апреля", "05": "мая", "06": "июня",
+        "07": "июля", "08": "августа", "09": "сентября",
+        "10": "октября", "11": "ноября", "12": "декабря",
+    }
+    date_str = f"{d_act} {months_ru.get(m_act, 'января')} {year} г."
+    ser, inv = get_act_inventory_item(year, num_act)
+    if "ПЭ" in ser.upper():
+        eq_type = "Тяговый агрегат"
+    elif ser:
+        eq_type = "Тепловоз маневровый"
+    else:
+        eq_type = ""
+
+    tags = {
+        "[АКТ]": clean_act_num, "[Акт]": clean_act_num, "[акт]": clean_act_num,
+        "[ДАТА]": date_str, "[Дата]": date_str,
+        "[НОМЕР]": num_act, "[Номер]": num_act,
+        "[АГРЕГАТ]": eq_type, "[Агрегат]": eq_type,
+        "[СЕРИЯ]": ser, "[Серия]": ser,
+        "[ИНВ]": inv, "[Инв]": inv,
+    }
+
+    template_path = find_act_template_path()
+    if template_path:
+        wb = load_workbook(template_path)
+        replace_tags_in_workbook(wb, tags)
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Акт"
+        ws["A1"] = "Акт"
+        ws["B1"] = clean_act_num
+        ws["A2"] = "Дата"
+        ws["B2"] = date_str
+        ws["A3"] = "Серия"
+        ws["B3"] = ser
+        ws["A4"] = "Инвентарный номер"
+        ws["B4"] = inv
+        ws["A5"] = "Тип"
+        ws["B5"] = eq_type
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for cell in ws["A1:B5"]:
+            for item in cell:
+                item.alignment = Alignment(horizontal="left")
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue(), f"act_{clean_act_num}.xlsx"
 
 
 def save_state(state: dict) -> dict:
@@ -1110,10 +1213,16 @@ function renderActs(){
     </div>
   `;
 }
-function startAct(month, act){
+async function startAct(month, act){
   if (!CAN_EDIT) return;
   setPath(`acts.${month}.${act}.is_done`, true);
-  render();
+  await saveState();
+  const url = `{{APP_PREFIX}}/api/act-export?month=${encodeURIComponent(month)}&act=${encodeURIComponent(act)}&year=${encodeURIComponent(appState.year)}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.click();
 }
 function cell(path, value, cls, month, table, row, col){
   const ro = CAN_EDIT ? '' : 'readonly';
@@ -1231,6 +1340,30 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Disposition", f'attachment; filename="grafik_ppr_{year}.json"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if route == "/api/act-export":
+            if not require_auth(self):
+                return
+            qs = parse_qs(parsed.query)
+            year = dt.date.today().year
+            if "year" in qs:
+                try:
+                    year = int(qs["year"][0])
+                except ValueError:
+                    year = dt.date.today().year
+            month = s(qs.get("month", [""])[0]).strip()
+            act = s(qs.get("act", [""])[0]).strip()
+            try:
+                body, filename = build_act_workbook(year, act)
+            except Exception as exc:
+                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
