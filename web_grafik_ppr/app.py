@@ -665,15 +665,15 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .months-row { display:flex; gap:8px; align-items:flex-start; justify-content:space-between; margin:10px 0 12px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 8px; }
-    .month-strip { display:flex; gap:6px; flex-wrap:wrap; margin:0; min-width:0; }
-    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    .months-row { display:flex; gap:6px; align-items:flex-start; justify-content:space-between; margin:6px 0 10px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .month-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; min-width:0; overflow:auto; }
+    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
-    .repair-strip { display:flex; gap:8px; flex-wrap:wrap; margin:0; }
-    .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 14px; font-weight:700; cursor:pointer; min-width:72px; }
-    .month-tools { display:flex; gap:8px; align-items:flex-start; justify-content:flex-end; flex-wrap:wrap; flex-shrink:0; position:sticky; right:0; z-index:5; background:rgba(255,255,255,.96); padding-left:8px; }
-    .row-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
-    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    .repair-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; }
+    .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; min-width:48px; }
+    .month-tools { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; flex-wrap:nowrap; flex-shrink:0; position:sticky; right:0; z-index:5; background:rgba(255,255,255,.96); padding-left:6px; }
+    .row-actions { display:flex; gap:4px; align-items:center; flex-shrink:0; }
+    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:900px; table-layout:fixed; }
@@ -713,7 +713,7 @@ HTML_TEMPLATE = """<!doctype html>
     .month-table { table-layout:fixed; width:max-content; }
     .month-table tbody tr { height:26px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
-    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { align-items:flex-start; flex-direction:column; position:static; } .month-tools { position:static; justify-content:flex-start; padding-left:0; } }
+    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { position:static; justify-content:flex-start; flex-wrap:wrap; padding-left:0; } .repair-strip { flex-wrap:wrap; } }
   </style>
 </head>
 <body>
