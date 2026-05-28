@@ -796,6 +796,34 @@ function handleMonthKeydown(e){
   e.preventDefault();
   moveCell(e.target, step[0], step[1]);
 }
+function handleMonthPaste(e){
+  if (!CAN_EDIT) return;
+  const target = e.target;
+  if (!target || !target.dataset || target.dataset.month === undefined) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+  const table = target.dataset.table;
+  const startRow = parseInt(target.dataset.row, 10);
+  const startCol = parseInt(target.dataset.col, 10);
+  if (!Number.isFinite(startRow) || !Number.isFinite(startCol)) return;
+  const rows = text.replace(/\r/g, '').split('\n').filter((row, idx, arr) => !(row === '' && idx === arr.length - 1));
+  if (!rows.length) return;
+  e.preventDefault();
+  rows.forEach((line, rOffset) => {
+    const cols = line.split('\t');
+    cols.forEach((value, cOffset) => {
+      const row = startRow + rOffset;
+      const col = startCol + cOffset;
+      const selector = `input[data-month="${ui.monthIndex}"][data-table="${table}"][data-row="${row}"][data-col="${col}"]`;
+      const cell = document.querySelector(selector);
+      if (!cell) return;
+      const normalized = value ?? '';
+      cell.value = normalized;
+      setPath(cell.dataset.path, normalized);
+    });
+  });
+  markDirty(true);
+}
 function bindNav(){
   document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id?'active':''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
 }
@@ -1029,7 +1057,7 @@ function renderActs(){
 }
 function cell(path, value, cls, month, table, row, col){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)">`;
+  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)" onpaste="handleMonthPaste(event)">`;
 }
 function addRow(type){
   if (!CAN_EDIT) return;
