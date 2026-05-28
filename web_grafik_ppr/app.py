@@ -684,15 +684,16 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .months-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:start; margin:6px 0 10px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 6px; }
-    .months-row > * { min-width:0; }
-    .month-strip { display:flex; gap:4px; flex-wrap:nowrap; width:100%; min-width:0; overflow:auto; margin:0; }
+    .months-row { position:sticky; top:0; z-index:4; display:flex; align-items:flex-start; gap:12px; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .months-row .month-strip { flex:1 1 auto; min-width:0; }
+    .months-row .month-tools { position:absolute; left:50%; transform:translateX(-50%); display:flex; justify-content:center; }
+    .months-row .row-actions { margin-left:auto; display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
     .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
     .repair-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; justify-content:center; }
     .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; min-width:48px; }
-    .month-tools { display:flex; justify-content:center; justify-self:center; }
-    .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; flex-shrink:0; }
+    .month-tools { display:flex; justify-content:center; }
+    .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
