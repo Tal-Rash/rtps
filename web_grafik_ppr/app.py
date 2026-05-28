@@ -665,13 +665,13 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .months-row { display:flex; gap:6px; align-items:flex-start; justify-content:space-between; margin:6px 0 10px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .months-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:6px; align-items:start; margin:6px 0 10px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .month-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; min-width:0; overflow:auto; }
     .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
     .repair-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; }
     .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; min-width:48px; }
-    .month-tools { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; flex-wrap:nowrap; flex-shrink:0; position:sticky; right:0; z-index:5; background:rgba(255,255,255,.96); padding-left:6px; }
+    .month-tools { display:contents; }
     .row-actions { display:flex; gap:4px; align-items:center; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
@@ -713,7 +713,7 @@ HTML_TEMPLATE = """<!doctype html>
     .month-table { table-layout:fixed; width:max-content; }
     .month-table tbody tr { height:26px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
-    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { position:static; justify-content:flex-start; flex-wrap:wrap; padding-left:0; } .repair-strip { flex-wrap:wrap; } }
+    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:flex; justify-content:flex-start; flex-wrap:wrap; padding-left:0; } .repair-strip { flex-wrap:wrap; } }
   </style>
 </head>
 <body>
@@ -906,10 +906,10 @@ function renderMonths(){
       <div class="month-strip">${monthButtons}</div>
       <div class="month-tools">
         ${repairButtons}
-        <div class="row-actions">
-          <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
-          <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
-        </div>
+      </div>
+      <div class="row-actions">
+        <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
+        <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
       </div>
     </div>
     ${renderMonthTable('plan', 'План', m, headers)}
