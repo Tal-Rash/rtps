@@ -749,9 +749,9 @@ function renderMonths(){
   const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
   const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
   return `
-    #<div class="section-head">
-      #<div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div>
-    #</div>
+    <!-- <div class="section-head"> -->
+      <!-- <div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div> -->
+    <!-- </div> -->
     <div class="months-row">
       <div class="month-strip">${monthButtons}</div>
       <div class="row-actions">
