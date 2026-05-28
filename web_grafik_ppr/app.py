@@ -914,15 +914,9 @@ class Handler(BaseHTTPRequestHandler):
         user = session[0] if session else None
         role = session[1] if session else None
         if parsed.path == "/":
-            if not user:
-                _redirect(self, "/login")
-                return
             _redirect(self, "/grafik-ppr")
             return
         if parsed.path == "/grafik-ppr":
-            if not user:
-                _redirect(self, "/login")
-                return
             year = dt.date.today().year
             qs = parse_qs(parsed.query)
             if "year" in qs:
@@ -951,8 +945,6 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/login">')
             return
         if parsed.path == "/api/state":
-            if not require_auth(self):
-                return
             qs = parse_qs(parsed.query)
             year = dt.date.today().year
             if "year" in qs:
