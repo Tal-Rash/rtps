@@ -16,7 +16,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 APP_VERSION = "web-gpp-0.1"
 MONTHS_RU = [
@@ -433,6 +433,11 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
     out = BytesIO()
     wb.save(out)
     return out.getvalue(), f"Акт_{clean_act_num}.xlsx"
+
+
+def content_disposition_attachment(filename: str) -> str:
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "file.xlsx"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
 def save_state(state: dict) -> dict:
@@ -1365,7 +1370,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Disposition", content_disposition_attachment(filename))
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
