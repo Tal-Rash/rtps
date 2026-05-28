@@ -945,12 +945,12 @@ function insertRepair(text){
   const days = REPAIR_AUTO_FILL_DAYS[text] || 0;
   if (!days) return;
   const year = appState.year;
-  const day = col - 2;
+  const day = col - 3;
   let filled = 0;
   let check = day + 1;
   while (filled < days && check <= month.days) {
     if (!isRepairSkipDay(year, month.month, check)) {
-      apply(check + 2, text);
+      apply(check + 3, text);
       filled += 1;
     }
     check += 1;
