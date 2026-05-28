@@ -34,6 +34,8 @@ ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 DB_FILE = DATA_DIR / "grafik_ppr_web.db"
 AUTH_FILE = DATA_DIR / "web_auth.json"
+SHARED_DATA_DIR = ROOT.parent / "data"
+WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 SOURCE_DB = ROOT.parent / "base" / "common_database.db"
 SOURCE_DIR = ROOT.parent / "src" / "График ППР"
 
@@ -41,9 +43,26 @@ DB_LOCK = Lock()
 SERVER_STARTED_AT = None
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-WEB_SECRET = os.environ.get("WEB_SECRET", "")
-if not WEB_SECRET:
-    WEB_SECRET = secrets.token_urlsafe(32)
+
+
+def load_web_secret() -> str:
+    secret = os.environ.get("WEB_SECRET", "").strip()
+    if secret:
+        return secret
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if WEB_SECRET_FILE.exists():
+        try:
+            secret = WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+            if secret:
+                return secret
+        except Exception:
+            pass
+    secret = secrets.token_urlsafe(32)
+    WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
+    return secret
+
+
+WEB_SECRET = load_web_secret()
 SESSIONS: dict[str, tuple[str, str, float]] = {}
 
 
@@ -472,7 +491,7 @@ EDIT_TOOLBAR = """
         <button onclick="saveState()">Сохранить</button>
         <button onclick="downloadJson()">Экспорт JSON</button>
         <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
-        <a class="badge" href="{{APP_PREFIX}}/logout" style="text-decoration:none;">Выйти</a>
+        <a class="badge" href="/" style="text-decoration:none;">Выйти</a>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
       </div>
 """
@@ -1153,8 +1172,7 @@ class Handler(BaseHTTPRequestHandler):
             _send_html(self, render_login())
             return
         if route == "/logout":
-            handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
-            _redirect(self, "/", handler_cookie)
+            _redirect(self, "/")
             return
         if route == "/api/state":
             qs = parse_qs(parsed.query)

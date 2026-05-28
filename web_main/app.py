@@ -15,9 +15,30 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 AUTH_FILE = DATA_DIR / "web_auth.json"
+SHARED_DATA_DIR = ROOT.parent / "data"
+WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-WEB_SECRET = os.environ.get("WEB_SECRET", "") or secrets.token_urlsafe(32)
+
+
+def load_web_secret() -> str:
+    secret = os.environ.get("WEB_SECRET", "").strip()
+    if secret:
+        return secret
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if WEB_SECRET_FILE.exists():
+        try:
+            secret = WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+            if secret:
+                return secret
+        except Exception:
+            pass
+    secret = secrets.token_urlsafe(32)
+    WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
+    return secret
+
+
+WEB_SECRET = load_web_secret()
 
 
 def load_auth_config() -> tuple[str, str, str]:
