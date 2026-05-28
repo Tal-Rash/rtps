@@ -669,6 +669,8 @@ HTML_TEMPLATE = """<!doctype html>
     .month-strip { display:flex; gap:6px; flex-wrap:wrap; margin:0; }
     .month-strip button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
+    .repair-strip { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
+    .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 14px; font-weight:700; cursor:pointer; min-width:72px; }
     .row-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; }
     .row-actions button.danger { background:#fff; }
@@ -744,11 +746,21 @@ let dirty = false;
 const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
+const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
 const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты / примечания'}];
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function setStatus(t){ document.getElementById('status').textContent = t; }
 function markDirty(v=true){ dirty=v; document.getElementById('dirtyHint').textContent = v ? 'Есть несохранённые изменения' : 'Изменений нет'; }
+function setLastCell(el){
+  if (!el || !el.dataset) return;
+  ui.lastCell = {
+    table: el.dataset.table,
+    row: Number(el.dataset.row),
+    col: Number(el.dataset.col),
+    path: el.dataset.path,
+  };
+}
 function setPath(path, value){
   if (!CAN_EDIT) return;
   const p = path.split('.');
@@ -791,6 +803,11 @@ function setSection(section){ ui.section = section; render(); }
 function setMonth(index){ ui.monthIndex = index; render(); }
 function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
+function isRepairSkipDay(year, month, day){
+  const fixed = [[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,7],[1,8],[2,23],[3,8],[5,1],[5,9],[6,12],[11,4]];
+  if (fixed.some(([m, d]) => m === month && d === day)) return true;
+  return isWeekend(year, month, day);
+}
 function systemDates(){
   return appState.system_dates || { transfer: [], holiday: [] };
 }
@@ -836,6 +853,17 @@ function renderMonths(){
   const m = currentMonth();
   const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
   const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
+  const repairButtons = CAN_EDIT ? `
+      <div class="repair-strip">
+        <button onclick="insertRepair('ТО2')">ТО2</button>
+        <button onclick="insertRepair('ТО3')">ТО3</button>
+        <button onclick="insertRepair('ТР1')">ТР1</button>
+        <button onclick="insertRepair('ТР2')">ТР2</button>
+        <button onclick="insertRepair('ТР3')">ТР3</button>
+        <button onclick="insertRepair('ТО')">ТО</button>
+        <button onclick="insertRepair('ТР')">ТР</button>
+      </div>
+    ` : '';
   return `
     <div class="section-head">
       <div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div>
@@ -847,6 +875,7 @@ function renderMonths(){
         <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">Удалить строку</button>
       </div>
     </div>
+    ${repairButtons}
     ${renderMonthTable('plan', 'План', m, headers)}
     ${renderMonthTable('fact', 'Факт', m, headers)}
   `;
@@ -894,6 +923,38 @@ function renderMonthTable(type, title, m, headers){
 function catButton(monthIndex, type, rowIndex, excluded){
   const label = excluded ? '↺' : '–';
   return `<button class="rowbtn cat-toggle" onclick="toggleExcluded(${monthIndex},'${type}',${rowIndex})">${label}</button>`;
+}
+function insertRepair(text){
+  if (!CAN_EDIT) return;
+  const el = document.activeElement;
+  const cell = (el && el.dataset && el.dataset.month !== undefined) ? el : null;
+  const targetCell = cell || (ui.lastCell ? document.querySelector(`input[data-table="${ui.lastCell.table}"][data-row="${ui.lastCell.row}"][data-col="${ui.lastCell.col}"]`) : null);
+  if (!targetCell || !targetCell.dataset) return;
+  const month = currentMonth();
+  const row = parseInt(targetCell.dataset.row, 10);
+  const col = parseInt(targetCell.dataset.col, 10);
+  if (!Number.isFinite(row) || !Number.isFinite(col) || col < 4 || col >= 4 + month.days) return;
+  const apply = (targetCol, value) => {
+    const target = document.querySelector(`input[data-month="${ui.monthIndex}"][data-table="${targetCell.dataset.table}"][data-row="${row}"][data-col="${targetCol}"]`);
+    if (target) {
+      target.value = value;
+      setPath(target.dataset.path, value);
+    }
+  };
+  apply(col, text);
+  const days = REPAIR_AUTO_FILL_DAYS[text] || 0;
+  if (!days) return;
+  const year = appState.year;
+  const day = col - 2;
+  let filled = 0;
+  let check = day + 1;
+  while (filled < days && check <= month.days) {
+    if (!isRepairSkipDay(year, month.month, check)) {
+      apply(check + 2, text);
+      filled += 1;
+    }
+    check += 1;
+  }
 }
 function renderNorms(){
   const leftRows = [
@@ -968,7 +1029,7 @@ function renderActs(){
 }
 function cell(path, value, cls, month, table, row, col){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)">`;
+  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)">`;
 }
 function addRow(type){
   if (!CAN_EDIT) return;
