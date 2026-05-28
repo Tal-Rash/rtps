@@ -217,7 +217,6 @@ def default_state(year: int) -> dict:
         "system_dates": load_system_dates(year),
         "months": months,
         "norms": norms,
-        "inventory": inventory,
         "acts": acts,
         "notes": notes,
     }
@@ -298,9 +297,6 @@ def load_state(year: int) -> dict:
             else:
                 state["norms"][cat].append({"k": key, "v": value})
 
-        inventory = cur.execute("SELECT ser, num, inv FROM inventory WHERE y=? ORDER BY ser, num", (year,)).fetchall()
-        state["inventory"] = [{"ser": s(r["ser"]), "num": s(r["num"]), "inv": s(r["inv"])} for r in inventory]
-
         acts = cur.execute("SELECT m, act_num, is_done, sap_order_done FROM acts_state WHERE y=? ORDER BY m, act_num", (year,)).fetchall()
         for row in acts:
             state["acts"].setdefault(s(row["m"]), {})[s(row["act_num"])] = {
@@ -322,7 +318,6 @@ def save_state(state: dict) -> dict:
         with db:
             cur.execute("DELETE FROM repairs WHERE y=?", (year,))
             cur.execute("DELETE FROM norms WHERE y=?", (year,))
-            cur.execute("DELETE FROM inventory WHERE y=?", (year,))
             cur.execute("DELETE FROM acts_state WHERE y=?", (year,))
             cur.execute("DELETE FROM report_notes WHERE y=?", (year,))
             cur.execute("INSERT OR REPLACE INTO repair_settings VALUES ('last_year', ?)", (str(year),))
@@ -348,13 +343,6 @@ def save_state(state: dict) -> dict:
                     v = s(row.get("v")).strip()
                     if k or v:
                         cur.execute("INSERT INTO norms VALUES (?,?,?,?)", (year, cat, k, v))
-
-            for row in state.get("inventory", []):
-                ser = s(row.get("ser")).strip()
-                num = s(row.get("num")).strip()
-                inv = s(row.get("inv")).strip()
-                if ser or num or inv:
-                    cur.execute("INSERT INTO inventory VALUES (?,?,?,?)", (year, ser, num, inv))
 
             for m_name, acts in state.get("acts", {}).items():
                 for act_num, flags in acts.items():
@@ -751,12 +739,12 @@ HTML_TEMPLATE = """<!doctype html>
 const BOOT_VERSION = "{{APP_VERSION}}";
 const BOOT_STARTED_AT = "{{STARTED_AT}}";
 let appState = {{STATE_JSON}};
-let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null, inventory: null } };
+let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null } };
 let dirty = false;
 const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
-const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'inventory',label:'Инвентарь'},{id:'acts',label:'Акты / примечания'}];
+const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты / примечания'}];
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function setStatus(t){ document.getElementById('status').textContent = t; }
@@ -842,7 +830,6 @@ function render(){
   const content = document.getElementById('content');
   if (ui.section === 'months') content.innerHTML = renderMonths();
   if (ui.section === 'norms') content.innerHTML = renderNorms();
-  if (ui.section === 'inventory') content.innerHTML = renderInventory();
   if (ui.section === 'acts') content.innerHTML = renderActs();
 }
 function renderMonths(){
@@ -953,21 +940,6 @@ function renderNorms(){
     </div>
   `;
 }
-function renderInventory(){
-  const rows = appState.inventory.map((r, i) => `<tr onclick="selectRow('inventory', ${i})"><td>${cell(`inventory.${i}.ser`, r.ser, 'cell')}</td><td>${cell(`inventory.${i}.num`, r.num, 'cell')}</td><td>${cell(`inventory.${i}.inv`, r.inv, 'cell')}</td></tr>`).join('');
-  return `
-    <div class="section-head">
-      <div><div class="section-title">Инвентарь</div><div class="sub">Серия, номер, инвентарный номер.</div></div>
-      <div class="toolbar"><button onclick="addInventoryRow()">Добавить строку</button><button class="danger" onclick="removeInventoryRow()">Удалить строку</button></div>
-    </div>
-    <div class="table-wrap">
-      <table class="compact">
-        <thead><tr><th>Серия</th><th>Номер</th><th>Инв№</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-}
 function renderActs(){
   const month = currentMonth().name;
   const acts = appState.acts[month] || {};
@@ -1008,8 +980,6 @@ function deleteRow(type){ if (!CAN_EDIT) return; const m = currentMonth(); if (m
 function toggleExcluded(mi, tt, r){ if (!CAN_EDIT) return; appState.months[mi][tt][r].excluded = !appState.months[mi][tt][r].excluded; markDirty(true); render(); }
 function addNorm(){ if (!CAN_EDIT) return; appState.norms.h_tep.push({k:'', v:''}); markDirty(true); render(); }
 function removeNorm(cat, idx){ if (!CAN_EDIT) return; appState.norms[cat].splice(idx,1); markDirty(true); render(); }
-function addInventoryRow(){ if (!CAN_EDIT) return; appState.inventory.push({ser:'',num:'',inv:''}); markDirty(true); render(); }
-function removeInventoryRow(){ if (!CAN_EDIT) return; appState.inventory.pop(); markDirty(true); render(); }
 function selectRow(section, idx){ ui.selected[section] = idx; }
 async function saveState(){
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
