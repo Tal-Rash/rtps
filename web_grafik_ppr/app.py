@@ -204,8 +204,8 @@ def default_state(year: int) -> dict:
     norms = {
         "h_tep": [],
         "h_agr": [],
-        "p_tep": [],
-        "p_agr": [],
+        "p_tep": [{"k": MONTHS_RU[i], "v": ""} for i in range(12)],
+        "p_agr": [{"k": MONTHS_RU[i], "v": ""} for i in range(12)],
     }
     inventory = []
     acts = {}
@@ -272,7 +272,21 @@ def load_state(year: int) -> dict:
             cat = s(row["cat"])
             if cat not in state["norms"]:
                 continue
-            state["norms"][cat].append({"k": s(row["k"]), "v": s(row["v"])})
+            key = s(row["k"])
+            value = s(row["v"])
+            if cat in {"p_tep", "p_agr"}:
+                idx = -1
+                if key in MONTHS_RU:
+                    idx = MONTHS_RU.index(key)
+                else:
+                    try:
+                        idx = int(key) - 1
+                    except ValueError:
+                        idx = -1
+                if 0 <= idx < 12:
+                    state["norms"][cat][idx] = {"k": key or MONTHS_RU[idx], "v": value}
+            else:
+                state["norms"][cat].append({"k": key, "v": value})
 
         inventory = cur.execute("SELECT ser, num, inv FROM inventory WHERE y=? ORDER BY ser, num", (year,)).fetchall()
         state["inventory"] = [{"ser": s(r["ser"]), "num": s(r["num"]), "inv": s(r["inv"])} for r in inventory]
@@ -880,18 +894,33 @@ function catButton(monthIndex, type, rowIndex, excluded){
   return `<button class="rowbtn cat-toggle" onclick="toggleExcluded(${monthIndex},'${type}',${rowIndex})">${label}</button>`;
 }
 function renderNorms(){
-  const headers = ['Категория','Код','Значение'];
-  const rows = Object.entries(appState.norms).flatMap(([cat, items]) => items.map((row, idx) => ({cat, idx, row})));
-  const htmlRows = rows.map((x, i) => `<tr onclick="selectRow('norms', ${i})"><td>${cell(`norms.${x.cat}.${x.idx}.k`, x.row.k, 'cell')}</td><td>${cell(`norms.${x.cat}.${x.idx}.v`, x.row.v, 'cell center')}</td><td><button class="rowbtn" onclick="removeNorm('${x.cat}', ${x.idx}); event.stopPropagation()">–</button></td></tr>`).join('');
+  const hoursRows = [
+    ...appState.norms.h_tep.map((row, idx) => ({cat:'h_tep', idx, row})),
+    ...appState.norms.h_agr.map((row, idx) => ({cat:'h_agr', idx, row})),
+  ];
+  const parkRows = Array.from({length:12}, (_, idx) => {
+    const month = String(idx + 1).padStart(2, '0');
+    const tep = appState.norms.p_tep[idx] || {k: month, v: ''};
+    const agr = appState.norms.p_agr[idx] || {k: month, v: ''};
+    return { idx, month, tep, agr };
+  });
+  const hoursHtml = hoursRows.map((x, i) => `<tr onclick="selectRow('norms', ${i})"><td>${x.cat === 'h_tep' ? 'ТЭП' : 'АГР'}</td><td>${cell(`norms.${x.cat}.${x.idx}.k`, x.row.k, 'cell')}</td><td>${cell(`norms.${x.cat}.${x.idx}.v`, x.row.v, 'cell center')}</td><td><button class="rowbtn" onclick="removeNorm('${x.cat}', ${x.idx}); event.stopPropagation()">–</button></td></tr>`).join('');
+  const parkHtml = parkRows.map((x) => `<tr><td>${x.month}</td><td>${cell(`norms.p_tep.${x.idx}.v`, x.tep.v, 'cell center')}</td><td>${cell(`norms.p_agr.${x.idx}.v`, x.agr.v, 'cell center')}</td></tr>`).join('');
   return `
     <div class="section-head">
       <div><div class="section-title">Нормы / парк</div><div class="sub">Нормативы часов и план парка.</div></div>
       <div class="toolbar"><button onclick="addNorm()">Добавить строку</button></div>
     </div>
+    <div class="table-wrap" style="margin-bottom:14px;">
+      <table class="compact">
+        <thead><tr><th>Группа</th><th>Код</th><th>Значение</th><th></th></tr></thead>
+        <tbody>${hoursHtml || '<tr><td colspan="4">Нет строк</td></tr>'}</tbody>
+      </table>
+    </div>
     <div class="table-wrap">
       <table class="compact">
-        <thead><tr><th>${headers[0]}</th><th>${headers[1]}</th><th>${headers[2]}</th></tr></thead>
-        <tbody>${htmlRows}</tbody>
+        <thead><tr><th>Месяц</th><th>Парк ТЭП</th><th>Парк АГР</th></tr></thead>
+        <tbody>${parkHtml}</tbody>
       </table>
     </div>
   `;
