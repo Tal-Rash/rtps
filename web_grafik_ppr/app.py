@@ -1049,7 +1049,7 @@ function repairButtonsHtml(){
 }
 function monthSelectHtml(){
   return `
-    <select id="actsMonthSelect" onchange="setMonth(parseInt(this.value, 10))" style="border:1px solid var(--line); border-radius:8px; padding:2px 4px; font:inherit; font-size:15px; background:#fff; width:72px; min-width:72px; max-width:72px;">
+    <select id="actsMonthSelect" onchange="setMonth(parseInt(this.value, 10))" style="border:1px solid var(--line); border-radius:8px; padding:2px 8px; font:inherit; font-size:15px; background:#fff; width:112px; min-width:112px; max-width:112px;">
       ${appState.months.map((m, i) => `<option value="${i}" ${i === ui.monthIndex ? 'selected' : ''}>${m.name}</option>`).join('')}
     </select>
   `;
