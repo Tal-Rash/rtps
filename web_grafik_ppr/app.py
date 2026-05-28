@@ -810,19 +810,17 @@ HTML_TEMPLATE = """<!doctype html>
       border:1px solid var(--line);
       background:linear-gradient(180deg,#fff,#f3f7ff);
       border-radius:8px;
-      padding:2px 5px;
+      padding:4px 7px;
       font:inherit;
       font-weight:700;
-      font-size:12px;
-      line-height:1.1;
       cursor:pointer;
     }
     .act-start:disabled { opacity:.5; cursor:default; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
-    th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:11px; padding:6px 4px; text-align:center; white-space:nowrap; }
-    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:1px 4px; height:20px; line-height:1; font:inherit; font-size:12px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:10px 6px; text-align:center; white-space:nowrap; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 6px; height:26px; line-height:1; font:inherit; font-size:12px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cell.center { text-align:center; }
     .cell.cat-toggle {
       display:block;
@@ -831,13 +829,13 @@ HTML_TEMPLATE = """<!doctype html>
       width:100%;
       text-align:center;
     }
-    .rownum { display:flex; gap:6px; align-items:center; justify-content:center; padding:1px 4px; min-height:20px; font-size:12px; }
-    .rowbtn { width:18px; height:18px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; font-size:11px; line-height:1; }
-    .rowbtn.cat-toggle { width:100%; height:20px; border-radius:0; border:0; background:transparent; }
+    .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:24px; }
+    .rowbtn { width:22px; height:22px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; }
+    .rowbtn.cat-toggle { width:100%; height:26px; border-radius:0; border:0; background:transparent; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { background:#fff3f3; }
-    .small { width:100%; min-width:0; text-align:center; font-size:11px; }
+    .small { width:100%; min-width:0; text-align:center; font-size:12px; }
     .notes { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--line); border-radius:14px; }
     .excluded-row { color:#9aa5b1; background:#f3f5f8; }
     .excluded-row input { background:#f3f5f8; color:#9aa5b1; }
@@ -852,9 +850,9 @@ HTML_TEMPLATE = """<!doctype html>
     .col-day { width:28px; }
     .col-note { width:120px; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
-    .compact th, .compact td { font-size:11px; }
+    .compact th, .compact td { font-size:12px; }
     .month-table { table-layout:fixed; width:max-content; }
-    .month-table tbody tr { height:20px; }
+    .month-table tbody tr { height:26px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
     @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:none; } .repair-strip { flex-wrap:wrap; } }
   </style>
@@ -1283,7 +1281,7 @@ async function loadYearFromInput(){
   await loadYear(year);
 }
 window.addEventListener('beforeunload', (e)=>{ if (dirty) { e.preventDefault(); e.returnValue=''; } });
-render(); setStatus(`Версия ${BOOT_VERSION}`);
+render();
 </script>
 </body>
 </html>
