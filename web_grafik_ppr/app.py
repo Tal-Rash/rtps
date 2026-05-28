@@ -1048,7 +1048,7 @@ function repairButtonsHtml(){
 }
 function monthSelectHtml(){
   return `
-    <select id="actsMonthSelect" onchange="setMonth(parseInt(this.value, 10))" style="border:1px solid var(--line); border-radius:8px; padding:2px 6px; font:inherit; background:#fff; width:78px; min-width:78px;">
+    <select id="actsMonthSelect" onchange="setMonth(parseInt(this.value, 10))" style="border:1px solid var(--line); border-radius:8px; padding:2px 4px; font:inherit; font-size:12px; background:#fff; width:62px; min-width:62px; max-width:62px;">
       ${appState.months.map((m, i) => `<option value="${i}" ${i === ui.monthIndex ? 'selected' : ''}>${m.name}</option>`).join('')}
     </select>
   `;
@@ -1207,7 +1207,7 @@ function renderActs(){
   }).join('');
   return `
     <div class="section-head">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:nowrap;">
         <div class="section-title">Акты</div>
         ${monthSelectHtml()}
       </div>
