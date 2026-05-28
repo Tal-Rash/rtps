@@ -804,8 +804,8 @@ function setMonth(index){ ui.monthIndex = index; render(); }
 function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
 function isRepairSkipDay(year, month, day){
-  const fixed = [[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,7],[1,8],[2,23],[3,8],[5,1],[5,9],[6,12],[11,4]];
-  if (fixed.some(([m, d]) => m === month && d === day)) return true;
+  if (hasSystemDate('holiday', month, day)) return true;
+  if (hasSystemDate('transfer', month, day)) return true;
   return isWeekend(year, month, day);
 }
 function systemDates(){
