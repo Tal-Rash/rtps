@@ -101,6 +101,7 @@ def load_auth_config() -> tuple[str, str]:
 
 WEB_USER, WEB_PASSWORD = load_auth_config()
 AUTH_ENABLED = True
+APP_PREFIX = "/grafik-ppr"
 
 
 def ensure_database() -> None:
@@ -384,7 +385,16 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
         .replace("{{TOOLBAR}}", toolbar)
         .replace("{{AUTH_BADGE}}", auth_badge)
         .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
+        .replace("{{APP_PREFIX}}", APP_PREFIX)
     )
+
+
+def _route_path(path: str) -> str:
+    if path == APP_PREFIX:
+        return "/"
+    if path.startswith(APP_PREFIX + "/"):
+        return path[len(APP_PREFIX):]
+    return path
 
 
 EDIT_TOOLBAR = """
@@ -394,7 +404,7 @@ EDIT_TOOLBAR = """
         <button onclick="saveState()">Сохранить</button>
         <button onclick="downloadJson()">Экспорт JSON</button>
         <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
-        <a class="badge" href="/logout" style="text-decoration:none;">Выйти</a>
+        <a class="badge" href="{{APP_PREFIX}}/logout" style="text-decoration:none;">Выйти</a>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
       </div>
 """
@@ -403,7 +413,7 @@ READONLY_TOOLBAR = """
       <div class="toolbar">
         <label>Год <input id="yearInput" type="number" min="2020" max="2100"></label>
         <button onclick="loadYearFromInput()">Открыть</button>
-        <a class="badge" href="/login" style="text-decoration:none;">Войти</a>
+        <a class="badge" href="{{APP_PREFIX}}/login" style="text-decoration:none;">Войти</a>
       </div>
 """
 
@@ -422,7 +432,7 @@ LOGIN_TEMPLATE = """<!doctype html>
   </style>
 </head>
 <body>
-  <form class="card" method="post" action="/login">
+  <form class="card" method="post" action="{{APP_PREFIX}}/login">
     <h1 style="margin-top:0;">Вход</h1>
     <p class="muted">Введите пароль для входа.</p>
     <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
@@ -472,7 +482,7 @@ HOME_TEMPLATE = """<!doctype html>
         <p class="sub">Стартовая страница для запуска веб-приложений. Сейчас доступен веб-график ППР, остальные модули можно подключать сюда по мере готовности.</p>
       </div>
       <div class="top-right">
-        <a class="badge" href="/logout">Выйти</a>
+        <a class="badge" href="{{APP_PREFIX}}/logout">Выйти</a>
         <div class="badge">{{AUTH_BADGE}}</div>
       </div>
     </div>
@@ -483,7 +493,7 @@ HOME_TEMPLATE = """<!doctype html>
           <h2>График ППР</h2>
           <p>План, факт, нормы, инвентарь и акты. Основной рабочий модуль уже перенесён на сервер.</p>
         </div>
-        <a href="/grafik-ppr">Открыть</a>
+        <a href="{{APP_PREFIX}}/">Открыть</a>
       </div>
       <div class="card">
         <div>
@@ -861,7 +871,7 @@ function selectRow(section, idx){ ui.selected[section] = idx; }
 async function saveState(){
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
   setStatus('Сохранение...');
-  const res = await fetch('/api/state', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
+  const res = await fetch('{{APP_PREFIX}}/api/state', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
   if (!res.ok) { setStatus('Ошибка'); return; }
   appState = await res.json();
   markDirty(false);
@@ -877,12 +887,12 @@ async function importJson(event){
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
   const f = event.target.files[0]; event.target.value = ''; if (!f) return;
   const payload = JSON.parse(await f.text());
-  const res = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(payload) });
+  const res = await fetch('{{APP_PREFIX}}/api/import', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(payload) });
   if (!res.ok) { alert('Импорт не удался'); return; }
   appState = await res.json(); markDirty(false); render();
 }
 async function loadYear(year){
-  const res = await fetch(`/api/state?year=${encodeURIComponent(year)}`);
+  const res = await fetch(`{{APP_PREFIX}}/api/state?year=${encodeURIComponent(year)}`);
   if (!res.ok) { alert('Не удалось загрузить год'); return; }
   appState = await res.json(); markDirty(false); render();
 }
@@ -906,13 +916,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        route = _route_path(parsed.path)
         session = current_session(self)
         user = session[0] if session else None
         role = session[1] if session else None
-        if parsed.path == "/":
+        if route == "/":
             _redirect(self, "/grafik-ppr")
             return
-        if parsed.path == "/grafik-ppr":
+        if route == "/grafik-ppr":
             year = dt.date.today().year
             qs = parse_qs(parsed.query)
             if "year" in qs:
@@ -922,7 +933,7 @@ class Handler(BaseHTTPRequestHandler):
                     year = dt.date.today().year
             _send_html(self, render_page(load_state(year), role == "edit", user))
             return
-        if parsed.path == "/login":
+        if route == "/login":
             if not AUTH_ENABLED:
                 _redirect(self, "/")
                 return
@@ -931,7 +942,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER))
             return
-        if parsed.path == "/logout":
+        if route == "/logout":
             handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -940,7 +951,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/login">')
             return
-        if parsed.path == "/api/state":
+        if route == "/api/state":
             qs = parse_qs(parsed.query)
             year = dt.date.today().year
             if "year" in qs:
@@ -972,9 +983,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        route = _route_path(parsed.path)
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
-        if parsed.path == "/login":
+        if route == "/login":
             if not AUTH_ENABLED:
                 _redirect(self, "/")
                 return
@@ -990,7 +1002,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw.decode("utf-8"))
         except Exception:
             payload = {}
-        if parsed.path in {"/api/state", "/api/import"}:
+        if route in {"/api/state", "/api/import"}:
             if not require_auth(self, need_edit=True):
                 return
             try:
