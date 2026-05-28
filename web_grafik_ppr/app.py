@@ -242,10 +242,6 @@ def load_state(year: int) -> dict:
         for row in notes:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
 
-        last_year = cur.execute("SELECT v FROM repair_settings WHERE k='last_year'").fetchone()
-        if last_year and last_year["v"]:
-            state["year"] = int(last_year["v"])
-
     return state
 
 
