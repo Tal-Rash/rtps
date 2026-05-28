@@ -606,9 +606,13 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .month-strip { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 12px; }
+    .months-row { display:flex; gap:8px; align-items:center; justify-content:space-between; margin:10px 0 12px; }
+    .month-strip { display:flex; gap:6px; flex-wrap:wrap; margin:0; }
     .month-strip button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
+    .row-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    .row-actions button.danger { background:#fff; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:900px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
@@ -644,7 +648,7 @@ HTML_TEMPLATE = """<!doctype html>
     .compact th, .compact td { font-size:13px; }
     .month-table { table-layout:fixed; width:max-content; }
     .month-table tbody tr { height:26px; }
-    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } }
+    @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { align-items:flex-start; flex-direction:column; } }
   </style>
 </head>
 <body>
@@ -748,7 +752,13 @@ function renderMonths(){
     <div class="section-head">
       <div><div class="section-title">Месяцы</div><div class="sub">План и факт по выбранному месяцу.</div></div>
     </div>
-    <div class="month-strip">${monthButtons}</div>
+    <div class="months-row">
+      <div class="month-strip">${monthButtons}</div>
+      <div class="row-actions">
+        <button onclick="addRow('plan'); addRow('fact')">Добавить строку</button>
+        <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">Удалить строку</button>
+      </div>
+    </div>
     ${renderMonthTable('plan', 'План', m, headers)}
     ${renderMonthTable('fact', 'Факт', m, headers)}
   `;
@@ -783,10 +793,6 @@ function renderMonthTable(type, title, m, headers){
   return `
     <div class="section-head" style="margin-top:16px;">
       <div><div class="section-title">${title}</div></div>
-      <div class="toolbar">
-        <button onclick="addRow('${type}')">Добавить строку</button>
-        <button class="danger" onclick="deleteRow('${type}')">Удалить строку</button>
-      </div>
     </div>
     <div class="table-wrap">
       <table class="compact month-table" style="min-width:${(4+m.days+2)*34 + 300}px">
