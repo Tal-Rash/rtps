@@ -1212,8 +1212,14 @@ function renderActs(){
         ${monthSelectHtml()}
       </div>
     </div>
-    <div class="table-wrap">
-      <table class="compact">
+    <div class="table-wrap" style="width:fit-content; max-width:100%;">
+      <table class="compact" style="width:max-content; min-width:0;">
+        <colgroup>
+          <col style="width:180px;">
+          <col style="width:120px;">
+          <col style="width:110px;">
+          <col style="width:120px;">
+        </colgroup>
         <thead><tr><th>№ акта</th><th>Сформировать акт</th><th>Акт сформирован</th><th>Создан заказ в SAP</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
       </table>
