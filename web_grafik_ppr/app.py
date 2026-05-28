@@ -407,8 +407,7 @@ def render_login(extra: str = "") -> str:
 
 EDIT_TOOLBAR = """
       <div class="toolbar">
-        <label>Год <input id="yearInput" type="number" min="2020" max="2100"></label>
-        <button onclick="loadYearFromInput()">Открыть</button>
+        <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
         <button onclick="saveState()">Сохранить</button>
         <button onclick="downloadJson()">Экспорт JSON</button>
         <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
@@ -419,8 +418,7 @@ EDIT_TOOLBAR = """
 
 READONLY_TOOLBAR = """
       <div class="toolbar">
-        <label>Год <input id="yearInput" type="number" min="2020" max="2100"></label>
-        <button onclick="loadYearFromInput()">Открыть</button>
+        <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
         <a class="badge" href="{{APP_PREFIX}}/login" style="text-decoration:none;">Войти</a>
       </div>
 """
@@ -732,8 +730,21 @@ function isWeekend(year, month, day){
   const wd = d.getDay();
   return wd === 0 || wd === 6;
 }
+function ensureYearOptions(){
+  const select = document.getElementById('yearInput');
+  if (!select) return;
+  const selected = String(appState.year);
+  const current = new Date().getFullYear();
+  const minYear = Math.min(2020, appState.year - 2, current - 2);
+  const maxYear = Math.max(2100, appState.year + 2, current + 2);
+  const options = [];
+  for (let y=minYear; y<=maxYear; y++) {
+    options.push(`<option value="${y}" ${String(y)===selected ? 'selected' : ''}>${y}</option>`);
+  }
+  select.innerHTML = options.join('');
+}
 function render(){
-  document.getElementById('yearInput').value = appState.year;
+  ensureYearOptions();
   document.getElementById('serverInfo').textContent = `Сервер: ${BOOT_STARTED_AT}`;
   document.querySelector('.sub').textContent = `Web-копия ${BOOT_VERSION}. Отдельная база, исходный PyQt-файл не тронут.`;
   document.title = `График ППР web ${BOOT_VERSION}`;
@@ -913,7 +924,7 @@ async function loadYear(year){
 async function loadYearFromInput(){
   const year = parseInt(document.getElementById('yearInput').value, 10);
   if (!year) return;
-  if (dirty && !confirm('Есть несохранённые изменения. Открыть год без сохранения?')) { document.getElementById('yearInput').value = appState.year; return; }
+  if (dirty && !confirm('Есть несохранённые изменения. Открыть год без сохранения?')) { ensureYearOptions(); return; }
   await loadYear(year);
 }
 window.addEventListener('beforeunload', (e)=>{ if (dirty) { e.preventDefault(); e.returnValue=''; } });
