@@ -20,30 +20,54 @@ SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 WEB_SECRET = os.environ.get("WEB_SECRET", "") or secrets.token_urlsafe(32)
 
 
-def load_auth_config() -> tuple[str, str]:
-    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    password = os.environ.get("WEB_PASSWORD", "").strip()
-    if password:
-        return user, password
+def load_auth_config() -> tuple[str, str, str]:
+    user = os.environ.get("WEB_USER", "rtps").strip() or "rtps"
+    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
+    edit_password = (
+        os.environ.get("WEB_EDIT_PASSWORD", "").strip()
+        or os.environ.get("WEB_PASSWORD", "").strip()
+    )
+    if view_password and edit_password:
+        return user, view_password, edit_password
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if AUTH_FILE.exists():
         try:
             payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
             file_user = str(payload.get("user", user)).strip() or user
-            file_password = str(payload.get("password", "")).strip()
-            if file_password:
-                return file_user, file_password
+            file_view = str(payload.get("view_password", "")).strip()
+            file_edit = str(payload.get("edit_password", "")).strip() or str(payload.get("password", "")).strip()
+            if file_edit and not file_view:
+                file_view = secrets.token_urlsafe(8)
+            if file_view and not file_edit:
+                file_edit = secrets.token_urlsafe(8)
+            if file_view and file_edit:
+                AUTH_FILE.write_text(
+                    json.dumps(
+                        {"user": file_user, "view_password": file_view, "edit_password": file_edit},
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                return file_user, file_view, file_edit
         except Exception:
             pass
-    password = secrets.token_urlsafe(8)
+    if not view_password:
+        view_password = secrets.token_urlsafe(8)
+    if not edit_password:
+        edit_password = secrets.token_urlsafe(8)
     AUTH_FILE.write_text(
-        json.dumps({"user": user, "password": password}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"user": user, "view_password": view_password, "edit_password": edit_password},
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
-    return user, password
+    return user, view_password, edit_password
 
 
-WEB_USER, WEB_PASSWORD = load_auth_config()
+WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 SESSIONS: dict[str, tuple[str, str, float]] = {}
 
 
@@ -157,8 +181,7 @@ LOGIN_TEMPLATE = """<!doctype html>
 <body>
   <form class="card" method="post" action="/login">
     <h1 style="margin-top:0;">Вход</h1>
-    <p class="muted">Введите пароль для входа.</p>
-    <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
+    <p class="muted">Введите пароль просмотра или редактирования.</p>
     <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
     <button type="submit">Войти</button>
   </form>
@@ -169,29 +192,39 @@ LOGIN_TEMPLATE = """<!doctype html>
 
 def _cookie_value(username: str, role: str) -> str:
     expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-    payload = f"{username}|{role}|{expiry}"
+    payload = f"{username}:{role}:{expiry}"
     sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token = f"{payload}|{sig}"
+    token = f"{payload}:{sig}"
     SESSIONS[token] = (username, role, float(expiry))
     return token
 
 
 def _verify_cookie(value: str) -> tuple[str, str] | None:
-    parts = value.split("|")
-    if len(parts) != 4:
-        return None
-    username, role, expiry_text, sig = parts
-    payload = f"{username}|{role}|{expiry_text}"
-    expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, sig):
-        return None
     try:
-        expiry = float(expiry_text)
-    except ValueError:
-        return None
-    if dt.datetime.now().timestamp() > expiry:
-        return None
-    return username, role
+        username, role, ts, sig = value.rsplit(":", 3)
+        payload = f"{username}:{role}:{ts}"
+        expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return None
+        if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
+            return None
+        if role not in {"view", "edit"}:
+            return None
+        return username, role
+    except Exception:
+        try:
+            username, role, expiry_text, sig = value.split("|")
+            payload = f"{username}|{role}|{expiry_text}"
+            expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, sig):
+                return None
+            if dt.datetime.now().timestamp() > float(expiry_text):
+                return None
+            if role not in {"view", "edit"}:
+                return None
+            return username, role
+        except Exception:
+            return None
 
 
 def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
@@ -238,14 +271,15 @@ def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None
     handler.end_headers()
 
 
-def _login_cookie(username: str) -> str:
-    token = _cookie_value(username, "edit")
+def _login_cookie(username: str, role: str) -> str:
+    token = _cookie_value(username, role)
     return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
 
 
-def render_home(username: str) -> str:
+def render_home(username: str, role: str) -> str:
     started_at = dt.datetime.now().strftime("%H:%M:%S %d.%m.%Y")
-    return HOME_TEMPLATE.replace("{{STARTED_AT}}", started_at).replace("{{AUTH_BADGE}}", f"Пользователь: {username}")
+    role_label = "Просмотр" if role == "view" else "Редактирование"
+    return HOME_TEMPLATE.replace("{{STARTED_AT}}", started_at).replace("{{AUTH_BADGE}}", f"Пользователь: {username} / {role_label}")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -256,11 +290,12 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         session = current_session(self)
         user = session[0] if session else None
+        role = session[1] if session else None
         if parsed.path == "/":
             if not user:
                 _redirect(self, "/login")
                 return
-            _send_html(self, render_home(user))
+            _send_html(self, render_home(user, role or "view"))
             return
         if parsed.path == "/grafik-ppr":
             _redirect(self, "https://yrtps.ru/grafik-ppr")
@@ -288,10 +323,12 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         if parsed.path == "/login":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            username = form.get("user", [""])[0].strip()
             password = form.get("password", [""])[0]
-            if username == WEB_USER and password == WEB_PASSWORD:
-                _redirect(self, "/", _login_cookie(username))
+            if password == WEB_VIEW_PASSWORD:
+                _redirect(self, "/", _login_cookie(WEB_USER, "view"))
+                return
+            if password == WEB_EDIT_PASSWORD:
+                _redirect(self, "/", _login_cookie(WEB_USER, "edit"))
                 return
             _send_html(
                 self,
