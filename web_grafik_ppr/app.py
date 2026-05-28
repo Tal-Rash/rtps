@@ -806,11 +806,11 @@ function handleMonthPaste(e){
   const startRow = parseInt(target.dataset.row, 10);
   const startCol = parseInt(target.dataset.col, 10);
   if (!Number.isFinite(startRow) || !Number.isFinite(startCol)) return;
-  const rows = text.replace(/\r/g, '').split('\n').filter((row, idx, arr) => !(row === '' && idx === arr.length - 1));
+  const rows = text.replace(/\\r/g, '').split('\\n').filter((row, idx, arr) => !(row === '' && idx === arr.length - 1));
   if (!rows.length) return;
   e.preventDefault();
   rows.forEach((line, rOffset) => {
-    const cols = line.split('\t');
+    const cols = line.split('\\t');
     cols.forEach((value, cOffset) => {
       const row = startRow + rOffset;
       const col = startCol + cOffset;
@@ -831,6 +831,10 @@ function setSection(section){ ui.section = section; render(); }
 function setMonth(index){ ui.monthIndex = index; render(); }
 function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
+function safeCurrentMonth(){
+  const months = Array.isArray(appState.months) ? appState.months : [];
+  return months[ui.monthIndex] || months[0] || { name:'', month:1, days:31, plan:[], fact:[] };
+}
 function isRepairSkipDay(year, month, day){
   if (hasSystemDate('holiday', month, day)) return true;
   if (hasSystemDate('transfer', month, day)) return true;
@@ -856,10 +860,11 @@ function isWeekend(year, month, day){
 function ensureYearOptions(){
   const select = document.getElementById('yearInput');
   if (!select) return;
-  const selected = String(appState.year);
+  const selectedYear = Number(appState.year) || new Date().getFullYear();
+  const selected = String(selectedYear);
   const current = new Date().getFullYear();
-  const minYear = Math.min(2020, appState.year - 2, current - 2);
-  const maxYear = Math.max(2100, appState.year + 2, current + 2);
+  const minYear = Math.min(2020, selectedYear - 2, current - 2);
+  const maxYear = Math.max(2100, selectedYear + 2, current + 2);
   const options = [];
   for (let y=minYear; y<=maxYear; y++) {
     options.push(`<option value="${y}" ${String(y)===selected ? 'selected' : ''}>${y}</option>`);
@@ -868,17 +873,20 @@ function ensureYearOptions(){
 }
 function render(){
   ensureYearOptions();
-  document.getElementById('serverInfo').textContent = `Сервер: ${BOOT_STARTED_AT}`;
-  document.querySelector('.sub').textContent = `Web-копия ${BOOT_VERSION}. Отдельная база, исходный PyQt-файл не тронут.`;
+  const serverInfo = document.getElementById('serverInfo');
+  if (serverInfo) serverInfo.textContent = `Сервер: ${BOOT_STARTED_AT}`;
+  const sub = document.querySelector('.sub');
+  if (sub) sub.textContent = `Web-копия ${BOOT_VERSION}. Отдельная база, исходный PyQt-файл не тронут.`;
   document.title = `График ППР web ${BOOT_VERSION}`;
   bindNav();
   const content = document.getElementById('content');
+  if (!content) return;
   if (ui.section === 'months') content.innerHTML = renderMonths();
   if (ui.section === 'norms') content.innerHTML = renderNorms();
   if (ui.section === 'acts') content.innerHTML = renderActs();
 }
 function renderMonths(){
-  const m = currentMonth();
+  const m = safeCurrentMonth();
   const headers = ['№','Серия','Номер','Категория',...Array.from({length:m.days},(_,i)=>String(i+1).padStart(2,'0')),'Примечание'];
   const monthButtons = appState.months.map((x,i)=>`<button class="${i===ui.monthIndex?'active':''}" onclick="setMonth(${i})">${x.name}</button>`).join('');
   const repairButtons = `
