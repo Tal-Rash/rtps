@@ -684,17 +684,17 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
-    .months-row .month-strip { display:flex; gap:4px; flex-wrap:nowrap; min-width:0; width:100%; overflow-x:auto; overflow-y:hidden; }
+    .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1.6fr) auto minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
     .months-row .month-tools { display:flex; justify-content:center; justify-self:center; align-self:start; }
     .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
-    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
+    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
-    .repair-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; justify-content:center; }
-    .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; min-width:48px; }
+    .repair-strip { display:flex; gap:3px; flex-wrap:nowrap; margin:0; justify-content:center; }
+    .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
     .month-tools { display:flex; justify-content:center; }
     .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
-    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
+    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:900px; table-layout:fixed; }
