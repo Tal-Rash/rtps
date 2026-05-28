@@ -1154,12 +1154,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/logout":
             handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Set-Cookie", handler_cookie)
-            self.end_headers()
-            self.wfile.write(f'<!doctype html><meta http-equiv="refresh" content="0; url={APP_PREFIX}/login">'.encode("utf-8"))
+            _redirect(self, "/", handler_cookie)
             return
         if route == "/api/state":
             qs = parse_qs(parsed.query)
