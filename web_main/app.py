@@ -129,9 +129,9 @@ HOME_TEMPLATE = """<!doctype html>
       <div class="card">
         <div>
           <h2>Справочник</h2>
-          <p>Следующий модуль.</p>
+          <p>Нормы времени, сотрудники и локомотивы.</p>
         </div>
-        <a class="disabled" href="#">Скоро</a>
+        <a href="/spravochnik">Открыть</a>
       </div>
     </div>
     <div class="status">Сервер запущен: {{STARTED_AT}}</div>
