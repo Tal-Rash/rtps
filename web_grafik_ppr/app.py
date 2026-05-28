@@ -684,14 +684,14 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .months-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(360px,auto) minmax(150px,auto); gap:6px; align-items:start; margin:6px 0 10px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .months-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:6px; align-items:start; margin:6px 0 10px; position:sticky; top:0; z-index:4; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .month-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; min-width:0; overflow:auto; }
     .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
     .repair-strip { display:flex; gap:4px; flex-wrap:nowrap; margin:0; justify-content:center; }
     .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; min-width:48px; }
-    .month-tools { display:contents; }
-    .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
+    .month-tools { display:flex; justify-content:center; }
+    .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; flex-shrink:0; }
     .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
@@ -923,9 +923,7 @@ function renderMonths(){
   return `
     <div class="months-row">
       <div class="month-strip">${monthButtons}</div>
-      <div class="month-tools">
-        ${repairButtons}
-      </div>
+      <div class="month-tools">${repairButtons}</div>
       <div class="row-actions">
         <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
         <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
