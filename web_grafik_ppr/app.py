@@ -18,10 +18,6 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, urlparse
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font
-
-
 APP_VERSION = "web-gpp-0.1"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -374,6 +370,12 @@ def replace_tags_in_workbook(wb, tags: dict[str, str]) -> None:
 
 
 def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
+    try:
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import Alignment, Font
+    except ImportError as exc:
+        raise RuntimeError("На сервере не установлен openpyxl") from exc
+
     clean_act_num = act.replace("Акт № ", "").strip()
     parts = clean_act_num.split("-")
     if len(parts) != 3:
