@@ -255,7 +255,7 @@ HTML = """<!doctype html>
     .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:14px}
     h1{margin:0;font-size:24px}.muted{color:var(--muted);font-size:13px}
     .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    button,a,select{border:1px solid var(--line);border-radius:12px;padding:10px 13px;background:#fff;color:#001b3d;font-weight:700;text-decoration:none;font:inherit}
+    button,a,select{border:1px solid var(--line);border-radius:8px;padding:10px 13px;background:#fff;color:#001b3d;font-weight:700;text-decoration:none;font:inherit}
     button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
     .tab{cursor:pointer}.tab.active{background:var(--blue);color:#fff;border-color:var(--blue)}
@@ -393,7 +393,7 @@ LOGIN_HTML = """<!doctype html>
   <style>
     body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f7fb;color:#102033}
     .card{max-width:420px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
-    input,button{width:100%;padding:12px;border-radius:12px;border:1px solid #d9e2ef;font:inherit}
+    input,button{width:100%;padding:12px;border-radius:8px;border:1px solid #d9e2ef;font:inherit}
     button{background:#276ef1;color:#fff;font-weight:700;cursor:pointer;border:0}
     .muted{color:#607086;font-size:13px}
   </style>
