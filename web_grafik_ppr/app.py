@@ -432,7 +432,7 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
 
     out = BytesIO()
     wb.save(out)
-    return out.getvalue(), f"act_{clean_act_num}.xlsx"
+    return out.getvalue(), f"Акт_{clean_act_num}.xlsx"
 
 
 def save_state(state: dict) -> dict:
