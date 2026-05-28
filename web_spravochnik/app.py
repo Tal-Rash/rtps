@@ -15,7 +15,9 @@ from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
+DATA_DIR = ROOT / "data"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
+AUTH_FILE = DATA_DIR / "web_auth.json"
 APP_PREFIX = "/spravochnik"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -26,6 +28,32 @@ MONTHS = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
 ]
+
+
+def load_auth_config() -> tuple[str, str]:
+    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
+    password = os.environ.get("WEB_PASSWORD", "").strip()
+    if password:
+        return user, password
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if AUTH_FILE.exists():
+        try:
+            payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+            file_user = str(payload.get("user", user)).strip() or user
+            file_password = str(payload.get("password", "")).strip()
+            if file_password:
+                return file_user, file_password
+        except Exception:
+            pass
+    password = secrets.token_urlsafe(8)
+    AUTH_FILE.write_text(
+        json.dumps({"user": user, "password": password}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return user, password
+
+
+WEB_USER, WEB_PASSWORD = load_auth_config()
 
 
 def ensure_db() -> None:
@@ -132,6 +160,14 @@ def redirect(handler: BaseHTTPRequestHandler, location: str) -> None:
     handler.send_header("Location", location)
     handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
+
+
+def login_cookie(username: str) -> str:
+    expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
+    payload = f"{username}|edit|{expiry}"
+    sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    token = f"{payload}|{sig}"
+    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
 
 
 def route_path(raw_path: str) -> str:
@@ -352,17 +388,57 @@ loadState();
 </html>
 """
 
+LOGIN_HTML = """<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход - Справочник</title>
+  <style>
+    body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f7fb;color:#102033}
+    .card{max-width:420px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
+    input,button{width:100%;padding:12px;border-radius:12px;border:1px solid #d9e2ef;font:inherit}
+    button{background:#276ef1;color:#fff;font-weight:700;cursor:pointer;border:0}
+    .muted{color:#607086;font-size:13px}
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/spravochnik/login">
+    <h1 style="margin-top:0;">Вход</h1>
+    <p class="muted">Введите пароль для входа.</p>
+    <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
+    <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
+    <button type="submit">Войти</button>
+  </form>
+</body>
+</html>
+"""
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
 
     def do_GET(self):
-        user = current_user(self)
-        if not user:
-            redirect(self, "/login")
-            return
         path = route_path(self.path)
+        user = current_user(self)
+        if path == "/login":
+            if user:
+                redirect(self, APP_PREFIX + "/")
+                return
+            send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER))
+            return
+        if path == "/logout":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax")
+            self.end_headers()
+            self.wfile.write(f'<!doctype html><meta http-equiv="refresh" content="0; url={APP_PREFIX}/login">'.encode("utf-8"))
+            return
+        if not user:
+            redirect(self, APP_PREFIX + "/login")
+            return
         parsed = urlparse(self.path)
         if path == "/":
             send_html(self, HTML)
@@ -374,13 +450,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self):
+        path = route_path(self.path)
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        if path == "/login":
+            form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            username = form.get("user", [""])[0].strip()
+            password = form.get("password", [""])[0]
+            if username == WEB_USER and password == WEB_PASSWORD:
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", APP_PREFIX + "/")
+                self.send_header("Set-Cookie", login_cookie(username))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER) + "<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>", HTTPStatus.UNAUTHORIZED)
+            return
         user = current_user(self)
         if not user:
             send_json(self, {"ok": False, "error": "auth"}, HTTPStatus.UNAUTHORIZED)
             return
-        path = route_path(self.path)
-        length = int(self.headers.get("Content-Length", "0") or 0)
-        raw = self.rfile.read(length) if length else b"{}"
         if path == "/api/save":
             try:
                 payload = json.loads(raw.decode("utf-8"))
