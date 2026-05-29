@@ -1092,7 +1092,7 @@ HTML_TEMPLATE = """<!doctype html>
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
-    .topbar,.nav,.panel { background:rgba(255,255,255,.88); border:1px solid rgba(217,226,239,.9); border-radius:var(--radius); box-shadow:var(--shadow); }
+    .topbar,.panel { background:rgba(255,255,255,.88); border:1px solid rgba(217,226,239,.9); border-radius:var(--radius); box-shadow:var(--shadow); }
     .topbar {
       position:sticky;
       top:12px;
@@ -1111,8 +1111,8 @@ HTML_TEMPLATE = """<!doctype html>
     .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
     .toolbar input,.toolbar button,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
     .toolbar button { font-weight:700; cursor:pointer; background:linear-gradient(180deg,#fff,#f3f7ff); }
-    .nav { display:flex; gap:12px; flex-wrap:wrap; padding:6px; margin:0; }
-    .nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; }
+    .nav { display:flex; gap:10px; flex-wrap:wrap; padding:0; margin:0; background:transparent; border:0; box-shadow:none; }
+    .nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(16,32,51,.06); }
     .nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
     .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
     .panel { padding:14px; }
@@ -1341,16 +1341,28 @@ HTML_TEMPLATE = """<!doctype html>
       </div>
     </div>
   </div>
-  <div id="sectionModal" class="modal-overlay" aria-hidden="true" onclick="closeSectionModal()">
+  <div id="normsModal" class="modal-overlay" aria-hidden="true" onclick="closeNormsModal()">
+    <div class="modal-window" style="width:min(920px, 100%);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>Нормы / парк</div>
+        <button class="modal-close" onclick="closeNormsModal()">×</button>
+      </div>
+      <div id="normsModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button class="primary" onclick="closeNormsModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+  <div id="actsModal" class="modal-overlay" aria-hidden="true" onclick="closeActsModal()">
     <div class="modal-window wide" onclick="event.stopPropagation()">
       <div class="modal-head">
-        <div id="sectionModalTitle">Раздел</div>
-        <button class="modal-close" onclick="closeSectionModal()">×</button>
+        <div>Акты</div>
+        <button class="modal-close" onclick="closeActsModal()">×</button>
       </div>
-      <div id="sectionModalBody" class="section-modal-body"></div>
+      <div id="actsModalBody" class="section-modal-body"></div>
       <div class="section-modal-actions">
-        <button onclick="saveSectionAndClose()">Сохранить и Закрыть</button>
-        <button class="primary" onclick="closeSectionModal()">Закрыть</button>
+        <button onclick="saveActsAndClose()">Сохранить и Закрыть</button>
+        <button class="primary" onclick="closeActsModal()">Закрыть</button>
       </div>
     </div>
   </div>
@@ -1659,7 +1671,7 @@ function renderSafe(){
   if (!content) return;
   content.innerHTML = renderMonths();
   applyMonthSelectionClasses();
-  renderSectionModal();
+  renderOpenModals();
 }
 window.addEventListener('error', (event) => {
   const content = document.getElementById('content');
@@ -1860,48 +1872,59 @@ function renderActs(){
     </div>
   `;
 }
-function renderSectionModal(){
-  const modal = document.getElementById('sectionModal');
-  const title = document.getElementById('sectionModalTitle');
-  const body = document.getElementById('sectionModalBody');
-  if (!modal || !title || !body) return;
-  if (!ui.modal) {
-    modal.classList.remove('visible');
-    modal.setAttribute('aria-hidden', 'true');
-    body.innerHTML = '';
-    return;
-  }
-  modal.classList.add('visible');
-  modal.setAttribute('aria-hidden', 'false');
-  if (ui.modal === 'norms') {
-    title.textContent = 'Нормы / парк';
-    body.innerHTML = renderNorms();
-  } else if (ui.modal === 'acts') {
-    title.textContent = 'Акты';
-    body.innerHTML = renderActs();
-  } else {
-    body.innerHTML = '';
-  }
-  requestAnimationFrame(() => {
-    if (ui.modal === 'acts') {
-      const select = document.getElementById('actsMonthSelect');
-      if (select) select.focus();
+function renderOpenModals(){
+  const normsModal = document.getElementById('normsModal');
+  const normsBody = document.getElementById('normsModalBody');
+  const actsModal = document.getElementById('actsModal');
+  const actsBody = document.getElementById('actsModalBody');
+  if (normsModal && normsBody) {
+    if (ui.modal === 'norms') {
+      normsModal.classList.add('visible');
+      normsModal.setAttribute('aria-hidden', 'false');
+      normsBody.innerHTML = renderNorms();
+    } else {
+      normsModal.classList.remove('visible');
+      normsModal.setAttribute('aria-hidden', 'true');
+      normsBody.innerHTML = '';
     }
-  });
+  }
+  if (actsModal && actsBody) {
+    if (ui.modal === 'acts') {
+      actsModal.classList.add('visible');
+      actsModal.setAttribute('aria-hidden', 'false');
+      actsBody.innerHTML = renderActs();
+      requestAnimationFrame(() => {
+        const select = document.getElementById('actsMonthSelect');
+        if (select) select.focus();
+      });
+    } else {
+      actsModal.classList.remove('visible');
+      actsModal.setAttribute('aria-hidden', 'true');
+      actsBody.innerHTML = '';
+    }
+  }
 }
 function openSectionModal(section){
   ui.modal = section;
   render();
 }
-function closeSectionModal(){
-  ui.modal = null;
-  render();
+function closeNormsModal(){
+  if (ui.modal === 'norms') {
+    ui.modal = null;
+    render();
+  }
 }
-async function saveSectionAndClose(){
+function closeActsModal(){
+  if (ui.modal === 'acts') {
+    ui.modal = null;
+    render();
+  }
+}
+async function saveActsAndClose(){
   if (dirty && CAN_EDIT) {
     await saveState();
   }
-  closeSectionModal();
+  closeActsModal();
 }
 async function startAct(month, act){
   if (!CAN_EDIT) return;
