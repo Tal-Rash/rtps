@@ -1364,7 +1364,7 @@ const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
-const sections = [{id:'months',label:'Месяцы'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'}];
+const sections = [{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'}];
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function setStatus(t){ document.getElementById('status').textContent = t; }
