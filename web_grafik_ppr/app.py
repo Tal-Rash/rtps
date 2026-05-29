@@ -1301,7 +1301,7 @@ HTML_TEMPLATE = """<!doctype html>
     .holiday-col { background:#ffdede; }
     .holiday-col input { background:#ffdede; }
     .col-idx { width:36px; }
-    .col-series { width:72px; }
+    .col-series { width:auto; min-width:56px; }
     .col-number { width:72px; }
     .col-cat { width:72px; }
     .col-day { width:30px; }
@@ -1746,7 +1746,7 @@ function renderMonthTable(type, title, m, headers){
   }).join('');
   const colHtml = [
     '<col style="width:45px">',
-    '<col style="width:var(--meta-col-width)">',
+    '<col style="width:auto; min-width:56px">',
     '<col style="width:var(--meta-col-width)">',
     '<col style="width:var(--meta-col-width)">',
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
