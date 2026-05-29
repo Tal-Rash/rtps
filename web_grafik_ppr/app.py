@@ -1189,13 +1189,14 @@ HTML_TEMPLATE = """<!doctype html>
       padding:8px 10px;
       font:inherit;
       font-weight:700;
+      font-size:16px;
       cursor:pointer;
     }
     .modal-actions button.primary { background:#dcedc8; }
     .report-table { width:max-content; min-width:100%; table-layout:auto; border-collapse:separate; border-spacing:0; }
     .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:2px 4px; vertical-align:middle; background:#fff; }
-    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:4px 6px; text-align:center; white-space:nowrap; }
-    .report-table td { font-size:12px; }
+    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:16px; padding:4px 6px; text-align:center; white-space:nowrap; }
+    .report-table td { font-size:16px; }
     .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:4px 6px; white-space:pre-line; }
     .report-table .num-cell { text-align:center; padding:4px 4px; white-space:nowrap; }
     .report-table tbody tr { height:auto; }
@@ -1208,12 +1209,12 @@ HTML_TEMPLATE = """<!doctype html>
       border:0;
       background:transparent;
       font:inherit;
-      font-size:11px;
+      font-size:16px;
       line-height:1;
       padding:0 3px;
       box-sizing:border-box;
     }
-    .report-loading { padding:10px; text-align:center; color:var(--muted); }
+    .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
     .act-start {
       width:100%;
       border:1px solid var(--line);
