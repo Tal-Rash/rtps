@@ -54,13 +54,12 @@ SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 def format_n(value) -> str:
     try:
-        number = float(value)
+        number = float(str(value).replace(",", "."))
     except Exception:
-        return ""
+        return "0,00"
     if number.is_integer():
-        return str(int(number))
-    text = f"{number:.2f}".rstrip("0").rstrip(".")
-    return text.replace(".", ",")
+        return f"{int(number)},00"
+    return f"{number:.2f}".replace(".", ",")
 
 
 def load_web_secret() -> str:
@@ -598,6 +597,28 @@ def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, 
     }
 
 
+def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str]) -> dict:
+    def count(section: str, category: str, code: str, factor: int) -> str:
+        return format_n(data["res"][section][category].get(code, 0) / factor)
+
+    tep_notes = "\n".join(data["notes"]["fact"]["tep"])
+    agr_notes = "\n".join(data["notes"]["fact"]["agr"])
+    rows = [
+        {"kind": "group", "label": "Кол-во технически исправных локомотивов\nТЕПЛОВОЗЫ МАНЕВРОВЫЕ", "plan": format_n(data["tp"]), "fact": format_n(data["tf"]), "note_key": "tep_park", "note": saved_notes.get("tep_park", "")},
+        {"kind": "row", "key": "tep_ТО2", "label": "ТО2", "plan": count("plan", "tep", "ТО2", 1), "fact": count("fact", "tep", "ТО2", 1), "note": saved_notes.get("tep_ТО2", "")},
+        {"kind": "row", "key": "tep_ТО3", "label": "ТО3", "plan": count("plan", "tep", "ТО3", 2), "fact": count("fact", "tep", "ТО3", 2), "note": saved_notes.get("tep_ТО3", "")},
+        {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
+        {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
+        {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
+        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": saved_notes.get("tep_ТР_unplan", tep_notes)},
+        {"kind": "group", "label": "Кол-во технически исправных локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
+        {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
+        {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
+        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": saved_notes.get("agr_ТР_unplan", agr_notes)},
+    ]
+    return {"month": month_name, "year": data["y"], "rows": rows}
+
+
 def build_report_workbook(year: int, month_name: str, state: dict | None = None) -> tuple[bytes, str]:
     try:
         from openpyxl import Workbook, load_workbook
@@ -1107,6 +1128,88 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
       white-space:nowrap;
     }
+    .modal-overlay {
+      position:fixed;
+      inset:0;
+      background:rgba(12,22,38,.45);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:50;
+    }
+    .modal-overlay.visible { display:flex; }
+    .modal-window {
+      width:min(840px, 100%);
+      max-height:calc(100vh - 36px);
+      background:#fff;
+      border:1px solid rgba(217,226,239,.95);
+      border-radius:18px;
+      box-shadow:0 24px 70px rgba(16,32,51,.25);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .modal-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      border-bottom:1px solid var(--line);
+      font-size:18px;
+      font-weight:800;
+    }
+    .modal-close {
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:8px;
+      width:30px;
+      height:30px;
+      cursor:pointer;
+      font-weight:700;
+      line-height:1;
+    }
+    .modal-body {
+      padding:12px 14px;
+      overflow:auto;
+    }
+    .modal-actions {
+      display:flex;
+      gap:10px;
+      padding:12px 14px 14px;
+      border-top:1px solid var(--line);
+      background:#fafcff;
+    }
+    .modal-actions button {
+      flex:1;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:8px;
+      padding:10px 12px;
+      font:inherit;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .modal-actions button.primary { background:#dcedc8; }
+    .report-table { width:100%; min-width:0; table-layout:fixed; border-collapse:separate; border-spacing:0; }
+    .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; vertical-align:middle; background:#fff; }
+    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:14px; padding:10px 8px; text-align:center; white-space:nowrap; }
+    .report-table td { font-size:14px; }
+    .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:10px 8px; white-space:pre-line; }
+    .report-table .num-cell { text-align:center; width:96px; padding:8px 6px; }
+    .report-note {
+      width:100%;
+      min-height:34px;
+      resize:vertical;
+      border:0;
+      background:transparent;
+      font:inherit;
+      font-size:13px;
+      padding:8px;
+      box-sizing:border-box;
+    }
+    .report-loading { padding:30px; text-align:center; color:var(--muted); }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1180,6 +1283,21 @@ HTML_TEMPLATE = """<!doctype html>
         <div id="serverInfo" class="badge">Сервер: {{STARTED_AT}}</div>
         <div id="status" class="badge">Готово</div>
         <div id="dirtyHint">Изменений нет</div>
+      </div>
+    </div>
+  </div>
+  <div id="reportModal" class="modal-overlay" aria-hidden="true" onclick="closeReportModal()">
+    <div class="modal-window" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div id="reportTitle">Отчет</div>
+        <button class="modal-close" onclick="closeReportModal()">×</button>
+      </div>
+      <div id="reportBody" class="modal-body">
+        <div class="report-loading">Подготовка отчета...</div>
+      </div>
+      <div class="modal-actions">
+        <button onclick="downloadReportExcel()">Отчет в Excel</button>
+        <button class="primary" onclick="saveReportAndClose()">Сохранить примечания и Закрыть</button>
       </div>
     </div>
   </div>
@@ -1541,12 +1659,93 @@ async function startAct(month, act){
   a.rel = 'noopener';
   a.click();
 }
+let reportDialogState = null;
+function openReportModalShell(title){
+  document.getElementById('reportTitle').textContent = title;
+  document.getElementById('reportBody').innerHTML = '<div class="report-loading">Подготовка отчета...</div>';
+  document.getElementById('reportModal').classList.add('visible');
+  document.getElementById('reportModal').setAttribute('aria-hidden', 'false');
+}
+function closeReportModal(){
+  const modal = document.getElementById('reportModal');
+  modal.classList.remove('visible');
+  modal.setAttribute('aria-hidden', 'true');
+  reportDialogState = null;
+}
+function setReportNote(key, value){
+  if (!reportDialogState) return;
+  const month = reportDialogState.month;
+  if (!appState.notes[month]) appState.notes[month] = {};
+  appState.notes[month][key] = value;
+  reportDialogState.rows = reportDialogState.rows.map((row) => row.key === key ? {...row, note: value} : row);
+  markDirty(true);
+}
+function renderReportBody(){
+  if (!reportDialogState) return;
+  const rows = reportDialogState.rows.map((row) => {
+    if (row.kind === 'group') {
+      return `
+        <tr>
+          <td class="group-cell">${esc(row.label)}</td>
+          <td class="num-cell">${esc(row.plan)}</td>
+          <td class="num-cell">${esc(row.fact)}</td>
+          <td class="group-cell">${esc(row.note || '')}</td>
+        </tr>
+      `;
+    }
+    return `
+      <tr>
+        <td>${esc(row.label)}</td>
+        <td class="num-cell">${esc(row.plan)}</td>
+        <td class="num-cell">${esc(row.fact)}</td>
+        <td><textarea class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
+      </tr>
+    `;
+  }).join('');
+  document.getElementById('reportBody').innerHTML = `
+    <table class="report-table">
+      <colgroup>
+        <col>
+        <col style="width:80px">
+        <col style="width:80px">
+        <col style="width:300px">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Показатель</th>
+          <th>План</th>
+          <th>Факт</th>
+          <th>Примечание</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
 async function openReport(){
   if (dirty && CAN_EDIT) {
     await saveState();
   }
   const month = currentMonth().name;
-  const url = `{{APP_PREFIX}}/api/report-export?month=${encodeURIComponent(month)}&year=${encodeURIComponent(appState.year)}`;
+  openReportModalShell(`Отчет ${month} ${appState.year}`);
+  const res = await fetch(`{{APP_PREFIX}}/api/report-preview?month=${encodeURIComponent(month)}&year=${encodeURIComponent(appState.year)}`);
+  if (!res.ok) {
+    document.getElementById('reportBody').innerHTML = '<div class="report-loading">Не удалось подготовить отчет.</div>';
+    return;
+  }
+  reportDialogState = await res.json();
+  renderReportBody();
+}
+async function saveReportAndClose(){
+  if (CAN_EDIT && dirty) {
+    await saveState();
+  }
+  closeReportModal();
+}
+function downloadReportExcel(){
+  if (!reportDialogState) return;
+  const month = reportDialogState.month;
+  const url = `{{APP_PREFIX}}/api/report-export?month=${encodeURIComponent(month)}&year=${encodeURIComponent(reportDialogState.year)}`;
   const a = document.createElement('a');
   a.href = url;
   a.target = '_blank';
@@ -1719,6 +1918,25 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if route == "/api/report-preview":
+            if not require_auth(self):
+                return
+            qs = parse_qs(parsed.query)
+            year = dt.date.today().year
+            if "year" in qs:
+                try:
+                    year = int(qs["year"][0])
+                except ValueError:
+                    year = dt.date.today().year
+            month = s(qs.get("month", [""])[0]).strip() or MONTHS_RU[dt.date.today().month - 1]
+            try:
+                state = load_state(year)
+                data = calculate_report_data_from_state(state, month)
+                saved_notes = state.get("notes", {}).get(month, {}) or {}
+                json_response(self, build_report_preview(month, data, saved_notes))
+            except Exception as exc:
+                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
