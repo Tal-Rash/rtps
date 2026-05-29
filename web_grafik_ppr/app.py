@@ -1253,6 +1253,12 @@ HTML_TEMPLATE = """<!doctype html>
     .norms-table th,
     .norms-table td { text-align:center; }
     .norms-table .group-row td { text-align:center; }
+    .norms-table { table-layout:fixed; }
+    .norms-table .col-name { width:130px; }
+    .norms-table .col-hours { width:72px; }
+    .norms-table .col-month { width:72px; }
+    .norms-table .col-tep { width:86px; }
+    .norms-table .col-agr { width:104px; }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1829,6 +1835,13 @@ function renderNorms(){
     </div>
     <div class="table-wrap" style="margin:0 auto 14px; width:fit-content; max-width:100%;">
       <table class="compact norms-table">
+        <colgroup>
+          <col class="col-name">
+          <col class="col-hours">
+          <col class="col-month">
+          <col class="col-tep">
+          <col class="col-agr">
+        </colgroup>
         <thead>
           <tr>
             <th rowspan="2">Вид ремонта</th>
