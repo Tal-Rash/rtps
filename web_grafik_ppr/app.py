@@ -1436,9 +1436,9 @@ function copyMonthSelectionText(){
     for (let col = sel.startCol; col <= sel.endCol; col++) {
       values.push(selectedMonthCellText({ monthIndex: sel.monthIndex, table: sel.table, row, col }));
     }
-    lines.push(values.join('\t'));
+    lines.push(values.join('\\t'));
   }
-  return lines.join('\n');
+  return lines.join('\\n');
 }
 function writeMonthCellValue(monthIndex, table, row, col, value){
   const selector = `input[data-month="${monthIndex}"][data-table="${table}"][data-row="${row}"][data-col="${col}"]`;
@@ -1453,10 +1453,10 @@ function pasteMonthSelectionText(target, text){
   if (!CAN_EDIT) return;
   const info = getMonthCellInfo(target);
   if (!info || ui.section !== 'months') return;
-  const rows = String(text ?? '').replace(/\r/g, '').split('\n');
+  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
   while (rows.length && rows[rows.length - 1] === '') rows.pop();
   if (!rows.length) return;
-  const matrix = rows.map((line) => line.split('\t'));
+  const matrix = rows.map((line) => line.split('\\t'));
   const sel = getSelectedMonthSelection();
   const useSelection = sel && sel.monthIndex === info.monthIndex && sel.table === info.table;
   const startRow = useSelection ? sel.startRow : info.row;
