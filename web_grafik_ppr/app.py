@@ -1230,6 +1230,7 @@ HTML_TEMPLATE = """<!doctype html>
     }
     .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
     .section-modal-body { padding:8px 10px; overflow:auto; }
+    .section-modal-body.centered { text-align:center; }
     .section-modal-actions {
       display:flex;
       gap:8px;
@@ -1249,6 +1250,9 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
     }
     .section-modal-actions button.primary { background:#dcedc8; }
+    .norms-table th,
+    .norms-table td { text-align:center; }
+    .norms-table .group-row td { text-align:center; }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1817,11 +1821,14 @@ function renderNorms(){
     return `<tr onclick="selectRow('norms', ${rowIndex})">${leftHtml}<td>${park.month}</td><td>${cell(`norms.p_tep.${park.idx}.v`, park.tep.v, 'cell center')}</td><td>${cell(`norms.p_agr.${park.idx}.v`, park.agr.v, 'cell center')}</td></tr>`;
   }).join('');
   return `
-    <div class="section-head">
-      <div><div class="section-title">Нормы / парк</div><div class="sub">Нормативы часов и план парка.</div></div>
+    <div class="section-head" style="justify-content:center; text-align:center;">
+      <div style="width:100%;">
+        <div class="section-title">Нормы / парк</div>
+        <div class="sub">Нормативы часов и план парка.</div>
+      </div>
     </div>
-    <div class="table-wrap" style="margin-bottom:14px;">
-      <table class="compact">
+    <div class="table-wrap" style="margin:0 auto 14px; width:fit-content; max-width:100%;">
+      <table class="compact norms-table">
         <thead>
           <tr>
             <th rowspan="2">Вид ремонта</th>
