@@ -1155,9 +1155,9 @@ HTML_TEMPLATE = """<!doctype html>
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      padding:12px 14px;
+      padding:8px 10px;
       border-bottom:1px solid var(--line);
-      font-size:18px;
+      font-size:16px;
       font-weight:800;
     }
     .modal-close {
@@ -1171,13 +1171,13 @@ HTML_TEMPLATE = """<!doctype html>
       line-height:1;
     }
     .modal-body {
-      padding:12px 14px;
+      padding:8px 10px;
       overflow:auto;
     }
     .modal-actions {
       display:flex;
-      gap:10px;
-      padding:12px 14px 14px;
+      gap:8px;
+      padding:8px 10px 10px;
       border-top:1px solid var(--line);
       background:#fafcff;
     }
@@ -1186,7 +1186,7 @@ HTML_TEMPLATE = """<!doctype html>
       border:1px solid var(--line);
       background:#fff;
       border-radius:8px;
-      padding:10px 12px;
+      padding:8px 10px;
       font:inherit;
       font-weight:700;
       cursor:pointer;
@@ -1194,22 +1194,22 @@ HTML_TEMPLATE = """<!doctype html>
     .modal-actions button.primary { background:#dcedc8; }
     .report-table { width:100%; min-width:0; table-layout:fixed; border-collapse:separate; border-spacing:0; }
     .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; vertical-align:middle; background:#fff; }
-    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:14px; padding:10px 8px; text-align:center; white-space:nowrap; }
-    .report-table td { font-size:14px; }
-    .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:10px 8px; white-space:pre-line; }
-    .report-table .num-cell { text-align:center; width:96px; padding:8px 6px; }
+    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:6px 6px; text-align:center; white-space:nowrap; }
+    .report-table td { font-size:12px; }
+    .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:6px 6px; white-space:pre-line; }
+    .report-table .num-cell { text-align:center; width:74px; padding:6px 4px; }
     .report-note {
       width:100%;
-      min-height:34px;
+      min-height:26px;
       resize:vertical;
       border:0;
       background:transparent;
       font:inherit;
-      font-size:13px;
-      padding:8px;
+      font-size:12px;
+      padding:6px;
       box-sizing:border-box;
     }
-    .report-loading { padding:30px; text-align:center; color:var(--muted); }
+    .report-loading { padding:16px; text-align:center; color:var(--muted); }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1242,7 +1242,7 @@ HTML_TEMPLATE = """<!doctype html>
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { background:#fff3f3; }
-    .small { width:100%; min-width:0; text-align:center; font-size:15px; }
+    .small { width:100%; min-width:0; text-align:center; font-size:12px; }
     .notes { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--line); border-radius:14px; }
     .excluded-row { color:#9aa5b1; background:#f3f5f8; }
     .excluded-row input { background:#f3f5f8; color:#9aa5b1; }
@@ -1706,9 +1706,9 @@ function renderReportBody(){
     <table class="report-table">
       <colgroup>
         <col>
-        <col style="width:80px">
-        <col style="width:80px">
-        <col style="width:300px">
+        <col style="width:74px">
+        <col style="width:74px">
+        <col style="width:250px">
       </colgroup>
       <thead>
         <tr>
