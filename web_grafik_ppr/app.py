@@ -1115,7 +1115,7 @@ HTML_TEMPLATE = """<!doctype html>
     .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
     .month-tools { display:none; }
     .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
-    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
+    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
     .row-actions button.danger { background:#fff; }
     .act-report {
       border:1px solid var(--line);
