@@ -1099,7 +1099,7 @@ HTML_TEMPLATE = """<!doctype html>
     .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
     .toolbar input,.toolbar button,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
     .toolbar button { font-weight:700; cursor:pointer; background:linear-gradient(180deg,#fff,#f3f7ff); }
-    .nav { display:flex; gap:8px; flex-wrap:wrap; padding:0; margin:0; }
+    .nav { display:flex; gap:12px; flex-wrap:wrap; padding:6px; margin:0; }
     .nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; }
     .nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
     .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
