@@ -1198,11 +1198,11 @@ HTML_TEMPLATE = """<!doctype html>
     .report-table td { font-size:12px; }
     .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:4px 6px; white-space:pre-line; }
     .report-table .num-cell { text-align:center; padding:4px 4px; white-space:nowrap; }
-    .report-table tbody tr { height:20px; }
+    .report-table tbody tr { height:auto; }
     .report-note {
       width:100%;
       min-height:16px;
-      height:16px;
+      height:auto;
       resize:none;
       overflow:hidden;
       border:0;
@@ -1682,7 +1682,14 @@ function setReportNote(key, value){
   if (!appState.notes[month]) appState.notes[month] = {};
   appState.notes[month][key] = value;
   reportDialogState.rows = reportDialogState.rows.map((row) => row.key === key ? {...row, note: value} : row);
+  autosizeReportNotes();
   markDirty(true);
+}
+function autosizeReportNotes(){
+  document.querySelectorAll('#reportBody textarea.report-note').forEach((el) => {
+    el.style.height = '0px';
+    el.style.height = `${el.scrollHeight}px`;
+  });
 }
 function renderReportBody(){
   if (!reportDialogState) return;
@@ -1725,6 +1732,7 @@ function renderReportBody(){
       <tbody>${rows}</tbody>
     </table>
   `;
+  autosizeReportNotes();
 }
 async function openReport(){
   if (dirty && CAN_EDIT) {
