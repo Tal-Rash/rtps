@@ -1109,7 +1109,7 @@ HTML_TEMPLATE = """<!doctype html>
     .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
     .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
-    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
+    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
     .repair-strip { display:flex; gap:3px; flex-wrap:nowrap; margin:0; justify-content:center; }
     .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
