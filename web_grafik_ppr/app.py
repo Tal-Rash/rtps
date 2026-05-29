@@ -1088,7 +1088,7 @@ HTML_TEMPLATE = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>График ППР web {{APP_VERSION}}</title>
   <style>
-    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:80px; }
+    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:80px; --series-col-width:62px; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
@@ -1304,7 +1304,7 @@ HTML_TEMPLATE = """<!doctype html>
     .holiday-col { background:#ffdede; }
     .holiday-col input { background:#ffdede; }
     .col-idx { width:36px; }
-    .col-series { width:62px; min-width:62px; }
+    .col-series { width:var(--series-col-width); }
     .col-number { width:72px; }
     .col-cat { width:72px; }
     .col-day { width:30px; }
@@ -1749,7 +1749,7 @@ function renderMonthTable(type, title, m, headers){
   }).join('');
   const colHtml = [
     '<col style="width:45px">',
-    '<col style="width:62px">',
+    '<col style="width:var(--series-col-width)">',
     '<col style="width:var(--meta-col-width)">',
     '<col style="width:var(--meta-col-width)">',
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
