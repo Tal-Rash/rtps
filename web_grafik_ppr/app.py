@@ -1254,11 +1254,14 @@ HTML_TEMPLATE = """<!doctype html>
     .norms-table td { text-align:center; }
     .norms-table .group-row td { text-align:center; }
     .norms-table { table-layout:fixed; }
-    .norms-table .col-name { width:130px; }
-    .norms-table .col-hours { width:72px; }
-    .norms-table .col-month { width:72px; }
-    .norms-table .col-tep { width:86px; }
-    .norms-table .col-agr { width:104px; }
+    .norms-table th,
+    .norms-table td { padding:4px 6px; font-size:13px; }
+    .norms-table .cell { height:24px; padding:2px 2px; font-size:13px; }
+    .norms-table .col-name { width:94px; }
+    .norms-table .col-hours { width:54px; }
+    .norms-table .col-month { width:58px; }
+    .norms-table .col-tep { width:72px; }
+    .norms-table .col-agr { width:74px; }
     .act-start {
       width:100%;
       border:1px solid var(--line);
