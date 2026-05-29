@@ -1162,6 +1162,7 @@ HTML_TEMPLATE = """<!doctype html>
       flex-direction:column;
       overflow:hidden;
     }
+    .modal-window.wide { width:min(1180px, 100%); }
     .modal-head {
       display:flex;
       align-items:center;
@@ -1228,6 +1229,26 @@ HTML_TEMPLATE = """<!doctype html>
       box-sizing:border-box;
     }
     .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
+    .section-modal-body { padding:8px 10px; overflow:auto; }
+    .section-modal-actions {
+      display:flex;
+      gap:8px;
+      padding:8px 10px 10px;
+      border-top:1px solid var(--line);
+      background:#fafcff;
+    }
+    .section-modal-actions button {
+      flex:1;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:8px;
+      padding:8px 10px;
+      font:inherit;
+      font-weight:700;
+      font-size:16px;
+      cursor:pointer;
+    }
+    .section-modal-actions button.primary { background:#dcedc8; }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1320,11 +1341,24 @@ HTML_TEMPLATE = """<!doctype html>
       </div>
     </div>
   </div>
+  <div id="sectionModal" class="modal-overlay" aria-hidden="true" onclick="closeSectionModal()">
+    <div class="modal-window wide" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div id="sectionModalTitle">Раздел</div>
+        <button class="modal-close" onclick="closeSectionModal()">×</button>
+      </div>
+      <div id="sectionModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="saveSectionAndClose()">Сохранить и Закрыть</button>
+        <button class="primary" onclick="closeSectionModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
 <script>
 const BOOT_VERSION = "{{APP_VERSION}}";
 const BOOT_STARTED_AT = "{{STARTED_AT}}";
 let appState = {{STATE_JSON}};
-let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null };
+let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null };
 let dirty = false;
 const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
@@ -1547,9 +1581,18 @@ function handleMonthKeydown(e){
   moveCell(e.target, step[0], step[1]);
 }
 function bindNav(){
-  document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id?'active':''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
+  document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id || ui.modal===s.id ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
 }
-function setSection(section){ ui.section = section; render(); }
+function setSection(section){
+  if (section === 'norms' || section === 'acts') {
+    ui.section = 'months';
+    openSectionModal(section);
+    return;
+  }
+  ui.modal = null;
+  ui.section = section;
+  render();
+}
 function setMonth(index){ ui.monthIndex = index; clearMonthSelection(); render(); }
 function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
@@ -1614,16 +1657,9 @@ function renderSafe(){
   bindNav();
   const content = document.getElementById('content');
   if (!content) return;
-  if (ui.section === 'months') content.innerHTML = renderMonths();
-  if (ui.section === 'norms') content.innerHTML = renderNorms();
-  if (ui.section === 'acts') content.innerHTML = renderActs();
+  content.innerHTML = renderMonths();
   applyMonthSelectionClasses();
-  if (ui.section === 'acts') {
-    requestAnimationFrame(() => {
-      const select = document.getElementById('actsMonthSelect');
-      if (select) select.focus();
-    });
-  }
+  renderSectionModal();
 }
 window.addEventListener('error', (event) => {
   const content = document.getElementById('content');
@@ -1823,6 +1859,49 @@ function renderActs(){
       </table>
     </div>
   `;
+}
+function renderSectionModal(){
+  const modal = document.getElementById('sectionModal');
+  const title = document.getElementById('sectionModalTitle');
+  const body = document.getElementById('sectionModalBody');
+  if (!modal || !title || !body) return;
+  if (!ui.modal) {
+    modal.classList.remove('visible');
+    modal.setAttribute('aria-hidden', 'true');
+    body.innerHTML = '';
+    return;
+  }
+  modal.classList.add('visible');
+  modal.setAttribute('aria-hidden', 'false');
+  if (ui.modal === 'norms') {
+    title.textContent = 'Нормы / парк';
+    body.innerHTML = renderNorms();
+  } else if (ui.modal === 'acts') {
+    title.textContent = 'Акты';
+    body.innerHTML = renderActs();
+  } else {
+    body.innerHTML = '';
+  }
+  requestAnimationFrame(() => {
+    if (ui.modal === 'acts') {
+      const select = document.getElementById('actsMonthSelect');
+      if (select) select.focus();
+    }
+  });
+}
+function openSectionModal(section){
+  ui.modal = section;
+  render();
+}
+function closeSectionModal(){
+  ui.modal = null;
+  render();
+}
+async function saveSectionAndClose(){
+  if (dirty && CAN_EDIT) {
+    await saveState();
+  }
+  closeSectionModal();
 }
 async function startAct(month, act){
   if (!CAN_EDIT) return;
