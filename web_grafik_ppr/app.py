@@ -1093,7 +1093,19 @@ HTML_TEMPLATE = """<!doctype html>
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
     .topbar,.nav,.panel { background:rgba(255,255,255,.88); border:1px solid rgba(217,226,239,.9); border-radius:var(--radius); box-shadow:var(--shadow); }
-    .topbar { display:flex; gap:14px; align-items:center; justify-content:space-between; padding:14px 16px; margin-bottom:14px; flex-wrap:wrap; }
+    .topbar {
+      position:sticky;
+      top:12px;
+      z-index:30;
+      display:flex;
+      gap:14px;
+      align-items:center;
+      justify-content:space-between;
+      padding:14px 16px;
+      margin-bottom:14px;
+      flex-wrap:wrap;
+      backdrop-filter:blur(10px);
+    }
     .titlebox h1 { margin:0; font-size:22px; }
     .titlebox .sub { color:var(--muted); font-size:13px; margin-top:2px; }
     .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
