@@ -1192,24 +1192,26 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
     }
     .modal-actions button.primary { background:#dcedc8; }
-    .report-table { width:100%; min-width:0; table-layout:fixed; border-collapse:separate; border-spacing:0; }
-    .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; vertical-align:middle; background:#fff; }
-    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:6px 6px; text-align:center; white-space:nowrap; }
+    .report-table { width:max-content; min-width:100%; table-layout:auto; border-collapse:separate; border-spacing:0; }
+    .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:2px 4px; vertical-align:middle; background:#fff; }
+    .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:12px; padding:4px 6px; text-align:center; white-space:nowrap; }
     .report-table td { font-size:12px; }
-    .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:6px 6px; white-space:pre-line; }
-    .report-table .num-cell { text-align:center; width:74px; padding:6px 4px; }
+    .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:4px 6px; white-space:pre-line; }
+    .report-table .num-cell { text-align:center; padding:4px 4px; white-space:nowrap; }
     .report-note {
       width:100%;
-      min-height:26px;
+      min-height:22px;
+      height:22px;
       resize:vertical;
       border:0;
       background:transparent;
       font:inherit;
-      font-size:12px;
-      padding:6px;
+      font-size:11px;
+      line-height:1.1;
+      padding:2px 4px;
       box-sizing:border-box;
     }
-    .report-loading { padding:16px; text-align:center; color:var(--muted); }
+    .report-loading { padding:10px; text-align:center; color:var(--muted); }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1698,7 +1700,7 @@ function renderReportBody(){
         <td>${esc(row.label)}</td>
         <td class="num-cell">${esc(row.plan)}</td>
         <td class="num-cell">${esc(row.fact)}</td>
-        <td><textarea class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
+        <td><textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
       </tr>
     `;
   }).join('');
@@ -1706,9 +1708,9 @@ function renderReportBody(){
     <table class="report-table">
       <colgroup>
         <col>
-        <col style="width:74px">
-        <col style="width:74px">
-        <col style="width:250px">
+        <col>
+        <col>
+        <col>
       </colgroup>
       <thead>
         <tr>
