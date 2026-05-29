@@ -52,6 +52,17 @@ SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
+def format_n(value) -> str:
+    try:
+        number = float(value)
+    except Exception:
+        return ""
+    if number.is_integer():
+        return str(int(number))
+    text = f"{number:.2f}".rstrip("0").rstrip(".")
+    return text.replace(".", ",")
+
+
 def load_web_secret() -> str:
     secret = os.environ.get("WEB_SECRET", "").strip()
     if secret:
@@ -876,6 +887,7 @@ def render_login(extra: str = "") -> str:
 EDIT_TOOLBAR = """
       <div class="toolbar">
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
+        <button onclick="openReport()">Отчет</button>
         <button onclick="saveState()">Сохранить</button>
         <button onclick="downloadJson()">Экспорт JSON</button>
         <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
@@ -887,6 +899,7 @@ EDIT_TOOLBAR = """
 READONLY_TOOLBAR = """
       <div class="toolbar">
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
+        <button onclick="openReport()">Отчет</button>
         <a class="badge" href="{{APP_PREFIX}}/login" style="text-decoration:none;">Войти</a>
       </div>
 """
@@ -1110,8 +1123,9 @@ HTML_TEMPLATE = """<!doctype html>
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
     th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
-    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:5px 8px; height:34px; line-height:1; font:inherit; font-size:15px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:13px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cell.center { text-align:center; }
+    .cell.small { font-size:11px; padding:2px 2px; }
     .cell.cat-toggle {
       display:block;
       box-sizing:border-box;
@@ -1137,12 +1151,12 @@ HTML_TEMPLATE = """<!doctype html>
     .col-series { width:72px; }
     .col-number { width:72px; }
     .col-cat { width:72px; }
-    .col-day { width:28px; }
+    .col-day { width:30px; }
     .col-note { width:120px; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
-    .compact th, .compact td { font-size:15px; }
+    .compact th, .compact td { font-size:13px; }
     .month-table { table-layout:fixed; width:max-content; }
-    .month-table tbody tr { height:34px; }
+    .month-table tbody tr { height:28px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
     @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:none; } .repair-strip { flex-wrap:wrap; } }
   </style>
@@ -1500,7 +1514,6 @@ function renderActs(){
       <div style="display:flex; align-items:center; gap:6px; flex-wrap:nowrap; justify-content:center; width:100%;">
         <div class="section-title">Акты</div>
         ${monthSelectHtml()}
-        <button class="act-report" ${CAN_EDIT ? '' : ''} onclick="openReport()">Отчет</button>
       </div>
     </div>
     <div class="table-wrap" style="width:fit-content; max-width:100%; margin:0 auto;">
