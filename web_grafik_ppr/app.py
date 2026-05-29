@@ -1232,9 +1232,9 @@ HTML_TEMPLATE = """<!doctype html>
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
     th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
-    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:13px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cell.center { text-align:center; }
-    .cell.small { font-size:11px; padding:2px 2px; }
+    .cell.small { font-size:14px; padding:2px 2px; }
     .cell.cat-toggle {
       display:block;
       box-sizing:border-box;
@@ -1242,8 +1242,8 @@ HTML_TEMPLATE = """<!doctype html>
       width:100%;
       text-align:center;
     }
-    .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:28px; font-size:15px; }
-    .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; font-size:14px; }
+    .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:28px; font-size:16px; }
+    .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; font-size:15px; }
     .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:0; background:transparent; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
