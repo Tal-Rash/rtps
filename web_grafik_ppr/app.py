@@ -1244,7 +1244,7 @@ HTML_TEMPLATE = """<!doctype html>
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
     th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
-    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; }
     .cell.center { text-align:center; }
     .cell.small { font-size:14px; padding:2px 2px; }
     .cell.selected-cell { background:rgba(39,110,241,.14); box-shadow:inset 0 0 0 1px rgba(39,110,241,.9); }
@@ -1506,12 +1506,19 @@ document.addEventListener('mouseup', endMonthSelection, true);
 document.addEventListener('copy', handleMonthCopy, true);
 function setPath(path, value){
   if (!CAN_EDIT) return;
+  if (typeof value === 'string') value = value.toUpperCase();
   const p = path.split('.');
   let o = appState;
   for (let i=0; i<p.length-1; i++) o = o[p[i]];
   const last = p[p.length-1];
   o[last] = value;
   markDirty(true);
+}
+function handleGridInput(el){
+  if (!el || !el.dataset) return;
+  const value = String(el.value ?? '').toUpperCase();
+  if (el.value !== value) el.value = value;
+  setPath(el.dataset.path, value);
 }
 function focusCell(el){ if (el) el.focus(); }
 function monthCells(type){
@@ -1931,7 +1938,7 @@ function downloadReportExcel(){
 }
 function cell(path, value, cls, month, table, row, col){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" onmousedown="beginMonthSelection(event)" onmouseenter="extendMonthSelection(event)" onmouseup="endMonthSelection()" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)" oncopy="handleMonthCopy(event)" onpaste="handleMonthPaste(event)">`;
+  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" onmousedown="beginMonthSelection(event)" onmouseenter="extendMonthSelection(event)" onmouseup="endMonthSelection()" oninput="handleGridInput(this)" onkeydown="handleMonthKeydown(event)" oncopy="handleMonthCopy(event)" onpaste="handleMonthPaste(event)">`;
 }
 function addRow(type){
   if (!CAN_EDIT) return;
