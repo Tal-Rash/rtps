@@ -1197,7 +1197,8 @@ HTML_TEMPLATE = """<!doctype html>
     .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:2px 4px; vertical-align:middle; background:#fff; }
     .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:16px; padding:4px 6px; text-align:center; white-space:nowrap; }
     .report-table td { font-size:16px; }
-    .report-table .group-cell { font-weight:800; background:#f2f2f2; padding:4px 6px; white-space:pre-line; }
+    .report-table tr.group-row td { background:#f2f2f2; }
+    .report-table .group-cell { font-weight:800; padding:4px 6px; white-space:pre-line; }
     .report-table .num-cell { text-align:center; padding:4px 4px; white-space:nowrap; }
     .report-table tbody tr { height:auto; }
     .report-note {
@@ -1697,7 +1698,7 @@ function renderReportBody(){
   const rows = reportDialogState.rows.map((row) => {
     if (row.kind === 'group') {
       return `
-        <tr>
+        <tr class="group-row">
           <td class="group-cell">${esc(row.label)}</td>
           <td class="num-cell">${esc(row.plan)}</td>
           <td class="num-cell">${esc(row.fact)}</td>
