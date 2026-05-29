@@ -1235,6 +1235,7 @@ HTML_TEMPLATE = """<!doctype html>
     .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cell.center { text-align:center; }
     .cell.small { font-size:14px; padding:2px 2px; }
+    .cell.selected-cell { background:rgba(39,110,241,.14); box-shadow:inset 0 0 0 1px rgba(39,110,241,.9); }
     .cell.cat-toggle {
       display:block;
       box-sizing:border-box;
@@ -1311,7 +1312,7 @@ HTML_TEMPLATE = """<!doctype html>
 const BOOT_VERSION = "{{APP_VERSION}}";
 const BOOT_STARTED_AT = "{{STARTED_AT}}";
 let appState = {{STATE_JSON}};
-let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null } };
+let ui = { section: 'months', monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null };
 let dirty = false;
 const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
@@ -1331,6 +1332,166 @@ function setLastCell(el){
     path: el.dataset.path,
   };
 }
+function getMonthCellInfo(el){
+  if (!el || !el.dataset || el.dataset.month === undefined) return null;
+  const monthIndex = Number(el.dataset.month);
+  const row = Number(el.dataset.row);
+  const col = Number(el.dataset.col);
+  if (!Number.isFinite(monthIndex) || !Number.isFinite(row) || !Number.isFinite(col)) return null;
+  return { monthIndex, table: el.dataset.table, row, col, path: el.dataset.path };
+}
+function selectionBounds(a, b){
+  return {
+    startRow: Math.min(a.row, b.row),
+    endRow: Math.max(a.row, b.row),
+    startCol: Math.min(a.col, b.col),
+    endCol: Math.max(a.col, b.col),
+  };
+}
+function clearMonthSelection(){
+  ui.monthSelection = null;
+  applyMonthSelectionClasses();
+}
+function setMonthSelection(anchor, focus){
+  if (!anchor || !focus || anchor.monthIndex !== focus.monthIndex || anchor.table !== focus.table) return;
+  ui.monthSelection = {
+    monthIndex: anchor.monthIndex,
+    table: anchor.table,
+    anchor,
+    focus,
+    ...selectionBounds(anchor, focus),
+  };
+  applyMonthSelectionClasses();
+}
+function applyMonthSelectionClasses(){
+  document.querySelectorAll('input.selected-cell').forEach((el) => el.classList.remove('selected-cell'));
+  if (ui.section !== 'months' || !ui.monthSelection) return;
+  const sel = ui.monthSelection;
+  document.querySelectorAll(`input[data-month="${sel.monthIndex}"][data-table="${sel.table}"]`).forEach((el) => {
+    const row = Number(el.dataset.row);
+    const col = Number(el.dataset.col);
+    if (row >= sel.startRow && row <= sel.endRow && col >= sel.startCol && col <= sel.endCol) {
+      el.classList.add('selected-cell');
+    }
+  });
+}
+function isMonthSelectionTarget(el){
+  const info = getMonthCellInfo(el);
+  return !!info && ui.section === 'months';
+}
+function beginMonthSelection(e){
+  if (!CAN_EDIT || e.button !== 0) return;
+  const target = e.currentTarget || e.target;
+  const info = getMonthCellInfo(target);
+  if (!info || ui.section !== 'months') return;
+  e.preventDefault();
+  setLastCell(target);
+  const keepAnchor = e.shiftKey && ui.monthSelection && ui.monthSelection.monthIndex === info.monthIndex && ui.monthSelection.table === info.table;
+  const anchor = keepAnchor ? ui.monthSelection.anchor : info;
+  setMonthSelection(anchor, info);
+  ui.draggingSelection = true;
+  focusCell(target);
+}
+function extendMonthSelection(e){
+  if (!ui.draggingSelection || ui.section !== 'months') return;
+  const target = e.currentTarget || e.target;
+  const info = getMonthCellInfo(target);
+  if (!info || !ui.monthSelection) return;
+  const anchor = ui.monthSelection.anchor;
+  if (anchor.monthIndex !== info.monthIndex || anchor.table !== info.table) return;
+  setMonthSelection(anchor, info);
+}
+function endMonthSelection(){
+  ui.draggingSelection = false;
+}
+function selectedMonthCellText(info){
+  const month = appState.months[info.monthIndex];
+  if (!month) return '';
+  const row = month[info.table] && month[info.table][info.row];
+  if (!row || !row.cells) return '';
+  return String(row.cells[info.col] ?? '');
+}
+function getSelectedMonthSelection(){
+  if (ui.section !== 'months' || !ui.monthSelection) return null;
+  return ui.monthSelection;
+}
+function copyMonthSelectionText(){
+  const sel = getSelectedMonthSelection();
+  if (!sel) return '';
+  const lines = [];
+  for (let row = sel.startRow; row <= sel.endRow; row++) {
+    const values = [];
+    for (let col = sel.startCol; col <= sel.endCol; col++) {
+      values.push(selectedMonthCellText({ monthIndex: sel.monthIndex, table: sel.table, row, col }));
+    }
+    lines.push(values.join('\t'));
+  }
+  return lines.join('\n');
+}
+function writeMonthCellValue(monthIndex, table, row, col, value){
+  const selector = `input[data-month="${monthIndex}"][data-table="${table}"][data-row="${row}"][data-col="${col}"]`;
+  const cell = document.querySelector(selector);
+  if (!cell) return false;
+  const normalized = value ?? '';
+  cell.value = normalized;
+  setPath(cell.dataset.path, normalized);
+  return true;
+}
+function pasteMonthSelectionText(target, text){
+  if (!CAN_EDIT) return;
+  const info = getMonthCellInfo(target);
+  if (!info || ui.section !== 'months') return;
+  const rows = String(text ?? '').replace(/\r/g, '').split('\n');
+  while (rows.length && rows[rows.length - 1] === '') rows.pop();
+  if (!rows.length) return;
+  const matrix = rows.map((line) => line.split('\t'));
+  const sel = getSelectedMonthSelection();
+  const useSelection = sel && sel.monthIndex === info.monthIndex && sel.table === info.table;
+  const startRow = useSelection ? sel.startRow : info.row;
+  const startCol = useSelection ? sel.startCol : info.col;
+  const sourceRows = matrix.length;
+  const sourceCols = Math.max(...matrix.map((row) => row.length), 1);
+  const targetRows = matrix.length === 1 && matrix[0].length === 1 && useSelection
+    ? (sel.endRow - sel.startRow + 1)
+    : sourceRows;
+  const targetCols = matrix.length === 1 && matrix[0].length === 1 && useSelection
+    ? (sel.endCol - sel.startCol + 1)
+    : sourceCols;
+  const fillSingle = matrix.length === 1 && matrix[0].length === 1 && useSelection;
+  for (let r = 0; r < targetRows; r++) {
+    for (let c = 0; c < targetCols; c++) {
+      const sourceRow = fillSingle ? 0 : Math.min(r, matrix.length - 1);
+      const sourceCol = fillSingle ? 0 : Math.min(c, matrix[sourceRow].length - 1);
+      const value = matrix[sourceRow][sourceCol] ?? '';
+      writeMonthCellValue(info.monthIndex, info.table, startRow + r, startCol + c, value);
+    }
+  }
+  if (useSelection) setMonthSelection(sel.anchor, { monthIndex: info.monthIndex, table: info.table, row: startRow + targetRows - 1, col: startCol + targetCols - 1 });
+  markDirty(true);
+}
+function handleMonthCopy(e){
+  const sel = getSelectedMonthSelection();
+  if (!sel) return;
+  const text = copyMonthSelectionText();
+  if (text === '') return;
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', text);
+}
+function handleMonthPaste(e){
+  if (!CAN_EDIT) return;
+  const target = e.target;
+  if (!target || !target.dataset || target.dataset.month === undefined) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+  const sel = getSelectedMonthSelection();
+  if (sel && sel.monthIndex !== Number(target.dataset.month)) {
+    clearMonthSelection();
+  }
+  e.preventDefault();
+  pasteMonthSelectionText(target, text);
+}
+document.addEventListener('mouseup', endMonthSelection, true);
+document.addEventListener('copy', handleMonthCopy, true);
 function setPath(path, value){
   if (!CAN_EDIT) return;
   const p = path.split('.');
@@ -1366,39 +1527,11 @@ function handleMonthKeydown(e){
   e.preventDefault();
   moveCell(e.target, step[0], step[1]);
 }
-function handleMonthPaste(e){
-  if (!CAN_EDIT) return;
-  const target = e.target;
-  if (!target || !target.dataset || target.dataset.month === undefined) return;
-  const text = (e.clipboardData || window.clipboardData).getData('text');
-  if (!text) return;
-  const table = target.dataset.table;
-  const startRow = parseInt(target.dataset.row, 10);
-  const startCol = parseInt(target.dataset.col, 10);
-  if (!Number.isFinite(startRow) || !Number.isFinite(startCol)) return;
-  const rows = text.replace(/\\r/g, '').split('\\n').filter((row, idx, arr) => !(row === '' && idx === arr.length - 1));
-  if (!rows.length) return;
-  e.preventDefault();
-  rows.forEach((line, rOffset) => {
-    const cols = line.split('\\t');
-    cols.forEach((value, cOffset) => {
-      const row = startRow + rOffset;
-      const col = startCol + cOffset;
-      const selector = `input[data-month="${ui.monthIndex}"][data-table="${table}"][data-row="${row}"][data-col="${col}"]`;
-      const cell = document.querySelector(selector);
-      if (!cell) return;
-      const normalized = value ?? '';
-      cell.value = normalized;
-      setPath(cell.dataset.path, normalized);
-    });
-  });
-  markDirty(true);
-}
 function bindNav(){
   document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id?'active':''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
 }
 function setSection(section){ ui.section = section; render(); }
-function setMonth(index){ ui.monthIndex = index; render(); }
+function setMonth(index){ ui.monthIndex = index; clearMonthSelection(); render(); }
 function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
 function safeCurrentMonth(){
@@ -1454,6 +1587,7 @@ function render(){
   if (ui.section === 'months') content.innerHTML = renderMonths();
   if (ui.section === 'norms') content.innerHTML = renderNorms();
   if (ui.section === 'acts') content.innerHTML = renderActs();
+  applyMonthSelectionClasses();
   if (ui.section === 'acts') {
     requestAnimationFrame(() => {
       const select = document.getElementById('actsMonthSelect');
@@ -1768,7 +1902,7 @@ function downloadReportExcel(){
 }
 function cell(path, value, cls, month, table, row, col){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)" onpaste="handleMonthPaste(event)">`;
+  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" onmousedown="beginMonthSelection(event)" onmouseenter="extendMonthSelection(event)" onmouseup="endMonthSelection()" oninput="setPath(this.dataset.path, this.value)" onkeydown="handleMonthKeydown(event)" oncopy="handleMonthCopy(event)" onpaste="handleMonthPaste(event)">`;
 }
 function addRow(type){
   if (!CAN_EDIT) return;
