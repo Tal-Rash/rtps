@@ -1575,6 +1575,17 @@ function ensureYearOptions(){
   select.innerHTML = options.join('');
 }
 function render(){
+  try {
+    renderSafe();
+  } catch (err) {
+    const content = document.getElementById('content');
+    if (content) {
+      content.innerHTML = `<div style="padding:14px;border:1px solid #f0c2c2;background:#fff5f5;color:#9b1c1c;border-radius:12px;white-space:pre-wrap;font:14px/1.4 monospace;">${esc(err && err.stack ? err.stack : err)}</div>`;
+    }
+    throw err;
+  }
+}
+function renderSafe(){
   ensureYearOptions();
   const serverInfo = document.getElementById('serverInfo');
   if (serverInfo) serverInfo.textContent = `Сервер: ${BOOT_STARTED_AT}`;
@@ -1595,6 +1606,12 @@ function render(){
     });
   }
 }
+window.addEventListener('error', (event) => {
+  const content = document.getElementById('content');
+  if (!content) return;
+  const text = event && event.error && event.error.stack ? event.error.stack : (event && event.message ? event.message : 'Unknown error');
+  content.innerHTML = `<div style="padding:14px;border:1px solid #f0c2c2;background:#fff5f5;color:#9b1c1c;border-radius:12px;white-space:pre-wrap;font:14px/1.4 monospace;">${esc(text)}</div>`;
+});
 function repairButtonsHtml(){
   return `
       <div class="repair-strip">
