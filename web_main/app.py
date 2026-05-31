@@ -139,7 +139,7 @@ HOME_TEMPLATE = """<!doctype html>
       <div class="card">
         <div>
           <h2>График ППР</h2>
-          <p>План, факт, нормы, инвентарь и акты.</p>
+          <p>План, факт, нормы.</p>
         </div>
         <a href="/grafik-ppr">Открыть</a>
       </div>
