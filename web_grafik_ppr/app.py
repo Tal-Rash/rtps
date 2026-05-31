@@ -138,7 +138,7 @@ def load_auth_config() -> tuple[str, str]:
 
 
 WEB_USER, WEB_PASSWORD = load_auth_config()
-AUTH_ENABLED = True
+AUTH_ENABLED = False
 APP_PREFIX = "/grafik-ppr"
 
 
@@ -1322,7 +1322,6 @@ HTML_TEMPLATE = """<!doctype html>
     <div class="topbar">
       <div class="titlebox">
         <h1>График ППР</h1>
-        <div class="sub">Web-копия {{APP_VERSION}}. Отдельная база, исходный PyQt-файл не тронут.</div>
       </div>
       <div class="controls">
       <div class="badge">{{AUTH_BADGE}}</div>
@@ -1676,8 +1675,6 @@ function renderSafe(){
   ensureYearOptions();
   const serverInfo = document.getElementById('serverInfo');
   if (serverInfo) serverInfo.textContent = `Сервер: ${BOOT_STARTED_AT}`;
-  const sub = document.querySelector('.sub');
-  if (sub) sub.textContent = `Web-копия ${BOOT_VERSION}. Отдельная база, исходный PyQt-файл не тронут.`;
   document.title = `График ППР web ${BOOT_VERSION}`;
   bindNav();
   const content = document.getElementById('content');
