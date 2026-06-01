@@ -69,5 +69,15 @@ jobs:
           restore_path web_main/data
           restore_path web_spravochnik/data
 
-          systemctl restart rtps.service
+          mapfile -t services < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' deploy/services.txt)
+          if [ "${#services[@]}" -eq 0 ]; then
+            echo "deploy/services.txt is empty" >&2
+            exit 1
+          fi
+
+          for service in "${services[@]}"; do
+            systemctl restart "$service"
+          done
+
+          systemctl reload nginx
           EOF
