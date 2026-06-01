@@ -22,6 +22,7 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
+
           : "${VPS_HOST:?Missing VPS_HOST secret}"
           : "${VPS_USER:=root}"
           : "${VPS_PORT:=22}"
@@ -37,18 +38,35 @@ jobs:
 
           cd /opt/rtps
 
-          db_backup=""
-          if [ -f base/common_database.db ]; then
-            db_backup="$(mktemp)"
-            cp -a base/common_database.db "$db_backup"
-          fi
+          backup_dir="$(mktemp -d)"
+
+          backup_path() {
+            if [ -e "$1" ]; then
+              mkdir -p "$backup_dir/$(dirname "$1")"
+              cp -a "$1" "$backup_dir/$1"
+            fi
+          }
+
+          restore_path() {
+            if [ -e "$backup_dir/$1" ]; then
+              rm -rf "$1"
+              mkdir -p "$(dirname "$1")"
+              cp -a "$backup_dir/$1" "$1"
+            fi
+          }
+
+          backup_path base/common_database.db
+          backup_path data
+          backup_path web_main/data
+          backup_path web_spravochnik/data
 
           git fetch origin main
           git reset --hard origin/main
 
-          if [ -n "$db_backup" ] && [ -f "$db_backup" ]; then
-            cp -a "$db_backup" base/common_database.db
-          fi
+          restore_path base/common_database.db
+          restore_path data
+          restore_path web_main/data
+          restore_path web_spravochnik/data
 
           systemctl restart rtps.service
           EOF
