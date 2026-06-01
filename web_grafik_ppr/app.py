@@ -1090,7 +1090,7 @@ HTML_TEMPLATE = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>График ППР web {{APP_VERSION}}</title>
   <style>
-    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:60px; --cat-col-width:80px; }
+    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:72px; --cat-col-width:100px; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
@@ -1215,11 +1215,75 @@ HTML_TEMPLATE = """<!doctype html>
     .report-table .col-report-name { width:280px; }
     .report-table .col-report-num { width:90px; }
     .report-table .col-report-note { width:360px; }
+    .report-table tr.group-row > td,
+    .report-table tr.group-row > th {
+      background:#f2f2f2 !important;
+      box-shadow:inset 0 0 0 9999px #f2f2f2 !important;
+    }
+    .report-table tr.excluded-row > td,
+    .report-table tr.excluded-row > th {
+      background:#f3f5f8 !important;
+      box-shadow:inset 0 0 0 9999px #f3f5f8 !important;
+    }
+    .report-wrap { padding:0 !important; background:#fff; }
+    #reportModal .modal-head,
+    #normsModal .modal-head,
+    #actsModal .modal-head {
+      display:grid !important;
+      grid-template-columns:30px minmax(0, 1fr) 30px;
+      align-items:center;
+      justify-content:normal;
+      text-align:center;
+    }
+    #reportTitle {
+      position:static !important;
+      transform:none !important;
+      grid-column:2;
+      justify-self:center;
+      width:auto;
+      max-width:100%;
+      text-align:center;
+      font-weight:800;
+    }
+    #reportModal .modal-head .section-title,
+    #normsModal .modal-head .section-title,
+    #actsModal .modal-head .section-title {
+      grid-column:2;
+      justify-self:center;
+      margin:0 !important;
+      text-align:center;
+    }
+    #normsModal .table-wrap {
+      width:100% !important;
+      max-width:none !important;
+    }
+    #reportModal .modal-close,
+    #normsModal .modal-close,
+    #actsModal .modal-close {
+      position:static !important;
+      transform:none !important;
+      grid-column:3;
+      justify-self:end;
+    }
+    #reportModal .modal-body { padding-left:12px !important; padding-right:12px !important; }
+    #reportModal .table-wrap { padding-left:0 !important; padding-right:0 !important; }
+    #reportModal .report-table { margin-left:0 !important; border-left:0; }
+    #reportModal .report-table tr.group-row > *:first-child,
+    #reportModal .report-table tr.excluded-row > *:first-child {
+      background-clip:border-box !important;
+      box-shadow:inset 9999px 0 0 #f2f2f2, inset 0 0 0 9999px #f2f2f2 !important;
+    }
+    #reportModal .report-table tr.excluded-row > *:first-child {
+      box-shadow:inset 9999px 0 0 #f3f5f8, inset 0 0 0 9999px #f3f5f8 !important;
+    }
+    .report-table tr.group-row { background:#f2f2f2 !important; }
+    .report-table tr.excluded-row { background:#f3f5f8 !important; }
     .report-table tr > *:last-child { border-right:0; }
     .report-table tbody tr:last-child > * { border-bottom:0; }
     .report-table tr.group-row > * { background:#f2f2f2 !important; }
     .report-table tr.excluded-row > * { background:#f3f5f8 !important; color:#9aa5b1; }
-    .report-table .group-cell { font-weight:800; padding:4px 6px; white-space:pre-line; }
+    .report-table td:first-child { text-align:right; padding-right:10px; }
+    .report-table .group-cell { font-weight:800; padding:4px 10px 4px 6px; white-space:pre-line; text-align:right; }
     .report-table .num-cell { text-align:center; padding:4px 4px; white-space:nowrap; }
     .report-table tbody tr { height:auto; }
     .report-note {
@@ -1237,6 +1301,7 @@ HTML_TEMPLATE = """<!doctype html>
       box-sizing:border-box;
     }
     .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
+    .modal-body { padding:8px 14px; overflow:auto; }
     .section-modal-body { padding:8px 14px; overflow:auto; }
     .section-modal-body.centered { text-align:center; }
     .acts-table { font-size:16px; }
@@ -1267,9 +1332,14 @@ HTML_TEMPLATE = """<!doctype html>
     .section-modal-actions button.primary { background:#dcedc8; }
     .norms-table th,
     .norms-table td { text-align:center; }
+    .norms-table td:first-child { text-align:right; padding-right:10px; }
     .norms-table .group-row td { text-align:center; }
     .table-wrap > table.norms-table,
     .table-wrap > table.acts-table { table-layout:auto; width:max-content; min-width:0; }
+    #normsModal .table-wrap > table.norms-table {
+      width:100%;
+      min-width:100%;
+    }
     .norms-table th,
     .norms-table td { padding:4px 6px; font-size:16px; }
     .norms-table .cell { height:24px; padding:2px 2px; font-size:16px; }
@@ -1374,6 +1444,8 @@ HTML_TEMPLATE = """<!doctype html>
     .col-number { width:var(--number-col-width); }
     .col-number .cell { padding-left:0; padding-right:0; text-align:center; }
     .col-cat { width:var(--cat-col-width); }
+    .month-table th:nth-child(3),
+    .month-table th:nth-child(4) { white-space:normal; line-height:1.05; }
     .col-day { width:30px; }
     .col-note { width:120px; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
@@ -1913,7 +1985,7 @@ function renderNorms(){
       <div style="width:100%;">
       </div>
     </div>
-    <div class="table-wrap" style="margin:0 auto 14px; width:fit-content; max-width:100%; padding:0 12px;">
+    <div class="table-wrap" style="margin:0 auto 14px; width:100%; max-width:none; padding:0;">
       <table class="compact norms-table">
         <colgroup>
           <col class="col-name">
@@ -2103,6 +2175,7 @@ function renderReportBody(){
     `;
   }).join('');
   document.getElementById('reportBody').innerHTML = `
+    <div class="table-wrap report-wrap" style="margin:0 auto; width:fit-content; max-width:100%; padding:0;">
     <table class="report-table">
       <colgroup>
         <col class="col-report-name">
@@ -2120,6 +2193,7 @@ function renderReportBody(){
       </thead>
       <tbody>${rows}</tbody>
     </table>
+    </div>
   `;
   autosizeReportNotes();
 }
