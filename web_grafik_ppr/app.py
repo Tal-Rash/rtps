@@ -409,9 +409,11 @@ def collect_row_notes(row: dict, unplanned_starts: list[tuple[int, int]], number
     row_notes: list[str] = []
     cells = row.get("cells") or []
     note = s(cells[-1]).strip() if cells else ""
-    if note:
+    has_unplanned = bool(unplanned_starts)
+    is_auto_act_note = note.startswith("Акт № ") and "-" in note
+    if note and (has_unplanned or not is_auto_act_note):
         row_notes.append(note)
-    if not row_notes and unplanned_starts:
+    if not row_notes and has_unplanned:
         for day, month in unplanned_starts:
             row_notes.append(f"Акт № {day:02d}-{month:02d}-{number}")
     return row_notes
@@ -496,6 +498,7 @@ def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
     acc.unplanned_hours = {"plan": {"tep": 0.0, "agr": 0.0}, "fact": {"tep": 0.0, "agr": 0.0}}
     acc.units = {"plan": {"tep": 0, "agr": 0}, "fact": {"tep": 0, "agr": 0}}
     acc.notes = {"plan": {"tep": [], "agr": []}, "fact": {"tep": [], "agr": []}}
+    acc.excluded = {"plan": set(), "fact": set()}
 
     months = state.get("months", []) or []
     if not (0 <= m_idx < len(months)):
@@ -510,6 +513,8 @@ def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
         prev_rows = prev_rows_by_unit_fact if table_type == "fact" else prev_rows_by_unit
         for row in curr_table:
             key = report_unit_key(row)
+            if row.get("excluded") and key:
+                acc.excluded[table_type].add(key)
             prev_row = prev_month.get(table_type, [])[prev_rows[key]] if prev_month and key and key in prev_rows else None
             process_report_row(acc, table_type, row, prev_row, curr_m, prev_m, fund_days)
 
@@ -536,6 +541,10 @@ def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
         "res": acc.result,
         "ub": acc.unplanned_blocks,
         "notes": acc.notes,
+        "excluded": {
+            "plan": sorted(["|".join(key) for key in acc.excluded["plan"]]),
+            "fact": sorted(["|".join(key) for key in acc.excluded["fact"]]),
+        },
     }
 
 
@@ -604,14 +613,14 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
     tep_notes = "\n".join(data["notes"]["fact"]["tep"])
     agr_notes = "\n".join(data["notes"]["fact"]["agr"])
     rows = [
-        {"kind": "group", "label": "Кол-во технически исправных локомотивов\nТЕПЛОВОЗЫ МАНЕВРОВЫЕ", "plan": format_n(data["tp"]), "fact": format_n(data["tf"]), "note_key": "tep_park", "note": saved_notes.get("tep_park", "")},
+        {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nТЕПЛОВОЗЫ МАНЕВРОВЫЕ", "plan": format_n(data["tp"]), "fact": format_n(data["tf"]), "note_key": "tep_park", "note": saved_notes.get("tep_park", "")},
         {"kind": "row", "key": "tep_ТО2", "label": "ТО2", "plan": count("plan", "tep", "ТО2", 1), "fact": count("fact", "tep", "ТО2", 1), "note": saved_notes.get("tep_ТО2", "")},
         {"kind": "row", "key": "tep_ТО3", "label": "ТО3", "plan": count("plan", "tep", "ТО3", 2), "fact": count("fact", "tep", "ТО3", 2), "note": saved_notes.get("tep_ТО3", "")},
         {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
         {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
         {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
         {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": saved_notes.get("tep_ТР_unplan", tep_notes)},
-        {"kind": "group", "label": "Кол-во технически исправных локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
+        {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
         {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
         {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
         {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": saved_notes.get("agr_ТР_unplan", agr_notes)},
@@ -875,13 +884,11 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
-    auth_badge = "Вход открыт" if not AUTH_ENABLED else (f"Пользователь: {username}" if username else "Режим: вход")
     return (
         HTML_TEMPLATE.replace("{{STATE_JSON}}", state_json)
         .replace("{{STARTED_AT}}", started_at)
         .replace("{{APP_VERSION}}", APP_VERSION)
         .replace("{{TOOLBAR}}", toolbar)
-        .replace("{{AUTH_BADGE}}", auth_badge)
         .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
         .replace("{{APP_PREFIX}}", APP_PREFIX)
         .replace("{{TEM_NORM_ROWS}}", json.dumps(TEM_NORM_ROWS, ensure_ascii=False))
@@ -912,7 +919,6 @@ EDIT_TOOLBAR = """
         <button onclick="saveState()">Сохранить</button>
         <button onclick="downloadJson()">Экспорт JSON</button>
         <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
-        <a class="badge" href="/" style="text-decoration:none;">Выйти</a>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
       </div>
 """
@@ -990,8 +996,6 @@ HOME_TEMPLATE = """<!doctype html>
         <p class="sub">Стартовая страница для запуска веб-приложений. Сейчас доступен веб-график ППР, остальные модули можно подключать сюда по мере готовности.</p>
       </div>
       <div class="top-right">
-        <a class="badge" href="{{APP_PREFIX}}/logout">Выйти</a>
-        <div class="badge">{{AUTH_BADGE}}</div>
       </div>
     </div>
 
@@ -1069,10 +1073,8 @@ def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None
 
 def render_home(username: str | None, can_edit: bool) -> str:
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
-    auth_badge = "Вход открыт" if not AUTH_ENABLED else (f"Пользователь: {username}" if username else "Режим: вход")
     return (
         HOME_TEMPLATE.replace("{{STARTED_AT}}", started_at)
-        .replace("{{AUTH_BADGE}}", auth_badge)
     )
 
 
@@ -1088,7 +1090,7 @@ HTML_TEMPLATE = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>График ППР web {{APP_VERSION}}</title>
   <style>
-    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:80px; --series-col-width:62px; }
+    :root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:60px; --cat-col-width:80px; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
@@ -1162,7 +1164,7 @@ HTML_TEMPLATE = """<!doctype html>
       flex-direction:column;
       overflow:hidden;
     }
-    .modal-window.wide { width:min(1180px, 100%); }
+    .modal-window.wide { width:fit-content; max-width:calc(100vw - 36px); }
     .modal-head {
       display:flex;
       align-items:center;
@@ -1206,11 +1208,17 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
     }
     .modal-actions button.primary { background:#dcedc8; }
-    .report-table { width:max-content; min-width:100%; table-layout:auto; border-collapse:separate; border-spacing:0; }
+    .report-table { width:max-content; min-width:0; table-layout:auto; border-collapse:separate; border-spacing:0; }
     .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:2px 4px; vertical-align:middle; background:#fff; }
     .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:16px; padding:4px 6px; text-align:center; white-space:nowrap; }
     .report-table td { font-size:16px; }
-    .report-table tr.group-row td { background:#f2f2f2; }
+    .report-table .col-report-name { width:280px; }
+    .report-table .col-report-num { width:90px; }
+    .report-table .col-report-note { width:360px; }
+    .report-table tr > *:last-child { border-right:0; }
+    .report-table tbody tr:last-child > * { border-bottom:0; }
+    .report-table tr.group-row > * { background:#f2f2f2 !important; }
+    .report-table tr.excluded-row > * { background:#f3f5f8 !important; color:#9aa5b1; }
     .report-table .group-cell { font-weight:800; padding:4px 6px; white-space:pre-line; }
     .report-table .num-cell { text-align:center; padding:4px 4px; white-space:nowrap; }
     .report-table tbody tr { height:auto; }
@@ -1229,8 +1237,15 @@ HTML_TEMPLATE = """<!doctype html>
       box-sizing:border-box;
     }
     .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
-    .section-modal-body { padding:8px 10px; overflow:auto; }
+    .section-modal-body { padding:8px 14px; overflow:auto; }
     .section-modal-body.centered { text-align:center; }
+    .acts-table { font-size:16px; }
+    .acts-table th,
+    .acts-table td { text-align:center; font-size:16px; }
+    .acts-table th { white-space:normal; line-height:1.1; }
+    .acts-table input[type="checkbox"] { display:block; margin:0 auto; transform:scale(1.15); }
+    .acts-table td:nth-child(2) { padding:0; }
+    .acts-table .act-start { width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center; font-size:16px; border:0; background:linear-gradient(180deg,#fff,#f3f7ff); }
     .section-modal-actions {
       display:flex;
       gap:8px;
@@ -1253,15 +1268,16 @@ HTML_TEMPLATE = """<!doctype html>
     .norms-table th,
     .norms-table td { text-align:center; }
     .norms-table .group-row td { text-align:center; }
-    .norms-table { table-layout:fixed; }
+    .table-wrap > table.norms-table,
+    .table-wrap > table.acts-table { table-layout:auto; width:max-content; min-width:0; }
     .norms-table th,
-    .norms-table td { padding:4px 6px; font-size:13px; }
-    .norms-table .cell { height:24px; padding:2px 2px; font-size:13px; }
-    .norms-table .col-name { width:94px; }
-    .norms-table .col-hours { width:54px; }
-    .norms-table .col-month { width:58px; }
-    .norms-table .col-tep { width:72px; }
-    .norms-table .col-agr { width:74px; }
+    .norms-table td { padding:4px 6px; font-size:16px; }
+    .norms-table .cell { height:24px; padding:2px 2px; font-size:16px; }
+    .norms-table .col-name { width:50px; }
+    .norms-table .col-hours { width:30px; }
+    .norms-table .col-month { width:40px; }
+    .norms-table .col-tep { width:60px; }
+    .norms-table .col-agr { width:60px; }
     .act-start {
       width:100%;
       border:1px solid var(--line);
@@ -1275,12 +1291,34 @@ HTML_TEMPLATE = """<!doctype html>
     }
     .act-start:disabled { opacity:.5; cursor:default; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
-    table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
-    th,td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
-    th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
+    .table-wrap > table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
+    .table-wrap > table th,
+    .table-wrap > table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
+    .table-wrap > table th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
+    .table-wrap > table tr > *:last-child { border-right:0; }
+    .table-wrap > table tbody tr:last-child > * { border-bottom:0; }
     .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; }
     .cell.center { text-align:center; }
     .cell.small { font-size:14px; padding:2px 2px; }
+    .col-day { position:relative; padding:0; height:28px; }
+    .cell.day-cell {
+      display:block;
+      width:100%;
+      height:100%;
+      padding:0;
+      margin:0;
+      box-sizing:border-box;
+      appearance:none;
+      -webkit-appearance:none;
+      border-radius:0;
+      outline:0;
+      background-color:transparent !important;
+      background-image:none !important;
+      box-shadow:none !important;
+      -webkit-box-shadow:none !important;
+      text-align:center;
+      line-height:28px;
+    }
     .cell.selected-cell { background:rgba(39,110,241,.14); box-shadow:inset 0 0 0 1px rgba(39,110,241,.9); }
     .cell.cat-toggle {
       display:block;
@@ -1291,27 +1329,59 @@ HTML_TEMPLATE = """<!doctype html>
     }
     .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:28px; font-size:16px; }
     .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; font-size:15px; }
-    .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:0; background:transparent; }
+    .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { background:#fff3f3; }
     .small { width:100%; min-width:0; text-align:center; font-size:12px; }
     .notes { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--line); border-radius:14px; }
-    .excluded-row { color:#9aa5b1; background:#f3f5f8; }
-    .excluded-row input { background:#f3f5f8; color:#9aa5b1; }
-    .transfer-col { background:#dcf8dc; }
-    .transfer-col input { background:#dcf8dc; }
-    .holiday-col { background:#ffdede; }
-    .holiday-col input { background:#ffdede; }
+    .excluded-row > * { color:#9aa5b1 !important; }
+    .excluded-row > td:not(.transfer-col):not(.holiday-col) {
+      background:#f3f5f8 !important;
+      box-shadow:inset 0 0 0 9999px #f3f5f8 !important;
+      padding-top:0 !important;
+      padding-bottom:0 !important;
+    }
+    .excluded-row > td:not(.transfer-col):not(.holiday-col) > .cell,
+    .excluded-row > td:not(.transfer-col):not(.holiday-col) > button,
+    .excluded-row > td:not(.transfer-col):not(.holiday-col) > textarea {
+      background:transparent !important;
+      color:#9aa5b1 !important;
+      padding-top:0 !important;
+      padding-bottom:0 !important;
+    }
+    .excluded-row input:not(.day-cell) { background:#f3f5f8 !important; color:#9aa5b1 !important; }
+    .excluded-row .cell.day-cell { color:#9aa5b1 !important; }
+    .table-wrap > table td.transfer-col { background:#dcf8dc !important; }
+    .table-wrap > table td.holiday-col { background:#ffdede !important; }
+    .table-wrap > table thead th.transfer-col { background:#dcf8dc !important; }
+    .table-wrap > table thead th.holiday-col { background:#ffdede !important; }
+    .table-wrap > table thead th.transfer-col,
+    .table-wrap > table thead th.holiday-col { position:sticky; z-index:2; }
+    td.transfer-col,
+    td.holiday-col,
+    td.col-day { padding:0; height:100%; position:relative; }
+    td.transfer-col .cell,
+    td.holiday-col .cell { padding:0; height:28px; line-height:28px; }
+    td.transfer-col .cell.small,
+    td.holiday-col .cell.small { padding:0; height:28px; line-height:28px; }
+    td.transfer-col .cell.day-cell { background:#dcf8dc !important; color:#102033 !important; }
+    td.holiday-col .cell.day-cell { background:#ffdede !important; color:#102033 !important; }
+    td.transfer-col .cell.day-cell::selection,
+    td.holiday-col .cell.day-cell::selection { background:rgba(16,32,51,.15); }
     .col-idx { width:36px; }
-    .col-series { width:var(--series-col-width); }
-    .col-number { width:80px; }
-    .col-cat { width:80px; }
+    .col-series { width:var(--series-col-width); min-width:var(--series-col-width); }
+    .col-number { width:var(--number-col-width); }
+    .col-number .cell { padding-left:0; padding-right:0; text-align:center; }
+    .col-cat { width:var(--cat-col-width); }
     .col-day { width:30px; }
     .col-note { width:120px; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
-    .compact th, .compact td { font-size:13px; }
-    .month-table { table-layout:fixed; width:max-content; }
+    .month-table.compact th,
+    .month-table.compact td,
+    .norms-table.compact th,
+    .norms-table.compact td { font-size:16px; }
+    .month-table { table-layout:fixed; width:auto; }
     .month-table tbody tr { height:28px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
     @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:none; } .repair-strip { flex-wrap:wrap; } }
@@ -1324,7 +1394,6 @@ HTML_TEMPLATE = """<!doctype html>
         <h1>График ППР</h1>
       </div>
       <div class="controls">
-      <div class="badge">{{AUTH_BADGE}}</div>
       <div class="nav" id="sectionNav"></div>
       {{TOOLBAR}}
       </div>
@@ -1354,9 +1423,9 @@ HTML_TEMPLATE = """<!doctype html>
     </div>
   </div>
   <div id="normsModal" class="modal-overlay" aria-hidden="true" onclick="closeNormsModal()">
-    <div class="modal-window" style="width:min(920px, 100%);" onclick="event.stopPropagation()">
+    <div class="modal-window" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
       <div class="modal-head">
-        <div>Нормы / парк</div>
+        <div class="section-title" style="margin:0 auto;">Нормы / парк</div>
         <button class="modal-close" onclick="closeNormsModal()">×</button>
       </div>
       <div id="normsModalBody" class="section-modal-body"></div>
@@ -1366,9 +1435,9 @@ HTML_TEMPLATE = """<!doctype html>
     </div>
   </div>
   <div id="actsModal" class="modal-overlay" aria-hidden="true" onclick="closeActsModal()">
-    <div class="modal-window wide" onclick="event.stopPropagation()">
+    <div class="modal-window wide" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
       <div class="modal-head">
-        <div>Акты</div>
+        <div class="section-title" style="margin:0 auto;">Акты</div>
         <button class="modal-close" onclick="closeActsModal()">×</button>
       </div>
       <div id="actsModalBody" class="section-modal-body"></div>
@@ -1734,7 +1803,20 @@ function renderMonthTable(type, title, m, headers){
     rowHtml.push(`<td class="col-cat">${catButton(ui.monthIndex, type, rIdx, row.excluded)}</td>`);
     for (let d=0; d<m.days; d++) {
       const cls = dayClass(m.month, d + 1);
-      rowHtml.push(`<td class="col-day ${cls}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', `cell small center ${cls}`, ui.monthIndex, type, rIdx, 4+d) }</td>`);
+      const dayFillStyle = cls === 'transfer-col'
+        ? 'background-color:#dcf8dc !important;'
+        : cls === 'holiday-col'
+          ? 'background-color:#ffdede !important;'
+          : '';
+      const tdStyle = dayFillStyle ? ` style="${dayFillStyle}"` : '';
+      const inputStyle = row.excluded
+        ? 'color:#9aa5b1 !important;'
+        : cls === 'transfer-col'
+          ? 'background-color:#dcf8dc !important;'
+          : cls === 'holiday-col'
+            ? 'background-color:#ffdede !important;'
+          : '';
+      rowHtml.push(`<td class="col-day ${cls}"${tdStyle}>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', `cell small center ${cls} day-cell`, ui.monthIndex, type, rIdx, 4+d, inputStyle) }</td>`);
     }
     rowHtml.push(`<td class="col-note">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
     return `<tr class="${row.excluded ? 'excluded-row' : ''}">${rowHtml.join('')}</tr>`;
@@ -1747,8 +1829,8 @@ function renderMonthTable(type, title, m, headers){
   const colHtml = [
     '<col style="width:45px">',
     '<col style="width:var(--series-col-width)">',
-    '<col style="width:var(--meta-col-width)">',
-    '<col style="width:var(--meta-col-width)">',
+    '<col style="width:var(--number-col-width)">',
+    '<col style="width:var(--cat-col-width)">',
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
     '<col style="width:180px">'
   ].join('');
@@ -1760,7 +1842,7 @@ function renderMonthTable(type, title, m, headers){
       </div>
     </div>
     <div class="table-wrap">
-      <table class="compact month-table" style="min-width:${(4+m.days+2)*34 + 300}px">
+      <table class="compact month-table" style="width:${45 + 100 + 60 + 80 + (m.days * 36) + 180}px">
         <colgroup>${colHtml}</colgroup>
         <thead><tr>${headHtml}</tr></thead>
         <tbody>${tableRows}</tbody>
@@ -1829,11 +1911,9 @@ function renderNorms(){
   return `
     <div class="section-head" style="justify-content:center; text-align:center;">
       <div style="width:100%;">
-        <div class="section-title">Нормы / парк</div>
-        <div class="sub">Нормативы часов и план парка.</div>
       </div>
     </div>
-    <div class="table-wrap" style="margin:0 auto 14px; width:fit-content; max-width:100%;">
+    <div class="table-wrap" style="margin:0 auto 14px; width:fit-content; max-width:100%; padding:0 12px;">
       <table class="compact norms-table">
         <colgroup>
           <col class="col-name">
@@ -1866,27 +1946,26 @@ function renderActs(){
     const x = acts[act];
     return `<tr>
       <td>${esc(act)}</td>
-      <td><button class="act-start" ${CAN_EDIT ? '' : 'disabled'} onclick="startAct('${month}', '${act}')">Пуск</button></td>
+      <td style="text-align:center; font-size:16px;"><button class="act-start" style="width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center;" ${CAN_EDIT ? '' : 'disabled'} onclick="startAct('${month}', '${act}')">Пуск</button></td>
       <td class="center"><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.is_done', this.checked)"></td>
       <td class="center"><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.sap_order_done', this.checked)"></td>
     </tr>`;
   }).join('');
   return `
     <div class="section-head">
-      <div style="display:flex; align-items:center; gap:6px; flex-wrap:nowrap; justify-content:center; width:100%;">
-        <div class="section-title">Акты</div>
+      <div style="display:flex; justify-content:center; width:100%;">
         ${monthSelectHtml()}
       </div>
     </div>
     <div class="table-wrap" style="width:fit-content; max-width:100%; margin:0 auto;">
-      <table class="compact" style="width:max-content; min-width:0;">
+      <table class="acts-table">
         <colgroup>
-          <col style="width:220px;">
-          <col style="width:160px;">
           <col style="width:150px;">
-          <col style="width:170px;">
+          <col style="width:120px;">
+          <col style="width:120px;">
+          <col style="width:130px;">
         </colgroup>
-        <thead><tr><th>№ акта</th><th>Сформировать акт</th><th>Акт сформирован</th><th>Создан заказ в SAP</th></tr></thead>
+        <thead><tr><th>№<br>акта</th><th>Сформировать<br>акт</th><th>Сформирован<br>акт</th><th>Создан заказ<br>в SAP</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
       </table>
     </div>
@@ -1985,35 +2064,51 @@ function autosizeReportNotes(){
     el.style.height = `${el.scrollHeight}px`;
   });
 }
+async function refreshReportDialog(){
+  if (!reportDialogState) return;
+  if (dirty && CAN_EDIT) {
+    await saveState({ refreshReport: false });
+  }
+  const month = reportDialogState.month;
+  const res = await fetch(`{{APP_PREFIX}}/api/report-preview?month=${encodeURIComponent(month)}&year=${encodeURIComponent(reportDialogState.year)}&_=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) return;
+  reportDialogState = await res.json();
+  renderReportBody();
+}
 function renderReportBody(){
   if (!reportDialogState) return;
+  const excluded = new Set([
+    ...((reportDialogState.excluded && reportDialogState.excluded.plan) || []),
+    ...((reportDialogState.excluded && reportDialogState.excluded.fact) || []),
+  ]);
   const rows = reportDialogState.rows.map((row) => {
+    const rowClass = row.key && (row.excluded || excluded.has(row.key)) ? 'excluded-row' : '';
     if (row.kind === 'group') {
       return `
-        <tr class="group-row">
-          <td class="group-cell">${esc(row.label)}</td>
-          <td class="num-cell">${esc(row.plan)}</td>
-          <td class="num-cell">${esc(row.fact)}</td>
-          <td class="group-cell">${esc(row.note || '')}</td>
+        <tr class="group-row ${rowClass}">
+          <td class="group-cell col-report-name">${esc(row.label)}</td>
+          <td class="num-cell col-report-num">${esc(row.plan)}</td>
+          <td class="num-cell col-report-num">${esc(row.fact)}</td>
+          <td class="group-cell col-report-note">${esc(row.note || '')}</td>
         </tr>
       `;
     }
     return `
-      <tr>
-        <td>${esc(row.label)}</td>
-        <td class="num-cell">${esc(row.plan)}</td>
-        <td class="num-cell">${esc(row.fact)}</td>
-        <td><textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
+      <tr class="${rowClass}">
+        <td class="col-report-name">${esc(row.label)}</td>
+        <td class="num-cell col-report-num">${esc(row.plan)}</td>
+        <td class="num-cell col-report-num">${esc(row.fact)}</td>
+        <td class="col-report-note"><textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
       </tr>
     `;
   }).join('');
   document.getElementById('reportBody').innerHTML = `
     <table class="report-table">
       <colgroup>
-        <col>
-        <col>
-        <col>
-        <col>
+        <col class="col-report-name">
+        <col class="col-report-num">
+        <col class="col-report-num">
+        <col class="col-report-note">
       </colgroup>
       <thead>
         <tr>
@@ -2034,7 +2129,7 @@ async function openReport(){
   }
   const month = currentMonth().name;
   openReportModalShell(`Отчет ${month} ${appState.year}`);
-  const res = await fetch(`{{APP_PREFIX}}/api/report-preview?month=${encodeURIComponent(month)}&year=${encodeURIComponent(appState.year)}`);
+  const res = await fetch(`{{APP_PREFIX}}/api/report-preview?month=${encodeURIComponent(month)}&year=${encodeURIComponent(appState.year)}&_=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) {
     document.getElementById('reportBody').innerHTML = '<div class="report-loading">Не удалось подготовить отчет.</div>';
     return;
@@ -2058,9 +2153,10 @@ function downloadReportExcel(){
   a.rel = 'noopener';
   a.click();
 }
-function cell(path, value, cls, month, table, row, col){
+function cell(path, value, cls, month, table, row, col, style=''){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}" onfocus="setLastCell(this)" onmousedown="beginMonthSelection(event)" onmouseenter="extendMonthSelection(event)" onmouseup="endMonthSelection()" oninput="handleGridInput(this)" onkeydown="handleMonthKeydown(event)" oncopy="handleMonthCopy(event)" onpaste="handleMonthPaste(event)">`;
+  const styleAttr = style ? ` style="${esc(style)}"` : '';
+  return `<input ${ro} class="${cls}" data-path="${path}" data-month="${month}" data-table="${table}" data-row="${row}" data-col="${col}" value="${esc(value)}"${styleAttr} onfocus="setLastCell(this)" onmousedown="beginMonthSelection(event)" onmouseenter="extendMonthSelection(event)" onmouseup="endMonthSelection()" oninput="handleGridInput(this)" onkeydown="handleMonthKeydown(event)" oncopy="handleMonthCopy(event)" onpaste="handleMonthPaste(event)">`;
 }
 function addRow(type){
   if (!CAN_EDIT) return;
@@ -2069,11 +2165,25 @@ function addRow(type){
   markDirty(true); render();
 }
 function deleteRow(type){ if (!CAN_EDIT) return; const m = currentMonth(); if (m[type].length>0) { m[type].pop(); markDirty(true); render(); } }
-function toggleExcluded(mi, tt, r){ if (!CAN_EDIT) return; appState.months[mi][tt][r].excluded = !appState.months[mi][tt][r].excluded; markDirty(true); render(); }
+async function toggleExcluded(mi, tt, r){
+  if (!CAN_EDIT) return;
+  const m = appState.months[mi];
+  const next = !(m[tt][r] && m[tt][r].excluded);
+  ['plan', 'fact'].forEach((kind) => {
+    if (m[kind] && m[kind][r]) m[kind][r].excluded = next;
+  });
+  markDirty(true);
+  if (reportDialogState && document.getElementById('reportModal').classList.contains('visible')) {
+    await refreshReportDialog();
+  } else {
+    render();
+  }
+}
 function addNorm(){ if (!CAN_EDIT) return; appState.norms.h_tep.push({k:'', v:''}); markDirty(true); render(); }
 function removeNorm(cat, idx){ if (!CAN_EDIT) return; appState.norms[cat].splice(idx,1); markDirty(true); render(); }
 function selectRow(section, idx){ ui.selected[section] = idx; }
-async function saveState(){
+async function saveState(options = {}){
+  const refreshReport = options.refreshReport !== false;
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
   setStatus('Сохранение...');
   const res = await fetch('{{APP_PREFIX}}/api/state', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
@@ -2082,6 +2192,9 @@ async function saveState(){
   markDirty(false);
   setStatus('Сохранено');
   render();
+  if (refreshReport && reportDialogState && document.getElementById('reportModal') && document.getElementById('reportModal').classList.contains('visible')) {
+    await refreshReportDialog();
+  }
 }
 function downloadJson(){
   const b = new Blob([JSON.stringify(appState, null, 2)], {type:'application/json;charset=utf-8'});
@@ -2107,7 +2220,7 @@ async function loadYearFromInput(){
   if (dirty && !confirm('Есть несохранённые изменения. Открыть год без сохранения?')) { ensureYearOptions(); return; }
   await loadYear(year);
 }
-window.addEventListener('beforeunload', (e)=>{ if (dirty) { e.preventDefault(); e.returnValue=''; } });
+window.addEventListener('beforeunload', (e)=>{ if (dirty && CAN_EDIT) { e.preventDefault(); e.returnValue=''; } });
 render();
 </script>
 </body>
