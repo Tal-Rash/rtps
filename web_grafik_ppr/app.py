@@ -1305,8 +1305,8 @@ HTML_TEMPLATE = """<!doctype html>
     .holiday-col input { background:#ffdede; }
     .col-idx { width:36px; }
     .col-series { width:var(--series-col-width); }
-    .col-number { width:72px; }
-    .col-cat { width:72px; }
+    .col-number { width:80px; }
+    .col-cat { width:80px; }
     .col-day { width:30px; }
     .col-note { width:120px; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
