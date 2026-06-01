@@ -1301,7 +1301,6 @@ HTML_TEMPLATE = """<!doctype html>
       box-sizing:border-box;
     }
     .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
-    .modal-body { padding:8px 14px; overflow:auto; }
     .section-modal-body { padding:8px 14px; overflow:auto; }
     .section-modal-body.centered { text-align:center; }
     .acts-table { font-size:16px; }
