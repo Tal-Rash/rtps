@@ -85,62 +85,56 @@ WEB_SECRET = load_web_secret()
 SESSIONS: dict[str, tuple[str, str, float]] = {}
 
 
-def load_auth_config() -> tuple[str, str]:
+def load_auth_config() -> tuple[str, str, str]:
     user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    password = (
-        os.environ.get("WEB_PASSWORD", "").strip()
-        or os.environ.get("WEB_EDIT_PASSWORD", "").strip()
-        or os.environ.get("WEB_VIEW_PASSWORD", "").strip()
+    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
+    edit_password = (
+        os.environ.get("WEB_EDIT_PASSWORD", "").strip()
+        or os.environ.get("WEB_PASSWORD", "").strip()
     )
-    if password:
-        return user, password
+    if view_password and edit_password:
+        return user, view_password, edit_password
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if AUTH_FILE.exists():
         try:
             payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
             file_user = str(payload.get("user", user)).strip() or user
-            file_password = str(payload.get("password", "")).strip()
-            if file_password:
-                return file_user, file_password
-            file_password = str(payload.get("edit_password", "")).strip()
-            if file_password:
+            file_view = str(payload.get("view_password", payload.get("password", ""))).strip()
+            file_edit = str(payload.get("edit_password", "")).strip() or str(payload.get("password", "")).strip()
+            if file_view and not file_edit:
+                file_edit = secrets.token_urlsafe(8)
+            if file_edit and not file_view:
+                file_view = secrets.token_urlsafe(8)
+            if file_view and file_edit:
                 AUTH_FILE.write_text(
                     json.dumps(
-                        {"user": file_user, "password": file_password},
+                        {"user": file_user, "view_password": file_view, "edit_password": file_edit},
                         ensure_ascii=False,
                         indent=2,
                     ),
                     encoding="utf-8",
                 )
-                return file_user, file_password
-            file_password = str(payload.get("view_password", "")).strip()
-            if file_password:
-                AUTH_FILE.write_text(
-                    json.dumps(
-                        {"user": file_user, "password": file_password},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-                return file_user, file_password
+                return file_user, file_view, file_edit
         except Exception:
             pass
-    password = secrets.token_urlsafe(8)
+    if not view_password:
+        view_password = secrets.token_urlsafe(8)
+    if not edit_password:
+        edit_password = secrets.token_urlsafe(8)
     AUTH_FILE.write_text(
         json.dumps(
-            {"user": user, "password": password},
+            {"user": user, "view_password": view_password, "edit_password": edit_password},
             ensure_ascii=False,
             indent=2,
         ),
         encoding="utf-8",
     )
-    print(f"Web auth created: user={user} password={password}")
-    return user, password
+    print(f"Web auth created: user={user} view_password={view_password} edit_password={edit_password}")
+    return user, view_password, edit_password
 
 
-WEB_USER, WEB_PASSWORD = load_auth_config()
-AUTH_ENABLED = False
+WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
+AUTH_ENABLED = True
 APP_PREFIX = "/grafik-ppr"
 
 
@@ -990,8 +984,6 @@ def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
 
 
 def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
-    if not AUTH_ENABLED:
-        return WEB_USER, "edit"
     cookies = _parse_cookies(handler)
     token = cookies.get(SESSION_COOKIE)
     if not token:
@@ -2932,7 +2924,10 @@ class Handler(BaseHTTPRequestHandler):
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             username = form.get("user", [""])[0].strip()
             password = form.get("password", [""])[0]
-            if username == WEB_USER and password == WEB_PASSWORD:
+            if username == WEB_USER and password == WEB_VIEW_PASSWORD:
+                _redirect(self, APP_PREFIX, _login_cookie(username, "view"))
+                return
+            if username == WEB_USER and password == WEB_EDIT_PASSWORD:
                 _redirect(self, APP_PREFIX, _login_cookie(username, "edit"))
                 return
             _send_html(self, render_login("<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>"), status=HTTPStatus.UNAUTHORIZED)
