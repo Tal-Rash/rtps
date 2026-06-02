@@ -159,29 +159,39 @@ def text(value) -> str:
 
 
 def verify_cookie(value: str) -> tuple[str, str] | None:
-    parts = value.split("|")
-    if len(parts) != 4:
-        return None
-    username, role, expiry_text, sig = parts
-    payload = f"{username}|{role}|{expiry_text}"
-    secrets_to_try = [WEB_SECRET]
-    if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-        secrets_to_try.append(LEGACY_WEB_SECRET)
-    ok = False
-    for secret in secrets_to_try:
-        expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-        if hmac.compare_digest(expected, sig):
-            ok = True
-            break
-    if not ok:
-        return None
     try:
-        expiry = float(expiry_text)
-    except ValueError:
-        return None
-    if dt.datetime.now().timestamp() > expiry:
-        return None
-    return username, role
+        username, role, ts, sig = value.rsplit(":", 3)
+        payload = f"{username}:{role}:{ts}"
+        secrets_to_try = [WEB_SECRET]
+        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+            secrets_to_try.append(LEGACY_WEB_SECRET)
+        for secret in secrets_to_try:
+            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, sig):
+                if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
+                    return None
+                if role in {"view", "edit"}:
+                    return username, role
+                return None
+    except Exception:
+        pass
+    try:
+        username, role, expiry_text, sig = value.split("|")
+        payload = f"{username}|{role}|{expiry_text}"
+        secrets_to_try = [WEB_SECRET]
+        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+            secrets_to_try.append(LEGACY_WEB_SECRET)
+        for secret in secrets_to_try:
+            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, sig):
+                if dt.datetime.now().timestamp() > float(expiry_text):
+                    return None
+                if role in {"view", "edit"}:
+                    return username, role
+                return None
+    except Exception:
+        pass
+    return None
 
 
 def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
@@ -195,21 +205,35 @@ def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
 
 
 def verify_cookie(value: str) -> tuple[str, str] | None:
-    parts = value.split("|")
-    if len(parts) != 4:
-        return None
-    username, role, expiry_text, sig = parts
-    payload = f"{username}|{role}|{expiry_text}"
-    expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, sig):
-        return None
     try:
-        expiry = float(expiry_text)
-    except ValueError:
+        username, role, ts, sig = value.rsplit(":", 3)
+        payload = f"{username}:{role}:{ts}"
+        secrets_to_try = [WEB_SECRET]
+        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+            secrets_to_try.append(LEGACY_WEB_SECRET)
+        for secret in secrets_to_try:
+            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, sig):
+                if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
+                    return None
+                if role in {"view", "edit"}:
+                    return username, role
+                return None
+    except Exception:
+        pass
+    try:
+        username, role, expiry_text, sig = value.split("|")
+        payload = f"{username}|{role}|{expiry_text}"
+        expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return None
+        if dt.datetime.now().timestamp() > float(expiry_text):
+            return None
+        if role not in {"view", "edit"}:
+            return None
+        return username, role
+    except Exception:
         return None
-    if dt.datetime.now().timestamp() > expiry:
-        return None
-    return username, role
 
 
 def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
