@@ -17,6 +17,7 @@ DATA_DIR = ROOT / "data"
 SHARED_DATA_DIR = ROOT.parent / "data"
 AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
+LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
@@ -38,7 +39,17 @@ def load_web_secret() -> str:
     return secret
 
 
+def load_legacy_web_secret() -> str:
+    try:
+        if LEGACY_WEB_SECRET_FILE.exists():
+            return LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return ""
+
+
 WEB_SECRET = load_web_secret()
+LEGACY_WEB_SECRET = load_legacy_web_secret()
 
 
 def load_auth_config() -> tuple[str, str, str]:
@@ -224,8 +235,16 @@ def _verify_cookie(value: str) -> tuple[str, str] | None:
     try:
         username, role, ts, sig = value.rsplit(":", 3)
         payload = f"{username}:{role}:{ts}"
-        expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, sig):
+        secrets_to_try = [WEB_SECRET]
+        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+            secrets_to_try.append(LEGACY_WEB_SECRET)
+        matched = False
+        for secret in secrets_to_try:
+            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, sig):
+                matched = True
+                break
+        if not matched:
             return None
         if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
             return None
@@ -236,8 +255,16 @@ def _verify_cookie(value: str) -> tuple[str, str] | None:
         try:
             username, role, expiry_text, sig = value.split("|")
             payload = f"{username}|{role}|{expiry_text}"
-            expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(expected, sig):
+            secrets_to_try = [WEB_SECRET]
+            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+                secrets_to_try.append(LEGACY_WEB_SECRET)
+            matched = False
+            for secret in secrets_to_try:
+                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(expected, sig):
+                    matched = True
+                    break
+            if not matched:
                 return None
             if dt.datetime.now().timestamp() > float(expiry_text):
                 return None
