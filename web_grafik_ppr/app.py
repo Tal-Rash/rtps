@@ -2448,6 +2448,7 @@ function openTu28StaffModal(){
   const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
+  ui.tu28RowIndex = row.rowIndex;
   ui.tu28Staff = ui.tu28Staff.length ? ui.tu28Staff : ["", "", "", "", "", "", ""];
   ui.modal = 'tu28staff';
   render();
@@ -2807,10 +2808,15 @@ class Handler(BaseHTTPRequestHandler):
                 payload = {}
             year = int(payload.get("year") or dt.date.today().year)
             month = s(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
+            row_raw = payload.get("row", None)
+            if row_raw in (None, ""):
+                json_response(self, {"error": "В месяце нет ремонтов для ТУ-28"}, status=HTTPStatus.BAD_REQUEST)
+                return
             try:
-                row_idx = int(payload.get("row", 0))
+                row_idx = int(row_raw)
             except Exception:
-                row_idx = 0
+                json_response(self, {"error": "Не удалось определить строку ремонта"}, status=HTTPStatus.BAD_REQUEST)
+                return
             staff_list = payload.get("staff") or []
             if not isinstance(staff_list, list):
                 staff_list = []
