@@ -99,12 +99,19 @@ def load_auth_config() -> tuple[str, str, str]:
         try:
             payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
             file_user = str(payload.get("user", user)).strip() or user
-            file_view = str(payload.get("view_password", payload.get("password", ""))).strip()
-            file_edit = str(payload.get("edit_password", "")).strip() or str(payload.get("password", "")).strip()
+            legacy_password = str(payload.get("password", "")).strip()
+            file_view = str(payload.get("view_password", legacy_password)).strip()
+            file_edit = str(payload.get("edit_password", "")).strip()
+            if not file_edit and legacy_password and not payload.get("view_password"):
+                file_edit = secrets.token_urlsafe(8)
+            if not file_edit:
+                file_edit = legacy_password
             if file_view and not file_edit:
                 file_edit = secrets.token_urlsafe(8)
             if file_edit and not file_view:
                 file_view = secrets.token_urlsafe(8)
+            if file_view and file_edit and file_view == file_edit:
+                file_edit = secrets.token_urlsafe(8)
             if file_view and file_edit:
                 AUTH_FILE.write_text(
                     json.dumps(
