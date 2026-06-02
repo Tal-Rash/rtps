@@ -14,8 +14,8 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
-AUTH_FILE = DATA_DIR / "web_auth.json"
 SHARED_DATA_DIR = ROOT.parent / "data"
+AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -42,7 +42,7 @@ WEB_SECRET = load_web_secret()
 
 
 def load_auth_config() -> tuple[str, str, str]:
-    user = os.environ.get("WEB_USER", "rtps").strip() or "rtps"
+    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
     view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
     edit_password = (
         os.environ.get("WEB_EDIT_PASSWORD", "").strip()
