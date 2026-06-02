@@ -1475,6 +1475,19 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
     }
     .section-modal-actions button.primary { background:#dcedc8; }
+    .error-modal-text {
+      white-space:pre-wrap;
+      word-break:break-word;
+      font:13px/1.45 Consolas, "Courier New", monospace;
+      max-height:50vh;
+      overflow:auto;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:12px;
+      background:#fff7f7;
+      color:#7a1620;
+      user-select:text;
+    }
     .norms-table th,
     .norms-table td { text-align:center; }
     .norms-table td:first-child { text-align:right; padding-right:10px; }
@@ -1700,6 +1713,18 @@ HTML_TEMPLATE = """<!doctype html>
       </div>
     </div>
   </div>
+  <div id="errorModal" class="modal-overlay" aria-hidden="true" onclick="closeErrorModal()">
+    <div class="modal-window" style="width:min(900px, calc(100vw - 36px));" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Ошибка</div>
+        <button class="modal-close" onclick="closeErrorModal()">×</button>
+      </div>
+      <div id="errorModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeErrorModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
 <script>
 const BOOT_VERSION = "{{APP_VERSION}}";
 const BOOT_STARTED_AT = "{{STARTED_AT}}";
@@ -1724,6 +1749,20 @@ function normalizeRepairCode(v){
     .replace(/[ABCEHKMOPTXY]/g, (ch) => map[ch] || ch);
 }
 function setStatus(t){ document.getElementById('status').textContent = t; }
+function showErrorModal(message){
+  const modal = document.getElementById('errorModal');
+  const body = document.getElementById('errorModalBody');
+  if (!modal || !body) return;
+  body.innerHTML = `<div class="error-modal-text" tabindex="0">${esc(message || 'Неизвестная ошибка')}</div>`;
+  modal.classList.add('visible');
+  modal.setAttribute('aria-hidden', 'false');
+}
+function closeErrorModal(){
+  const modal = document.getElementById('errorModal');
+  if (!modal) return;
+  modal.classList.remove('visible');
+  modal.setAttribute('aria-hidden', 'true');
+}
 function markDirty(v=true){ dirty=v; document.getElementById('dirtyHint').textContent = v ? 'Есть несохранённые изменения' : 'Изменений нет'; }
 function setLastCell(el){
   if (!el || !el.dataset) return;
@@ -2482,8 +2521,13 @@ function downloadTu28(){
     body: JSON.stringify(payload),
   }).then(async (res) => {
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.error || 'Не удалось сформировать ТУ-28');
+      const text = await res.text().catch(() => '');
+      try {
+        const err = JSON.parse(text || '{}');
+        showErrorModal(err.error || text || 'Не удалось сформировать ТУ-28');
+      } catch (_) {
+        showErrorModal(text ? `Не удалось сформировать ТУ-28:\n${text}` : 'Не удалось сформировать ТУ-28');
+      }
       return;
     }
     const blob = await res.blob();
@@ -2495,7 +2539,7 @@ function downloadTu28(){
     URL.revokeObjectURL(url);
     closeTu28StaffModal();
     closeTu28Modal();
-  }).catch(() => alert('Не удалось сформировать ТУ-28'));
+  }).catch((err) => showErrorModal(err && err.stack ? err.stack : 'Не удалось сформировать ТУ-28'));
 }
 function confirmTu28Staff(){
   downloadTu28();
@@ -2906,6 +2950,35 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
             json_response(self, saved)
+            return
+        if route == "/api/tu28-export":
+            if not require_auth(self):
+                return
+            year = int(payload.get("year") or dt.date.today().year)
+            month = s(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
+            row_raw = payload.get("row", None)
+            if row_raw in (None, ""):
+                json_response(self, {"error": "В месяце нет ремонтов для ТУ-28"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                row_idx = int(row_raw)
+            except Exception:
+                json_response(self, {"error": "Не удалось определить строку ремонта"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            staff_list = payload.get("staff") or []
+            if not isinstance(staff_list, list):
+                staff_list = []
+            try:
+                body, filename = build_tu28_workbook(year, month, row_idx, staff_list)
+            except Exception as exc:
+                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self.send_header("Content-Disposition", content_disposition_attachment(filename))
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
