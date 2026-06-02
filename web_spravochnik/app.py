@@ -420,10 +420,10 @@ HTML = """<!doctype html>
       <h1>Справочник</h1>
       <div class="muted">Нормы времени, сотрудники, локомотивы. База: common_database.db</div>
     </div>
-    <div class="actions">
+  <div class="actions">
       <a href="/">На главную</a>
       <label>Год <select id="year"></select></label>
-      <button class="primary" onclick="saveAll()">Сохранить</button>
+      <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
     </div>
   </div>
   <div class="tabs">
@@ -437,6 +437,7 @@ HTML = """<!doctype html>
 </div>
 <script>
 const API = '/spravochnik';
+const CAN_EDIT = {{CAN_EDIT}};
 let state = null;
 const headers = {
   norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
@@ -468,21 +469,25 @@ function renderAll(){
   renderTable('norms', state.norms, false);
   renderTable('employees', state.employees, true);
   renderTable('inventory', state.inventory, true);
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.style.display = CAN_EDIT ? '' : 'none';
+  }
 }
 
 function renderTable(name, rows, editableRows){
   const panel = document.getElementById(name);
-  const rowbar = editableRows ? `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>` : '';
+  const rowbar = (editableRows && CAN_EDIT) ? `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>` : '';
   let html = rowbar + '<table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
     html += `<tr onclick="selectRow('${name}', ${r})"><td>${r + 1}</td>`;
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
-        html += `<td><input type="checkbox" ${val ? 'checked' : ''} onchange="setCell('${name}',${r},${c},this.checked)"></td>`;
+        html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
       } else {
         const cls = c === 0 || (name === 'employees' && c < 3) ? 'left' : '';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" oninput="setCell('${name}',${r},${c},this.value)"></td>`;
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       }
     });
     html += '</tr>';
@@ -493,19 +498,22 @@ function renderTable(name, rows, editableRows){
 
 let selected = {employees: -1, inventory: -1};
 function selectRow(name, row){ selected[name] = row; }
-function setCell(name, row, col, value){ state[name][row][col] = value; }
+function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; }
 function addRow(name){
+  if (!CAN_EDIT) return;
   const cols = headers[name].length;
   state[name].push(Array(cols).fill(''));
   renderTable(name, state[name], true);
 }
 function deleteRow(name){
+  if (!CAN_EDIT) return;
   const row = selected[name] >= 0 ? selected[name] : state[name].length - 1;
   if(row >= 0) state[name].splice(row, 1);
   selected[name] = -1;
   renderTable(name, state[name], true);
 }
 async function saveAll(){
+  if (!CAN_EDIT) return;
   state.year = Number(document.getElementById('year').value);
   const res = await fetch(`${API}/api/save`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
   if(!res.ok){ alert('Ошибка сохранения'); return; }
@@ -584,7 +592,12 @@ class Handler(BaseHTTPRequestHandler):
                 redirect(self, APP_PREFIX + "/login")
                 return
             badge = "Просмотр" if role == "view" else "Редактирование"
-            send_html(self, HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", badge))
+            send_html(
+                self,
+                HTML.replace("{{USER}}", WEB_USER)
+                    .replace("{{AUTH_BADGE}}", badge)
+                    .replace("{{CAN_EDIT}}", "true" if role == "edit" else "false"),
+            )
             return
         if path == "/api/state":
             if not require_auth(self):
