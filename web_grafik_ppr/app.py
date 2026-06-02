@@ -26,11 +26,13 @@ MONTHS_RU = [
 TEM_NORM_ROWS = ["ТО2", "ТО3", "ТР1", "ТР2", "ТР3", "СР", "КР"]
 AGR_NORM_ROWS = ["ТО", "ТР", "КР"]
 REPORT_TEMPLATE_NAME = "Отчет_шаблон.xlsx"
+TU28_TEMPLATE_NAME = "ТУ-28_шаблон.xlsx"
 MONTH_DAY_LIMIT_FOR_REPORT = 25
 TEP_REPORT_FACTORS = {"ТО2": 1, "ТО3": 2, "ТР1": 5, "ТР2": 10, "ТР3": 15}
 AGR_REPORT_FACTORS = {"ТО": 1, "ТР": 5}
 TEP_HOUR_FACTORS = {"ТО2": 1, "ТО3": 2, "ТР1": 5, "ТР2": 10, "ТР3": 15}
 AGR_HOUR_FACTORS = {"ТО": 1, "ТР": 5}
+TU28_REPAIR_CODES = {"ТО3", "ТР1", "ТР2", "ТР3", "СР", "КР"}
 FIXED_HOLIDAYS = {
     (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
     (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
@@ -172,6 +174,11 @@ def s(value) -> str:
 
 def normalize_repair_code(value: str) -> str:
     text = s(value).strip().upper().replace(" ", "").replace("-", "")
+    latin_map = str.maketrans({
+        "A": "А", "B": "В", "C": "С", "E": "Е", "H": "Н", "K": "К",
+        "M": "М", "O": "О", "P": "Р", "T": "Т", "X": "Х", "Y": "У",
+    })
+    text = text.translate(latin_map)
     if any("А" <= c <= "Я" for c in text):
         return text
     if any(c.isdigit() for c in text):
@@ -364,6 +371,18 @@ def find_report_template_path() -> Path | None:
         ROOT / REPORT_TEMPLATE_NAME,
         SOURCE_DIR / REPORT_TEMPLATE_NAME,
         ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / REPORT_TEMPLATE_NAME,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def find_tu28_template_path() -> Path | None:
+    candidates = [
+        ROOT / TU28_TEMPLATE_NAME,
+        SOURCE_DIR / TU28_TEMPLATE_NAME,
+        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / TU28_TEMPLATE_NAME,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -676,6 +695,30 @@ def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
         return "", ""
 
 
+def format_fio_initials(full_name: str) -> str:
+    parts = s(full_name).split()
+    if len(parts) >= 3:
+        return f"{parts[0]} {parts[1][0]}. {parts[2][0]}."
+    if len(parts) == 2:
+        return f"{parts[0]} {parts[1][0]}."
+    return s(full_name).strip()
+
+
+def get_all_employee_names() -> list[str]:
+    try:
+        if not SOURCE_DB.exists():
+            return []
+        with sqlite3.connect(SOURCE_DB) as db:
+            cur = db.cursor()
+            cur.execute(
+                "SELECT DISTINCT CASE WHEN COALESCE(full_name, '') != '' THEN full_name ELSE name END "
+                "FROM employees ORDER BY 1"
+            )
+            return [s(row[0]).strip() for row in cur.fetchall() if s(row[0]).strip()]
+    except Exception:
+        return []
+
+
 def replace_tags_in_workbook(wb, tags: dict[str, str]) -> None:
     for sheet in wb.worksheets:
         for row in sheet.iter_rows():
@@ -752,6 +795,100 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
     out = BytesIO()
     wb.save(out)
     return out.getvalue(), f"Акт_{clean_act_num}.xlsx"
+
+
+def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: list[str] | None = None, state: dict | None = None) -> tuple[bytes, str]:
+    try:
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import Alignment, Font
+    except ImportError as exc:
+        raise RuntimeError("На сервере не установлен openpyxl") from exc
+
+    state = state or load_state(year)
+    month = next((m for m in state.get("months", []) if s(m.get("name")) == month_name), None)
+    if not month:
+        raise ValueError("Не удалось найти месяц")
+    fact_rows = month.get("fact") or []
+    if row_idx < 0 or row_idx >= len(fact_rows):
+        raise ValueError("Не удалось найти строку ремонта")
+    row = fact_rows[row_idx]
+    cells = row.get("cells") or []
+    series = s(cells[1]).strip()
+    number = s(cells[2]).strip()
+    if not number:
+        raise ValueError("Не удалось определить номер")
+
+    repair_code = ""
+    repair_day = None
+    for col in range(4, 4 + int(month.get("days") or 0)):
+        value = normalize_repair_code(s(cells[col]) if col < len(cells) else "")
+        if value in TU28_REPAIR_CODES:
+            repair_code = s(cells[col]).strip().upper()
+            repair_day = col - 3
+            break
+    if not repair_day:
+        raise ValueError("В выбранной строке не найден ремонт для ТУ-28")
+
+    if "ПЭ" in series.upper():
+        eq_type = "Тяговый агрегат"
+    elif series:
+        eq_type = "Тепловоз маневровый"
+    else:
+        eq_type = ""
+
+    try:
+        month_num = int(month.get("month") or 0)
+    except Exception:
+        month_num = 0
+    date_str = f"{repair_day:02d}.{month_num:02d}.{year}"
+    tags = {
+        "[СЕРИЯ]": series,
+        "[НОМЕР]": number,
+        "[ДАТА]": date_str,
+        "[ВИД]": repair_code,
+        "[АГРЕГАТ]": eq_type,
+        "[ДИЗЕЛЬ]": "",
+        "[ЭКИПАЖ 1]": "",
+        "[ЭКИПАЖ 2]": "",
+        "[АКБ]": "",
+        "[ЭЛМАШ]": "",
+        "[ЭЛАП]": "",
+        "[ТОРМОЗ]": "",
+    }
+    components = [
+        "ДИЗЕЛЬ",
+        "ЭКИПАЖ 1",
+        "ЭКИПАЖ 2",
+        "АКБ",
+        "ЭЛМАШ",
+        "ЭЛАП",
+        "ТОРМОЗ",
+    ]
+    for idx, name in enumerate(staff_list or []):
+        if idx >= len(components):
+            break
+        tags[f"[{components[idx]}]"] = format_fio_initials(name)
+
+    template_path = find_tu28_template_path()
+    if template_path:
+        wb = load_workbook(template_path)
+        replace_tags_in_workbook(wb, tags)
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ТУ-28"
+        for idx, (k, v) in enumerate(tags.items(), start=1):
+            ws[f"A{idx}"] = k
+            ws[f"B{idx}"] = v
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for row_cells in ws.iter_rows():
+            for cell in row_cells:
+                cell.alignment = Alignment(horizontal="left", vertical="top")
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue(), f"ТУ-28_{month_name}_{year}.xlsx"
 
 
 def content_disposition_attachment(filename: str) -> str:
@@ -882,10 +1019,12 @@ def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bo
 
 def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
+    employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
     return (
         HTML_TEMPLATE.replace("{{STATE_JSON}}", state_json)
+        .replace("{{EMPLOYEE_NAMES}}", employees_json)
         .replace("{{STARTED_AT}}", started_at)
         .replace("{{APP_VERSION}}", APP_VERSION)
         .replace("{{TOOLBAR}}", toolbar)
@@ -1307,6 +1446,13 @@ HTML_TEMPLATE = """<!doctype html>
     .acts-table th,
     .acts-table td { text-align:center; font-size:16px; }
     .acts-table th { white-space:normal; line-height:1.1; }
+    #tu28Modal .acts-table th,
+    #tu28Modal .acts-table td { padding:6px 14px; }
+    #tu28StaffModal .table-wrap { width:fit-content; max-width:100%; margin:0 auto; }
+    #tu28StaffModal .acts-table { width:max-content; table-layout:auto; }
+    #tu28StaffModal .acts-table th,
+    #tu28StaffModal .acts-table td { padding:4px 10px; }
+    #tu28StaffModal .tu28-staff-select { width:100%; min-width:240px; padding:6px 10px; }
     .acts-table input[type="checkbox"] { display:block; margin:0 auto; transform:scale(1.15); }
     .acts-table td:nth-child(2) { padding:0; }
     .acts-table .act-start { width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center; font-size:16px; border:0; background:linear-gradient(180deg,#fff,#f3f7ff); }
@@ -1464,6 +1610,7 @@ HTML_TEMPLATE = """<!doctype html>
     .month-table { table-layout:fixed; width:auto; }
     .month-table tbody tr { height:28px; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
+    #tu28Modal tr.selected-row > * { background:#e8f0ff !important; box-shadow:inset 0 0 0 1px rgba(39,110,241,.45); }
     @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:none; } .repair-strip { flex-wrap:wrap; } }
   </style>
 </head>
@@ -1527,19 +1674,55 @@ HTML_TEMPLATE = """<!doctype html>
       </div>
     </div>
   </div>
+  <div id="tu28Modal" class="modal-overlay" aria-hidden="true" onclick="closeTu28Modal()">
+    <div class="modal-window wide" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">ТУ-28</div>
+        <button class="modal-close" onclick="closeTu28Modal()">×</button>
+      </div>
+      <div id="tu28ModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeTu28Modal()">Закрыть</button>
+        <button class="primary" onclick="openTu28StaffModal()">Персонал</button>
+      </div>
+    </div>
+  </div>
+  <div id="tu28StaffModal" class="modal-overlay" aria-hidden="true" onclick="closeTu28StaffModal()">
+    <div class="modal-window wide" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Ответственные за ремонт</div>
+        <button class="modal-close" onclick="closeTu28StaffModal()">×</button>
+      </div>
+      <div id="tu28StaffModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeTu28StaffModal()">Отмена</button>
+        <button class="primary" onclick="confirmTu28Staff()">OK</button>
+      </div>
+    </div>
+  </div>
 <script>
 const BOOT_VERSION = "{{APP_VERSION}}";
 const BOOT_STARTED_AT = "{{STARTED_AT}}";
 let appState = {{STATE_JSON}};
-let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null };
+const EMPLOYEE_NAMES = {{EMPLOYEE_NAMES}};
+let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: [] };
 let dirty = false;
 const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
-const sections = [{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'}];
+const sections = [{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
+function normalizeRepairCode(v){
+  const map = {A:'А', B:'В', C:'С', E:'Е', H:'Н', K:'К', M:'М', O:'О', P:'Р', T:'Т', X:'Х', Y:'У'};
+  return String(v ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\\s+/g, '')
+    .replace(/-/g, '')
+    .replace(/[ABCEHKMOPTXY]/g, (ch) => map[ch] || ch);
+}
 function setStatus(t){ document.getElementById('status').textContent = t; }
 function markDirty(v=true){ dirty=v; document.getElementById('dirtyHint').textContent = v ? 'Есть несохранённые изменения' : 'Изменений нет'; }
 function setLastCell(el){
@@ -1762,7 +1945,7 @@ function bindNav(){
   document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id || ui.modal===s.id ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
 }
 function setSection(section){
-  if (section === 'norms' || section === 'acts') {
+  if (section === 'norms' || section === 'acts' || section === 'tu28') {
     ui.section = 'months';
     openSectionModal(section);
     return;
@@ -2056,11 +2239,131 @@ function renderActs(){
     </div>
   `;
 }
+function tu28Month(){
+  return appState.months[ui.tu28MonthIndex] || currentMonth();
+}
+function tu28CandidatesForMonth(monthIndex){
+  const month = appState.months[monthIndex];
+  if (!month) return [];
+  const rows = month.fact || [];
+  const candidates = [];
+  rows.forEach((row, rowIndex) => {
+    if (!row || row.excluded) return;
+    const cells = row.cells || [];
+    for (let col = 4; col < 4 + month.days; col++) {
+      const code = normalizeRepairCode(String(cells[col] ?? ''));
+      if (['ТО3','ТР1','ТР2','ТР3','СР','КР'].includes(code)) {
+        candidates.push({
+          rowIndex,
+          date: `${String(col - 3).padStart(2, '0')}.${String(month.month).padStart(2, '0')}.${appState.year}`,
+          code: String(cells[col] ?? '').trim().toUpperCase(),
+          series: String(cells[1] ?? '').trim(),
+          number: String(cells[2] ?? '').trim(),
+        });
+        break;
+      }
+    }
+  });
+  return candidates;
+}
+function renderTu28(){
+  const month = tu28Month();
+  const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
+  if (ui.tu28RowIndex == null && candidates.length) ui.tu28RowIndex = candidates[0].rowIndex;
+  if (!candidates.some((x) => x.rowIndex === ui.tu28RowIndex)) {
+    ui.tu28RowIndex = candidates.length ? candidates[0].rowIndex : null;
+  }
+  const rows = candidates.map((c, idx) => `
+    <tr class="${c.rowIndex === ui.tu28RowIndex ? 'selected-row' : ''}" onclick="selectTu28Row(${c.rowIndex})">
+      <td>${idx + 1}</td>
+      <td>${esc(c.series)}</td>
+      <td>${esc(c.number)}</td>
+      <td>${esc(c.date)}</td>
+      <td>${esc(c.code)}</td>
+    </tr>
+  `).join('');
+  return `
+    <div class="section-head">
+      <div style="display:flex; justify-content:center; width:100%;">
+        <select id="tu28MonthSelect" onchange="setTu28Month(this.value)" style="border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit;">
+          ${appState.months.map((m, i) => `<option value="${i}" ${i === ui.tu28MonthIndex ? 'selected' : ''}>${m.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
+      <table class="acts-table" style="width:max-content; min-width:0; table-layout:auto;">
+        <colgroup>
+          <col style="width:70px;">
+          <col style="width:160px;">
+          <col style="width:120px;">
+          <col style="width:120px;">
+          <col style="width:130px;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>Серия</th>
+            <th>Номер</th>
+            <th>Дата</th>
+            <th>Ремонт</th>
+          </tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="5">В месяце нет ремонтов для ТУ-28</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+function renderTu28Staff(){
+  const rows = [
+    "Дизель, топливная, вспом. оборуд.",
+    "Экипаж",
+    "Экипаж",
+    "Аккумуляторная батарея",
+    "Электрические машины",
+    "Эл. аппаратура, КИП, АЛСН, рация",
+    "Тормозное оборудование",
+  ];
+  const options = ['<option value=""></option>'].concat(EMPLOYEE_NAMES.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`)).join('');
+  const tableRows = rows.map((label, idx) => {
+    const current = ui.tu28Staff[idx] || '';
+    return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${esc(label)}</td>
+        <td>
+          <select data-index="${idx}" class="tu28-staff-select">${options}</select>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  return `
+    <div style="margin-bottom:10px; font-weight:700;">Выберите ФИО исполнителей из списка:</div>
+    <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
+      <table class="acts-table" style="width:max-content; table-layout:auto;">
+        <colgroup>
+          <col style="width:40px;">
+          <col style="width:auto;">
+          <col style="width:260px;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Вид работ (узел)</th>
+            <th>ФИО</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  `;
+}
 function renderOpenModals(){
   const normsModal = document.getElementById('normsModal');
   const normsBody = document.getElementById('normsModalBody');
   const actsModal = document.getElementById('actsModal');
   const actsBody = document.getElementById('actsModalBody');
+  const tu28Modal = document.getElementById('tu28Modal');
+  const tu28Body = document.getElementById('tu28ModalBody');
   if (normsModal && normsBody) {
     if (ui.modal === 'norms') {
       normsModal.classList.add('visible');
@@ -2087,6 +2390,37 @@ function renderOpenModals(){
       actsBody.innerHTML = '';
     }
   }
+  if (tu28Modal && tu28Body) {
+    if (ui.modal === 'tu28') {
+      tu28Modal.classList.add('visible');
+      tu28Modal.setAttribute('aria-hidden', 'false');
+      tu28Body.innerHTML = renderTu28();
+    } else {
+      tu28Modal.classList.remove('visible');
+      tu28Modal.setAttribute('aria-hidden', 'true');
+      tu28Body.innerHTML = '';
+    }
+  }
+  const tu28StaffModal = document.getElementById('tu28StaffModal');
+  const tu28StaffBody = document.getElementById('tu28StaffModalBody');
+  if (tu28StaffModal && tu28StaffBody) {
+    if (ui.modal === 'tu28staff') {
+      tu28StaffModal.classList.add('visible');
+      tu28StaffModal.setAttribute('aria-hidden', 'false');
+      tu28StaffBody.innerHTML = renderTu28Staff();
+      tu28StaffBody.querySelectorAll('select.tu28-staff-select').forEach((sel) => {
+        const idx = Number(sel.dataset.index);
+        sel.value = ui.tu28Staff[idx] || '';
+        sel.addEventListener('change', () => {
+          ui.tu28Staff[idx] = sel.value;
+        });
+      });
+    } else {
+      tu28StaffModal.classList.remove('visible');
+      tu28StaffModal.setAttribute('aria-hidden', 'true');
+      tu28StaffBody.innerHTML = '';
+    }
+  }
 }
 function openSectionModal(section){
   ui.modal = section;
@@ -2103,6 +2437,67 @@ function closeActsModal(){
     ui.modal = null;
     render();
   }
+}
+function closeTu28Modal(){
+  if (ui.modal === 'tu28') {
+    ui.modal = null;
+    render();
+  }
+}
+function openTu28StaffModal(){
+  const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
+  const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
+  if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
+  ui.tu28Staff = ui.tu28Staff.length ? ui.tu28Staff : ["", "", "", "", "", "", ""];
+  ui.modal = 'tu28staff';
+  render();
+}
+function closeTu28StaffModal(){
+  if (ui.modal === 'tu28staff') {
+    ui.modal = 'tu28';
+    render();
+  }
+}
+function setTu28Month(index){
+  ui.tu28MonthIndex = Number(index);
+  ui.tu28RowIndex = null;
+  ui.tu28Staff = [];
+  render();
+}
+function selectTu28Row(rowIndex){
+  ui.tu28RowIndex = Number(rowIndex);
+  render();
+}
+function downloadTu28(){
+  const month = tu28Month();
+  if (!month) return;
+  const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
+  const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
+  if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
+  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff || [] };
+  fetch(`{{APP_PREFIX}}/api/tu28-export`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json; charset=utf-8'},
+    body: JSON.stringify(payload),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Не удалось сформировать ТУ-28');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ТУ-28_${month.name}_${appState.year}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    closeTu28StaffModal();
+    closeTu28Modal();
+  }).catch(() => alert('Не удалось сформировать ТУ-28'));
+}
+function confirmTu28Staff(){
+  downloadTu28();
 }
 async function saveActsAndClose(){
   if (dirty && CAN_EDIT) {
@@ -2392,6 +2787,35 @@ class Handler(BaseHTTPRequestHandler):
             act = s(qs.get("act", [""])[0]).strip()
             try:
                 body, filename = build_act_workbook(year, act)
+            except Exception as exc:
+                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self.send_header("Content-Disposition", content_disposition_attachment(filename))
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if route == "/api/tu28-export":
+            if not require_auth(self):
+                return
+            payload = {}
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except Exception:
+                payload = {}
+            year = int(payload.get("year") or dt.date.today().year)
+            month = s(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
+            try:
+                row_idx = int(payload.get("row", 0))
+            except Exception:
+                row_idx = 0
+            staff_list = payload.get("staff") or []
+            if not isinstance(staff_list, list):
+                staff_list = []
+            try:
+                body, filename = build_tu28_workbook(year, month, row_idx, staff_list)
             except Exception as exc:
                 json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
