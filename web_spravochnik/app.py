@@ -17,11 +17,12 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
-AUTH_FILE = DATA_DIR / "web_auth.json"
 APP_PREFIX = "/spravochnik"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-WEB_SECRET = os.environ.get("WEB_SECRET", "") or secrets.token_urlsafe(32)
+SHARED_DATA_DIR = ROOT.parent / "data"
+AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
+WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_LOCK = Lock()
 
 MONTHS = [
@@ -30,30 +31,77 @@ MONTHS = [
 ]
 
 
-def load_auth_config() -> tuple[str, str]:
+def load_web_secret() -> str:
+    secret = os.environ.get("WEB_SECRET", "").strip()
+    if secret:
+        return secret
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if WEB_SECRET_FILE.exists():
+        try:
+            secret = WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+            if secret:
+                return secret
+        except Exception:
+            pass
+    secret = secrets.token_urlsafe(32)
+    WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
+    return secret
+
+
+WEB_SECRET = load_web_secret()
+
+
+def load_auth_config() -> tuple[str, str, str]:
     user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    password = os.environ.get("WEB_PASSWORD", "").strip()
-    if password:
-        return user, password
+    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
+    edit_password = (
+        os.environ.get("WEB_EDIT_PASSWORD", "").strip()
+        or os.environ.get("WEB_PASSWORD", "").strip()
+    )
+    if view_password and edit_password:
+        return user, view_password, edit_password
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if AUTH_FILE.exists():
         try:
             payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
             file_user = str(payload.get("user", user)).strip() or user
-            file_password = str(payload.get("password", "")).strip()
-            if file_password:
-                return file_user, file_password
+            legacy_password = str(payload.get("password", "")).strip()
+            file_view = str(payload.get("view_password", legacy_password)).strip()
+            file_edit = str(payload.get("edit_password", "")).strip()
+            if not file_edit and legacy_password and not payload.get("view_password"):
+                file_edit = secrets.token_urlsafe(8)
+            if not file_edit:
+                file_edit = legacy_password
+            if file_view and not file_edit:
+                file_edit = secrets.token_urlsafe(8)
+            if file_edit and not file_view:
+                file_view = secrets.token_urlsafe(8)
+            if file_view and file_edit and file_view == file_edit:
+                file_edit = secrets.token_urlsafe(8)
+            if file_view and file_edit:
+                AUTH_FILE.write_text(
+                    json.dumps(
+                        {"user": file_user, "view_password": file_view, "edit_password": file_edit},
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                return file_user, file_view, file_edit
         except Exception:
             pass
-    password = secrets.token_urlsafe(8)
+    if not view_password:
+        view_password = secrets.token_urlsafe(8)
+    if not edit_password:
+        edit_password = secrets.token_urlsafe(8)
     AUTH_FILE.write_text(
-        json.dumps({"user": user, "password": password}, ensure_ascii=False, indent=2),
+        json.dumps({"user": user, "view_password": view_password, "edit_password": edit_password}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return user, password
+    return user, view_password, edit_password
 
 
-WEB_USER, WEB_PASSWORD = load_auth_config()
+WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 
 
 def ensure_db() -> None:
@@ -127,8 +175,60 @@ def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return result
 
 
-def current_user(handler: BaseHTTPRequestHandler) -> str | None:
-    return "public"
+def verify_cookie(value: str) -> tuple[str, str] | None:
+    parts = value.split("|")
+    if len(parts) != 4:
+        return None
+    username, role, expiry_text, sig = parts
+    payload = f"{username}|{role}|{expiry_text}"
+    expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return None
+    try:
+        expiry = float(expiry_text)
+    except ValueError:
+        return None
+    if dt.datetime.now().timestamp() > expiry:
+        return None
+    return username, role
+
+
+def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for part in handler.headers.get("Cookie", "").split(";"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        result[key.strip()] = value.strip()
+    return result
+
+
+def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
+    cookies = parse_cookies(handler)
+    token = cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    return verify_cookie(token)
+
+
+def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
+    session = current_session(handler)
+    if session and (not need_edit or session[1] == "edit"):
+        return True
+    handler.send_response(HTTPStatus.UNAUTHORIZED)
+    handler.send_header("Content-Type", "text/plain; charset=utf-8")
+    handler.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
+    handler.end_headers()
+    handler.wfile.write("Требуется вход".encode("utf-8"))
+    return False
+
+
+def login_cookie(username: str, role: str) -> str:
+    expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
+    payload = f"{username}|{role}|{expiry}"
+    sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    token = f"{payload}|{sig}"
+    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
 
 
 def send_json(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
@@ -417,14 +517,35 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = route_path(self.path)
-        if path in {"/login", "/logout"}:
-            redirect(self, APP_PREFIX + "/")
+        session = current_session(self)
+        user = session[0] if session else None
+        role = session[1] if session else None
+        if path == "/login":
+            if user:
+                redirect(self, APP_PREFIX + "/")
+                return
+            send_html(self, HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", "Вход не выполнен"))
+            return
+        if path == "/logout":
+            handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Set-Cookie", handler_cookie)
+            self.end_headers()
+            self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/spravochnik/login">')
             return
         parsed = urlparse(self.path)
         if path == "/":
-            send_html(self, HTML)
+            if not user:
+                redirect(self, APP_PREFIX + "/login")
+                return
+            badge = "Просмотр" if role == "view" else "Редактирование"
+            send_html(self, HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", badge))
             return
         if path == "/api/state":
+            if not require_auth(self):
+                return
             year = int(parse_qs(parsed.query).get("year", [dt.date.today().year])[0])
             send_json(self, load_state(year))
             return
@@ -435,9 +556,23 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         if path == "/login":
-            redirect(self, APP_PREFIX + "/")
+            form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            password = form.get("password", [""])[0]
+            if password == WEB_VIEW_PASSWORD:
+                redirect(self, APP_PREFIX + "/", login_cookie(WEB_USER, "view"))
+                return
+            if password == WEB_EDIT_PASSWORD:
+                redirect(self, APP_PREFIX + "/", login_cookie(WEB_USER, "edit"))
+                return
+            send_html(
+                self,
+                HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", "Неверный логин или пароль"),
+                status=HTTPStatus.UNAUTHORIZED,
+            )
             return
         if path == "/api/save":
+            if not require_auth(self, need_edit=True):
+                return
             try:
                 payload = json.loads(raw.decode("utf-8"))
                 save_state(payload)
