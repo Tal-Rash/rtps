@@ -1251,6 +1251,7 @@ HTML_TEMPLATE = """<!doctype html>
     .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
     .toolbar input,.toolbar button,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
     .toolbar button { font-weight:700; cursor:pointer; background:linear-gradient(180deg,#fff,#f3f7ff); }
+    .home-link { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; color:#001b3d; font:inherit; font-weight:700; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
     .nav { display:flex; gap:10px; flex-wrap:wrap; padding:0; margin:0; background:transparent; border:0; box-shadow:none; }
     .nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(16,32,51,.06); }
     .nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
@@ -1633,6 +1634,7 @@ HTML_TEMPLATE = """<!doctype html>
         <h1>График ППР</h1>
       </div>
       <div class="controls">
+      <a class="home-link" href="/">На главную</a>
       <div class="nav" id="sectionNav"></div>
       {{TOOLBAR}}
       </div>
