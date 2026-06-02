@@ -1388,7 +1388,16 @@ HTML_TEMPLATE = """<!doctype html>
       text-align:center;
       line-height:28px;
     }
-    .cell.selected-cell { background:rgba(39,110,241,.14); box-shadow:inset 0 0 0 1px rgba(39,110,241,.9); }
+    .cell.selected-cell,
+    .cell.day-cell.selected-cell,
+    td.transfer-col .cell.day-cell.selected-cell,
+    td.holiday-col .cell.day-cell.selected-cell {
+      background:rgba(39,110,241,.10) !important;
+      box-shadow:inset 0 0 0 1px rgba(39,110,241,.55) !important;
+      outline:0;
+      position:relative;
+      z-index:3;
+    }
     .cell.cat-toggle {
       display:block;
       box-sizing:border-box;
@@ -1689,7 +1698,10 @@ function handleMonthCopy(e){
 }
 function handleMonthPaste(e){
   if (!CAN_EDIT) return;
-  const target = e.target;
+  if (e.defaultPrevented) return;
+  const target = (e.target && e.target.dataset && e.target.dataset.month !== undefined)
+    ? e.target
+    : ui.lastCell;
   if (!target || !target.dataset || target.dataset.month === undefined) return;
   const text = (e.clipboardData || window.clipboardData).getData('text');
   if (!text) return;
@@ -1702,6 +1714,7 @@ function handleMonthPaste(e){
 }
 document.addEventListener('mouseup', endMonthSelection, true);
 document.addEventListener('copy', handleMonthCopy, true);
+document.addEventListener('paste', handleMonthPaste, true);
 function setPath(path, value){
   if (!CAN_EDIT) return;
   if (typeof value === 'string') value = value.toUpperCase();
@@ -1714,6 +1727,7 @@ function setPath(path, value){
 }
 function handleGridInput(el){
   if (!el || !el.dataset) return;
+  setLastCell(el);
   const value = String(el.value ?? '').toUpperCase();
   if (el.value !== value) el.value = value;
   setPath(el.dataset.path, value);
