@@ -393,7 +393,7 @@ HTML = """<!doctype html>
   <div id="inventory" class="panel"></div>
 </div>
 <script>
-const API = location.pathname.replace(/\\/$/, '');
+const API = '/spravochnik';
 let state = null;
 const headers = {
   norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
