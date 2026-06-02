@@ -524,7 +524,7 @@ class Handler(BaseHTTPRequestHandler):
             if user:
                 redirect(self, APP_PREFIX + "/")
                 return
-            send_html(self, HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", "Вход не выполнен"))
+            send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER))
             return
         if path == "/logout":
             handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
