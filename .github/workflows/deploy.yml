@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
 
           cd /opt/rtps
-          export GIT_SSH_COMMAND='ssh -i /root/.ssh/id_ed25519_github -o IdentitiesOnly=yes'
+          git config core.sshCommand 'ssh -i /root/.ssh/id_ed25519_github -o IdentitiesOnly=yes -o BatchMode=yes'
 
           backup_dir="$(mktemp -d)"
 
