@@ -187,7 +187,7 @@ HOME_TEMPLATE = """<!doctype html>
           <h2>Справочник</h2>
           <p>Нормы времени, сотрудники и локомотивы.</p>
         </div>
-        <a href="/spravochnik">Открыть</a>
+        {{SPRAVOCHNIK_LINK}}
       </div>
     </div>
     <div class="status">Сервер запущен: {{STARTED_AT}}</div>
@@ -327,7 +327,17 @@ def _login_cookie(username: str, role: str) -> str:
 def render_home(username: str, role: str) -> str:
     started_at = dt.datetime.now().strftime("%H:%M:%S %d.%m.%Y")
     role_label = "Просмотр" if role == "view" else "Редактирование"
-    return HOME_TEMPLATE.replace("{{STARTED_AT}}", started_at).replace("{{AUTH_BADGE}}", f"Пользователь: {username} / {role_label}")
+    spravochnik_link = (
+        '<a class="disabled" href="#" aria-disabled="true" tabindex="-1">Открыть</a>'
+        if role == "view"
+        else '<a href="/spravochnik">Открыть</a>'
+    )
+    return (
+        HOME_TEMPLATE
+        .replace("{{STARTED_AT}}", started_at)
+        .replace("{{AUTH_BADGE}}", f"Пользователь: {username} / {role_label}")
+        .replace("{{SPRAVOCHNIK_LINK}}", spravochnik_link)
+    )
 
 
 class Handler(BaseHTTPRequestHandler):
