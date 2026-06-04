@@ -275,27 +275,26 @@ def _verify_cookie(value: str) -> tuple[str, str] | None:
             return None
 
 
-def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
+def _parse_cookie_values(handler: BaseHTTPRequestHandler, name: str) -> list[str]:
     raw = handler.headers.get("Cookie", "")
-    cookies: dict[str, str] = {}
+    values: list[str] = []
     for part in raw.split(";"):
         if "=" not in part:
             continue
         key, value = part.split("=", 1)
-        cookies[key.strip()] = value.strip()
-    return cookies
+        if key.strip() == name:
+            values.append(value.strip())
+    return values
 
 
 def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
-    cookies = _parse_cookies(handler)
-    token = cookies.get(SESSION_COOKIE)
-    if not token:
-        return None
-    session = _verify_cookie(token)
-    if session:
-        username, role = session
-        SESSIONS[token] = (username, role, dt.datetime.now().timestamp())
-    return session
+    for token in _parse_cookie_values(handler, SESSION_COOKIE):
+        session = _verify_cookie(token)
+        if session:
+            username, role = session
+            SESSIONS[token] = (username, role, dt.datetime.now().timestamp())
+            return session
+    return None
 
 
 def _send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:

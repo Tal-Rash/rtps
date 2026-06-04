@@ -125,14 +125,15 @@ def text(value) -> str:
     return "" if value is None else str(value)
 
 
-def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
-    cookies: dict[str, str] = {}
+def parse_cookie_values(handler: BaseHTTPRequestHandler, name: str) -> list[str]:
+    values: list[str] = []
     for part in handler.headers.get("Cookie", "").split(";"):
         if "=" not in part:
             continue
         key, value = part.split("=", 1)
-        cookies[key.strip()] = value.strip()
-    return cookies
+        if key.strip() == name:
+            values.append(value.strip())
+    return values
 
 
 def verify_cookie(value: str) -> tuple[str, str] | None:
@@ -153,8 +154,11 @@ def verify_cookie(value: str) -> tuple[str, str] | None:
 
 
 def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
-    token = parse_cookies(handler).get(SESSION_COOKIE)
-    return verify_cookie(token) if token else None
+    for token in parse_cookie_values(handler, SESSION_COOKIE):
+        session = verify_cookie(token)
+        if session:
+            return session
+    return None
 
 
 def route_path(path: str) -> str:
