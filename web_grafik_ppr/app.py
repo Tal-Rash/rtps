@@ -466,7 +466,7 @@ def collect_unplanned_starts_across_months(
         row_idx = row_map.get(row_key_str)
         rows = month.get(table_type, []) or []
         row = rows[row_idx] if row_idx is not None and row_idx < len(rows) else None
-        day_limit = int(month.get("days") or 0)
+        day_limit = MONTH_DAY_LIMIT_FOR_REPORT if mi == month_index else int(month.get("days") or 0)
         for day in range(1, day_limit + 1):
             is_num = row_cell_is_numeric(row, day)
             if is_num and not last_is_num:
@@ -484,12 +484,14 @@ def collect_unplanned_starts_across_months(
         runs.append((current_start, current_end))
 
     starts: list[tuple[int, int]] = []
-    for (start_month, start_day), (_end_month, _end_day) in runs:
+    for (start_month, start_day), (end_month, end_day) in runs:
         try:
-            dt.date(year, start_month, start_day)
+            start_date = dt.date(year, start_month, start_day)
+            end_date = dt.date(year, end_month, end_day)
         except ValueError:
             continue
-        starts.append((start_month, start_day))
+        if end_date >= window_start and start_date <= window_end:
+            starts.append((start_month, start_day))
     return starts
 
 
@@ -2490,7 +2492,7 @@ function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey){
     const rowIdx = rowMap[rowKeyStr];
     const rows = month[tableType] || [];
     const row = Number.isInteger(rowIdx) && rowIdx < rows.length ? rows[rowIdx] : null;
-    const dayLimit = Number(month.days || 0);
+    const dayLimit = mi === monthIndex ? 25 : Number(month.days || 0);
     for (let day = 1; day <= dayLimit; day += 1) {
       const isNum = rowCellIsNumeric(row, day);
       if (isNum && !lastIsNum) currentStart = [monthNum, day];
@@ -2507,6 +2509,11 @@ function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey){
   if (lastIsNum && currentStart && currentEnd) runs.push([currentStart, currentEnd]);
 
   return runs
+    .filter(([[startMonth, startDay], [endMonth, endDay]]) => {
+      const startDate = new Date(year, startMonth - 1, startDay);
+      const endDate = new Date(year, endMonth - 1, endDay);
+      return endDate >= windowStart && startDate <= windowEnd;
+    })
     .map(([[startMonth, startDay]]) => `Акт № ${String(startDay).padStart(2, '0')}-${String(startMonth).padStart(2, '0')}-${String(rowKey[1] || '').trim().toUpperCase()}`);
 }
 function collectActNumbersFromRow(currRow, monthIndex, tableType, rowKey){
