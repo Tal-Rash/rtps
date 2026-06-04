@@ -1065,7 +1065,6 @@ READONLY_TOOLBAR = """
       <div class="toolbar">
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
         <button onclick="openReport()">Отчет</button>
-        <a class="badge" href="{{APP_PREFIX}}/login" style="text-decoration:none;">Войти</a>
       </div>
 """
 
@@ -1644,10 +1643,6 @@ HTML_TEMPLATE = """<!doctype html>
     </div>
     <div class="panel">
       <div id="content"></div>
-      <div class="footerbar">
-        <div id="status" class="badge">Готово</div>
-        <div id="dirtyHint">Изменений нет</div>
-      </div>
     </div>
   </div>
   <div id="reportModal" class="modal-overlay" aria-hidden="true" onclick="closeReportModal()">
@@ -1750,7 +1745,7 @@ function normalizeRepairCode(v){
     .replace(/-/g, '')
     .replace(/[ABCEHKMOPTXY]/g, (ch) => map[ch] || ch);
 }
-function setStatus(t){ document.getElementById('status').textContent = t; }
+function setStatus(t){ void t; }
 function showErrorModal(message){
   const modal = document.getElementById('errorModal');
   const body = document.getElementById('errorModalBody');
@@ -1765,7 +1760,7 @@ function closeErrorModal(){
   modal.classList.remove('visible');
   modal.setAttribute('aria-hidden', 'true');
 }
-function markDirty(v=true){ dirty=v; document.getElementById('dirtyHint').textContent = v ? 'Есть несохранённые изменения' : 'Изменений нет'; }
+function markDirty(v=true){ dirty=v; }
 function setLastCell(el){
   if (!el || !el.dataset) return;
   ui.lastCell = {
