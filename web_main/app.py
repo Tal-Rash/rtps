@@ -157,9 +157,9 @@ HOME_TEMPLATE = """<!doctype html>
       <div class="card">
         <div>
           <h2>Замер КП</h2>
-          <p>Следующий модуль.</p>
+          <p>Замеры и последующее заполнение по шагам.</p>
         </div>
-        <a class="disabled" href="#">Скоро</a>
+        <a href="/zamer-kp">Открыть</a>
       </div>
       <div class="card">
         <div>
@@ -357,6 +357,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/grafik-ppr":
             _redirect(self, "https://yrtps.ru/grafik-ppr")
+            return
+        if parsed.path == "/zamer-kp":
+            _redirect(self, "https://yrtps.ru/zamer-kp")
             return
         if parsed.path == "/login":
             if user:
