@@ -422,6 +422,8 @@ HTML = """<!doctype html>
     </div>
   <div class="actions">
       <a href="/">На главную</a>
+      <button id="cancelBtn" onclick="cancelChanges()">Отмена</button>
+      <button id="restoreBtn" onclick="restoreChanges()">Вернуть</button>
       <label>Год <select id="year"></select></label>
       <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
     </div>
@@ -439,6 +441,8 @@ HTML = """<!doctype html>
 const API = '/spravochnik';
 const CAN_EDIT = {{CAN_EDIT}};
 let state = null;
+let savedState = null;
+let canceledState = null;
 const headers = {
   norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
   employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Молоко прим.'],
@@ -462,6 +466,8 @@ async function loadState(){
   const res = await fetch(`${API}/api/state?year=${year}`, {cache:'no-store'});
   if(!res.ok){ alert('Не удалось загрузить справочник'); return; }
   state = await res.json();
+  savedState = cloneState(state);
+  canceledState = null;
   renderAll();
 }
 
@@ -473,6 +479,7 @@ function renderAll(){
   if (saveBtn) {
     saveBtn.style.display = CAN_EDIT ? '' : 'none';
   }
+  updateHistoryButtons();
 }
 
 function renderTable(name, rows, editableRows){
@@ -517,7 +524,37 @@ async function saveAll(){
   state.year = Number(document.getElementById('year').value);
   const res = await fetch(`${API}/api/save`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
   if(!res.ok){ alert('Ошибка сохранения'); return; }
+  savedState = cloneState(state);
+  canceledState = null;
+  updateHistoryButtons();
   alert('Сохранено');
+}
+function cloneState(value){
+  return value ? JSON.parse(JSON.stringify(value)) : null;
+}
+function updateHistoryButtons(){
+  const cancelBtn = document.getElementById('cancelBtn');
+  const restoreBtn = document.getElementById('restoreBtn');
+  if (cancelBtn) cancelBtn.style.display = CAN_EDIT ? '' : 'none';
+  if (restoreBtn) restoreBtn.style.display = CAN_EDIT && !!canceledState ? '' : 'none';
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
+  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
+}
+function cancelChanges(){
+  if (!CAN_EDIT || !savedState) return;
+  canceledState = cloneState(state);
+  state = cloneState(savedState);
+  selected = {employees:-1, inventory:-1};
+  renderAll();
+  alert('Отменено');
+}
+function restoreChanges(){
+  if (!CAN_EDIT || !canceledState) return;
+  state = cloneState(canceledState);
+  canceledState = null;
+  selected = {employees:-1, inventory:-1};
+  renderAll();
+  alert('Восстановлено');
 }
 function showTab(id, btn){
   document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));

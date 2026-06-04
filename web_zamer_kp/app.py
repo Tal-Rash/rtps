@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.6"
+APP_VERSION = "web-zkp-0.7"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -460,6 +460,8 @@ HTML = """<!doctype html>
       </div>
       <div class="actions">
         <a href="/">На главную</a>
+        <button id="cancelBtn" onclick="cancelChanges()">Отмена</button>
+        <button id="restoreBtn" onclick="restoreChanges()">Вернуть</button>
         <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить</button>
       </div>
     </div>
@@ -524,6 +526,10 @@ const CAN_EDIT = {{CAN_EDIT}};
 let state = null;
 let dirty = false;
 let currentRepairType = '';
+let savedState = null;
+let canceledState = null;
+let savedRepairType = '';
+let canceledRepairType = '';
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -538,6 +544,18 @@ function setStatus(text){
 function setDirty(flag){
   dirty = !!flag;
   document.getElementById('dirtyBadge').textContent = dirty ? 'есть изменения' : 'готово';
+  updateHistoryButtons();
+}
+function cloneState(value){
+  return value ? JSON.parse(JSON.stringify(value)) : null;
+}
+function updateHistoryButtons(){
+  const cancelBtn = document.getElementById('cancelBtn');
+  const restoreBtn = document.getElementById('restoreBtn');
+  if (cancelBtn) cancelBtn.style.display = CAN_EDIT ? '' : 'none';
+  if (restoreBtn) restoreBtn.style.display = CAN_EDIT && !!canceledState ? '' : 'none';
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
+  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
 }
 function getCurrentLoco(){
   return document.getElementById('locomotive').value.trim();
@@ -712,7 +730,11 @@ async function loadState(nextLocomotive){
     return;
   }
   state = await res.json();
+  savedState = cloneState(state);
+  canceledState = null;
   currentRepairType = state.repair_type || currentRepairType || '';
+  savedRepairType = currentRepairType;
+  canceledRepairType = '';
   document.getElementById('locomotive').value = state.locomotive || '';
   document.getElementById('measurementDate').value = state.measurement_date || '';
   renderLocoOptions();
@@ -767,6 +789,10 @@ async function saveCurrent(){
     return;
   }
   state = await res.json();
+  savedState = cloneState(state);
+  canceledState = null;
+  savedRepairType = currentRepairType;
+  canceledRepairType = '';
   document.getElementById('locomotive').value = state.locomotive || '';
   document.getElementById('measurementDate').value = state.measurement_date || '';
   renderRepairOptions();
@@ -776,10 +802,43 @@ async function saveCurrent(){
   setStatus('Сохранено');
 }
 
+function cancelChanges(){
+  if (!CAN_EDIT || !savedState) return;
+  canceledState = cloneState(state);
+  canceledRepairType = currentRepairType;
+  state = cloneState(savedState);
+  currentRepairType = savedRepairType || '';
+  document.getElementById('locomotive').value = state.locomotive || '';
+  document.getElementById('measurementDate').value = state.measurement_date || '';
+  renderLocoOptions();
+  renderRepairOptions();
+  renderMeta();
+  renderTable();
+  setDirty(false);
+  setStatus('Отменено');
+}
+
+function restoreChanges(){
+  if (!CAN_EDIT || !canceledState) return;
+  state = cloneState(canceledState);
+  currentRepairType = canceledRepairType || '';
+  document.getElementById('locomotive').value = state.locomotive || '';
+  document.getElementById('measurementDate').value = state.measurement_date || '';
+  renderLocoOptions();
+  renderRepairOptions();
+  renderMeta();
+  renderTable();
+  setDirty(true);
+  setStatus('Восстановлено');
+  canceledState = null;
+  canceledRepairType = '';
+}
+
 document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
+updateHistoryButtons();
 loadState();
 </script>
 </body>

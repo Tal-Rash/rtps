@@ -18,7 +18,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-0.3"
+APP_VERSION = "web-gpp-0.5"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -1920,6 +1920,9 @@ let appState = {{STATE_JSON}};
 const EMPLOYEE_NAMES = {{EMPLOYEE_NAMES}};
 let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: [] };
 let dirty = false;
+let savedAppState = null;
+let savedMonthsState = null;
+let canceledMonthsState = null;
 const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
@@ -1958,6 +1961,17 @@ function updateSaveButtonState(){
   const btn = document.getElementById('saveButton');
   if (!btn) return;
   btn.classList.toggle('save-ready', !!dirty && !!CAN_EDIT);
+}
+function cloneState(value){
+  return value ? JSON.parse(JSON.stringify(value)) : null;
+}
+function updateHistoryButtons(){
+  const cancelBtn = document.getElementById('cancelButton');
+  const restoreBtn = document.getElementById('restoreButton');
+  if (cancelBtn) cancelBtn.style.display = CAN_EDIT ? '' : 'none';
+  if (restoreBtn) restoreBtn.style.display = CAN_EDIT && !!canceledMonthsState ? '' : 'none';
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedMonthsState;
+  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledMonthsState;
 }
 function ensureLeaveGuard(){
   if (!CAN_EDIT || leaveGuardInstalled) return;
@@ -2292,6 +2306,7 @@ function renderSafe(){
   content.innerHTML = renderMonths();
   applyMonthSelectionClasses();
   renderOpenModals();
+  updateHistoryButtons();
 }
 window.addEventListener('error', (event) => {
   const content = document.getElementById('content');
@@ -2329,6 +2344,8 @@ function renderMonths(){
       <div class="row-actions">
         <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
         <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
+        <button id="cancelButton" onclick="cancelChanges()">Отмена</button>
+        <button id="restoreButton" onclick="restoreChanges()">Вернуть</button>
       </div>
     </div>
     ${renderMonthTable('plan', 'План', m, headers)}
@@ -3094,6 +3111,9 @@ async function saveState(options = {}){
   const res = await fetch('{{APP_PREFIX}}/api/state', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
   if (!res.ok) { setStatus('Ошибка'); return; }
   appState = await res.json();
+  savedAppState = cloneState(appState);
+  savedMonthsState = cloneState(appState.months);
+  canceledMonthsState = null;
   markDirty(false);
   setStatus('Сохранено');
   render();
@@ -3112,12 +3132,22 @@ async function importJson(event){
   const payload = JSON.parse(await f.text());
   const res = await fetch('{{APP_PREFIX}}/api/import', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(payload) });
   if (!res.ok) { alert('Импорт не удался'); return; }
-  appState = await res.json(); markDirty(false); render();
+  appState = await res.json();
+  savedAppState = cloneState(appState);
+  savedMonthsState = cloneState(appState.months);
+  canceledMonthsState = null;
+  markDirty(false);
+  render();
 }
 async function loadYear(year){
   const res = await fetch(`{{APP_PREFIX}}/api/state?year=${encodeURIComponent(year)}`);
   if (!res.ok) { alert('Не удалось загрузить год'); return; }
-  appState = await res.json(); markDirty(false); render();
+  appState = await res.json();
+  savedAppState = cloneState(appState);
+  savedMonthsState = cloneState(appState.months);
+  canceledMonthsState = null;
+  markDirty(false);
+  render();
 }
 async function loadYearFromInput(){
   const year = parseInt(document.getElementById('yearInput').value, 10);
@@ -3128,11 +3158,28 @@ function requestHomeClick(event){
   if (event) event.preventDefault();
   return promptLeave('Есть несохранённые изменения. Сохранить перед переходом на главную?', () => { location.href = '/'; });
 }
+function cancelChanges(){
+  if (!CAN_EDIT || !savedMonthsState) return;
+  canceledMonthsState = cloneState(appState.months);
+  appState.months = cloneState(savedMonthsState);
+  markDirty(JSON.stringify(appState) !== JSON.stringify(savedAppState));
+  render();
+}
+function restoreChanges(){
+  if (!CAN_EDIT || !canceledMonthsState) return;
+  appState.months = cloneState(canceledMonthsState);
+  canceledMonthsState = null;
+  markDirty(JSON.stringify(appState) !== JSON.stringify(savedAppState));
+  render();
+}
 window.addEventListener('beforeunload', (e)=>{ if (dirty && CAN_EDIT) { e.preventDefault(); e.returnValue=''; } });
 window.addEventListener('popstate', () => {
   if (!leaveGuardInstalled || !CAN_EDIT) return;
   promptLeave('Есть несохранённые изменения. Сохранить перед уходом?', () => { location.href = '/'; });
 });
+savedAppState = cloneState(appState);
+savedMonthsState = cloneState(appState.months);
+updateHistoryButtons();
 render();
 </script>
 </body>
