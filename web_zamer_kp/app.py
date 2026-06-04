@@ -34,22 +34,6 @@ DEFAULT_REPAIR_OPTIONS = {
     "tem": ["", "ТО-2", "ТО-3", "ТО-4", "ТР-1", "ТР-2", "ТР-3", "СР", "КР"],
     "pe": ["", "ТО", "ТР", "СР", "КР"],
 }
-DEFAULT_LOCOMOTIVES = [
-    {"series": "ТЭМ-2УМ", "number": "767"},
-    {"series": "ТЭМ-2", "number": "7745"},
-    {"series": "ТЭМ-18ДМ", "number": "3346"},
-    {"series": "ТЭМ-18ДМ", "number": "3407"},
-    {"series": "ТЭМ-18ДМ", "number": "3424"},
-    {"series": "ПЭ-2М", "number": "48"},
-    {"series": "ПЭ-2М", "number": "49"},
-    {"series": "ПЭ-2М", "number": "50"},
-    {"series": "ПЭ-2М", "number": "51"},
-    {"series": "ПЭ-2М", "number": "52"},
-    {"series": "ПЭ-2М", "number": "53"},
-    {"series": "ПЭ-2М", "number": "54"},
-    {"series": "ПЭ-2М", "number": "56"},
-    {"series": "ПЭ-2М", "number": "57"},
-]
 DEFAULT_NORMS = [
     ("max_prokat", "Прокат", "больше или равно", "6", "7"),
     ("min_greben", "Толщина гребня", "меньше или равно", "26", "25"),
@@ -278,9 +262,14 @@ def allowed_repairs(series: str, locomotive: str) -> list[str]:
 
 
 def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
-    rows = cur.execute("SELECT y, ser, num FROM inventory ORDER BY y DESC, rowid").fetchall()
-    if not rows:
-        return [dict(item) for item in DEFAULT_LOCOMOTIVES]
+    rows = cur.execute(
+        """
+        SELECT y, ser, num, inv
+        FROM inventory
+        WHERE TRIM(COALESCE(num, '')) <> ''
+        ORDER BY y DESC, rowid DESC
+        """
+    ).fetchall()
 
     seen: set[str] = set()
     result: list[dict[str, str]] = []
@@ -290,8 +279,12 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
             continue
         seen.add(number)
         series = text(row["ser"]).strip()
-        result.append({"series": series, "number": number, "label": f"{series} {number}".strip()})
-    return result or [dict(item) for item in DEFAULT_LOCOMOTIVES]
+        inv = text(row["inv"]).strip()
+        label = f"{series} {number}".strip()
+        if inv:
+            label = f"{label} (инв. {inv})"
+        result.append({"series": series, "number": number, "label": label})
+    return result
 
 
 def empty_measurements() -> list[list[str]]:
@@ -596,9 +589,12 @@ function measurementClass(col, value){
 }
 function renderLocoOptions(){
   const datalist = document.getElementById('locoList');
-  datalist.innerHTML = (state?.locomotives || [])
-    .map(x => `<option value="${esc(x.number)}">${esc(x.label || x.number)}</option>`)
-    .join('');
+  const items = state?.locomotives || [];
+  datalist.innerHTML = items.length
+    ? items.map(x => `<option value="${esc(x.number)}">${esc(x.label || x.number)}</option>`).join('')
+    : '<option value=""></option>';
+  const input = document.getElementById('locomotive');
+  input.placeholder = items.length ? 'Выберите локомотив из справочника' : 'Нет локомотивов в справочнике';
 }
 function renderRepairOptions(){
   const select = document.getElementById('repairType');
