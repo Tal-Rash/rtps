@@ -254,7 +254,7 @@ def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
     return verify_cookie(token)
 
 
-def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
+def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = True) -> bool:
     session = current_session(handler)
     if session and (not need_edit or session[1] == "edit"):
         return True
@@ -572,8 +572,11 @@ class Handler(BaseHTTPRequestHandler):
         user = session[0] if session else None
         role = session[1] if session else None
         if path == "/login":
-            if user:
+            if user and role == "edit":
                 redirect(self, APP_PREFIX + "/")
+                return
+            if user and role != "edit":
+                redirect(self, APP_PREFIX + "/logout")
                 return
             send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER))
             return
@@ -591,12 +594,11 @@ class Handler(BaseHTTPRequestHandler):
             if not user:
                 redirect(self, APP_PREFIX + "/login")
                 return
-            badge = "Просмотр" if role == "view" else "Редактирование"
             send_html(
                 self,
                 HTML.replace("{{USER}}", WEB_USER)
-                    .replace("{{AUTH_BADGE}}", badge)
-                    .replace("{{CAN_EDIT}}", "true" if role == "edit" else "false"),
+                    .replace("{{AUTH_BADGE}}", "Редактирование")
+                    .replace("{{CAN_EDIT}}", "true"),
             )
             return
         if path == "/api/state":
@@ -614,9 +616,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/login":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             password = form.get("password", [""])[0]
-            if password == WEB_VIEW_PASSWORD:
-                redirect(self, APP_PREFIX + "/", login_cookie(WEB_USER, "view"))
-                return
             if password == WEB_EDIT_PASSWORD:
                 redirect(self, APP_PREFIX + "/", login_cookie(WEB_USER, "edit"))
                 return
