@@ -752,8 +752,6 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
                     lines.append(line)
             return "\n".join(lines)
         return saved or auto
-    def split_notes(saved: str, auto: str) -> dict[str, str]:
-        return {"note": s(saved).strip(), "acts": s(auto).strip()}
 
     tep_notes = "\n".join(data["notes"]["fact"]["tep"])
     agr_notes = "\n".join(data["notes"]["fact"]["agr"])
@@ -764,11 +762,11 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
         {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
         {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
         {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
-        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), **split_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
+        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": merge_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
         {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
         {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
         {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
-        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), **split_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
+        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": merge_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
     ]
     return {"month": month_name, "year": data["y"], "rows": rows}
 
@@ -2966,10 +2964,7 @@ function renderReportBody(){
         <td class="col-report-name">${esc(row.label)}</td>
         <td class="num-cell col-report-num">${esc(row.plan)}</td>
         <td class="num-cell col-report-num">${esc(row.fact)}</td>
-        <td class="col-report-note">
-          <textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea>
-          ${row.acts ? `<div class="report-act-hint">${esc(row.acts)}</div>` : ''}
-        </td>
+        <td class="col-report-note"><textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
       </tr>
     `;
   }).join('');
