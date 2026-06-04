@@ -422,8 +422,8 @@ HTML = """<!doctype html>
     </div>
   <div class="actions">
       <a href="/">На главную</a>
-      <button id="cancelBtn" onclick="cancelChanges()">Отмена</button>
-      <button id="restoreBtn" onclick="restoreChanges()">Вернуть</button>
+      <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+      <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       <label>Год <select id="year"></select></label>
       <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
     </div>
@@ -535,8 +535,8 @@ function cloneState(value){
 function updateHistoryButtons(){
   const cancelBtn = document.getElementById('cancelBtn');
   const restoreBtn = document.getElementById('restoreBtn');
-  if (cancelBtn) cancelBtn.style.display = CAN_EDIT ? '' : 'none';
-  if (restoreBtn) restoreBtn.style.display = CAN_EDIT && !!canceledState ? '' : 'none';
+  if (cancelBtn) cancelBtn.style.display = '';
+  if (restoreBtn) restoreBtn.style.display = '';
   if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
 }

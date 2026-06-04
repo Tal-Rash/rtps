@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.7"
+APP_VERSION = "web-zkp-0.8"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -460,8 +460,8 @@ HTML = """<!doctype html>
       </div>
       <div class="actions">
         <a href="/">На главную</a>
-        <button id="cancelBtn" onclick="cancelChanges()">Отмена</button>
-        <button id="restoreBtn" onclick="restoreChanges()">Вернуть</button>
+        <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+        <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
         <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить</button>
       </div>
     </div>
@@ -552,8 +552,8 @@ function cloneState(value){
 function updateHistoryButtons(){
   const cancelBtn = document.getElementById('cancelBtn');
   const restoreBtn = document.getElementById('restoreBtn');
-  if (cancelBtn) cancelBtn.style.display = CAN_EDIT ? '' : 'none';
-  if (restoreBtn) restoreBtn.style.display = CAN_EDIT && !!canceledState ? '' : 'none';
+  if (cancelBtn) cancelBtn.style.display = '';
+  if (restoreBtn) restoreBtn.style.display = '';
   if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
 }

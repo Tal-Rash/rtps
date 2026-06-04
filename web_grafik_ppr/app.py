@@ -18,7 +18,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-0.5"
+APP_VERSION = "web-gpp-0.6"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -1968,8 +1968,8 @@ function cloneState(value){
 function updateHistoryButtons(){
   const cancelBtn = document.getElementById('cancelButton');
   const restoreBtn = document.getElementById('restoreButton');
-  if (cancelBtn) cancelBtn.style.display = CAN_EDIT ? '' : 'none';
-  if (restoreBtn) restoreBtn.style.display = CAN_EDIT && !!canceledMonthsState ? '' : 'none';
+  if (cancelBtn) cancelBtn.style.display = '';
+  if (restoreBtn) restoreBtn.style.display = '';
   if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedMonthsState;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledMonthsState;
 }
@@ -2344,8 +2344,8 @@ function renderMonths(){
       <div class="row-actions">
         <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
         <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
-        <button id="cancelButton" onclick="cancelChanges()">Отмена</button>
-        <button id="restoreButton" onclick="restoreChanges()">Вернуть</button>
+        <button id="cancelButton" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+        <button id="restoreButton" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       </div>
     </div>
     ${renderMonthTable('plan', 'План', m, headers)}
