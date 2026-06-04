@@ -1259,9 +1259,9 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .month-table-head { justify-content:center; }
-    .month-table-head > div { justify-content:center; }
-    .month-table-title { width:100%; text-align:center; }
+    .month-table-head { display:grid; grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr); gap:10px; align-items:center; }
+    .month-table-actions { justify-self:start; min-width:0; }
+    .month-table-title { justify-self:center; text-align:center; }
     .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
     .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
@@ -2147,10 +2147,11 @@ function renderMonthTable(type, title, m, headers){
   ].join('');
   return `
     <div class="section-head month-table-head" style="margin-top:16px;">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <div class="section-title month-table-title">${title}</div>
+      <div class="month-table-actions">
         ${repairButtonsHtml()}
       </div>
+      <div class="section-title month-table-title">${title}</div>
+      <div></div>
     </div>
     <div class="table-wrap">
       <table class="compact month-table" style="width:${45 + 100 + 60 + 80 + (m.days * 36) + 180}px">
