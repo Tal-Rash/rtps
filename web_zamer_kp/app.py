@@ -468,9 +468,8 @@ HTML = """<!doctype html>
 
     <div class="filters" style="margin-top:12px;">
       <label>Локомотив
-        <input id="locomotive" list="locoList" autocomplete="off" spellcheck="false" style="width:170px">
+        <select id="locomotive" style="width:220px"></select>
       </label>
-      <datalist id="locoList"></datalist>
       <label>Дата замера
         <input id="measurementDate" type="date" style="width:150px">
       </label>
@@ -588,13 +587,19 @@ function measurementClass(col, value){
   return 'ok';
 }
 function renderLocoOptions(){
-  const datalist = document.getElementById('locoList');
+  const select = document.getElementById('locomotive');
   const items = state?.locomotives || [];
-  datalist.innerHTML = items.length
-    ? items.map(x => `<option value="${esc(x.number)}">${esc(x.label || x.number)}</option>`).join('')
-    : '<option value=""></option>';
-  const input = document.getElementById('locomotive');
-  input.placeholder = items.length ? 'Выберите локомотив из справочника' : 'Нет локомотивов в справочнике';
+  select.innerHTML = items.length
+    ? ['<option value="">Выберите локомотив</option>']
+        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.label || x.number)}</option>`))
+        .join('')
+    : '<option value="">Нет локомотивов в справочнике</option>';
+  select.disabled = !items.length;
+  if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
+    select.value = state.locomotive;
+  } else if (items.length && !select.value) {
+    select.value = items[0].number;
+  }
 }
 function renderRepairOptions(){
   const select = document.getElementById('repairType');
@@ -775,7 +780,6 @@ async function saveCurrent(){
 }
 
 document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
-document.getElementById('locomotive').addEventListener('blur', onLocomotiveCommit);
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
