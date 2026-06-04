@@ -455,43 +455,44 @@ def collect_unplanned_starts_across_months(
     prev_month_num = int(months[month_index - 1].get("month") or month_index) if month_index > 0 else None
     window_start = dt.date(year, prev_month_num, 26) if prev_month_num else dt.date(year, curr_month_num, 1)
     window_end = dt.date(year, curr_month_num, MONTH_DAY_LIMIT_FOR_REPORT)
-    runs: list[tuple[tuple[int, int], tuple[int, int]]] = []
-    current_start: tuple[int, int] | None = None
-    current_end: tuple[int, int] | None = None
-    last_is_num = False
+    def row_for_date(date: dt.date) -> dict | None:
+        month_idx = date.month - 1
+        if month_idx < 0 or month_idx >= len(row_maps):
+            return None
+        row_idx = row_maps[month_idx].get(row_key_str)
+        rows = months[month_idx].get(table_type, []) or []
+        return rows[row_idx] if row_idx is not None and row_idx < len(rows) else None
 
-    for mi, month in enumerate(months[: month_index + 1]):
-        month_num = int(month.get("month") or mi + 1)
-        row_map = row_maps[mi] if mi < len(row_maps) else {}
-        row_idx = row_map.get(row_key_str)
-        rows = month.get(table_type, []) or []
-        row = rows[row_idx] if row_idx is not None and row_idx < len(rows) else None
-        day_limit = MONTH_DAY_LIMIT_FOR_REPORT if mi == month_index else int(month.get("days") or 0)
-        for day in range(1, day_limit + 1):
-            is_num = row_cell_is_numeric(row, day)
-            if is_num and not last_is_num:
-                current_start = (month_num, day)
-            if is_num:
-                current_end = (month_num, day)
-            if not is_num and last_is_num and current_start and current_end:
-                runs.append((current_start, current_end))
-                current_start = None
-                current_end = None
-            last_is_num = is_num
-        if not row:
-            last_is_num = False
-    if last_is_num and current_start and current_end:
-        runs.append((current_start, current_end))
+    def numeric_on(date: dt.date) -> bool:
+        return row_cell_is_numeric(row_for_date(date), date.day)
 
     starts: list[tuple[int, int]] = []
-    for (start_month, start_day), (end_month, end_day) in runs:
-        try:
-            start_date = dt.date(year, start_month, start_day)
-            end_date = dt.date(year, end_month, end_day)
-        except ValueError:
-            continue
-        if end_date >= window_start and start_date <= window_end:
-            starts.append((start_month, start_day))
+    seen = set()
+
+    def add_start(date: dt.date) -> None:
+        key = (date.month, date.day)
+        if key in seen:
+            return
+        seen.add(key)
+        starts.append(key)
+
+    if numeric_on(window_start):
+        start = window_start
+        prev = start - dt.timedelta(days=1)
+        while prev.year == year and prev >= dt.date(year, 1, 1) and numeric_on(prev):
+            start = prev
+            prev -= dt.timedelta(days=1)
+        add_start(start)
+
+    prev_is_num = numeric_on(window_start)
+    day = window_start + dt.timedelta(days=1)
+    while day <= window_end:
+        is_num = numeric_on(day)
+        if is_num and not prev_is_num:
+            add_start(day)
+        prev_is_num = is_num
+        day += dt.timedelta(days=1)
+
     return starts
 
 
@@ -2481,40 +2482,40 @@ function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey){
   const prevMonthNum = monthIndex > 0 ? Number(months[monthIndex - 1].month || monthIndex) : null;
   const windowStart = prevMonthNum ? new Date(year, prevMonthNum - 1, 26) : new Date(year, currMonthNum - 1, 1);
   const windowEnd = new Date(year, currMonthNum - 1, 25);
-  const runs = [];
-  let currentStart = null;
-  let currentEnd = null;
-  let lastIsNum = false;
-
-  months.slice(0, monthIndex + 1).forEach((month, mi) => {
-    const monthNum = Number(month.month || mi + 1);
-    const rowMap = rowMaps[mi] || {};
-    const rowIdx = rowMap[rowKeyStr];
-    const rows = month[tableType] || [];
-    const row = Number.isInteger(rowIdx) && rowIdx < rows.length ? rows[rowIdx] : null;
-    const dayLimit = mi === monthIndex ? 25 : Number(month.days || 0);
-    for (let day = 1; day <= dayLimit; day += 1) {
-      const isNum = rowCellIsNumeric(row, day);
-      if (isNum && !lastIsNum) currentStart = [monthNum, day];
-      if (isNum) currentEnd = [monthNum, day];
-      if (!isNum && lastIsNum && currentStart && currentEnd) {
-        runs.push([currentStart, currentEnd]);
-        currentStart = null;
-        currentEnd = null;
-      }
-      lastIsNum = isNum;
+  const rowForDate = (date) => {
+    const monthIdx = date.getMonth();
+    if (monthIdx < 0 || monthIdx >= rowMaps.length) return null;
+    const rowIdx = (rowMaps[monthIdx] || {})[rowKeyStr];
+    const rows = months[monthIdx][tableType] || [];
+    return Number.isInteger(rowIdx) && rowIdx < rows.length ? rows[rowIdx] : null;
+  };
+  const numericOn = (date) => rowCellIsNumeric(rowForDate(date), date.getDate());
+  const starts = [];
+  const seen = new Set();
+  const addStart = (date) => {
+    const key = `${date.getMonth() + 1}-${date.getDate()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    starts.push(new Date(date));
+  };
+  if (numericOn(windowStart)) {
+    let start = new Date(windowStart);
+    let prev = new Date(start);
+    prev.setDate(prev.getDate() - 1);
+    while (prev.getFullYear() === year && prev >= new Date(year, 0, 1) && numericOn(prev)) {
+      start = new Date(prev);
+      prev.setDate(prev.getDate() - 1);
     }
-    if (!row) lastIsNum = false;
-  });
-  if (lastIsNum && currentStart && currentEnd) runs.push([currentStart, currentEnd]);
-
-  return runs
-    .filter(([[startMonth, startDay], [endMonth, endDay]]) => {
-      const startDate = new Date(year, startMonth - 1, startDay);
-      const endDate = new Date(year, endMonth - 1, endDay);
-      return endDate >= windowStart && startDate <= windowEnd;
-    })
-    .map(([[startMonth, startDay]]) => `Акт № ${String(startDay).padStart(2, '0')}-${String(startMonth).padStart(2, '0')}-${String(rowKey[1] || '').trim().toUpperCase()}`);
+    addStart(start);
+  }
+  let prevIsNum = numericOn(windowStart);
+  for (let day = new Date(windowStart); day <= windowEnd; day.setDate(day.getDate() + 1)) {
+    if (day.getTime() === windowStart.getTime()) continue;
+    const isNum = numericOn(day);
+    if (isNum && !prevIsNum) addStart(day);
+    prevIsNum = isNum;
+  }
+  return starts.map((date) => `Акт № ${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(rowKey[1] || '').trim().toUpperCase()}`);
 }
 function collectActNumbersFromRow(currRow, monthIndex, tableType, rowKey){
   const cells = currRow && currRow.cells ? currRow.cells : [];
