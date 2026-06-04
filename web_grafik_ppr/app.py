@@ -1936,20 +1936,6 @@ function defaultTableRows(year, month, rows = 14){
     cells: [String(idx + 1), '', '', '', ...Array.from({length: days}, () => ''), ''],
   }));
 }
-function normalizeTableRows(rows, year, month){
-  const days = daysInMonth(year, month);
-  const expectedLength = 4 + days + 1;
-  if (!Array.isArray(rows) || rows.length === 0) return defaultTableRows(year, month);
-  return rows.map((row, idx) => {
-    const result = row && typeof row === 'object' ? {...row} : {};
-    const cells = Array.isArray(result.cells) ? result.cells.slice(0, expectedLength) : [];
-    while (cells.length < expectedLength) cells.push('');
-    if (!String(cells[0] ?? '').trim()) cells[0] = String(idx + 1);
-    result.cells = cells;
-    result.excluded = Boolean(result.excluded);
-    return result;
-  });
-}
 function ensureAppStateShape(){
   if (!appState || typeof appState !== 'object') appState = {};
   const year = Number(appState.year) || new Date().getFullYear();
@@ -1969,8 +1955,8 @@ function ensureAppStateShape(){
       name: existing.name || name,
       month: Number(existing.month) || monthNum,
       days: Number(existing.days) || days,
-      plan: normalizeTableRows(existing.plan, year, monthNum),
-      fact: normalizeTableRows(existing.fact, year, monthNum),
+      plan: Array.isArray(existing.plan) ? existing.plan : defaultTableRows(year, monthNum),
+      fact: Array.isArray(existing.fact) ? existing.fact : defaultTableRows(year, monthNum),
     };
   });
 }
