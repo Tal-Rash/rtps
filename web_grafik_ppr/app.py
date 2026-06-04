@@ -514,6 +514,34 @@ def collect_row_notes(row: dict, unplanned_starts: list[tuple[int, int]], number
     return row_notes
 
 
+def collect_report_act_notes_for_category(state: dict, month_index: int, table_type: str, category: str) -> list[str]:
+    months = state.get("months", []) or []
+    if not months or not (0 <= month_index < len(months)):
+        return []
+    year = int(state.get("year") or dt.date.today().year)
+    month = months[month_index]
+    notes: list[str] = []
+    for row in month.get(table_type, []) or []:
+        if row.get("excluded"):
+            continue
+        cells = row.get("cells") or []
+        series = s(cells[1]).strip().upper() if len(cells) > 1 else ""
+        number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
+        if not series or not number:
+            continue
+        row_category = "agr" if "ПЭ" in series else "tep"
+        if row_category != category:
+            continue
+        key = report_unit_key(row)
+        if not key:
+            continue
+        for day, month_num in collect_unplanned_starts_across_months(year, months, month_index, table_type, key):
+            note = f"Акт № {day:02d}-{month_num:02d}-{number}"
+            if note not in notes:
+                notes.append(note)
+    return notes
+
+
 def process_report_day(acc, row: dict, day: int, month_num: int, category: str, table_type: str, state: dict) -> None:
     cells = row.get("cells") or []
     idx = day + 3
@@ -628,6 +656,15 @@ def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
                 acc.excluded[table_type].add(key)
             prev_row = prev_month.get(table_type, [])[prev_rows[key]] if prev_month and key and key in prev_rows else None
             process_report_row(acc, table_type, row, prev_row, curr_m, prev_m, fund_days, int(state.get("year") or dt.date.today().year), months, m_idx)
+
+    if acc.notes["fact"]["tep"] is not None:
+        for note in collect_report_act_notes_for_category(state, m_idx, "fact", "tep"):
+            if note not in acc.notes["fact"]["tep"]:
+                acc.notes["fact"]["tep"].append(note)
+    if acc.notes["fact"]["agr"] is not None:
+        for note in collect_report_act_notes_for_category(state, m_idx, "fact", "agr"):
+            if note not in acc.notes["fact"]["agr"]:
+                acc.notes["fact"]["agr"].append(note)
 
     fact_tep_ok, fact_agr_ok = calculate_ok_units(state, int(state.get("year") or dt.date.today().year), month_name, acc, period_hours)
 
