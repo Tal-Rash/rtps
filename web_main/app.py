@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 SHARED_DATA_DIR = ROOT.parent / "data"
 AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
+ACCESS_STATE_FILE = SHARED_DATA_DIR / "web_access.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "grafik_ppr_session"
@@ -231,6 +232,30 @@ def _cookie_value(username: str, role: str) -> str:
     return token
 
 
+def _write_access_state(username: str, role: str, expiry: int) -> None:
+    ACCESS_STATE_FILE.write_text(
+        json.dumps(
+            {
+                "username": username,
+                "role": role,
+                "expires_at": expiry,
+                "updated_at": int(dt.datetime.now().timestamp()),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _clear_access_state() -> None:
+    try:
+        if ACCESS_STATE_FILE.exists():
+            ACCESS_STATE_FILE.unlink()
+    except Exception:
+        pass
+
+
 def _verify_cookie(value: str) -> tuple[str, str] | None:
     try:
         username, role, ts, sig = value.rsplit(":", 3)
@@ -367,6 +392,7 @@ class Handler(BaseHTTPRequestHandler):
             _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", WEB_USER))
             return
         if parsed.path == "/logout":
+            _clear_access_state()
             handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -385,9 +411,13 @@ class Handler(BaseHTTPRequestHandler):
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             password = form.get("password", [""])[0]
             if password == WEB_VIEW_PASSWORD:
+                expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
+                _write_access_state(WEB_USER, "view", expiry)
                 _redirect(self, "/", _login_cookie(WEB_USER, "view"))
                 return
             if password == WEB_EDIT_PASSWORD:
+                expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
+                _write_access_state(WEB_USER, "edit", expiry)
                 _redirect(self, "/", _login_cookie(WEB_USER, "edit"))
                 return
             _send_html(

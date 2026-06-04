@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent
 SHARED_DATA_DIR = ROOT.parent / "data"
 LEGACY_WEB_SECRET_FILE = ROOT / "data" / "web_secret.txt"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
+ACCESS_STATE_FILE = SHARED_DATA_DIR / "web_access.json"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -181,6 +182,16 @@ def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
         session = verify_cookie(token)
         if session:
             return session
+    try:
+        if ACCESS_STATE_FILE.exists():
+            payload = json.loads(ACCESS_STATE_FILE.read_text(encoding="utf-8"))
+            role = text(payload.get("role", "")).strip()
+            expiry = float(payload.get("expires_at", 0) or 0)
+            if role in {"view", "edit"} and expiry >= dt.datetime.now().timestamp():
+                username = text(payload.get("username", "main")).strip() or "main"
+                return username, role
+    except Exception:
+        pass
     return None
 
 
