@@ -1645,7 +1645,6 @@ HTML_TEMPLATE = """<!doctype html>
     <div class="panel">
       <div id="content"></div>
       <div class="footerbar">
-        <div id="serverInfo" class="badge">Сервер: {{STARTED_AT}}</div>
         <div id="status" class="badge">Готово</div>
         <div id="dirtyHint">Изменений нет</div>
       </div>
@@ -1731,7 +1730,6 @@ HTML_TEMPLATE = """<!doctype html>
   </div>
 <script>
 const BOOT_VERSION = "{{APP_VERSION}}";
-const BOOT_STARTED_AT = "{{STARTED_AT}}";
 let appState = {{STATE_JSON}};
 const EMPLOYEE_NAMES = {{EMPLOYEE_NAMES}};
 let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: [] };
@@ -2053,8 +2051,6 @@ function render(){
 }
 function renderSafe(){
   ensureYearOptions();
-  const serverInfo = document.getElementById('serverInfo');
-  if (serverInfo) serverInfo.textContent = `Сервер: ${BOOT_STARTED_AT}`;
   document.title = `График ППР web ${BOOT_VERSION}`;
   bindNav();
   const content = document.getElementById('content');
