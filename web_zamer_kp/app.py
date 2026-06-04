@@ -18,7 +18,6 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 SHARED_DATA_DIR = ROOT.parent / "data"
-AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
@@ -76,33 +75,7 @@ def load_web_secret() -> str:
     return secret
 
 
-def load_auth_config() -> tuple[str, str, str]:
-    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
-    edit_password = os.environ.get("WEB_EDIT_PASSWORD", "").strip() or os.environ.get("WEB_PASSWORD", "").strip()
-    if view_password and edit_password:
-        return user, view_password, edit_password
-    if AUTH_FILE.exists():
-        try:
-            payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
-            file_user = str(payload.get("user", user)).strip() or user
-            file_view = str(payload.get("view_password", payload.get("password", ""))).strip()
-            file_edit = str(payload.get("edit_password", payload.get("password", ""))).strip()
-            if file_view and file_edit:
-                return file_user, file_view, file_edit
-        except Exception:
-            pass
-    view_password = view_password or secrets.token_urlsafe(8)
-    edit_password = edit_password or secrets.token_urlsafe(8)
-    AUTH_FILE.write_text(
-        json.dumps({"user": user, "view_password": view_password, "edit_password": edit_password}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return user, view_password, edit_password
-
-
 WEB_SECRET = load_web_secret()
-WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 
 
 def connect() -> sqlite3.Connection:
@@ -182,14 +155,6 @@ def verify_cookie(value: str) -> tuple[str, str] | None:
 def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
     token = parse_cookies(handler).get(SESSION_COOKIE)
     return verify_cookie(token) if token else None
-
-
-def make_login_cookie(role: str) -> str:
-    expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-    payload = f"{WEB_USER}:{role}:{expiry}"
-    sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token = f"{payload}:{sig}"
-    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
 
 
 def route_path(path: str) -> str:
@@ -787,27 +752,25 @@ loadState();
 """
 
 
-LOGIN_HTML = """<!doctype html>
+UNAUTH_HTML = """<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Вход - Замер КП</title>
+  <title>Замер КП</title>
   <style>
     body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f7fb;color:#102033}
-    .card{max-width:420px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
-    input,button{width:100%;padding:12px;border-radius:8px;border:1px solid #d9e2ef;font:inherit}
-    button{background:#276ef1;color:#fff;font-weight:700;cursor:pointer;border:0}
-    .muted{color:#607086;font-size:13px}
+    .card{max-width:520px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
+    a{display:inline-block;margin-top:12px;padding:12px 16px;border-radius:8px;background:#276ef1;color:#fff;text-decoration:none;font-weight:700}
+    .muted{color:#607086;font-size:13px;line-height:1.5}
   </style>
 </head>
 <body>
-  <form class="card" method="post" action="{{APP_PREFIX}}/login">
-    <h1 style="margin-top:0;">Вход</h1>
-    <p class="muted">Введите пароль просмотра или редактирования.</p>
-    <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
-    <button type="submit">Войти</button>
-  </form>
+  <div class="card">
+    <h1 style="margin-top:0;">Вход через главное приложение</h1>
+    <p class="muted">В `Замере КП` отдельный пароль больше не нужен. Сначала войдите в главное приложение, а затем откройте модуль снова.</p>
+    <a href="/login">Открыть вход</a>
+  </div>
 </body>
 </html>
 """
@@ -835,20 +798,16 @@ class Handler(BaseHTTPRequestHandler):
             if session:
                 redirect(self, APP_PREFIX)
                 return
-            send_html(self, LOGIN_HTML.replace("{{APP_PREFIX}}", APP_PREFIX))
+            send_html(self, UNAUTH_HTML)
             return
 
         if route == "/logout":
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax")
-            self.end_headers()
-            self.wfile.write(f'<!doctype html><meta http-equiv="refresh" content="0; url={APP_PREFIX}/login">'.encode("utf-8"))
+            redirect(self, "/logout")
             return
 
         if route == "/":
             if not session:
-                redirect(self, APP_PREFIX + "/login")
+                send_html(self, UNAUTH_HTML)
                 return
             send_html(self, render_page(role or "view"))
             return
@@ -868,23 +827,6 @@ class Handler(BaseHTTPRequestHandler):
         route = route_path(parsed.path)
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
-
-        if route == "/login":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            password = form.get("password", [""])[0]
-            if password == WEB_VIEW_PASSWORD:
-                redirect(self, APP_PREFIX, make_login_cookie("view"))
-                return
-            if password == WEB_EDIT_PASSWORD:
-                redirect(self, APP_PREFIX, make_login_cookie("edit"))
-                return
-            send_html(
-                self,
-                LOGIN_HTML.replace("{{APP_PREFIX}}", APP_PREFIX)
-                + "<p style='text-align:center;color:#b00020;'>Неверный пароль</p>",
-                HTTPStatus.UNAUTHORIZED,
-            )
-            return
 
         if route == "/api/state":
             if not require_auth(self, need_edit=True):
