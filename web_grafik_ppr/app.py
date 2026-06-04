@@ -448,7 +448,6 @@ def collect_unplanned_starts_across_months(
 ) -> list[tuple[int, int]]:
     if not row_key or not months or not (0 <= month_index < len(months)):
         return []
-    row_key_str = "|".join(row_key)
     row_maps = [build_rows_by_unit(month, table_type) for month in months[: month_index + 1]]
     curr_month = months[month_index]
     curr_month_num = int(curr_month.get("month") or month_index + 1)
@@ -459,7 +458,7 @@ def collect_unplanned_starts_across_months(
         month_idx = date.month - 1
         if month_idx < 0 or month_idx >= len(row_maps):
             return None
-        row_idx = row_maps[month_idx].get(row_key_str)
+        row_idx = row_maps[month_idx].get(row_key)
         rows = months[month_idx].get(table_type, []) or []
         return rows[row_idx] if row_idx is not None and row_idx < len(rows) else None
 
@@ -470,7 +469,7 @@ def collect_unplanned_starts_across_months(
     seen = set()
 
     def add_start(date: dt.date) -> None:
-        key = (date.month, date.day)
+        key = (date.day, date.month)
         if key in seen:
             return
         seen.add(key)
