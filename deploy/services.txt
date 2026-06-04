@@ -1,3 +1,4 @@
 rtps.service
 grafik-ppr.service
 spravochnik.service
+zamer-kp.service

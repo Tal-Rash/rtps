@@ -87,6 +87,7 @@ Services restarted by deploy:
 rtps.service
 grafik-ppr.service
 spravochnik.service
+zamer-kp.service
 ```
 
 The service list lives in:
@@ -94,6 +95,8 @@ The service list lives in:
 ```text
 deploy/services.txt
 ```
+
+Service unit files in `deploy/*.service` are copied to `/etc/systemd/system/` during deploy before the restart step.
 
 nginx is used as the reverse proxy and is reloaded after deployment.
 

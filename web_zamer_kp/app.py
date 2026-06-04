@@ -7,6 +7,8 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
+import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -903,7 +905,10 @@ def main() -> None:
     port = int(os.environ.get("WEB_PORT", "8003"))
     server = ThreadingHTTPServer((host, port), Handler)
     server.daemon_threads = True
-    print(f"Замер КП ready: http://{host}:{port}{APP_PREFIX}")
+    url = f"http://{host}:{port}{APP_PREFIX}"
+    print(f"Замер КП ready: {url}")
+    if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     server.serve_forever()
 
 

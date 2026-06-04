@@ -1,0 +1,16 @@
+[Unit]
+Description=RTPS Замер КП web app
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rtps
+Environment=WEB_HOST=0.0.0.0
+Environment=WEB_PORT=8003
+ExecStart=/usr/bin/python3 /opt/rtps/web_zamer_kp/app.py
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target
