@@ -18,7 +18,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-0.1"
+APP_VERSION = "web-gpp-0.2"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -1813,6 +1813,7 @@ HTML_TEMPLATE = """<!doctype html>
     <div class="topbar">
       <div class="titlebox">
         <h1>График ППР</h1>
+        <div class="sub">Версия {{APP_VERSION}}</div>
       </div>
       <div class="controls">
       <a class="home-link" href="/" onclick="return requestHomeClick(event)">На главную</a>
