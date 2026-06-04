@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.4"
+APP_VERSION = "web-zkp-0.5"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -267,7 +267,7 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
         SELECT y, ser, num, inv
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
-        ORDER BY y DESC, rowid DESC
+        ORDER BY y DESC, rowid
         """
     ).fetchall()
 
