@@ -662,6 +662,22 @@ def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, 
     def count(section: str, category: str, code: str, factor: int) -> float:
         return data["res"][section][category].get(code, 0) / factor
 
+    def merge_notes(saved: str, auto: str) -> str:
+        saved = s(saved).strip()
+        auto = s(auto).strip()
+        if saved and auto:
+            lines = []
+            seen = set()
+            for chunk in (saved, auto):
+                for line in chunk.splitlines():
+                    line = line.strip()
+                    if not line or line in seen:
+                        continue
+                    seen.add(line)
+                    lines.append(line)
+            return "\n".join(lines)
+        return saved or auto
+
     tep_plan = {code: count("plan", "tep", code, factor) for code, factor in TEP_REPORT_FACTORS.items()}
     tep_fact = {code: count("fact", "tep", code, factor) for code, factor in TEP_REPORT_FACTORS.items()}
     agr_plan = {code: count("plan", "agr", code, factor) for code, factor in AGR_REPORT_FACTORS.items()}
@@ -698,7 +714,7 @@ def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, 
         "[ПРИМ_ТЕП_ТР3]": saved_notes.get("tep_ТР3", ""),
         "[ПЛАН_ТЕП_НЕПЛАН]": format_n(p_tep_ub),
         "[ФАКТ_ТЕП_НЕПЛАН]": format_n(f_tep_ub),
-        "[ПРИМ_ТЕП_НЕПЛАН]": saved_notes.get("tep_ТР_unplan", "\n".join(data["notes"]["fact"]["tep"])),
+        "[ПРИМ_ТЕП_НЕПЛАН]": merge_notes(saved_notes.get("tep_ТР_unplan", ""), "\n".join(data["notes"]["fact"]["tep"])),
         "[ПЛАН_АГР_ПАРК]": format_n(data["ap"]),
         "[ФАКТ_АГР_ПАРК]": format_n(data["af"]),
         "[ПРИМ_АГР_ПАРК]": saved_notes.get("agr_park", ""),
@@ -710,7 +726,7 @@ def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, 
         "[ПРИМ_АГР_ТР]": saved_notes.get("agr_ТР", ""),
         "[ПЛАН_АГР_НЕПЛАН]": format_n(p_agr_ub),
         "[ФАКТ_АГР_НЕПЛАН]": format_n(f_agr_ub),
-        "[ПРИМ_АГР_НЕПЛАН]": saved_notes.get("agr_ТР_unplan", "\n".join(data["notes"]["fact"]["agr"])),
+        "[ПРИМ_АГР_НЕПЛАН]": merge_notes(saved_notes.get("agr_ТР_unplan", ""), "\n".join(data["notes"]["fact"]["agr"])),
         "[ПЛАН_СУММА]": format_n(sum_p),
         "[ФАКТ_СУММА]": format_n(sum_f),
     }
@@ -719,6 +735,22 @@ def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, 
 def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str]) -> dict:
     def count(section: str, category: str, code: str, factor: int) -> str:
         return format_n(data["res"][section][category].get(code, 0) / factor)
+
+    def merge_notes(saved: str, auto: str) -> str:
+        saved = s(saved).strip()
+        auto = s(auto).strip()
+        if saved and auto:
+            lines = []
+            seen = set()
+            for chunk in (saved, auto):
+                for line in chunk.splitlines():
+                    line = line.strip()
+                    if not line or line in seen:
+                        continue
+                    seen.add(line)
+                    lines.append(line)
+            return "\n".join(lines)
+        return saved or auto
 
     tep_notes = "\n".join(data["notes"]["fact"]["tep"])
     agr_notes = "\n".join(data["notes"]["fact"]["agr"])
@@ -729,11 +761,11 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
         {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
         {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
         {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
-        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": saved_notes.get("tep_ТР_unplan", tep_notes)},
+        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": merge_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
         {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
         {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
         {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
-        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": saved_notes.get("agr_ТР_unplan", agr_notes)},
+        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": merge_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
     ]
     return {"month": month_name, "year": data["y"], "rows": rows}
 
@@ -1144,7 +1176,7 @@ EDIT_TOOLBAR = """
       <div class="toolbar">
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
         <button onclick="openReport()">Отчет</button>
-        <button onclick="saveState()">Сохранить</button>
+        <button id="saveButton" onclick="saveState()">Сохранить</button>
         <button onclick="downloadJson()">Экспорт JSON</button>
         <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
@@ -1340,6 +1372,8 @@ HTML_TEMPLATE = """<!doctype html>
     .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
     .toolbar input,.toolbar button,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
     .toolbar button { font-weight:400; cursor:pointer; background:linear-gradient(180deg,#fff,#f3f7ff); }
+    .toolbar button.save-ready { background:linear-gradient(180deg,#f0fff2,#d9f4dd); border-color:#7dc68a; color:#12582a; }
+    .toolbar button.save-ready:hover { background:linear-gradient(180deg,#e7fced,#cfeed4); }
     .home-link { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; color:#001b3d; font:inherit; font-weight:400; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
     .nav { display:flex; gap:10px; flex-wrap:wrap; padding:0; margin:0; background:transparent; border:0; box-shadow:none; }
     .nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:10px 14px; font-weight:400; cursor:pointer; box-shadow:0 4px 12px rgba(16,32,51,.06); }
@@ -1874,7 +1908,12 @@ function closeErrorModal(){
   modal.classList.remove('visible');
   modal.setAttribute('aria-hidden', 'true');
 }
-function markDirty(v=true){ dirty=v; }
+function markDirty(v=true){ dirty=v; updateSaveButtonState(); }
+function updateSaveButtonState(){
+  const btn = document.getElementById('saveButton');
+  if (!btn) return;
+  btn.classList.toggle('save-ready', !!dirty && !!CAN_EDIT);
+}
 function ensureLeaveGuard(){
   if (!CAN_EDIT || leaveGuardInstalled) return;
   history.pushState({leaveGuard:true}, '', location.href);
@@ -2202,6 +2241,7 @@ function renderSafe(){
   ensureLeaveGuard();
   document.title = `График ППР web ${BOOT_VERSION}`;
   bindNav();
+  updateSaveButtonState();
   const content = document.getElementById('content');
   if (!content) return;
   content.innerHTML = renderMonths();
