@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.5"
+APP_VERSION = "web-zkp-0.6"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -437,13 +437,11 @@ HTML = """<!doctype html>
     td.fixed { background:#f7fafc; font-weight:600; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
     td input.left { text-align:left; }
-    td.ok { background:var(--ok); }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
     .legend { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; color:var(--muted); font-size:12px; }
     .dot { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
-    .dot.ok { background:var(--ok); border:1px solid #bfe0c9; }
     .dot.warn { background:var(--warn); border:1px solid #f0d97d; }
     .dot.bad { background:var(--bad); border:1px solid #e0a6a6; }
     @media (max-width: 900px) {
@@ -512,7 +510,6 @@ HTML = """<!doctype html>
         <tbody id="inputBody"></tbody>
       </table>
       <div class="legend">
-        <span><span class="dot ok"></span>в пределах нормы</span>
         <span><span class="dot warn"></span>желтая зона</span>
         <span><span class="dot bad"></span>красная зона</span>
       </div>
@@ -584,7 +581,7 @@ function measurementClass(col, value){
   const less = String(item.condition || '').toLowerCase().includes('меньше');
   if (red !== null && (less ? val <= red : val >= red)) return 'bad';
   if (yellow !== null && (less ? val <= yellow : val >= yellow)) return 'warn';
-  return 'ok';
+  return '';
 }
 function renderLocoOptions(){
   const select = document.getElementById('locomotive');
