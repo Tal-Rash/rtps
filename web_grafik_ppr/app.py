@@ -751,6 +751,8 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
                     lines.append(line)
             return "\n".join(lines)
         return saved or auto
+    def split_notes(saved: str, auto: str) -> dict[str, str]:
+        return {"note": s(saved).strip(), "acts": s(auto).strip()}
 
     tep_notes = "\n".join(data["notes"]["fact"]["tep"])
     agr_notes = "\n".join(data["notes"]["fact"]["agr"])
@@ -761,11 +763,11 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
         {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
         {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
         {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
-        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": merge_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
+        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), **split_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
         {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
         {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
         {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
-        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": merge_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
+        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), **split_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
     ]
     return {"month": month_name, "year": data["y"], "rows": rows}
 
@@ -1574,6 +1576,13 @@ HTML_TEMPLATE = """<!doctype html>
       line-height:1;
       padding:0 3px;
       box-sizing:border-box;
+    }
+    .report-act-hint {
+      margin-top:4px;
+      font-size:12px;
+      line-height:1.25;
+      color:#48607c;
+      white-space:pre-wrap;
     }
     .report-loading { padding:10px; text-align:center; color:var(--muted); font-size:16px; }
     .section-modal-body { padding:8px 14px; overflow:auto; }
@@ -2575,8 +2584,8 @@ function renderActs(){
     return `<tr>
       <td>${esc(act)}</td>
       <td style="text-align:center; font-size:16px;"><button class="act-start" style="width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center;" ${CAN_EDIT ? '' : 'disabled'} onclick="startAct('${month}', '${act}')">Пуск</button></td>
-      <td class="center"><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.is_done', this.checked)"></td>
-      <td class="center"><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setPath('acts.${month}.${act}.sap_order_done', this.checked)"></td>
+      <td class="center"><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setActInfoFlag('${month}', '${act}', 'is_done', this.checked)"></td>
+      <td class="center"><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setActInfoFlag('${month}', '${act}', 'sap_order_done', this.checked)"></td>
     </tr>`;
   }).join('');
   return `
@@ -2598,6 +2607,18 @@ function renderActs(){
       </table>
     </div>
   `;
+}
+function ensureActStateBucket(month, act){
+  if (!appState.acts) appState.acts = {};
+  if (!appState.acts[month]) appState.acts[month] = {};
+  if (!appState.acts[month][act]) appState.acts[month][act] = { is_done: false, sap_order_done: false };
+  return appState.acts[month][act];
+}
+function setActInfoFlag(month, act, key, value){
+  if (!CAN_EDIT) return;
+  const bucket = ensureActStateBucket(month, act);
+  bucket[key] = !!value;
+  markDirty(true);
 }
 function tu28Month(){
   return appState.months[ui.tu28MonthIndex] || currentMonth();
@@ -2873,7 +2894,7 @@ async function saveActsAndClose(){
 }
 async function startAct(month, act){
   if (!CAN_EDIT) return;
-  setPath(`acts.${month}.${act}.is_done`, true);
+  setActInfoFlag(month, act, 'is_done', true);
   await saveState();
   const url = `{{APP_PREFIX}}/api/act-export?month=${encodeURIComponent(month)}&act=${encodeURIComponent(act)}&year=${encodeURIComponent(appState.year)}`;
   const a = document.createElement('a');
@@ -2944,7 +2965,10 @@ function renderReportBody(){
         <td class="col-report-name">${esc(row.label)}</td>
         <td class="num-cell col-report-num">${esc(row.plan)}</td>
         <td class="num-cell col-report-num">${esc(row.fact)}</td>
-        <td class="col-report-note"><textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
+        <td class="col-report-note">
+          <textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea>
+          ${row.acts ? `<div class="report-act-hint">${esc(row.acts)}</div>` : ''}
+        </td>
       </tr>
     `;
   }).join('');
