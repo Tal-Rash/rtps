@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.3"
+APP_VERSION = "web-zkp-0.4"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -458,7 +458,7 @@ HTML = """<!doctype html>
     <div class="top">
       <div>
         <h1>Замер КП</h1>
-        <div class="muted">Первый шаг веб-версии по локальной логике из `ТУ 17.py`</div>
+        <div class="muted">Версия {{APP_VERSION}}</div>
       </div>
       <div class="actions">
         <a href="/">На главную</a>
@@ -591,7 +591,7 @@ function renderLocoOptions(){
   const items = state?.locomotives || [];
   select.innerHTML = items.length
     ? ['<option value="">Выберите локомотив</option>']
-        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.label || x.number)}</option>`))
+        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
         .join('')
     : '<option value="">Нет локомотивов в справочнике</option>';
   select.disabled = !items.length;
