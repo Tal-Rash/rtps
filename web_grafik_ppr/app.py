@@ -425,17 +425,91 @@ def build_rows_by_unit(month_data: dict, table_type: str) -> dict[tuple[str, str
     return rows_by_unit
 
 
+def row_cell_is_numeric(row: dict | None, day: int) -> bool:
+    if not row or not row.get("cells"):
+        return False
+    idx = day + 3
+    raw = s(row["cells"][idx]) if idx < len(row["cells"]) else ""
+    if not raw.strip():
+        return False
+    try:
+        float(raw.replace(",", "."))
+    except ValueError:
+        return False
+    return True
+
+
+def collect_unplanned_starts_across_months(
+    year: int,
+    months: list[dict],
+    month_index: int,
+    table_type: str,
+    row_key: tuple[str, str],
+) -> list[tuple[int, int]]:
+    if not row_key or not months or not (0 <= month_index < len(months)):
+        return []
+    row_key_str = "|".join(row_key)
+    row_maps = [build_rows_by_unit(month, table_type) for month in months[: month_index + 1]]
+    curr_month = months[month_index]
+    curr_month_num = int(curr_month.get("month") or month_index + 1)
+    prev_month_num = int(months[month_index - 1].get("month") or month_index) if month_index > 0 else None
+    window_start = dt.date(year, prev_month_num, 26) if prev_month_num else dt.date(year, curr_month_num, 1)
+    window_end = dt.date(year, curr_month_num, MONTH_DAY_LIMIT_FOR_REPORT)
+    runs: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    current_start: tuple[int, int] | None = None
+    current_end: tuple[int, int] | None = None
+    last_is_num = False
+
+    for mi, month in enumerate(months[: month_index + 1]):
+        month_num = int(month.get("month") or mi + 1)
+        row_map = row_maps[mi] if mi < len(row_maps) else {}
+        row_idx = row_map.get(row_key_str)
+        rows = month.get(table_type, []) or []
+        row = rows[row_idx] if row_idx is not None and row_idx < len(rows) else None
+        day_limit = MONTH_DAY_LIMIT_FOR_REPORT if mi == month_index else int(month.get("days") or 0)
+        for day in range(1, day_limit + 1):
+            is_num = row_cell_is_numeric(row, day)
+            if is_num and not last_is_num:
+                current_start = (month_num, day)
+            if is_num:
+                current_end = (month_num, day)
+            if not is_num and last_is_num and current_start and current_end:
+                runs.append((current_start, current_end))
+                current_start = None
+                current_end = None
+            last_is_num = is_num
+        if not row:
+            last_is_num = False
+    if last_is_num and current_start and current_end:
+        runs.append((current_start, current_end))
+
+    starts: list[tuple[int, int]] = []
+    for (start_month, start_day), (end_month, end_day) in runs:
+        try:
+            start_date = dt.date(year, start_month, start_day)
+            end_date = dt.date(year, end_month, end_day)
+        except ValueError:
+            continue
+        if end_date >= window_start and start_date <= window_end:
+            starts.append((start_month, start_day))
+    return starts
+
+
 def collect_row_notes(row: dict, unplanned_starts: list[tuple[int, int]], number: str) -> list[str]:
     row_notes: list[str] = []
     cells = row.get("cells") or []
     note = s(cells[-1]).strip() if cells else ""
     has_unplanned = bool(unplanned_starts)
     is_auto_act_note = note.startswith("Акт № ") and "-" in note
-    if note and (has_unplanned or not is_auto_act_note):
+    if note and not is_auto_act_note:
         row_notes.append(note)
-    if not row_notes and has_unplanned:
+    if has_unplanned:
         for day, month in unplanned_starts:
-            row_notes.append(f"Акт № {day:02d}-{month:02d}-{number}")
+            auto_note = f"Акт № {day:02d}-{month:02d}-{number}"
+            if auto_note not in row_notes:
+                row_notes.append(auto_note)
+    if not row_notes and note and is_auto_act_note:
+        row_notes.append(note)
     return row_notes
 
 
@@ -459,7 +533,18 @@ def process_report_day(acc, row: dict, day: int, month_num: int, category: str, 
         state["last_is_num"] = False
 
 
-def process_report_row(acc, table_type: str, curr_row: dict, prev_row: dict | None, curr_m: int, prev_m: int | None, fund_days: int) -> None:
+def process_report_row(
+    acc,
+    table_type: str,
+    curr_row: dict,
+    prev_row: dict | None,
+    curr_m: int,
+    prev_m: int | None,
+    fund_days: int,
+    year: int,
+    months: list[dict],
+    month_index: int,
+) -> None:
     if curr_row.get("excluded"):
         return
     cells = curr_row.get("cells") or []
@@ -475,7 +560,12 @@ def process_report_row(acc, table_type: str, curr_row: dict, prev_row: dict | No
             process_report_day(acc, prev_row, day, prev_m, category, table_type, state)
     for day in range(1, MONTH_DAY_LIMIT_FOR_REPORT + 1):
         process_report_day(acc, curr_row, day, curr_m, category, table_type, state)
-    for note in collect_row_notes(curr_row, state["unplanned_starts"], number):
+    row_key = report_unit_key(curr_row)
+    if table_type == "fact" and row_key:
+        auto_starts = collect_unplanned_starts_across_months(year, months, month_index, table_type, row_key)
+    else:
+        auto_starts = state["unplanned_starts"]
+    for note in collect_row_notes(curr_row, auto_starts, number):
         if note not in acc.notes[table_type][category]:
             acc.notes[table_type][category].append(note)
 
@@ -536,7 +626,7 @@ def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
             if row.get("excluded") and key:
                 acc.excluded[table_type].add(key)
             prev_row = prev_month.get(table_type, [])[prev_rows[key]] if prev_month and key and key in prev_rows else None
-            process_report_row(acc, table_type, row, prev_row, curr_m, prev_m, fund_days)
+            process_report_row(acc, table_type, row, prev_row, curr_m, prev_m, fund_days, int(state.get("year") or dt.date.today().year), months, m_idx)
 
     fact_tep_ok, fact_agr_ok = calculate_ok_units(state, int(state.get("year") or dt.date.today().year), month_name, acc, period_hours)
 
@@ -2323,52 +2413,100 @@ function buildRowsByUnit(monthData, tableType){
   });
   return rowsByUnit;
 }
-function collectActNumbersFromRow(currRow, prevRow, prevMonthNum, currMonthNum, prevDays, currDays){
+function rowCellIsNumeric(row, day){
+  if (!row || !row.cells) return false;
+  const idx = day + 3;
+  const raw = String(row.cells[idx] ?? '').trim();
+  if (!raw) return false;
+  const numeric = Number(raw.replace(',', '.'));
+  return Number.isFinite(numeric);
+}
+function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey){
+  const months = appState.months || [];
+  if (!rowKey || !months.length || monthIndex < 0 || monthIndex >= months.length) return [];
+  const year = Number(appState.year) || new Date().getFullYear();
+  const rowKeyStr = rowKey.join('|');
+  const rowMaps = months.slice(0, monthIndex + 1).map((month) => buildRowsByUnit(month, tableType));
+  const currMonth = months[monthIndex];
+  const currMonthNum = Number(currMonth.month || monthIndex + 1);
+  const prevMonthNum = monthIndex > 0 ? Number(months[monthIndex - 1].month || monthIndex) : null;
+  const windowStart = prevMonthNum ? new Date(year, prevMonthNum - 1, 26) : new Date(year, currMonthNum - 1, 1);
+  const windowEnd = new Date(year, currMonthNum - 1, 25);
+  const runs = [];
+  let currentStart = null;
+  let currentEnd = null;
+  let lastIsNum = false;
+
+  months.slice(0, monthIndex + 1).forEach((month, mi) => {
+    const monthNum = Number(month.month || mi + 1);
+    const rowMap = rowMaps[mi] || {};
+    const rowIdx = rowMap[rowKeyStr];
+    const rows = month[tableType] || [];
+    const row = Number.isInteger(rowIdx) && rowIdx < rows.length ? rows[rowIdx] : null;
+    const dayLimit = mi === monthIndex ? 25 : Number(month.days || 0);
+    for (let day = 1; day <= dayLimit; day += 1) {
+      const isNum = rowCellIsNumeric(row, day);
+      if (isNum && !lastIsNum) currentStart = [monthNum, day];
+      if (isNum) currentEnd = [monthNum, day];
+      if (!isNum && lastIsNum && currentStart && currentEnd) {
+        runs.push([currentStart, currentEnd]);
+        currentStart = null;
+        currentEnd = null;
+      }
+      lastIsNum = isNum;
+    }
+    if (!row) lastIsNum = false;
+  });
+  if (lastIsNum && currentStart && currentEnd) runs.push([currentStart, currentEnd]);
+
+  return runs
+    .filter(([[startMonth, startDay], [endMonth, endDay]]) => {
+      const startDate = new Date(year, startMonth - 1, startDay);
+      const endDate = new Date(year, endMonth - 1, endDay);
+      return endDate >= windowStart && startDate <= windowEnd;
+    })
+    .map(([[startMonth, startDay]]) => `Акт № ${String(startDay).padStart(2, '0')}-${String(startMonth).padStart(2, '0')}-${String(rowKey[1] || '').trim().toUpperCase()}`);
+}
+function collectActNumbersFromRow(currRow, monthIndex, tableType, rowKey){
   const cells = currRow && currRow.cells ? currRow.cells : [];
-  const number = String(cells[2] ?? '').trim().toUpperCase();
-  if (!number) return [];
   const note = String(cells[cells.length - 1] ?? '').trim();
-  const candidates = [];
+  const candidates = collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey);
   const seen = new Set();
+  const result = [];
   const add = (value) => {
     const clean = String(value || '').replace(/^Акт №\\s*/i, '').trim();
     if (!clean || seen.has(clean)) return;
     seen.add(clean);
-    candidates.push(clean);
+    result.push(clean);
   };
-  if (/^Акт №\\s*\\d{2}-\\d{2}-/i.test(note)) add(note);
-  const state = { lastIsNum: false, starts: [] };
-  const scanDay = (row, day, monthNum) => {
-    if (!row || !row.cells) {
-      state.lastIsNum = false;
-      return;
-    }
-    const idx = day + 3;
-    const raw = String(row.cells[idx] ?? '').trim();
-    if (!raw) {
-      state.lastIsNum = false;
-      return;
-    }
-    const numeric = Number(raw.replace(',', '.'));
-    if (Number.isFinite(numeric)) {
-      if (!state.lastIsNum) state.starts.push([day, monthNum]);
-      state.lastIsNum = true;
-    } else {
-      state.lastIsNum = false;
-    }
+  candidates.forEach(add);
+  if (!result.length && /^Акт №\\s*\\d{2}-\\d{2}-/i.test(note)) add(note);
+  return result;
+}
+function parseActSortKey(act){
+  const clean = String(act || '').replace(/^Акт №\\s*/i, '').trim();
+  const parts = clean.split('-').map((x) => x.trim());
+  if (parts.length < 3) return { month: 99, day: 99, tail: clean };
+  const day = Number(parts[0]);
+  const month = Number(parts[1]);
+  return {
+    month: Number.isFinite(month) ? month : 99,
+    day: Number.isFinite(day) ? day : 99,
+    tail: parts.slice(2).join('-'),
+    raw: clean,
   };
-  if (prevRow && prevMonthNum && prevDays) {
-    for (let day = 26; day <= prevDays; day++) scanDay(prevRow, day, prevMonthNum);
-  }
-  for (let day = 1; day <= Math.min(25, currDays || 25); day++) scanDay(currRow, day, currMonthNum);
-  state.starts.forEach(([day, monthNum]) => add(`Акт № ${String(day).padStart(2, '0')}-${String(monthNum).padStart(2, '0')}-${number}`));
-  return candidates;
+}
+function compareActsByDate(a, b){
+  const aa = parseActSortKey(a);
+  const bb = parseActSortKey(b);
+  if (aa.month !== bb.month) return aa.month - bb.month;
+  if (aa.day !== bb.day) return aa.day - bb.day;
+  if (aa.tail !== bb.tail) return aa.tail.localeCompare(bb.tail, 'ru');
+  return aa.raw.localeCompare(bb.raw, 'ru');
 }
 function collectActRowsForMonth(monthIndex){
   const month = appState.months[monthIndex];
   if (!month) return [];
-  const prevMonth = monthIndex > 0 ? appState.months[monthIndex - 1] : null;
-  const prevRowsByUnit = prevMonth ? buildRowsByUnit(prevMonth, 'fact') : {};
   const savedActs = (appState.acts && appState.acts[month.name]) || {};
   const rows = [];
   const seen = new Set();
@@ -2376,8 +2514,7 @@ function collectActRowsForMonth(monthIndex){
     if (!row || row.excluded) return;
     const key = reportUnitKey(row);
     if (!key) return;
-    const prevRow = prevMonth && prevRowsByUnit[key.join('|')] !== undefined ? prevMonth.fact[prevRowsByUnit[key.join('|')]] : null;
-    const acts = collectActNumbersFromRow(row, prevRow, prevMonth ? prevMonth.month : null, month.month, prevMonth ? prevMonth.days : 0, month.days);
+    const acts = collectActNumbersFromRow(row, monthIndex, 'fact', key);
     acts.forEach((act) => {
       if (seen.has(act)) return;
       seen.add(act);
@@ -2389,7 +2526,7 @@ function collectActRowsForMonth(monthIndex){
     seen.add(act);
     rows.push({ act, saved: savedActs[act] || { is_done: false, sap_order_done: false }, rowIndex: null });
   });
-  return rows.sort((a, b) => a.act.localeCompare(b.act, 'ru'));
+  return rows.sort((a, b) => compareActsByDate(a.act, b.act));
 }
 function renderActs(){
   const month = currentMonth().name;
