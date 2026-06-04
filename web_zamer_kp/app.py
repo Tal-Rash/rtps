@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 SHARED_DATA_DIR = ROOT.parent / "data"
+LEGACY_WEB_SECRET_FILE = ROOT / "data" / "web_secret.txt"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
@@ -70,12 +71,26 @@ def load_web_secret() -> str:
                 return secret
         except Exception:
             pass
+    if LEGACY_WEB_SECRET_FILE.exists():
+        try:
+            secret = LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+            if secret:
+                WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
+                return secret
+        except Exception:
+            pass
     secret = secrets.token_urlsafe(32)
     WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
     return secret
 
 
 WEB_SECRET = load_web_secret()
+LEGACY_WEB_SECRET = ""
+try:
+    if LEGACY_WEB_SECRET_FILE.exists():
+        LEGACY_WEB_SECRET = LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+except Exception:
+    LEGACY_WEB_SECRET = ""
 
 
 def connect() -> sqlite3.Connection:
@@ -141,8 +156,16 @@ def verify_cookie(value: str) -> tuple[str, str] | None:
         try:
             username, role, expiry_text, sig = value.rsplit(sep, 3)
             payload = f"{username}{sep}{role}{sep}{expiry_text}"
-            expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(expected, sig):
+            secrets_to_try = [WEB_SECRET]
+            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+                secrets_to_try.append(LEGACY_WEB_SECRET)
+            matched = False
+            for secret in secrets_to_try:
+                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(expected, sig):
+                    matched = True
+                    break
+            if not matched:
                 continue
             if float(expiry_text) < dt.datetime.now().timestamp():
                 return None
