@@ -2613,55 +2613,6 @@ function collectActRowsForMonth(monthIndex){
   });
   return rows.sort((a, b) => compareActsByDate(a.act, b.act));
 }
-function mergeReportNoteText(saved, autoLines){
-  const lines = [];
-  const seen = new Set();
-  const add = (value) => {
-    String(value || '').split(/\r?\n/).forEach((line) => {
-      const clean = line.trim();
-      if (!clean || seen.has(clean)) return;
-      seen.add(clean);
-      lines.push(clean);
-    });
-  };
-  add(saved);
-  (autoLines || []).forEach(add);
-  return lines.join('\n');
-}
-function collectReportActNotesForCategory(monthIndex, category){
-  const month = appState.months[monthIndex];
-  if (!month) return [];
-  const notes = [];
-  const seen = new Set();
-  (month.fact || []).forEach((row) => {
-    if (!row || row.excluded) return;
-    const key = reportUnitKey(row);
-    if (!key) return;
-    const series = String(key[0] || '').trim().toUpperCase();
-    const rowCategory = series.includes('ПЭ') ? 'agr' : 'tep';
-    if (rowCategory !== category) return;
-    collectActNumbersFromRow(row, monthIndex, 'fact', key).forEach((act) => {
-      const note = `Акт № ${act}`;
-      if (seen.has(note)) return;
-      seen.add(note);
-      notes.push(note);
-    });
-  });
-  return notes;
-}
-function applyLocalReportActNotes(){
-  if (!reportDialogState) return;
-  const monthIndex = (appState.months || []).findIndex((m) => m && m.name === reportDialogState.month);
-  if (monthIndex < 0) return;
-  const notesByKey = {
-    'tep_ТР_unplan': collectReportActNotesForCategory(monthIndex, 'tep'),
-    'agr_ТР_unplan': collectReportActNotesForCategory(monthIndex, 'agr'),
-  };
-  reportDialogState.rows = (reportDialogState.rows || []).map((row) => {
-    if (!row || !notesByKey[row.key]) return row;
-    return {...row, note: mergeReportNoteText(row.note || '', notesByKey[row.key])};
-  });
-}
 function renderActs(){
   const month = currentMonth().name;
   const rows = collectActRowsForMonth(ui.monthIndex).map(({ act, saved }) => {
@@ -3025,7 +2976,6 @@ async function refreshReportDialog(){
   const res = await fetch(`{{APP_PREFIX}}/api/report-preview?month=${encodeURIComponent(month)}&year=${encodeURIComponent(reportDialogState.year)}&_=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) return;
   reportDialogState = await res.json();
-  applyLocalReportActNotes();
   renderReportBody();
 }
 function renderReportBody(){
@@ -3090,7 +3040,6 @@ async function openReport(){
     return;
   }
   reportDialogState = await res.json();
-  applyLocalReportActNotes();
   renderReportBody();
 }
 async function saveReportAndClose(){
