@@ -147,11 +147,8 @@ APP_PREFIX = "/grafik-ppr"
 
 def ensure_database() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if DB_FILE.exists():
-        return
-    if SOURCE_DB.exists():
+    if (not DB_FILE.exists() or DB_FILE.stat().st_size == 0) and SOURCE_DB.exists():
         shutil.copy2(SOURCE_DB, DB_FILE)
-        return
     with sqlite3.connect(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS repairs (y INT, m TEXT, t TEXT, r INT, c INT, v TEXT, PRIMARY KEY(y,m,t,r,c))")
@@ -1924,9 +1921,46 @@ const CAN_EDIT = {{CAN_EDIT}};
 const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
+const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const sections = [{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
+
+function daysInMonth(year, month){
+  return new Date(year, month, 0).getDate();
+}
+function defaultTableRows(year, month, rows = 14){
+  const days = daysInMonth(year, month);
+  return Array.from({length: rows}, (_, idx) => ({
+    excluded: false,
+    cells: [String(idx + 1), '', '', '', ...Array.from({length: days}, () => ''), ''],
+  }));
+}
+function ensureAppStateShape(){
+  if (!appState || typeof appState !== 'object') appState = {};
+  const year = Number(appState.year) || new Date().getFullYear();
+  appState.year = year;
+  if (!appState.system_dates || typeof appState.system_dates !== 'object') {
+    appState.system_dates = { transfer: [], holiday: [] };
+  }
+  if (!appState.norms || typeof appState.norms !== 'object') appState.norms = {};
+  if (!appState.acts || typeof appState.acts !== 'object') appState.acts = {};
+  if (!appState.notes || typeof appState.notes !== 'object') appState.notes = {};
+  const sourceMonths = Array.isArray(appState.months) ? appState.months : [];
+  appState.months = MONTHS_RU.map((name, idx) => {
+    const monthNum = idx + 1;
+    const days = daysInMonth(year, monthNum);
+    const existing = sourceMonths[idx] && typeof sourceMonths[idx] === 'object' ? sourceMonths[idx] : {};
+    return {
+      name: existing.name || name,
+      month: Number(existing.month) || monthNum,
+      days: Number(existing.days) || days,
+      plan: Array.isArray(existing.plan) ? existing.plan : defaultTableRows(year, monthNum),
+      fact: Array.isArray(existing.fact) ? existing.fact : defaultTableRows(year, monthNum),
+    };
+  });
+}
+ensureAppStateShape();
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function normalizeRepairCode(v){
@@ -3163,12 +3197,12 @@ async function importJson(event){
   const payload = JSON.parse(await f.text());
   const res = await fetch('{{APP_PREFIX}}/api/import', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(payload) });
   if (!res.ok) { alert('Импорт не удался'); return; }
-  appState = await res.json(); markDirty(false); render();
+  appState = await res.json(); ensureAppStateShape(); markDirty(false); render();
 }
 async function loadYear(year){
   const res = await fetch(`{{APP_PREFIX}}/api/state?year=${encodeURIComponent(year)}`);
   if (!res.ok) { alert('Не удалось загрузить год'); return; }
-  appState = await res.json(); markDirty(false); render();
+  appState = await res.json(); ensureAppStateShape(); markDirty(false); render();
 }
 async function loadYearFromInput(){
   const year = parseInt(document.getElementById('yearInput').value, 10);
