@@ -1349,6 +1349,16 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
     }
     .modal-actions button.primary { background:#dcedc8; }
+    .leave-window {
+      width:min(460px, calc(100vw - 36px));
+    }
+    .leave-body {
+      padding:18px 18px 8px;
+      text-align:center;
+      color:var(--text);
+      font-size:16px;
+      line-height:1.45;
+    }
     .report-table { width:max-content; min-width:0; table-layout:auto; border-collapse:separate; border-spacing:0; }
     .report-table th, .report-table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:2px 4px; vertical-align:middle; background:#fff; }
     .report-table th { position:sticky; top:0; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:16px; padding:4px 6px; text-align:center; white-space:nowrap; }
@@ -1636,13 +1646,25 @@ HTML_TEMPLATE = """<!doctype html>
         <h1>График ППР</h1>
       </div>
       <div class="controls">
-      <a class="home-link" href="/">На главную</a>
+      <a class="home-link" href="/" onclick="return requestHomeClick(event)">На главную</a>
       <div class="nav" id="sectionNav"></div>
       {{TOOLBAR}}
       </div>
     </div>
-    <div class="panel">
+  <div class="panel">
       <div id="content"></div>
+    </div>
+  </div>
+  <div id="leaveModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-window leave-window" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Сохранить изменения?</div>
+      </div>
+      <div id="leaveMessage" class="leave-body">Есть несохранённые изменения.</div>
+      <div class="section-modal-actions">
+        <button onclick="resolveLeaveChoice(true)">Да</button>
+        <button class="primary" onclick="resolveLeaveChoice(false)">Нет</button>
+      </div>
     </div>
   </div>
   <div id="reportModal" class="modal-overlay" aria-hidden="true" onclick="closeReportModal()">
@@ -1734,6 +1756,8 @@ const TEM_NORM_ROWS = {{TEM_NORM_ROWS}};
 const AGR_NORM_ROWS = {{AGR_NORM_ROWS}};
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
 const sections = [{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
+let leaveGuardInstalled = false;
+let pendingLeaveAction = null;
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function normalizeRepairCode(v){
@@ -1761,6 +1785,45 @@ function closeErrorModal(){
   modal.setAttribute('aria-hidden', 'true');
 }
 function markDirty(v=true){ dirty=v; }
+function ensureLeaveGuard(){
+  if (!CAN_EDIT || leaveGuardInstalled) return;
+  history.pushState({leaveGuard:true}, '', location.href);
+  leaveGuardInstalled = true;
+}
+function openLeaveModal(message, action){
+  pendingLeaveAction = action;
+  const modal = document.getElementById('leaveModal');
+  const body = document.getElementById('leaveMessage');
+  if (body) body.textContent = message || 'Есть несохранённые изменения.';
+  if (!modal) return;
+  modal.classList.add('visible');
+  modal.setAttribute('aria-hidden', 'false');
+}
+function closeLeaveModal(){
+  const modal = document.getElementById('leaveModal');
+  if (!modal) return;
+  modal.classList.remove('visible');
+  modal.setAttribute('aria-hidden', 'true');
+}
+async function resolveLeaveChoice(shouldSave){
+  const action = pendingLeaveAction;
+  if (!action) return;
+  if (shouldSave && dirty && CAN_EDIT) {
+    await saveState({refreshReport:false});
+    if (dirty) return;
+  }
+  pendingLeaveAction = null;
+  closeLeaveModal();
+  await action();
+}
+function promptLeave(message, action){
+  if (!dirty || !CAN_EDIT) {
+    action();
+    return false;
+  }
+  openLeaveModal(message, action);
+  return false;
+}
 function setLastCell(el){
   if (!el || !el.dataset) return;
   ui.lastCell = {
@@ -2046,6 +2109,7 @@ function render(){
 }
 function renderSafe(){
   ensureYearOptions();
+  ensureLeaveGuard();
   document.title = `График ППР web ${BOOT_VERSION}`;
   bindNav();
   const content = document.getElementById('content');
@@ -2242,11 +2306,95 @@ function renderNorms(){
     </div>
   `;
 }
+function reportUnitKey(row){
+  const cells = row && row.cells ? row.cells : [];
+  const series = String(cells[1] ?? '').trim().toUpperCase();
+  const number = String(cells[2] ?? '').trim().toUpperCase();
+  if (!series || !number) return null;
+  return [series, number];
+}
+function buildRowsByUnit(monthData, tableType){
+  const rowsByUnit = {};
+  if (!monthData || !monthData[tableType]) return rowsByUnit;
+  monthData[tableType].forEach((row, idx) => {
+    if (!row || row.excluded) return;
+    const key = reportUnitKey(row);
+    if (key) rowsByUnit[key.join('|')] = idx;
+  });
+  return rowsByUnit;
+}
+function collectActNumbersFromRow(currRow, prevRow, prevMonthNum, currMonthNum, prevDays, currDays){
+  const cells = currRow && currRow.cells ? currRow.cells : [];
+  const number = String(cells[2] ?? '').trim().toUpperCase();
+  if (!number) return [];
+  const note = String(cells[cells.length - 1] ?? '').trim();
+  const candidates = [];
+  const seen = new Set();
+  const add = (value) => {
+    const clean = String(value || '').replace(/^Акт №\\s*/i, '').trim();
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    candidates.push(clean);
+  };
+  if (/^Акт №\\s*\\d{2}-\\d{2}-/i.test(note)) add(note);
+  const state = { lastIsNum: false, starts: [] };
+  const scanDay = (row, day, monthNum) => {
+    if (!row || !row.cells) {
+      state.lastIsNum = false;
+      return;
+    }
+    const idx = day + 3;
+    const raw = String(row.cells[idx] ?? '').trim();
+    if (!raw) {
+      state.lastIsNum = false;
+      return;
+    }
+    const numeric = Number(raw.replace(',', '.'));
+    if (Number.isFinite(numeric)) {
+      if (!state.lastIsNum) state.starts.push([day, monthNum]);
+      state.lastIsNum = true;
+    } else {
+      state.lastIsNum = false;
+    }
+  };
+  if (prevRow && prevMonthNum && prevDays) {
+    for (let day = 26; day <= prevDays; day++) scanDay(prevRow, day, prevMonthNum);
+  }
+  for (let day = 1; day <= Math.min(25, currDays || 25); day++) scanDay(currRow, day, currMonthNum);
+  state.starts.forEach(([day, monthNum]) => add(`Акт № ${String(day).padStart(2, '0')}-${String(monthNum).padStart(2, '0')}-${number}`));
+  return candidates;
+}
+function collectActRowsForMonth(monthIndex){
+  const month = appState.months[monthIndex];
+  if (!month) return [];
+  const prevMonth = monthIndex > 0 ? appState.months[monthIndex - 1] : null;
+  const prevRowsByUnit = prevMonth ? buildRowsByUnit(prevMonth, 'fact') : {};
+  const savedActs = (appState.acts && appState.acts[month.name]) || {};
+  const rows = [];
+  const seen = new Set();
+  (month.fact || []).forEach((row, rowIndex) => {
+    if (!row || row.excluded) return;
+    const key = reportUnitKey(row);
+    if (!key) return;
+    const prevRow = prevMonth && prevRowsByUnit[key.join('|')] !== undefined ? prevMonth.fact[prevRowsByUnit[key.join('|')]] : null;
+    const acts = collectActNumbersFromRow(row, prevRow, prevMonth ? prevMonth.month : null, month.month, prevMonth ? prevMonth.days : 0, month.days);
+    acts.forEach((act) => {
+      if (seen.has(act)) return;
+      seen.add(act);
+      rows.push({ act, saved: savedActs[act] || { is_done: false, sap_order_done: false }, rowIndex });
+    });
+  });
+  Object.keys(savedActs).sort().forEach((act) => {
+    if (seen.has(act)) return;
+    seen.add(act);
+    rows.push({ act, saved: savedActs[act] || { is_done: false, sap_order_done: false }, rowIndex: null });
+  });
+  return rows.sort((a, b) => a.act.localeCompare(b.act, 'ru'));
+}
 function renderActs(){
   const month = currentMonth().name;
-  const acts = appState.acts[month] || {};
-  const rows = Object.keys(acts).sort().map(act => {
-    const x = acts[act];
+  const rows = collectActRowsForMonth(ui.monthIndex).map(({ act, saved }) => {
+    const x = saved || {};
     return `<tr>
       <td>${esc(act)}</td>
       <td style="text-align:center; font-size:16px;"><button class="act-start" style="width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center;" ${CAN_EDIT ? '' : 'disabled'} onclick="startAct('${month}', '${act}')">Пуск</button></td>
@@ -2740,10 +2888,17 @@ async function loadYear(year){
 async function loadYearFromInput(){
   const year = parseInt(document.getElementById('yearInput').value, 10);
   if (!year) return;
-  if (dirty && !confirm('Есть несохранённые изменения. Открыть год без сохранения?')) { ensureYearOptions(); return; }
-  await loadYear(year);
+  promptLeave('Есть несохранённые изменения. Сохранить перед открытием другого года?', () => loadYear(year));
+}
+function requestHomeClick(event){
+  if (event) event.preventDefault();
+  return promptLeave('Есть несохранённые изменения. Сохранить перед переходом на главную?', () => { location.href = '/'; });
 }
 window.addEventListener('beforeunload', (e)=>{ if (dirty && CAN_EDIT) { e.preventDefault(); e.returnValue=''; } });
+window.addEventListener('popstate', () => {
+  if (!leaveGuardInstalled || !CAN_EDIT) return;
+  promptLeave('Есть несохранённые изменения. Сохранить перед уходом?', () => { location.href = '/'; });
+});
 render();
 </script>
 </body>
