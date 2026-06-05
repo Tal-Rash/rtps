@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.4"
+APP_VERSION = "web-zkp-1.5"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -426,7 +426,7 @@ HTML = """<!doctype html>
     button, a, input, select { border:1px solid var(--line); border-radius:8px; padding:9px 11px; background:#fff; color:var(--text); font:inherit; text-decoration:none; }
     button { cursor:pointer; font-weight:700; }
     .primary { background:var(--blue); border-color:var(--blue); color:#fff; }
-    .meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:12px 0; }
+    .meta { display:none; }
     .badge { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:13px; }
     .badge strong { font-weight:700; }
     .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; }
@@ -480,12 +480,6 @@ HTML = """<!doctype html>
         <select id="repairType" style="width:150px"></select>
       </label>
       <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить в архив</button>
-    </div>
-
-    <div class="meta">
-      <div class="badge">Серия: <strong id="seriesBadge">-</strong></div>
-      <div class="badge">КП в работе: <strong id="axisBadge">-</strong></div>
-      <div class="badge">Статус: <strong id="dirtyBadge">готово</strong></div>
     </div>
 
     <div class="table-shell">
@@ -556,7 +550,6 @@ function setStatus(text){
 }
 function setDirty(flag){
   dirty = !!flag;
-  document.getElementById('dirtyBadge').textContent = dirty ? 'есть изменения' : 'готово';
   updateHistoryButtons();
 }
 function cloneState(value){
@@ -638,11 +631,7 @@ function renderRepairOptions(){
   currentRepairType = select.value || '';
 }
 function renderMeta(){
-  const loco = getCurrentLoco();
-  const series = getSeries(loco);
-  const axisCount = getAxisCount(loco);
-  document.getElementById('seriesBadge').textContent = series || '-';
-  document.getElementById('axisBadge').textContent = loco ? String(axisCount) : '-';
+  return;
 }
 function renderTable(){
   const tbody = document.getElementById('inputBody');
