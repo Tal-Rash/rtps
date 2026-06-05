@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.15"
+APP_VERSION = "web-zkp-1.16"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -560,6 +560,47 @@ def save_archive(payload: dict) -> dict:
     return load_state(locomotive)
 
 
+def update_archive_cells(payload: dict) -> dict:
+    changes = payload.get("changes") or []
+    if not isinstance(changes, list) or not changes:
+        return {"error": "Нет изменений для сохранения."}, 400
+
+    normalized: list[tuple[int, str, str, str, int, int, str]] = []
+    for change in changes:
+        if not isinstance(change, dict):
+            return {"error": "Некорректный формат изменений."}, 400
+        try:
+            year = int(change.get("year"))
+            measurement_date = text(change.get("measurement_date")).strip()
+            locomotive = text(change.get("locomotive")).strip()
+            repair_type = text(change.get("repair_type")).strip()
+            source_r = int(change.get("source_r"))
+            display_col = int(change.get("display_col"))
+            if display_col < 10 or display_col > 19:
+                return {"error": "Можно редактировать только правую часть таблицы архива."}, 400
+            source_c = display_col - 8
+            value = text(change.get("value"))
+        except Exception:
+            return {"error": "Некорректные данные изменения архива."}, 400
+
+        if not measurement_date or not locomotive or not repair_type:
+            return {"error": "Не удалось определить строку архива для изменения."}, 400
+
+        normalized.append((year, measurement_date, locomotive, repair_type, source_r, source_c, value))
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        for year, measurement_date, locomotive, repair_type, source_r, source_c, value in normalized:
+            cur.execute(
+                "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (year, measurement_date, locomotive, repair_type, source_r, source_c, value),
+            )
+        conn.commit()
+
+    return {"ok": True}
+
+
 def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bool = True) -> list[dict]:
     locomotive = text(locomotive).strip()
     search_text = text(search_text).strip().lower()
@@ -733,6 +774,7 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
                 "measurement_date": measurement_date,
                 "locomotive": loco,
                 "repair_type": repair_type,
+                "source_r": row_index,
                 "section": section_value,
                 "stats": stats,
             })
@@ -789,6 +831,17 @@ HTML = """<!doctype html>
     .archive-table th, .archive-table td { font-size:12px; }
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
+    .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
+    .archive-table td.archive-raw { width:60px; }
+    .archive-table td.archive-raw input {
+      width:100%;
+      height:34px;
+      border:0;
+      text-align:center;
+      background:transparent;
+      padding:2px 3px;
+      font-size:12px;
+    }
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
@@ -944,6 +997,8 @@ let archiveSortDesc = true;
 let selectionAnchor = null;
 let selectionFocus = null;
 let clipboardCache = '';
+let archiveSelectionAnchor = null;
+let archiveSelectionFocus = null;
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -1108,6 +1163,235 @@ function clearSelectedCells(){
   recalcDiameters();
   setStatus('Очищено');
 }
+function archiveRowMeta(row){
+  return archiveRows[row] || null;
+}
+function archiveCellElement(row, col){
+  return document.querySelector(`#archiveBody input[data-row="${row}"][data-col="${col}"]`);
+}
+function archiveCellValue(row, col){
+  const input = archiveCellElement(row, col);
+  if (input) return input.value ?? '';
+  return archiveRowMeta(row)?.values?.[col] ?? '';
+}
+function archiveCellInBounds(row, col){
+  return row >= 0 && row < archiveRows.length && col >= 10 && col <= 19;
+}
+function clearArchiveSelection(){
+  archiveSelectionAnchor = null;
+  archiveSelectionFocus = null;
+  document.querySelectorAll('#archiveBody td.selected').forEach(td => td.classList.remove('selected'));
+}
+function archiveSelectionRect(){
+  if (!archiveSelectionAnchor || !archiveSelectionFocus) return null;
+  return {
+    top: Math.min(archiveSelectionAnchor.row, archiveSelectionFocus.row),
+    bottom: Math.max(archiveSelectionAnchor.row, archiveSelectionFocus.row),
+    left: Math.min(archiveSelectionAnchor.col, archiveSelectionFocus.col),
+    right: Math.max(archiveSelectionAnchor.col, archiveSelectionFocus.col),
+  };
+}
+function renderArchiveSelectionHighlight(){
+  document.querySelectorAll('#archiveBody td.selected').forEach(td => td.classList.remove('selected'));
+  const rect = archiveSelectionRect();
+  if (!rect) return;
+  for (let r = rect.top; r <= rect.bottom; r += 1) {
+    for (let c = rect.left; c <= rect.right; c += 1) {
+      const td = document.querySelector(`#archiveBody tr[data-row="${r}"] td[data-col="${c}"]`);
+      if (td) td.classList.add('selected');
+    }
+  }
+}
+function selectArchiveCell(row, col, extend = false){
+  const cell = { row, col };
+  if (!extend || !archiveSelectionAnchor) {
+    archiveSelectionAnchor = cell;
+  }
+  archiveSelectionFocus = cell;
+  renderArchiveSelectionHighlight();
+}
+function focusArchiveCell(row, col, extend = false){
+  if (!archiveCellInBounds(row, col)) return;
+  selectArchiveCell(row, col, extend);
+  const target = archiveCellElement(row, col);
+  if (target) target.focus();
+}
+function archiveCellChangePayload(row, col, value){
+  const meta = archiveRowMeta(row);
+  if (!meta) return null;
+  return {
+    year: meta.year,
+    measurement_date: meta.measurement_date,
+    locomotive: meta.locomotive,
+    repair_type: meta.repair_type,
+    source_r: meta.source_r,
+    display_col: col,
+    value,
+  };
+}
+async function saveArchiveChanges(changes, statusText){
+  if (!CAN_EDIT) return false;
+  if (!changes.length) return true;
+  const status = document.getElementById('archiveStatus');
+  if (status) status.textContent = statusText || 'Сохранение архива...';
+  const res = await fetch(`${API}/api/archive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ changes }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    await loadArchive();
+    if (status) status.textContent = err.error || err.message || 'Ошибка сохранения архива';
+    return false;
+  }
+  await loadArchive();
+  clearArchiveSelection();
+  if (status) status.textContent = 'Архив обновлен';
+  return true;
+}
+async function copyArchiveSelectionToClipboard(){
+  const rect = archiveSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (archiveSelectionFocus || archiveSelectionAnchor);
+  if (!start || !archiveCellInBounds(start.row, start.col)) return;
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const lines = [];
+  for (let r = start.row; r <= end.row; r += 1) {
+    const rowValues = [];
+    for (let c = start.col; c <= end.col; c += 1) {
+      rowValues.push(archiveCellValue(r, c));
+    }
+    lines.push(rowValues.join('\\t'));
+  }
+  await writeClipboardText(lines.join('\\n'));
+  const status = document.getElementById('archiveStatus');
+  if (status) status.textContent = 'Скопировано';
+}
+async function applyArchivePastedBlock(text, startRow, startCol){
+  if (!CAN_EDIT) return false;
+  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  if (rows.length && rows[rows.length - 1] === '') rows.pop();
+  if (!rows.length) return false;
+  const changes = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const cells = rows[i].split('\t');
+    for (let j = 0; j < cells.length; j += 1) {
+      const tr = startRow + i;
+      const tc = startCol + j;
+      if (!archiveCellInBounds(tr, tc)) continue;
+      const input = archiveCellElement(tr, tc);
+      if (!input) continue;
+      const value = cells[j].trim();
+      input.value = value;
+      input.dataset.original = value;
+      const payload = archiveCellChangePayload(tr, tc, value);
+      if (payload) changes.push(payload);
+    }
+  }
+  if (!changes.length) return false;
+  return saveArchiveChanges(changes, 'Сохранение архива...');
+}
+async function clearArchiveSelectedCells(){
+  if (!CAN_EDIT) return false;
+  const rect = archiveSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (archiveSelectionFocus || archiveSelectionAnchor);
+  if (!start || !archiveCellInBounds(start.row, start.col)) return false;
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const changes = [];
+  for (let r = start.row; r <= end.row; r += 1) {
+    for (let c = start.col; c <= end.col; c += 1) {
+      if (!archiveCellInBounds(r, c)) continue;
+      const input = archiveCellElement(r, c);
+      if (!input) continue;
+      input.value = '';
+      input.dataset.original = '';
+      const payload = archiveCellChangePayload(r, c, '');
+      if (payload) changes.push(payload);
+    }
+  }
+  if (!changes.length) return false;
+  return saveArchiveChanges(changes, 'Очистка архива...');
+}
+function handleArchiveCellMouseDown(event, row, col){
+  if (!CAN_EDIT) return true;
+  if (event.button !== 0) return true;
+  if (event.shiftKey && archiveSelectionAnchor) {
+    selectArchiveCell(archiveSelectionAnchor.row, archiveSelectionAnchor.col, true);
+    selectArchiveCell(row, col, true);
+  } else {
+    selectArchiveCell(row, col, false);
+  }
+  const target = event.currentTarget;
+  if (target) target.focus();
+  event.preventDefault();
+  return false;
+}
+function handleArchiveCellFocus(row, col){
+  if (!archiveSelectionAnchor || !archiveSelectionFocus || archiveSelectionAnchor.row !== row || archiveSelectionAnchor.col !== col || archiveSelectionFocus.row !== row || archiveSelectionFocus.col !== col) {
+    selectArchiveCell(row, col, false);
+  }
+}
+async function handleArchiveCellChange(row, col, value, input){
+  if (!CAN_EDIT) return;
+  const meta = archiveRowMeta(row);
+  if (!meta) return;
+  const current = String(input?.dataset?.original ?? '');
+  const next = String(value ?? '').trim();
+  if (current === next) return;
+  const ok = confirm('Вы уверены, что хотите изменить данные в архиве?');
+  if (!ok) {
+    if (input) input.value = current;
+    return;
+  }
+  const saved = await saveArchiveChanges([archiveCellChangePayload(row, col, next)], 'Сохранение архива...');
+  if (!saved && input) {
+    input.value = current;
+  }
+}
+async function handleArchiveKeydown(event, row, col){
+  const key = event.key;
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+  if (ctrlOrMeta && key.toLowerCase() === 'c') {
+    event.preventDefault();
+    await copyArchiveSelectionToClipboard();
+    return;
+  }
+  if (ctrlOrMeta && key.toLowerCase() === 'v') {
+    event.preventDefault();
+    const ok = confirm('Вы уверены, что хотите вставить данные в архив?');
+    if (!ok) return;
+    const text = await readClipboardText();
+    if (!text) return;
+    const rect = archiveSelectionRect();
+    const start = rect ? { row: rect.top, col: rect.left } : { row, col };
+    await applyArchivePastedBlock(text, start.row, start.col);
+    return;
+  }
+  if (key === 'Delete' || key === 'Backspace') {
+    event.preventDefault();
+    const ok = confirm('Вы уверены, что хотите очистить выбранные ячейки в архиве?');
+    if (!ok) return;
+    await clearArchiveSelectedCells();
+    return;
+  }
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+  event.preventDefault();
+  if (event.shiftKey) {
+    if (!archiveSelectionAnchor) archiveSelectionAnchor = { row, col };
+    let nextRow = row;
+    let nextCol = col;
+    if (key === 'ArrowLeft' && col > 10) nextCol = col - 1;
+    if (key === 'ArrowRight' && col < 19) nextCol = col + 1;
+    if (key === 'ArrowUp' && row > 0) nextRow = row - 1;
+    if (key === 'ArrowDown' && row < (archiveRows.length - 1)) nextRow = row + 1;
+    focusArchiveCell(nextRow, nextCol, true);
+    return;
+  }
+  if (key === 'ArrowLeft' && col > 10) focusArchiveCell(row, col - 1, false);
+  if (key === 'ArrowRight' && col < 19) focusArchiveCell(row, col + 1, false);
+  if (key === 'ArrowUp' && row > 0) focusArchiveCell(row - 1, col, false);
+  if (key === 'ArrowDown' && row < (archiveRows.length - 1)) focusArchiveCell(row + 1, col, false);
+}
 function setStatus(text){
   document.getElementById('status').textContent = text || '';
 }
@@ -1246,14 +1530,31 @@ function renderArchiveTable(){
     tbody.innerHTML = '<tr><td colspan="20" style="padding:14px;color:var(--muted);">Архив пуст</td></tr>';
     return;
   }
-  tbody.innerHTML = archiveRows.map(row => {
+  tbody.innerHTML = archiveRows.map((row, rowIndex) => {
     const values = row.values || [];
     const cells = values.map((value, index) => {
-      const cls = index === 0 ? 'first-col' : (index >= 2 && index <= 8 ? 'summary' : (index >= 10 ? 'raw' : ''));
-      return `<td class="${cls}">${esc(value)}</td>`;
+      if (index >= 10) {
+        return `
+          <td class="measure-cell archive-raw" data-col="${index}">
+            <input
+              value="${esc(value)}"
+              data-row="${rowIndex}"
+              data-col="${index}"
+              data-original="${esc(value)}"
+              ${CAN_EDIT ? '' : 'readonly'}
+              onmousedown="return handleArchiveCellMouseDown(event, ${rowIndex}, ${index})"
+              onfocus="handleArchiveCellFocus(${rowIndex}, ${index})"
+              onchange="handleArchiveCellChange(${rowIndex}, ${index}, this.value, this)"
+              onkeydown="handleArchiveKeydown(event, ${rowIndex}, ${index})"
+            >
+          </td>`;
+      }
+      const cls = index === 0 ? 'first-col' : (index === 9 ? 'axis-col' : 'summary');
+      return `<td class="${cls}" data-col="${index}">${esc(value)}</td>`;
     }).join('');
-    return `<tr>${cells}</tr>`;
+    return `<tr data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}">${cells}</tr>`;
   }).join('');
+  renderArchiveSelectionHighlight();
 }
 function renderTable(){
   const tbody = document.getElementById('inputBody');
@@ -1299,6 +1600,7 @@ async function loadArchive(){
   const loco = document.getElementById('archiveLocomotive')?.value || '';
   const search = document.getElementById('archiveSearch')?.value || '';
   if (status) status.textContent = 'Загрузка архива...';
+  clearArchiveSelection();
   updateArchiveSortButton();
   const res = await fetch(`${API}/api/archive?locomotive=${encodeURIComponent(loco)}&search=${encodeURIComponent(search)}&sort=${archiveSortDesc ? 'desc' : 'asc'}`, { cache: 'no-store' });
   if (!res.ok) {
@@ -1706,7 +2008,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 payload = json.loads(raw.decode("utf-8"))
-                result = save_archive(payload)
+                if payload.get("changes"):
+                    result = update_archive_cells(payload)
+                else:
+                    result = save_archive(payload)
                 if isinstance(result, tuple):
                     body, status = result
                     send_json(self, body, status)
