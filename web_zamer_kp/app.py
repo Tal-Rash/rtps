@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.0"
+APP_VERSION = "web-zkp-1.1"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -418,25 +418,26 @@ HTML = """<!doctype html>
     :root { --line:#d8e0ea; --text:#102033; --muted:#66758a; --blue:#276ef1; --bg:#f5f7fb; --ok:#eef7f0; --warn:#fff8d5; --bad:#ffe5e5; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
-    .wrap { max-width: 1540px; margin:0 auto; padding:16px; }
-    .top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px 16px; }
+    body { display:flex; justify-content:center; }
+    .wrap { width:max-content; max-width:none; margin:0 auto; padding:16px; display:flex; flex-direction:column; align-items:center; }
+    .top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px 16px; width:max-content; }
     h1 { margin:0; font-size:24px; }
     .muted { color:var(--muted); font-size:13px; }
     .actions, .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     button, a, input, select { border:1px solid var(--line); border-radius:8px; padding:9px 11px; background:#fff; color:var(--text); font:inherit; text-decoration:none; }
     button { cursor:pointer; font-weight:700; }
     .primary { background:var(--blue); border-color:var(--blue); color:#fff; }
-    .meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:12px 0; }
+    .meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:12px 0; width:max-content; }
     .badge { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:13px; }
     .badge strong { font-weight:700; }
-    .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; }
+    .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; width:max-content; }
     table { border-collapse:collapse; width:max-content; table-layout:fixed; }
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; }
     th.small { font-size:12px; line-height:1.1; }
-    th.measure-head, td.measure-cell { width:40px; }
-    th.section-col, td.section-col { width:84px; }
-    th.number-col, td.number-col { width:58px; }
+    th.measure-head, td.measure-cell { width:60px; }
+    th.section-col, td.section-col { width:80px; }
+    th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
     td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
@@ -491,13 +492,13 @@ HTML = """<!doctype html>
     <div class="table-shell">
       <table id="inputTable" aria-label="Ввод замера КП">
         <colgroup>
-          <col style="width:84px">
-          <col style="width:58px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
+          <col style="width:80px">
+          <col style="width:80px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
         </colgroup>
         <thead>
           <tr>
