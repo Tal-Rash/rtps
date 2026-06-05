@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.14"
+APP_VERSION = "web-zkp-1.15"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -781,6 +781,7 @@ HTML = """<!doctype html>
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
     td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
+    td.measure-cell.selected { box-shadow: inset 0 0 0 2px #2f6fed; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
@@ -940,6 +941,9 @@ let savedRepairType = '';
 let canceledRepairType = '';
 let archiveRows = [];
 let archiveSortDesc = true;
+let selectionAnchor = null;
+let selectionFocus = null;
+let clipboardCache = '';
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -947,6 +951,162 @@ function esc(value){
 function n(value){
   const x = parseFloat(String(value ?? '').replace(',', '.'));
   return Number.isFinite(x) ? x : null;
+}
+function clampCell(row, col){
+  return {
+    row: Math.max(0, row),
+    col: Math.max(0, Math.min(9, col)),
+  };
+}
+function getVisibleAxisCount(){
+  return getAxisCount(getCurrentLoco());
+}
+function isCellInBounds(row, col){
+  return row >= 0 && col >= 0 && col < 10 && row < getVisibleAxisCount();
+}
+function clearSelection(){
+  selectionAnchor = null;
+  selectionFocus = null;
+  document.querySelectorAll('#inputBody td.measure-cell.selected').forEach(td => td.classList.remove('selected'));
+}
+function selectionRect(){
+  if (!selectionAnchor || !selectionFocus) return null;
+  const top = Math.min(selectionAnchor.row, selectionFocus.row);
+  const bottom = Math.max(selectionAnchor.row, selectionFocus.row);
+  const left = Math.min(selectionAnchor.col, selectionFocus.col);
+  const right = Math.max(selectionAnchor.col, selectionFocus.col);
+  return { top, bottom, left, right };
+}
+function renderSelectionHighlight(){
+  document.querySelectorAll('#inputBody td.measure-cell.selected').forEach(td => td.classList.remove('selected'));
+  const rect = selectionRect();
+  if (!rect) return;
+  for (let r = rect.top; r <= rect.bottom; r += 1) {
+    for (let c = rect.left; c <= rect.right; c += 1) {
+      const td = document.querySelector(`#inputBody tr[data-row="${r}"] td.measure-cell[data-col="${c}"]`);
+      if (td) td.classList.add('selected');
+    }
+  }
+}
+function selectCell(row, col, extend = false){
+  const cell = clampCell(row, col);
+  if (!extend || !selectionAnchor) {
+    selectionAnchor = cell;
+  }
+  selectionFocus = cell;
+  renderSelectionHighlight();
+}
+function focusCell(row, col, extend = false){
+  const cell = clampCell(row, col);
+  if (!isCellInBounds(cell.row, cell.col)) return;
+  selectCell(cell.row, cell.col, extend);
+  const target = document.querySelector(`input[data-row="${cell.row}"][data-col="${cell.col}"]`);
+  if (target) target.focus();
+}
+function cellValue(row, col){
+  return state?.measurements?.[row]?.[col] ?? '';
+}
+function setCellValue(row, col, value){
+  if (!state?.measurements?.[row]) return;
+  state.measurements[row][col] = value;
+  const input = document.querySelector(`input[data-row="${row}"][data-col="${col}"]`);
+  if (input && input.value !== value) input.value = value;
+}
+function readClipboardText(){
+  if (navigator.clipboard?.readText) {
+    return navigator.clipboard.readText().catch(() => clipboardCache || '');
+  }
+  return Promise.resolve(clipboardCache || '');
+}
+function writeClipboardText(text){
+  clipboardCache = String(text ?? '');
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(clipboardCache).catch(() => undefined);
+  }
+  const ta = document.createElement('textarea');
+  ta.value = clipboardCache;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+  } finally {
+    ta.remove();
+  }
+  return Promise.resolve();
+}
+async function copySelectionToClipboard(){
+  const rect = selectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (selectionFocus || selectionAnchor);
+  if (!start || !isCellInBounds(start.row, start.col)) return;
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const lines = [];
+  for (let r = start.row; r <= end.row; r += 1) {
+    const rowValues = [];
+    for (let c = start.col; c <= end.col; c += 1) {
+      rowValues.push(cellValue(r, c));
+    }
+    lines.push(rowValues.join('\\t'));
+  }
+  await writeClipboardText(lines.join('\\n'));
+  setStatus('Скопировано');
+}
+function applyPastedBlock(text, startRow, startCol){
+  if (!CAN_EDIT || !state) return;
+  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  if (rows.length && rows[rows.length - 1] === '') rows.pop();
+  if (!rows.length) return;
+  let touched = false;
+  const axisCount = getVisibleAxisCount();
+  for (let i = 0; i < rows.length; i += 1) {
+    const cells = rows[i].split('\\t');
+    for (let j = 0; j < cells.length; j += 1) {
+      const tr = startRow + i;
+      const tc = startCol + j;
+      if (tr >= axisCount || tc >= 10) continue;
+      const value = cells[j].trim();
+      setCellValue(tr, tc, value);
+      touched = true;
+    }
+  }
+  if (!touched) return;
+  setDirty(true);
+  for (let r = startRow; r < Math.min(axisCount, startRow + rows.length); r += 1) {
+    refreshRowClasses(r);
+  }
+  recalcDiameters();
+}
+async function pasteClipboardIntoSelection(row, col){
+  const text = await readClipboardText();
+  if (!text) return;
+  const rect = selectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : clampCell(row, col);
+  applyPastedBlock(text, start.row, start.col);
+  focusCell(start.row, start.col);
+  setStatus('Вставлено');
+}
+function clearSelectedCells(){
+  if (!CAN_EDIT || !state) return;
+  const rect = selectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (selectionFocus || selectionAnchor);
+  if (!start || !isCellInBounds(start.row, start.col)) return;
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const axisCount = getVisibleAxisCount();
+  let touched = false;
+  for (let r = start.row; r <= end.row; r += 1) {
+    if (r >= axisCount) continue;
+    for (let c = start.col; c <= end.col; c += 1) {
+      if (c >= 10) continue;
+      setCellValue(r, c, '');
+      touched = true;
+      refreshRowClasses(r);
+    }
+  }
+  if (!touched) return;
+  setDirty(true);
+  recalcDiameters();
+  setStatus('Очищено');
 }
 function setStatus(text){
   document.getElementById('status').textContent = text || '';
@@ -1121,6 +1281,8 @@ function renderTable(){
             ${CAN_EDIT ? '' : 'readonly'}
             data-row="${r}"
             data-col="${c}"
+            onmousedown="return handleCellMouseDown(event, ${r}, ${c})"
+            onfocus="handleCellFocus(${r}, ${c})"
             oninput="handleCellInput(${r}, ${c}, this.value)"
             onkeydown="handleKeydown(event, ${r}, ${c})"
           >
@@ -1130,6 +1292,7 @@ function renderTable(){
   }
   tbody.innerHTML = html;
   recalcDiameters();
+  renderSelectionHighlight();
 }
 async function loadArchive(){
   const status = document.getElementById('archiveStatus');
@@ -1194,18 +1357,63 @@ function handleCellInput(row, col, value){
     recalcDiameters();
   }
 }
-function moveFocus(row, col){
-  const target = document.querySelector(`input[data-row="${row}"][data-col="${col}"]`);
+function handleCellMouseDown(event, row, col){
+  if (!CAN_EDIT) return true;
+  if (event.button !== 0) return true;
+  if (event.shiftKey && selectionAnchor) {
+    selectCell(selectionAnchor.row, selectionAnchor.col, true);
+    selectCell(row, col, true);
+  } else {
+    selectCell(row, col, false);
+  }
+  const target = event.currentTarget;
   if (target) target.focus();
+  event.preventDefault();
+  return false;
+}
+function handleCellFocus(row, col){
+  if (!selectionAnchor || !selectionFocus || selectionAnchor.row !== row || selectionAnchor.col !== col || selectionFocus.row !== row || selectionFocus.col !== col) {
+    selectCell(row, col, false);
+  }
+}
+function moveFocus(row, col){
+  focusCell(row, col, false);
 }
 function handleKeydown(event, row, col){
   const key = event.key;
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+  if (ctrlOrMeta && key.toLowerCase() === 'c') {
+    event.preventDefault();
+    copySelectionToClipboard();
+    return;
+  }
+  if (ctrlOrMeta && key.toLowerCase() === 'v') {
+    event.preventDefault();
+    pasteClipboardIntoSelection(row, col);
+    return;
+  }
+  if (key === 'Delete' || key === 'Backspace') {
+    event.preventDefault();
+    clearSelectedCells();
+    return;
+  }
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
   event.preventDefault();
+  if (event.shiftKey) {
+    if (!selectionAnchor) selectionAnchor = { row, col };
+    let nextRow = row;
+    let nextCol = col;
+    if (key === 'ArrowLeft' && col > 0) nextCol = col - 1;
+    if (key === 'ArrowRight' && col < 9) nextCol = col + 1;
+    if (key === 'ArrowUp' && row > 0) nextRow = row - 1;
+    if (key === 'ArrowDown' && row < (getVisibleAxisCount() - 1)) nextRow = row + 1;
+    focusCell(nextRow, nextCol, true);
+    return;
+  }
   if (key === 'ArrowLeft' && col > 0) moveFocus(row, col - 1);
   if (key === 'ArrowRight' && col < 9) moveFocus(row, col + 1);
   if (key === 'ArrowUp' && row > 0) moveFocus(row - 1, col);
-  if (key === 'ArrowDown' && row < (getAxisCount(getCurrentLoco()) - 1)) moveFocus(row + 1, col);
+  if (key === 'ArrowDown' && row < (getVisibleAxisCount() - 1)) moveFocus(row + 1, col);
 }
 async function loadState(nextLocomotive){
   const loco = (nextLocomotive ?? getCurrentLoco()).trim();
