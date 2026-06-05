@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.12"
+APP_VERSION = "web-zkp-1.13"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -422,6 +422,144 @@ def save_state(payload: dict) -> dict:
     return load_state(locomotive)
 
 
+def build_archive_rows(payload: dict) -> tuple[dict, list[tuple[int, str, str, str, int, int, str]], list[str]]:
+    locomotive = text(payload.get("locomotive")).strip()
+    measurement_date = text(payload.get("measurement_date")).strip() or dt.date.today().isoformat()
+    repair_type = text(payload.get("repair_type")).strip()
+    rows = payload.get("measurements") or []
+
+    try:
+        year = int(measurement_date[:4])
+    except Exception:
+        year = dt.date.today().year
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        series = series_for_locomotive(cur, locomotive)
+        series_text = normalize_text(series + " " + locomotive)
+        axis_count = locomotive_axis_count(series, locomotive)
+        visible_rows = 6 if axis_count == 6 else 12
+        if "пэ-2м" in series_text or "пэ2м" in series_text or "пэ 2м" in series_text or "pe-2m" in series_text or "pe2m" in series_text:
+            required_columns = [0, 1, 2, 3, 6, 7]
+        else:
+            required_columns = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive=? ORDER BY r, c", (locomotive,)).fetchall()
+        if not kp_rows:
+            kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive='' ORDER BY r, c").fetchall()
+        kp_map: dict[int, dict[int, str]] = {}
+        for row in kp_rows:
+            kp_map.setdefault(int(row["r"]), {})[int(row["c"])] = text(row["v"])
+
+        def parse_float(v):
+            try:
+                return float(text(v).replace(",", "."))
+            except Exception:
+                return None
+
+        missing_cells: list[str] = []
+        normalized_rows: list[list[str]] = []
+        for row_index in range(visible_rows):
+            row = list(rows[row_index] if row_index < len(rows) else []) + [""] * INPUT_DATA_COLS
+            normalized_rows.append(row[:INPUT_DATA_COLS])
+            for col in required_columns:
+                value = text(row[col]).strip()
+                if not value:
+                    axis_number = row_index + 1
+                    missing_cells.append(f"ось {axis_number}, колонка {col + 1}")
+
+        if missing_cells:
+            return {"error": "missing", "measurement_date": measurement_date, "locomotive": locomotive, "repair_type": repair_type}, [], missing_cells
+
+        if not repair_type:
+            return {"error": "repair", "measurement_date": measurement_date, "locomotive": locomotive, "repair_type": repair_type}, [], []
+
+        archive_rows: list[tuple[int, str, str, str, int, int, str]] = []
+        for row_index in range(visible_rows):
+            row = normalized_rows[row_index]
+            table_row = row_index + 2
+            section_value = "1" if axis_count == 6 else str((row_index // 4) + 1)
+            kp_row = kp_map.get(row_index, {})
+
+            left_band = parse_float(row[6])
+            right_band = parse_float(row[7])
+            left_kp = parse_float(kp_row.get(2, ""))
+            right_kp = parse_float(kp_row.get(3, ""))
+            left_diam = "" if left_kp is None or left_band is None else str(int(round(left_kp + left_band * 2)))
+            right_diam = "" if right_kp is None or right_band is None else str(int(round(right_kp + right_band * 2)))
+
+            values = {
+                0: section_value,
+                1: str(row_index + 1),
+                2: row[0],
+                3: row[1],
+                4: row[2],
+                5: row[3],
+                6: row[4],
+                7: row[5],
+                8: row[6],
+                9: row[7],
+                10: left_diam,
+                11: right_diam,
+            }
+            for col, value in values.items():
+                value = text(value).strip()
+                if value:
+                    archive_rows.append((year, measurement_date, locomotive, repair_type, table_row, col, value))
+
+        return {
+            "year": year,
+            "measurement_date": measurement_date,
+            "locomotive": locomotive,
+            "repair_type": repair_type,
+            "axis_count": axis_count,
+        }, archive_rows, []
+
+
+def save_archive(payload: dict) -> dict:
+    meta, archive_rows, missing_cells = build_archive_rows(payload)
+    if meta.get("error") == "missing":
+        return {"error": "Не все обязательные ячейки заполнены.", "missing_cells": missing_cells}, 400
+    if meta.get("error") == "repair":
+        return {"error": "Выберите вид ремонта."}, 400
+
+    year = int(meta["year"])
+    measurement_date = meta["measurement_date"]
+    locomotive = meta["locomotive"]
+    repair_type = meta["repair_type"]
+    overwrite = bool(payload.get("overwrite"))
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        existing = cur.execute(
+            "SELECT COUNT(*) FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+            (year, measurement_date, locomotive, repair_type),
+        ).fetchone()[0]
+        if existing and not overwrite:
+            return {
+                "error": "duplicate",
+                "message": "Запись с таким локомотивом, датой и видом ремонта уже есть в архиве.",
+            }, 409
+
+        cur.execute("BEGIN")
+        cur.execute(
+            "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+            (year, measurement_date, locomotive, repair_type),
+        )
+        cur.executemany(
+            "INSERT INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            archive_rows,
+        )
+        cur.execute("DELETE FROM input_data WHERE y=? AND locomotive=?", (year, locomotive))
+        cur.execute(
+            "INSERT OR REPLACE INTO input_meta(y, locomotive, measurement_date) VALUES(?,?,?)",
+            (year, locomotive, measurement_date),
+        )
+        conn.commit()
+
+    return load_state(locomotive)
+
+
 def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bool = True) -> list[dict]:
     locomotive = text(locomotive).strip()
     search_text = text(search_text).strip().lower()
@@ -690,7 +828,7 @@ HTML = """<!doctype html>
         <label>Вид ремонта
           <select id="repairType" style="width:150px"></select>
         </label>
-        <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить в архив</button>
+      <button id="saveBtn" class="primary" onclick="saveToArchive()">Сохранить в архив</button>
       </div>
 
       <div class="table-shell">
@@ -1105,7 +1243,7 @@ async function maybeSwitchLocomotive(nextValue){
       document.getElementById('locomotive').value = current;
       return;
     }
-    await saveCurrent();
+    await saveDraft();
   }
   await loadState(next);
 }
@@ -1118,7 +1256,7 @@ function onDateChange(){
 function onRepairChange(){
   currentRepairType = document.getElementById('repairType').value || '';
 }
-async function saveCurrent(){
+async function saveDraft(){
   if (!CAN_EDIT) return;
   if (!state) return;
   state.locomotive = getCurrentLoco();
@@ -1152,6 +1290,64 @@ async function saveCurrent(){
   await loadArchive();
   setDirty(false);
   setStatus('Сохранено');
+}
+
+function blankMeasurements(){
+  return Array.from({ length: 12 }, () => Array.from({ length: 10 }, () => ''));
+}
+
+async function saveToArchive(){
+  if (!CAN_EDIT) return;
+  if (!state) return;
+  const payload = {
+    locomotive: getCurrentLoco(),
+    measurement_date: document.getElementById('measurementDate').value || state.measurement_date || new Date().toISOString().slice(0, 10),
+    repair_type: document.getElementById('repairType').value || '',
+    measurements: state.measurements,
+    overwrite: false,
+  };
+  state.locomotive = payload.locomotive;
+  state.measurement_date = payload.measurement_date;
+  currentRepairType = payload.repair_type;
+  setStatus('Сохранение в архив...');
+  const sendRequest = async (overwrite) => {
+    const res = await fetch(`${API}/api/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ ...payload, overwrite }),
+    });
+    return res;
+  };
+
+  let res = await sendRequest(false);
+  if (res.status === 409) {
+    const err = await res.json().catch(() => ({}));
+    const ok = confirm((err.message || 'Запись уже есть в архиве.') + '\n\nПерезаписать существующую запись?');
+    if (!ok) {
+      setStatus('Сохранение в архив отменено');
+      return;
+    }
+    res = await sendRequest(true);
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    setStatus(err.error || err.message || 'Ошибка архивации');
+    return;
+  }
+
+  state = await res.json();
+  state.measurements = blankMeasurements();
+  savedState = cloneState(state);
+  canceledState = null;
+  savedRepairType = currentRepairType;
+  canceledRepairType = '';
+  renderRepairOptions();
+  renderMeta();
+  renderTable();
+  await loadArchive();
+  setDirty(false);
+  setStatus('Данные сохранены в архив');
 }
 
 function cancelChanges(){
@@ -1293,6 +1489,21 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = json.loads(raw.decode("utf-8"))
                 send_json(self, save_state(payload))
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/archive":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                result = save_archive(payload)
+                if isinstance(result, tuple):
+                    body, status = result
+                    send_json(self, body, status)
+                else:
+                    send_json(self, result)
             except Exception as exc:
                 send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
