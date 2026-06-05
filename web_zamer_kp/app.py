@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.9"
+APP_VERSION = "web-zkp-1.10"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -519,9 +519,9 @@ HTML = """<!doctype html>
         </thead>
         <tbody id="inputBody"></tbody>
       </table>
-      <div class="legend">
-        <span><span class="dot warn"></span>желтая зона</span>
-        <span><span class="dot bad"></span>красная зона</span>
+      <div class="legend" aria-label="Легенда зон">
+        <span title="Желтая зона"><span class="dot warn"></span></span>
+        <span title="Красная зона"><span class="dot bad"></span></span>
       </div>
     </div>
 
