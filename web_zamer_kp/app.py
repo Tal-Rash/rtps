@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.16"
+APP_VERSION = "web-zkp-1.17"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -390,6 +390,144 @@ def load_state(locomotive: str | None = None) -> dict:
         "norms": norms,
         "year": year,
     }
+
+
+def kp_completion_state(cur: sqlite3.Cursor, locomotive: str) -> str | None:
+    locomotive = text(locomotive).strip()
+    if not locomotive:
+        return None
+
+    series = series_for_locomotive(cur, locomotive)
+    expected_rows = locomotive_axis_count(series, locomotive)
+    rows = cur.execute(
+        "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3)",
+        (locomotive,),
+    ).fetchall()
+    if not rows:
+        return None
+
+    values: dict[tuple[int, int], str] = {}
+    for row in rows:
+        values[(int(row["r"]), int(row["c"]))] = text(row["v"]).strip()
+
+    for row_index in range(expected_rows):
+        if not values.get((row_index, 2), "") or not values.get((row_index, 3), ""):
+            return "yellow"
+    return "green"
+
+
+def load_kp_view(selected_locomotive: str = "") -> dict:
+    selected_locomotive = text(selected_locomotive).strip()
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        locomotives = load_locomotives(cur)
+        if not selected_locomotive and locomotives:
+            selected_locomotive = locomotives[0]["number"]
+
+        all_mode = selected_locomotive == "Все локомотивы"
+        kp_map: dict[int, dict[int, str]] = {}
+        rows: list[dict[str, object]] = []
+        axis_count = 0
+        status = None
+
+        if all_mode:
+            all_values = cur.execute(
+                "SELECT locomotive, r, c, v FROM kp_data WHERE TRIM(COALESCE(locomotive, '')) <> '' ORDER BY locomotive, r, c"
+            ).fetchall()
+            kp_values: dict[tuple[str, int, int], str] = {}
+            for row in all_values:
+                kp_values[(text(row["locomotive"]).strip(), int(row["r"]), int(row["c"]))] = text(row["v"])
+
+            for loco in locomotives:
+                number = loco["number"]
+                series = loco["series"]
+                count = locomotive_axis_count(series, number)
+                for row_index in range(count):
+                    values = [
+                        number,
+                        str(row_index + 1),
+                        kp_values.get((number, row_index, 1), ""),
+                        kp_values.get((number, row_index, 2), ""),
+                        kp_values.get((number, row_index, 3), ""),
+                    ]
+                    rows.append(
+                        {
+                            "locomotive": number,
+                            "row": row_index,
+                            "values": values,
+                            "search": " ".join(text(v).strip().lower() for v in values),
+                            "editable": False,
+                        }
+                    )
+            status = "all"
+        else:
+            series = series_for_locomotive(cur, selected_locomotive)
+            axis_count = locomotive_axis_count(series, selected_locomotive)
+            kp_rows = cur.execute(
+                "SELECT r, c, v FROM kp_data WHERE locomotive=? ORDER BY r, c",
+                (selected_locomotive,),
+            ).fetchall()
+            if not kp_rows:
+                kp_rows = cur.execute(
+                    "SELECT r, c, v FROM kp_data WHERE locomotive='' ORDER BY r, c"
+                ).fetchall()
+            for row in kp_rows:
+                kp_map.setdefault(int(row["r"]), {})[int(row["c"])] = text(row["v"])
+
+            for row_index in range(axis_count):
+                values = [
+                    str(row_index + 1),
+                    kp_map.get(row_index, {}).get(1, ""),
+                    kp_map.get(row_index, {}).get(2, ""),
+                    kp_map.get(row_index, {}).get(3, ""),
+                ]
+                rows.append(
+                    {
+                        "locomotive": selected_locomotive,
+                        "row": row_index,
+                        "values": values,
+                        "search": " ".join(text(v).strip().lower() for v in values),
+                        "editable": True,
+                    }
+                )
+            status = kp_completion_state(cur, selected_locomotive)
+
+        return {
+            "selected_locomotive": selected_locomotive,
+            "all_mode": all_mode,
+            "axis_count": axis_count,
+            "locomotives": locomotives,
+            "rows": rows,
+            "kp_map": kp_map,
+            "status": status,
+        }
+
+
+def save_kp_data(payload: dict) -> dict:
+    locomotive = text(payload.get("locomotive")).strip()
+    if not locomotive or locomotive == "Все локомотивы":
+        return {"error": "Выберите конкретный локомотив."}, 400
+
+    rows = payload.get("rows") or []
+    if not isinstance(rows, list):
+        return {"error": "Некорректные данные КП."}, 400
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        cur.execute("DELETE FROM kp_data WHERE locomotive=?", (locomotive,))
+
+        insert_rows: list[tuple[str, int, int, str]] = []
+        for r, row in enumerate(rows):
+            values = list(row or []) + [""] * 4
+            for c, value in enumerate(values[:4]):
+                value = text(value).strip()
+                if value:
+                    insert_rows.append((locomotive, r, c, value))
+        cur.executemany("INSERT INTO kp_data (locomotive, r, c, v) VALUES (?, ?, ?, ?)", insert_rows)
+        conn.commit()
+
+    return load_kp_view(locomotive)
 
 
 def save_state(payload: dict) -> dict:
@@ -814,6 +952,22 @@ HTML = """<!doctype html>
     .archive-controls input { width:240px; }
     .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; display:flex; justify-content:center; margin-top:16px; }
     .archive-table-shell { margin-top:0; padding-top:10px; }
+    .kp-shell { margin-top:12px; }
+    .kp-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+    .kp-note { margin:6px 0 8px; color:var(--muted); font-size:13px; line-height:1.4; }
+    .kp-legend { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:10px; font-size:13px; color:#44556b; }
+    .kp-legend-item { display:flex; align-items:center; gap:6px; }
+    .kp-legend-swatch { width:14px; height:14px; border:1px solid #7f8ea5; border-radius:3px; box-sizing:border-box; }
+    .kp-legend-green { background:#c8e6c9; }
+    .kp-legend-yellow { background:#fff0a6; }
+    .kp-legend-empty { background:transparent; }
+    .kp-status { min-height:20px; margin-top:8px; font-size:13px; color:var(--muted); }
+    .kp-table-shell { margin-top:0; padding-top:8px; }
+    .kp-table th, .kp-table td { font-size:12px; }
+    .kp-table td { white-space:pre-line; }
+    .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
+    .kp-table td.readonly { background:#f7fafc; font-weight:600; }
+    .kp-table td.selected { box-shadow: inset 0 0 0 2px #2f6fed; }
     table { border-collapse:collapse; width:max-content; table-layout:fixed; }
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; font-size:14px; line-height:1.1; }
@@ -868,6 +1022,7 @@ HTML = """<!doctype html>
 
     <div class="tabs" role="tablist" aria-label="Разделы">
       <button id="tabInput" class="tab active" type="button" onclick="switchTab('input')">Ввод замера</button>
+      <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
       <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
     </div>
 
@@ -924,6 +1079,36 @@ HTML = """<!doctype html>
       </div>
 
       <div id="status" class="status"></div>
+    </div>
+
+    <div id="panelKp" class="panel">
+      <div class="kp-controls" style="margin-top:0;">
+        <label>Локомотив
+          <select id="kpLocomotive" style="width:220px"></select>
+        </label>
+        <label>Поиск
+          <input id="kpSearch" type="text" placeholder="№ КП, ось, диаметр" style="width:260px">
+        </label>
+      </div>
+      <div class="kp-note">Памятка: редактирование диаметров колесных центров доступно только при выборе конкретного локомотива.</div>
+      <div class="kp-legend">
+        <div class="kp-legend-item"><span class="kp-legend-swatch kp-legend-yellow"></span><span>жёлтый - данные диаметров заполнены не полностью</span></div>
+        <div class="kp-legend-item"><span class="kp-legend-swatch kp-legend-green"></span><span>зелёный - все данные диаметров внесены</span></div>
+        <div class="kp-legend-item"><span class="kp-legend-swatch kp-legend-empty"></span><span>без цвета - данных по диаметрам нет</span></div>
+      </div>
+      <div class="table-shell kp-table-shell">
+        <table id="kpTable" class="kp-table" aria-label="КП данные">
+          <colgroup id="kpColgroup">
+            <col style="width:160px">
+            <col style="width:160px">
+            <col style="width:160px">
+            <col style="width:160px">
+          </colgroup>
+          <thead id="kpHead"></thead>
+          <tbody id="kpBody"></tbody>
+        </table>
+      </div>
+      <div id="kpStatus" class="kp-status"></div>
     </div>
 
     <div id="panelArchive" class="panel">
@@ -992,6 +1177,12 @@ let savedState = null;
 let canceledState = null;
 let savedRepairType = '';
 let canceledRepairType = '';
+let kpRows = [];
+let kpSelectedLoco = '';
+let kpAllMode = false;
+let kpSearchText = '';
+let kpLoading = false;
+let kpSelectedStatus = null;
 let archiveRows = [];
 let archiveSortDesc = true;
 let selectionAnchor = null;
@@ -1412,16 +1603,24 @@ function updateHistoryButtons(){
 }
 function setActiveTab(tab){
   const inputTab = document.getElementById('tabInput');
+  const kpTab = document.getElementById('tabKp');
   const archiveTab = document.getElementById('tabArchive');
   const panelInput = document.getElementById('panelInput');
+  const panelKp = document.getElementById('panelKp');
   const panelArchive = document.getElementById('panelArchive');
   if (inputTab) inputTab.classList.toggle('active', tab === 'input');
+  if (kpTab) kpTab.classList.toggle('active', tab === 'kp');
   if (archiveTab) archiveTab.classList.toggle('active', tab === 'archive');
   if (panelInput) panelInput.classList.toggle('active', tab === 'input');
+  if (panelKp) panelKp.classList.toggle('active', tab === 'kp');
   if (panelArchive) panelArchive.classList.toggle('active', tab === 'archive');
 }
 async function switchTab(tab){
   setActiveTab(tab);
+  if (tab === 'kp') {
+    renderKpLocomotiveOptions();
+    await loadKpData(document.getElementById('kpLocomotive')?.value || kpSelectedLoco || state?.locomotive || '');
+  }
   if (tab === 'archive') {
     await loadArchive();
   }
@@ -1499,6 +1698,228 @@ function renderArchiveLocomotives(){
     select.value = current;
   } else if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
     select.value = state.locomotive;
+  }
+}
+function kpStatusLabel(status, allMode, rowCount){
+  if (allMode) {
+    return rowCount ? `Показано строк: ${rowCount}` : 'Нет данных по КП';
+  }
+  if (status === 'green') return 'Диаметры заполнены полностью';
+  if (status === 'yellow') return 'Есть неполные данные по диаметрам';
+  return 'Данных по диаметрам нет';
+}
+function renderKpLocomotiveOptions(){
+  const select = document.getElementById('kpLocomotive');
+  const items = state?.locomotives || [];
+  if (!select) return;
+  const current = select.value || kpSelectedLoco || state?.locomotive || '';
+  select.innerHTML = items.length
+    ? ['<option value="">Выберите локомотив</option>', '<option value="Все локомотивы">Все локомотивы</option>']
+        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
+        .join('')
+    : '<option value="">Нет локомотивов в справочнике</option>';
+  if (current && (current === 'Все локомотивы' || items.some(x => x.number === current))) {
+    select.value = current;
+  } else if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
+    select.value = state.locomotive;
+  } else if (items.length) {
+    select.value = items[0].number;
+  }
+  kpSelectedLoco = select.value || '';
+}
+function renderKpStatus(textValue){
+  const status = document.getElementById('kpStatus');
+  if (status) status.textContent = textValue || '';
+}
+function renderKpTable(){
+  const head = document.getElementById('kpHead');
+  const body = document.getElementById('kpBody');
+  const colgroup = document.getElementById('kpColgroup');
+  if (!head || !body || !colgroup) return;
+
+  const allMode = kpAllMode;
+  const headers = allMode
+    ? ['Локомотив', '№ КП', '№ оси', 'Диаметр КЦ<br>лев', 'Диаметр КЦ<br>прав']
+    : ['№ КП', '№ оси', 'Диаметр КЦ<br>лев', 'Диаметр КЦ<br>прав'];
+  const widths = allMode ? [120, 120, 160, 160, 160] : [160, 160, 160, 160];
+  colgroup.innerHTML = widths.map(w => `<col style="width:${w}px">`).join('');
+  head.innerHTML = `<tr>${headers.map(value => `<th>${value}</th>`).join('')}</tr>`;
+
+  if (!kpRows.length) {
+    body.innerHTML = `<tr><td colspan="${headers.length}" style="padding:14px;color:var(--muted);">Нет данных</td></tr>`;
+    renderKpStatus(kpStatusLabel(null, allMode, 0));
+    return;
+  }
+
+  body.innerHTML = kpRows.map((row, rowIndex) => {
+    const values = row.values || [];
+    const search = row.search || values.map(value => String(value ?? '').trim().toLowerCase()).join(' ');
+    const editable = !!row.editable && CAN_EDIT && !allMode;
+    if (allMode) {
+      return `
+        <tr data-row="${rowIndex}" data-search="${esc(search)}">
+          ${values.map((value, colIndex) => {
+            const cls = colIndex === 0 ? 'readonly' : '';
+            return `<td class="${cls}">${esc(value)}</td>`;
+          }).join('')}
+        </tr>`;
+    }
+    return `
+      <tr data-row="${rowIndex}" data-search="${esc(search)}">
+        <td class="readonly">${esc(values[0] ?? '')}</td>
+        ${[1, 2, 3].map(colIndex => `
+          <td>
+            <input
+              value="${esc(values[colIndex] ?? '')}"
+              ${editable ? '' : 'readonly'}
+              data-row="${rowIndex}"
+              data-col="${colIndex}"
+              onfocus="handleKpCellFocus(this)"
+              onmousedown="return handleKpCellMouseDown(event, ${rowIndex}, ${colIndex})"
+              onchange="handleKpCellChange(${rowIndex}, ${colIndex}, this.value, this)"
+              onkeydown="handleKpKeydown(event, ${rowIndex}, ${colIndex})"
+            >
+          </td>`).join('')}
+      </tr>`;
+  }).join('');
+  applyKpSearchFilter();
+  renderKpStatus(kpStatusLabel(kpSelectedStatus, allMode, kpRows.length));
+}
+function applyKpSearchFilter(){
+  const textValue = (document.getElementById('kpSearch')?.value || kpSearchText || '').trim().toLowerCase();
+  kpSearchText = textValue;
+  document.querySelectorAll('#kpBody tr').forEach(tr => {
+    const haystack = (tr.dataset.search || tr.textContent || '').toLowerCase();
+    tr.style.display = !textValue || haystack.includes(textValue) ? '' : 'none';
+  });
+}
+function kpCellElement(row, col){
+  return document.querySelector(`#kpBody input[data-row="${row}"][data-col="${col}"]`);
+}
+function kpRowValues(rowIndex){
+  const row = kpRows[rowIndex];
+  if (!row) return [];
+  return row.values || [];
+}
+function handleKpCellFocus(input){
+  if (!input) return;
+  input.select?.();
+}
+function handleKpCellMouseDown(event, row, col){
+  if (!CAN_EDIT || kpAllMode) return true;
+  if (event.button !== 0) return true;
+  const input = event.currentTarget;
+  if (input) input.focus();
+  event.preventDefault();
+  return false;
+}
+function handleKpCellChange(row, col, value, input){
+  if (!CAN_EDIT || kpAllMode || kpLoading) return;
+  const next = String(value ?? '').trim();
+  if (!kpRows[row]) return;
+  kpRows[row].values[col] = next;
+  if (input) input.value = next;
+  saveKpDataChanges();
+}
+function handleKpKeydown(event, row, col){
+  if (kpAllMode) return;
+  const key = event.key;
+  if (key === 'Delete' || key === 'Backspace') {
+    event.preventDefault();
+    const input = kpCellElement(row, col);
+    if (input) {
+      input.value = '';
+      handleKpCellChange(row, col, '', input);
+    }
+    return;
+  }
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) {
+    event.preventDefault();
+    let nextRow = row;
+    let nextCol = col;
+    if (key === 'ArrowLeft' && col > 1) nextCol = col - 1;
+    if (key === 'ArrowRight' && col < 3) nextCol = col + 1;
+    if (key === 'ArrowUp' && row > 0) nextRow = row - 1;
+    if (key === 'ArrowDown' && row < kpRows.length - 1) nextRow = row + 1;
+    const next = kpCellElement(nextRow, nextCol);
+    if (next) next.focus();
+  }
+}
+function collectKpRowsFromView(){
+  return kpRows.map((row, rowIndex) => {
+    if (kpAllMode) return row.values || [];
+    const values = [`${rowIndex + 1}`, '', '', ''];
+    values[1] = kpCellElement(rowIndex, 1)?.value ?? row.values?.[1] ?? '';
+    values[2] = kpCellElement(rowIndex, 2)?.value ?? row.values?.[2] ?? '';
+    values[3] = kpCellElement(rowIndex, 3)?.value ?? row.values?.[3] ?? '';
+    return values.map(value => String(value ?? '').trim());
+  });
+}
+async function saveKpDataChanges(){
+  if (!CAN_EDIT || kpAllMode || kpLoading) return false;
+  const loco = (kpSelectedLoco || '').trim();
+  if (!loco || loco === 'Все локомотивы') return false;
+  const rows = collectKpRowsFromView();
+  kpLoading = true;
+  renderKpStatus('Сохранение КП данных...');
+    try {
+      const res = await fetch(`${API}/api/kp-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ locomotive: loco, rows }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        kpLoading = false;
+        await loadKpData(loco);
+        renderKpStatus(err.error || 'Не удалось сохранить КП данные');
+        return false;
+      }
+    const payload = await res.json();
+    kpSelectedLoco = payload.selected_locomotive || loco;
+    kpAllMode = !!payload.all_mode;
+    kpSelectedStatus = payload.status || null;
+    kpRows = payload.rows || [];
+    if (state && kpSelectedLoco && kpSelectedLoco === state.locomotive) {
+      state.kp = payload.kp_map || {};
+      recalcDiameters();
+    }
+    renderKpLocomotiveOptions();
+    renderKpTable();
+    renderKpStatus(kpStatusLabel(kpSelectedStatus, kpAllMode, kpRows.length));
+    return true;
+  } finally {
+    kpLoading = false;
+  }
+}
+async function loadKpData(nextValue){
+  const select = document.getElementById('kpLocomotive');
+  const value = String(nextValue ?? select?.value ?? kpSelectedLoco ?? state?.locomotive ?? '').trim();
+  if (select && value && select.value !== value) {
+    select.value = value;
+  }
+  kpSelectedLoco = value || (state?.locomotive || '');
+  kpLoading = true;
+  renderKpStatus('Загрузка КП данных...');
+  try {
+    const res = await fetch(`${API}/api/kp-data?locomotive=${encodeURIComponent(kpSelectedLoco)}`, { cache: 'no-store' });
+    if (!res.ok) {
+      kpRows = [];
+      kpAllMode = false;
+      renderKpTable();
+      renderKpStatus('Не удалось загрузить КП данные');
+      return;
+    }
+    const payload = await res.json();
+    kpSelectedLoco = payload.selected_locomotive || kpSelectedLoco;
+    kpAllMode = !!payload.all_mode;
+    kpSelectedStatus = payload.status || null;
+    kpRows = payload.rows || [];
+    renderKpLocomotiveOptions();
+    renderKpTable();
+    renderKpStatus(kpStatusLabel(kpSelectedStatus, kpAllMode, kpRows.length));
+  } finally {
+    kpLoading = false;
   }
 }
 function renderRepairOptions(){
@@ -1735,6 +2156,7 @@ async function loadState(nextLocomotive){
   document.getElementById('measurementDate').value = state.measurement_date || '';
   renderLocoOptions();
   renderArchiveLocomotives();
+  renderKpLocomotiveOptions();
   renderRepairOptions();
   renderMeta();
   renderTable();
@@ -1869,6 +2291,7 @@ function cancelChanges(){
   document.getElementById('locomotive').value = state.locomotive || '';
   document.getElementById('measurementDate').value = state.measurement_date || '';
   renderLocoOptions();
+  renderKpLocomotiveOptions();
   renderRepairOptions();
   renderMeta();
   renderTable();
@@ -1883,6 +2306,7 @@ function restoreChanges(){
   document.getElementById('locomotive').value = state.locomotive || '';
   document.getElementById('measurementDate').value = state.measurement_date || '';
   renderLocoOptions();
+  renderKpLocomotiveOptions();
   renderRepairOptions();
   renderMeta();
   renderTable();
@@ -1895,6 +2319,8 @@ function restoreChanges(){
 document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
+document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
+document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilter);
 document.getElementById('archiveLocomotive').addEventListener('change', loadArchive);
 document.getElementById('archiveSearch').addEventListener('input', loadArchive);
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
@@ -1985,6 +2411,14 @@ class Handler(BaseHTTPRequestHandler):
             send_json(self, {"rows": rows})
             return
 
+        if route == "/api/kp-data":
+            if not require_auth(self):
+                return
+            qs = parse_qs(parsed.query)
+            locomotive = text(qs.get("locomotive", [""])[0]).strip()
+            send_json(self, load_kp_view(locomotive))
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self):
@@ -2012,6 +2446,21 @@ class Handler(BaseHTTPRequestHandler):
                     result = update_archive_cells(payload)
                 else:
                     result = save_archive(payload)
+                if isinstance(result, tuple):
+                    body, status = result
+                    send_json(self, body, status)
+                else:
+                    send_json(self, result)
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/kp-data":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                result = save_kp_data(payload)
                 if isinstance(result, tuple):
                     body, status = result
                     send_json(self, body, status)
