@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.10"
+APP_VERSION = "web-zkp-1.11"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -445,10 +445,6 @@ HTML = """<!doctype html>
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
-    .legend { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; color:var(--muted); font-size:12px; }
-    .dot { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
-    .dot.warn { background:var(--warn); border:1px solid #f0d97d; }
-    .dot.bad { background:var(--bad); border:1px solid #e0a6a6; }
     @media (max-width: 900px) {
       .top { display:block; }
       .actions, .filters { margin-top:10px; }
@@ -519,10 +515,6 @@ HTML = """<!doctype html>
         </thead>
         <tbody id="inputBody"></tbody>
       </table>
-      <div class="legend" aria-label="Легенда зон">
-        <span title="Желтая зона"><span class="dot warn"></span></span>
-        <span title="Красная зона"><span class="dot bad"></span></span>
-      </div>
     </div>
 
     <div id="status" class="status"></div>
