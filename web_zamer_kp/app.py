@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.2"
+APP_VERSION = "web-zkp-1.3"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -466,7 +466,6 @@ HTML = """<!doctype html>
         <a href="/">На главную</a>
         <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-        <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить</button>
       </div>
     </div>
 
@@ -480,6 +479,7 @@ HTML = """<!doctype html>
       <label>Вид ремонта
         <select id="repairType" style="width:150px"></select>
       </label>
+      <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить в архив</button>
     </div>
 
     <div class="meta">
