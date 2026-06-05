@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.8"
+APP_VERSION = "web-zkp-0.9"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -434,7 +434,9 @@ HTML = """<!doctype html>
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; }
     th.small { font-size:12px; line-height:1.1; }
+    th.measure-head, td.measure-cell { width:42px; }
     td.fixed { background:#f7fafc; font-weight:600; }
+    td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
@@ -490,23 +492,23 @@ HTML = """<!doctype html>
           <tr>
             <th class="small" rowspan="2" style="width:110px;">Секция<br>(вагон)</th>
             <th class="small" rowspan="2" style="width:74px;">Номер<br>КП</th>
-            <th colspan="2">Прокат</th>
-            <th colspan="2">Гребень</th>
-            <th colspan="2">Крутизна</th>
-            <th colspan="2">Бандаж</th>
-            <th colspan="2">Диаметр</th>
+            <th class="measure-head" colspan="2">Прокат</th>
+            <th class="measure-head" colspan="2">Гребень</th>
+            <th class="measure-head" colspan="2">Крутизна</th>
+            <th class="measure-head" colspan="2">Бандаж</th>
+            <th class="measure-head" colspan="2">Диаметр</th>
           </tr>
           <tr>
-            <th class="small">лев</th>
-            <th class="small">прав</th>
-            <th class="small">лев</th>
-            <th class="small">прав</th>
-            <th class="small">лев</th>
-            <th class="small">прав</th>
-            <th class="small">лев</th>
-            <th class="small">прав</th>
-            <th class="small">лев</th>
-            <th class="small">прав</th>
+            <th class="small measure-head">лев</th>
+            <th class="small measure-head">прав</th>
+            <th class="small measure-head">лев</th>
+            <th class="small measure-head">прав</th>
+            <th class="small measure-head">лев</th>
+            <th class="small measure-head">прав</th>
+            <th class="small measure-head">лев</th>
+            <th class="small measure-head">прав</th>
+            <th class="small measure-head">лев</th>
+            <th class="small measure-head">прав</th>
           </tr>
         </thead>
         <tbody id="inputBody"></tbody>
@@ -651,7 +653,7 @@ function renderTable(){
       const value = rows[r]?.[c] ?? '';
       const cls = measurementClass(c, value);
       html += `
-        <td class="${cls}" data-col="${c}">
+        <td class="measure-cell ${cls}" data-col="${c}">
           <input
             value="${esc(value)}"
             ${CAN_EDIT ? '' : 'readonly'}
