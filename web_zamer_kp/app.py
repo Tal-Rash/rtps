@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.11"
+APP_VERSION = "web-zkp-1.12"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -100,6 +100,20 @@ def ensure_db() -> None:
             CREATE TABLE IF NOT EXISTS kp_data (
                 locomotive TEXT, r INT, c INT, v TEXT,
                 PRIMARY KEY(locomotive, r, c)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS archive_data (
+                y INT,
+                measurement_date TEXT,
+                locomotive TEXT,
+                repair_type TEXT,
+                r INT,
+                c INT,
+                v TEXT,
+                PRIMARY KEY(y, measurement_date, locomotive, repair_type, r, c)
             )
             """
         )
@@ -408,6 +422,186 @@ def save_state(payload: dict) -> dict:
     return load_state(locomotive)
 
 
+def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bool = True) -> list[dict]:
+    locomotive = text(locomotive).strip()
+    search_text = text(search_text).strip().lower()
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        order_direction = "DESC" if sort_desc else "ASC"
+        params: list[str] = []
+        query = """
+            SELECT y, measurement_date, locomotive, repair_type, r, c, v
+            FROM archive_data
+        """
+        where: list[str] = []
+        if locomotive and locomotive != "Все локомотивы":
+            where.append("locomotive = ?")
+            params.append(locomotive)
+        if where:
+            query += " WHERE " + " AND ".join(where)
+        query += f" ORDER BY y {order_direction}, measurement_date {order_direction}, locomotive ASC, repair_type ASC, r ASC, c ASC"
+        rows = cur.execute(query, params).fetchall()
+
+        grouped: dict[tuple[int, str, str, str, int], list[str]] = {}
+        for row in rows:
+            r = int(row["r"])
+            if r < 2:
+                continue
+            key = (
+                int(row["y"] or 0),
+                text(row["measurement_date"]).strip(),
+                text(row["locomotive"]).strip(),
+                text(row["repair_type"]).strip(),
+                r,
+            )
+            grouped.setdefault(key, [""] * 12)
+            c = int(row["c"])
+            if 0 <= c < 12:
+                grouped[key][c] = text(row["v"])
+
+        def to_float(v):
+            try:
+                return float(text(v).replace(",", "."))
+            except Exception:
+                return None
+
+        def fmt_num(v):
+            if v is None:
+                return ""
+            try:
+                value = float(v)
+            except Exception:
+                return text(v).strip()
+            if value.is_integer():
+                return str(int(value))
+            return str(value).rstrip("0").rstrip(".").replace(".", ",")
+
+        stats_by_section: dict[tuple[int, str, str, str, str], dict[str, str]] = {}
+        for (year, measurement_date, loco, repair_type, row_index), values in grouped.items():
+            section_value = values[0] or "1"
+            key = (year, measurement_date, loco, repair_type, section_value)
+            stats = stats_by_section.setdefault(
+                key,
+                {
+                    "max_prokat": "",
+                    "min_greben": "",
+                    "min_krut": "",
+                    "min_bandage_thickness": "",
+                    "max_diameter_diff": "",
+                    "prokat_6_count": "0",
+                    "bandage_limit_count": "0",
+                },
+            )
+            prokat_pair = [v for v in [to_float(values[2]), to_float(values[3])] if v is not None]
+            greben_pair = [v for v in [to_float(values[4]), to_float(values[5])] if v is not None]
+            krut_pair = [v for v in [to_float(values[6]), to_float(values[7])] if v is not None]
+            bandage_pair = [v for v in [to_float(values[8]), to_float(values[9])] if v is not None]
+            diameter_pair = [v for v in [to_float(values[10]), to_float(values[11])] if v is not None]
+
+            if prokat_pair:
+                current = to_float(stats["max_prokat"])
+                stats["max_prokat"] = fmt_num(max(prokat_pair)) if current is None else fmt_num(max([current, *prokat_pair]))
+                if max(prokat_pair) >= 6:
+                    stats["prokat_6_count"] = fmt_num((to_float(stats["prokat_6_count"]) or 0) + 1)
+            if greben_pair:
+                current = to_float(stats["min_greben"])
+                stats["min_greben"] = fmt_num(min(greben_pair)) if current is None else fmt_num(min([current, *greben_pair]))
+            if krut_pair:
+                current = to_float(stats["min_krut"])
+                stats["min_krut"] = fmt_num(min(krut_pair)) if current is None else fmt_num(min([current, *krut_pair]))
+            if bandage_pair:
+                current = to_float(stats["min_bandage_thickness"])
+                stats["min_bandage_thickness"] = fmt_num(min(bandage_pair)) if current is None else fmt_num(min([current, *bandage_pair]))
+            if len(diameter_pair) >= 2:
+                diff = max(diameter_pair) - min(diameter_pair)
+                current = to_float(stats["max_diameter_diff"])
+                stats["max_diameter_diff"] = fmt_num(diff) if current is None else fmt_num(max([current, diff]))
+            if bandage_pair:
+                check_text = normalize_text(loco)
+                is_limit = False
+                if any(x in check_text for x in ["пэ-2м", "пэ2м", "пэ 2м", "pe-2m", "pe2m"]):
+                    is_limit = any(v < 51 for v in bandage_pair)
+                elif "тэм" in check_text or "tem" in check_text:
+                    is_limit = any(v < 41 for v in bandage_pair)
+                if is_limit:
+                    stats["bandage_limit_count"] = fmt_num((to_float(stats["bandage_limit_count"]) or 0) + 1)
+
+        def sort_key(item):
+            (year, measurement_date, loco, repair_type, row_index), _ = item
+            try:
+                year_key = int(year)
+            except Exception:
+                year_key = 0
+            try:
+                date_key = int((measurement_date or "").replace("-", ""))
+            except Exception:
+                date_key = 0
+            if sort_desc:
+                return (-year_key, -date_key, loco, repair_type, row_index)
+            return (year_key, date_key, loco, repair_type, row_index)
+
+        archive_rows: list[dict] = []
+        for (year, measurement_date, loco, repair_type, row_index), values in sorted(grouped.items(), key=sort_key):
+            if search_text:
+                probe = " ".join(
+                    [
+                        text(year),
+                        measurement_date,
+                        loco,
+                        repair_type,
+                        *[text(v) for v in values],
+                    ]
+                ).lower()
+                if search_text not in probe:
+                    continue
+
+            formatted_date = measurement_date
+            if measurement_date and len(measurement_date) >= 10:
+                parts = measurement_date.split("-")
+                if len(parts) == 3:
+                    formatted_date = f"{parts[2]}.{parts[1]}.{parts[0][-2:]}"
+
+            date_and_repair = f"{loco}\n{formatted_date}"
+            if repair_type:
+                date_and_repair += f"\n{repair_type}"
+
+            section_value = values[0] or "1"
+            stats = stats_by_section.get((year, measurement_date, loco, repair_type, section_value), {})
+            row_values = [
+                date_and_repair,
+                section_value,
+                stats.get("max_prokat", ""),
+                stats.get("min_greben", ""),
+                stats.get("min_krut", ""),
+                stats.get("min_bandage_thickness", ""),
+                stats.get("max_diameter_diff", ""),
+                stats.get("bandage_limit_count", "0"),
+                stats.get("prokat_6_count", "0"),
+                values[1],
+                values[2],
+                values[3],
+                values[4],
+                values[5],
+                values[6],
+                values[7],
+                values[8],
+                values[9],
+                values[10],
+                values[11],
+            ]
+            archive_rows.append({
+                "values": row_values,
+                "year": year,
+                "measurement_date": measurement_date,
+                "locomotive": loco,
+                "repair_type": repair_type,
+                "section": section_value,
+                "stats": stats,
+            })
+
+        return archive_rows
+
+
 HTML = """<!doctype html>
 <html lang="ru">
 <head>
@@ -430,7 +624,16 @@ HTML = """<!doctype html>
     .badge { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:13px; }
     .badge strong { font-weight:700; }
     #saveBtn { margin-left:auto; }
+    .tabs { display:flex; gap:8px; margin-top:12px; }
+    .tab { background:#fff; border:1px solid var(--line); border-bottom-color:#c9d4e3; padding:10px 14px; border-radius:10px 10px 0 0; font-weight:700; cursor:pointer; }
+    .tab.active { background:#eef3f8; border-bottom-color:#eef3f8; }
+    .panel { display:none; background:#fff; border:1px solid var(--line); border-top:none; border-radius:0 16px 16px 16px; padding:12px; }
+    .panel.active { display:block; }
+    .archive-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+    .archive-controls label { display:flex; align-items:center; gap:8px; }
+    .archive-controls input { width:240px; }
     .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; display:flex; justify-content:center; margin-top:16px; }
+    .archive-table-shell { margin-top:0; padding-top:10px; }
     table { border-collapse:collapse; width:max-content; table-layout:fixed; }
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; font-size:14px; line-height:1.1; }
@@ -444,6 +647,11 @@ HTML = """<!doctype html>
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
+    .archive-table th, .archive-table td { font-size:12px; }
+    .archive-table td { white-space:pre-line; }
+    .archive-table td.raw { width:60px; }
+    .archive-table td.summary { width:110px; }
+    .archive-table td.first-col { width:220px; }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
     @media (max-width: 900px) {
       .top { display:block; }
@@ -466,58 +674,120 @@ HTML = """<!doctype html>
       </div>
     </div>
 
-    <div class="filters" style="margin-top:12px;">
-      <label>Локомотив
-        <select id="locomotive" style="width:220px"></select>
-      </label>
-      <label>Дата замера
-        <input id="measurementDate" type="date" style="width:150px">
-      </label>
-      <label>Вид ремонта
-        <select id="repairType" style="width:150px"></select>
-      </label>
-      <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить в архив</button>
+    <div class="tabs" role="tablist" aria-label="Разделы">
+      <button id="tabInput" class="tab active" type="button" onclick="switchTab('input')">Ввод замера</button>
+      <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
     </div>
 
-    <div class="table-shell">
-      <table id="inputTable" aria-label="Ввод замера КП">
-        <colgroup>
-          <col style="width:80px">
-          <col style="width:80px">
-          <col style="width:60px"><col style="width:60px">
-          <col style="width:60px"><col style="width:60px">
-          <col style="width:60px"><col style="width:60px">
-          <col style="width:60px"><col style="width:60px">
-          <col style="width:60px"><col style="width:60px">
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="small section-col" rowspan="2">Секция<br>(вагон)</th>
-            <th class="small number-col" rowspan="2">Номер<br>КП</th>
-            <th class="measure-head" colspan="2">Прокат</th>
-            <th class="measure-head" colspan="2">Толщина гребня</th>
-            <th class="measure-head" colspan="2">Параметр крутизны гребня</th>
-            <th class="measure-head" colspan="2">Толщина бандажа</th>
-            <th class="measure-head" colspan="2">Диаметр бандажа</th>
-          </tr>
-          <tr>
-            <th class="small measure-head">лев</th>
-            <th class="small measure-head">прав</th>
-            <th class="small measure-head">лев</th>
-            <th class="small measure-head">прав</th>
-            <th class="small measure-head">лев</th>
-            <th class="small measure-head">прав</th>
-            <th class="small measure-head">лев</th>
-            <th class="small measure-head">прав</th>
-            <th class="small measure-head">лев</th>
-            <th class="small measure-head">прав</th>
-          </tr>
-        </thead>
-        <tbody id="inputBody"></tbody>
-      </table>
+    <div id="panelInput" class="panel active">
+      <div class="filters" style="margin-top:0;">
+        <label>Локомотив
+          <select id="locomotive" style="width:220px"></select>
+        </label>
+        <label>Дата замера
+          <input id="measurementDate" type="date" style="width:150px">
+        </label>
+        <label>Вид ремонта
+          <select id="repairType" style="width:150px"></select>
+        </label>
+        <button id="saveBtn" class="primary" onclick="saveCurrent()">Сохранить в архив</button>
+      </div>
+
+      <div class="table-shell">
+        <table id="inputTable" aria-label="Ввод замера КП">
+          <colgroup>
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="small section-col" rowspan="2">Секция<br>(вагон)</th>
+              <th class="small number-col" rowspan="2">Номер<br>КП</th>
+              <th class="measure-head" colspan="2">Прокат</th>
+              <th class="measure-head" colspan="2">Толщина гребня</th>
+              <th class="measure-head" colspan="2">Параметр крутизны гребня</th>
+              <th class="measure-head" colspan="2">Толщина бандажа</th>
+              <th class="measure-head" colspan="2">Диаметр бандажа</th>
+            </tr>
+            <tr>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+            </tr>
+          </thead>
+          <tbody id="inputBody"></tbody>
+        </table>
+      </div>
+
+      <div id="status" class="status"></div>
     </div>
 
-    <div id="status" class="status"></div>
+    <div id="panelArchive" class="panel">
+      <div class="archive-controls">
+        <label>Локомотив
+          <select id="archiveLocomotive" style="width:220px"></select>
+        </label>
+        <label>Поиск
+          <input id="archiveSearch" type="text" placeholder="Дата, локомотив, вид ремонта" />
+        </label>
+        <button id="archiveSortBtn" type="button" onclick="toggleArchiveSort()">⬇ НОВЫЕ → СТАРЫЕ</button>
+      </div>
+
+      <div class="table-shell archive-table-shell">
+        <table id="archiveTable" class="archive-table" aria-label="Архив замеров">
+          <colgroup>
+            <col style="width:220px">
+            <col style="width:80px">
+            <col style="width:110px">
+            <col style="width:110px">
+            <col style="width:110px">
+            <col style="width:110px">
+            <col style="width:110px">
+            <col style="width:90px">
+            <col style="width:90px">
+            <col style="width:80px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Локомотив<br>Дата<br>Вид ремонта</th>
+              <th>Секция</th>
+              <th>Прокат,<br>макс</th>
+              <th>Гребень,<br>мин</th>
+              <th>Крутизна,<br>мин</th>
+              <th>Бандаж,<br>мин</th>
+              <th>Диаметр,<br>разница</th>
+              <th>КП с<br>бандажом</th>
+              <th>КП с<br>прокатом 6+</th>
+              <th>Номер<br>КП</th>
+              <th>Прокат<br>лев</th><th>Прокат<br>прав</th>
+              <th>Гребень<br>лев</th><th>Гребень<br>прав</th>
+              <th>Крутизна<br>лев</th><th>Крутизна<br>прав</th>
+              <th>Бандаж<br>лев</th><th>Бандаж<br>прав</th>
+              <th>Диаметр<br>лев</th><th>Диаметр<br>прав</th>
+            </tr>
+          </thead>
+          <tbody id="archiveBody"></tbody>
+        </table>
+      </div>
+      <div id="archiveStatus" class="status"></div>
+    </div>
   </div>
 
 <script>
@@ -530,6 +800,8 @@ let savedState = null;
 let canceledState = null;
 let savedRepairType = '';
 let canceledRepairType = '';
+let archiveRows = [];
+let archiveSortDesc = true;
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -555,6 +827,22 @@ function updateHistoryButtons(){
   if (restoreBtn) restoreBtn.style.display = '';
   if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
+}
+function setActiveTab(tab){
+  const inputTab = document.getElementById('tabInput');
+  const archiveTab = document.getElementById('tabArchive');
+  const panelInput = document.getElementById('panelInput');
+  const panelArchive = document.getElementById('panelArchive');
+  if (inputTab) inputTab.classList.toggle('active', tab === 'input');
+  if (archiveTab) archiveTab.classList.toggle('active', tab === 'archive');
+  if (panelInput) panelInput.classList.toggle('active', tab === 'input');
+  if (panelArchive) panelArchive.classList.toggle('active', tab === 'archive');
+}
+async function switchTab(tab){
+  setActiveTab(tab);
+  if (tab === 'archive') {
+    await loadArchive();
+  }
 }
 function getCurrentLoco(){
   return document.getElementById('locomotive').value.trim();
@@ -615,6 +903,22 @@ function renderLocoOptions(){
     select.value = items[0].number;
   }
 }
+function renderArchiveLocomotives(){
+  const select = document.getElementById('archiveLocomotive');
+  const items = state?.locomotives || [];
+  const current = select?.value || '';
+  if (!select) return;
+  select.innerHTML = items.length
+    ? ['<option value="">Все локомотивы</option>']
+        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
+        .join('')
+    : '<option value="">Нет локомотивов в справочнике</option>';
+  if (current && items.some(x => x.number === current)) {
+    select.value = current;
+  } else if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
+    select.value = state.locomotive;
+  }
+}
 function renderRepairOptions(){
   const select = document.getElementById('repairType');
   const current = currentRepairType || '';
@@ -623,8 +927,35 @@ function renderRepairOptions(){
   select.value = options.includes(current) ? current : '';
   currentRepairType = select.value || '';
 }
+function updateArchiveSortButton(){
+  const btn = document.getElementById('archiveSortBtn');
+  if (!btn) return;
+  if (archiveSortDesc) {
+    btn.textContent = '⬇ НОВЫЕ → СТАРЫЕ';
+    btn.title = 'Показать замеры от новых к старым';
+  } else {
+    btn.textContent = '⬆ СТАРЫЕ → НОВЫЕ';
+    btn.title = 'Показать замеры от старых к новым';
+  }
+}
 function renderMeta(){
   return;
+}
+function renderArchiveTable(){
+  const tbody = document.getElementById('archiveBody');
+  if (!tbody) return;
+  if (!archiveRows.length) {
+    tbody.innerHTML = '<tr><td colspan="20" style="padding:14px;color:var(--muted);">Архив пуст</td></tr>';
+    return;
+  }
+  tbody.innerHTML = archiveRows.map(row => {
+    const values = row.values || [];
+    const cells = values.map((value, index) => {
+      const cls = index === 0 ? 'first-col' : (index >= 2 && index <= 8 ? 'summary' : (index >= 10 ? 'raw' : ''));
+      return `<td class="${cls}">${esc(value)}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
 }
 function renderTable(){
   const tbody = document.getElementById('inputBody');
@@ -661,6 +992,28 @@ function renderTable(){
   }
   tbody.innerHTML = html;
   recalcDiameters();
+}
+async function loadArchive(){
+  const status = document.getElementById('archiveStatus');
+  const loco = document.getElementById('archiveLocomotive')?.value || '';
+  const search = document.getElementById('archiveSearch')?.value || '';
+  if (status) status.textContent = 'Загрузка архива...';
+  updateArchiveSortButton();
+  const res = await fetch(`${API}/api/archive?locomotive=${encodeURIComponent(loco)}&search=${encodeURIComponent(search)}&sort=${archiveSortDesc ? 'desc' : 'asc'}`, { cache: 'no-store' });
+  if (!res.ok) {
+    archiveRows = [];
+    renderArchiveTable();
+    if (status) status.textContent = 'Не удалось загрузить архив';
+    return;
+  }
+  const payload = await res.json();
+  archiveRows = payload.rows || [];
+  renderArchiveTable();
+  if (status) status.textContent = archiveRows.length ? `Записей: ${archiveRows.length}` : 'Архив пуст';
+}
+function toggleArchiveSort(){
+  archiveSortDesc = !archiveSortDesc;
+  loadArchive();
 }
 function refreshRowClasses(rowIndex){
   const row = document.querySelector(`tr[data-row="${rowIndex}"]`);
@@ -733,9 +1086,12 @@ async function loadState(nextLocomotive){
   document.getElementById('locomotive').value = state.locomotive || '';
   document.getElementById('measurementDate').value = state.measurement_date || '';
   renderLocoOptions();
+  renderArchiveLocomotives();
   renderRepairOptions();
   renderMeta();
   renderTable();
+  updateArchiveSortButton();
+  await loadArchive();
   setDirty(false);
   setStatus('Готово');
 }
@@ -793,6 +1149,7 @@ async function saveCurrent(){
   renderRepairOptions();
   renderMeta();
   renderTable();
+  await loadArchive();
   setDirty(false);
   setStatus('Сохранено');
 }
@@ -832,6 +1189,8 @@ function restoreChanges(){
 document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
+document.getElementById('archiveLocomotive').addEventListener('change', loadArchive);
+document.getElementById('archiveSearch').addEventListener('input', loadArchive);
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
 loadState();
@@ -907,6 +1266,17 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             locomotive = text(qs.get("locomotive", [""])[0]).strip()
             send_json(self, load_state(locomotive))
+            return
+
+        if route == "/api/archive":
+            if not require_auth(self):
+                return
+            qs = parse_qs(parsed.query)
+            locomotive = text(qs.get("locomotive", [""])[0]).strip()
+            search = text(qs.get("search", [""])[0]).strip()
+            sort = text(qs.get("sort", ["desc"])[0]).strip().lower()
+            rows = load_archive_rows(locomotive, search, sort != "asc")
+            send_json(self, {"rows": rows})
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
