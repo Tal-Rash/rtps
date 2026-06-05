@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-0.9"
+APP_VERSION = "web-zkp-1.0"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -430,11 +430,13 @@ HTML = """<!doctype html>
     .badge { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:13px; }
     .badge strong { font-weight:700; }
     .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; }
-    table { border-collapse:collapse; width:100%; min-width:1080px; table-layout:fixed; }
+    table { border-collapse:collapse; width:max-content; table-layout:fixed; }
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; }
     th.small { font-size:12px; line-height:1.1; }
-    th.measure-head, td.measure-cell { width:42px; }
+    th.measure-head, td.measure-cell { width:40px; }
+    th.section-col, td.section-col { width:84px; }
+    th.number-col, td.number-col { width:58px; }
     td.fixed { background:#f7fafc; font-weight:600; }
     td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
@@ -488,15 +490,24 @@ HTML = """<!doctype html>
 
     <div class="table-shell">
       <table id="inputTable" aria-label="Ввод замера КП">
+        <colgroup>
+          <col style="width:84px">
+          <col style="width:58px">
+          <col style="width:40px"><col style="width:40px">
+          <col style="width:40px"><col style="width:40px">
+          <col style="width:40px"><col style="width:40px">
+          <col style="width:40px"><col style="width:40px">
+          <col style="width:40px"><col style="width:40px">
+        </colgroup>
         <thead>
           <tr>
-            <th class="small" rowspan="2" style="width:110px;">Секция<br>(вагон)</th>
-            <th class="small" rowspan="2" style="width:74px;">Номер<br>КП</th>
-            <th class="measure-head" colspan="2">Прокат</th>
-            <th class="measure-head" colspan="2">Гребень</th>
-            <th class="measure-head" colspan="2">Крутизна</th>
-            <th class="measure-head" colspan="2">Бандаж</th>
-            <th class="measure-head" colspan="2">Диаметр</th>
+            <th class="small section-col" rowspan="2">Секция<br>(вагон)</th>
+            <th class="small number-col" rowspan="2">Номер<br>КП</th>
+            <th class="measure-head" colspan="2">Прокат, мм</th>
+            <th class="measure-head" colspan="2">Толщина гребня, мм</th>
+            <th class="measure-head" colspan="2">Параметр крутизны гребня, мм</th>
+            <th class="measure-head" colspan="2">Толщина бандажа, мм</th>
+            <th class="measure-head" colspan="2">Диаметр бандажа, мм</th>
           </tr>
           <tr>
             <th class="small measure-head">лев</th>
@@ -646,9 +657,9 @@ function renderTable(){
     const section = sectionMap.get(r);
     html += `<tr data-row="${r}">`;
     if (section) {
-      html += `<td class="fixed" rowspan="${section.span}">${esc(section.value)}</td>`;
+      html += `<td class="fixed section-col" rowspan="${section.span}">${esc(section.value)}</td>`;
     }
-    html += `<td class="fixed">${r + 1}</td>`;
+    html += `<td class="fixed number-col">${r + 1}</td>`;
     for (let c = 0; c < 10; c += 1) {
       const value = rows[r]?.[c] ?? '';
       const cls = measurementClass(c, value);
