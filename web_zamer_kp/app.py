@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.0"
+APP_VERSION = "web-zkp-1.1"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -434,9 +434,9 @@ HTML = """<!doctype html>
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; }
     th.small { font-size:12px; line-height:1.1; }
-    th.measure-head, td.measure-cell { width:40px; }
-    th.section-col, td.section-col { width:84px; }
-    th.number-col, td.number-col { width:58px; }
+    th.measure-head, td.measure-cell { width:60px; }
+    th.section-col, td.section-col { width:80px; }
+    th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
     td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
@@ -491,13 +491,13 @@ HTML = """<!doctype html>
     <div class="table-shell">
       <table id="inputTable" aria-label="Ввод замера КП">
         <colgroup>
-          <col style="width:84px">
-          <col style="width:58px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
-          <col style="width:40px"><col style="width:40px">
+          <col style="width:80px">
+          <col style="width:80px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
+          <col style="width:60px"><col style="width:60px">
         </colgroup>
         <thead>
           <tr>
