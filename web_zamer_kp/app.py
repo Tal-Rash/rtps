@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.25"
+APP_VERSION = "web-zkp-1.26"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1308,6 +1308,7 @@ let archiveSelectionAnchor = null;
 let archiveSelectionFocus = null;
 let locomotiveInputSource = 'loaded';
 let initialLoadPromise = null;
+let locomotiveSwitchPromise = null;
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -1832,7 +1833,7 @@ function renderLocoOptions(){
 }
 function renderLocoDropdown(filterText = '', open = true){
   const dropdown = document.getElementById('locomotiveDropdown');
-  const items = LOCOMOTIVE_CHOICES || [];
+  const items = (LOCOMOTIVE_CHOICES && LOCOMOTIVE_CHOICES.length ? LOCOMOTIVE_CHOICES : (state?.locomotives || []));
   if (!dropdown) return;
   const textValue = String(filterText || '').trim().toLowerCase();
   const filtered = textValue
@@ -2414,14 +2415,28 @@ async function loadState(nextLocomotive, preloadedState = null, manualConfig = n
   setStatus('Готово');
 }
 async function maybeSwitchLocomotive(nextValue){
+  if (locomotiveSwitchPromise) {
+    await locomotiveSwitchPromise.catch(() => undefined);
+  }
+  locomotiveSwitchPromise = switchLocomotive(String(nextValue ?? '').trim()).finally(() => {
+    locomotiveSwitchPromise = null;
+  });
+  return locomotiveSwitchPromise;
+}
+async function switchLocomotive(next){
   if (initialLoadPromise) {
     await initialLoadPromise.catch(() => undefined);
   }
-  const next = nextValue.trim();
   const current = state?.locomotive || '';
   if (!next) {
     const input = document.getElementById('locomotive');
     if (input) input.value = current;
+    return;
+  }
+  if (next === current) {
+    locomotiveInputSource = 'loaded';
+    renderMeta();
+    hideLocoDropdown();
     return;
   }
   if (dirty && current) {
@@ -2474,7 +2489,7 @@ async function maybeSwitchLocomotive(nextValue){
   await loadState(next);
 }
 function onLocomotiveCommit(){
-  maybeSwitchLocomotive(document.getElementById('locomotive').value);
+  return maybeSwitchLocomotive(document.getElementById('locomotive').value);
 }
 function onDateChange(){
   setDirty(true);
@@ -2616,6 +2631,10 @@ function restoreChanges(){
 
 document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
 document.getElementById('locomotive').addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    hideLocoDropdown();
+    return;
+  }
   if (event.key === 'Enter') {
     event.preventDefault();
     onLocomotiveCommit();
@@ -2633,6 +2652,10 @@ document.getElementById('locomotiveDropdown').addEventListener('mousedown', even
   if (!btn) return;
   event.preventDefault();
   chooseLoco(btn.dataset.loco || '');
+});
+document.addEventListener('mousedown', event => {
+  const picker = event.target.closest?.('.loco-picker');
+  if (!picker) hideLocoDropdown();
 });
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
