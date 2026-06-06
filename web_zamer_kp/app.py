@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.19"
+APP_VERSION = "web-zkp-1.20"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -89,7 +89,7 @@ def ensure_db() -> None:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS input_meta (y INT, locomotive TEXT, measurement_date TEXT, PRIMARY KEY(y, locomotive))"
+            "CREATE TABLE IF NOT EXISTS input_meta (y INT, locomotive TEXT, measurement_date TEXT, wheel_pair_count INT, section_count INT, PRIMARY KEY(y, locomotive))"
         )
         cur.execute(
             "CREATE TABLE IF NOT EXISTS input_data (y INT, locomotive TEXT, r INT, c INT, v TEXT, PRIMARY KEY(y, locomotive, r, c))"
@@ -128,6 +128,11 @@ def ensure_db() -> None:
             )
             """
         )
+        existing_input_meta_cols = {row[1] for row in cur.execute("PRAGMA table_info(input_meta)").fetchall()}
+        if "wheel_pair_count" not in existing_input_meta_cols:
+            cur.execute("ALTER TABLE input_meta ADD COLUMN wheel_pair_count INT")
+        if "section_count" not in existing_input_meta_cols:
+            cur.execute("ALTER TABLE input_meta ADD COLUMN section_count INT")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
             DEFAULT_NORMS,
@@ -268,6 +273,10 @@ def locomotive_axis_count(series: str, locomotive: str) -> int:
     return 12
 
 
+def default_section_count(axis_count: int) -> int:
+    return 1 if int(axis_count or 0) <= 6 else 3
+
+
 def allowed_repairs(series: str, locomotive: str) -> list[str]:
     normalized = normalize_text(series + " " + locomotive)
     if "пэ-2м" in normalized or "пэ2м" in normalized or "пэ 2м" in normalized or "pe-2m" in normalized or "pe2m" in normalized:
@@ -310,7 +319,7 @@ def row_to_index(row_value: int) -> int | None:
     return idx if 0 <= idx < INPUT_ROWS else None
 
 
-def load_state(locomotive: str | None = None) -> dict:
+def load_state(locomotive: str | None = None, wheel_pair_count: int | None = None, section_count: int | None = None) -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         locomotives = load_locomotives(cur)
@@ -325,12 +334,17 @@ def load_state(locomotive: str | None = None) -> dict:
         meta = None
         if locomotive:
             meta = cur.execute(
-                "SELECT y, measurement_date FROM input_meta WHERE locomotive=? ORDER BY y DESC LIMIT 1",
+                "SELECT y, measurement_date, wheel_pair_count, section_count FROM input_meta WHERE locomotive=? ORDER BY y DESC LIMIT 1",
                 (locomotive,),
             ).fetchone()
 
         measurement_date = dt.date.today().isoformat()
         year = dt.date.today().year
+        if wheel_pair_count is None:
+            wheel_pair_count = axis_count
+        if section_count is None:
+            section_count = default_section_count(axis_count)
+        has_manual_meta = False
         if meta:
             year = int(meta["y"] or year)
             measurement_date = text(meta["measurement_date"]).strip() or measurement_date
@@ -338,6 +352,19 @@ def load_state(locomotive: str | None = None) -> dict:
                 year = int(measurement_date[:4])
             except Exception:
                 pass
+            try:
+                meta_wheel_pairs = int(meta["wheel_pair_count"] or 0)
+            except Exception:
+                meta_wheel_pairs = 0
+            try:
+                meta_sections = int(meta["section_count"] or 0)
+            except Exception:
+                meta_sections = 0
+            if meta_wheel_pairs > 0:
+                wheel_pair_count = meta_wheel_pairs
+            if meta_sections > 0:
+                section_count = meta_sections
+            has_manual_meta = meta_wheel_pairs > 0 or meta_sections > 0
         elif measurement_date:
             try:
                 year = int(measurement_date[:4])
@@ -389,6 +416,9 @@ def load_state(locomotive: str | None = None) -> dict:
         "kp": kp_map,
         "norms": norms,
         "year": year,
+        "wheel_pair_count": int(wheel_pair_count or axis_count),
+        "section_count": int(section_count or default_section_count(axis_count)),
+        "has_manual_meta": has_manual_meta,
     }
 
 
@@ -534,6 +564,14 @@ def save_state(payload: dict) -> dict:
     locomotive = text(payload.get("locomotive")).strip()
     measurement_date = text(payload.get("measurement_date")).strip() or dt.date.today().isoformat()
     rows = payload.get("measurements") or []
+    try:
+        wheel_pair_count = int(payload.get("wheel_pair_count") or 0)
+    except Exception:
+        wheel_pair_count = 0
+    try:
+        section_count = int(payload.get("section_count") or 0)
+    except Exception:
+        section_count = 0
 
     try:
         year = int(measurement_date[:4])
@@ -553,8 +591,14 @@ def save_state(payload: dict) -> dict:
                     insert_rows.append((year, locomotive, r + 2, c + 2, value))
         cur.executemany("INSERT INTO input_data(y, locomotive, r, c, v) VALUES(?,?,?,?,?)", insert_rows)
         cur.execute(
-            "INSERT OR REPLACE INTO input_meta(y, locomotive, measurement_date) VALUES(?,?,?)",
-            (year, locomotive, measurement_date),
+            "INSERT OR REPLACE INTO input_meta(y, locomotive, measurement_date, wheel_pair_count, section_count) VALUES(?,?,?,?,?)",
+            (
+                year,
+                locomotive,
+                measurement_date,
+                wheel_pair_count or None,
+                section_count or None,
+            ),
         )
         conn.commit()
     return load_state(locomotive)
@@ -576,7 +620,15 @@ def build_archive_rows(payload: dict) -> tuple[dict, list[tuple[int, str, str, s
         series = series_for_locomotive(cur, locomotive)
         series_text = normalize_text(series + " " + locomotive)
         axis_count = locomotive_axis_count(series, locomotive)
-        visible_rows = 6 if axis_count == 6 else 12
+        try:
+            wheel_pair_count = int(payload.get("wheel_pair_count") or axis_count)
+        except Exception:
+            wheel_pair_count = axis_count
+        try:
+            section_count = int(payload.get("section_count") or default_section_count(axis_count))
+        except Exception:
+            section_count = default_section_count(axis_count)
+        visible_rows = max(1, min(wheel_pair_count, INPUT_ROWS))
         if "пэ-2м" in series_text or "пэ2м" in series_text or "пэ 2м" in series_text or "pe-2m" in series_text or "pe2m" in series_text:
             required_columns = [0, 1, 2, 3, 6, 7]
         else:
@@ -597,6 +649,11 @@ def build_archive_rows(payload: dict) -> tuple[dict, list[tuple[int, str, str, s
 
         missing_cells: list[str] = []
         normalized_rows: list[list[str]] = []
+        section_sizes: list[int] = []
+        base = visible_rows // max(1, section_count)
+        remainder = visible_rows % max(1, section_count)
+        for i in range(max(1, section_count)):
+            section_sizes.append(base + (1 if i < remainder else 0))
         for row_index in range(visible_rows):
             row = list(rows[row_index] if row_index < len(rows) else []) + [""] * INPUT_DATA_COLS
             normalized_rows.append(row[:INPUT_DATA_COLS])
@@ -616,7 +673,13 @@ def build_archive_rows(payload: dict) -> tuple[dict, list[tuple[int, str, str, s
         for row_index in range(visible_rows):
             row = normalized_rows[row_index]
             table_row = row_index + 2
-            section_value = "1" if axis_count == 6 else str((row_index // 4) + 1)
+            running = 0
+            section_value = "1"
+            for section_index, span in enumerate(section_sizes, start=1):
+                running += span
+                if row_index < running:
+                    section_value = str(section_index)
+                    break
             kp_row = kp_map.get(row_index, {})
 
             left_band = parse_float(row[6])
@@ -666,6 +729,14 @@ def save_archive(payload: dict) -> dict:
     locomotive = meta["locomotive"]
     repair_type = meta["repair_type"]
     overwrite = bool(payload.get("overwrite"))
+    try:
+        wheel_pair_count = int(payload.get("wheel_pair_count") or 0)
+    except Exception:
+        wheel_pair_count = 0
+    try:
+        section_count = int(payload.get("section_count") or 0)
+    except Exception:
+        section_count = 0
 
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
@@ -690,8 +761,14 @@ def save_archive(payload: dict) -> dict:
         )
         cur.execute("DELETE FROM input_data WHERE y=? AND locomotive=?", (year, locomotive))
         cur.execute(
-            "INSERT OR REPLACE INTO input_meta(y, locomotive, measurement_date) VALUES(?,?,?)",
-            (year, locomotive, measurement_date),
+            "INSERT OR REPLACE INTO input_meta(y, locomotive, measurement_date, wheel_pair_count, section_count) VALUES(?,?,?,?,?)",
+            (
+                year,
+                locomotive,
+                measurement_date,
+                wheel_pair_count or None,
+                section_count or None,
+            ),
         )
         conn.commit()
 
@@ -1226,6 +1303,7 @@ let selectionFocus = null;
 let clipboardCache = '';
 let archiveSelectionAnchor = null;
 let archiveSelectionFocus = null;
+let locomotiveInputSource = 'loaded';
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -1664,16 +1742,37 @@ async function switchTab(tab){
 function getCurrentLoco(){
   return document.getElementById('locomotive').value.trim();
 }
+function isKnownLocomotive(number){
+  return (LOCOMOTIVE_CHOICES || []).some(item => item.number === String(number || '').trim());
+}
+function currentWheelPairCount(number){
+  if (state && String(number || '').trim() === String(state.locomotive || '').trim() && Number.isFinite(Number(state.wheel_pair_count))) {
+    return Number(state.wheel_pair_count) || 12;
+  }
+  return 12;
+}
+function currentSectionCount(number){
+  if (state && String(number || '').trim() === String(state.locomotive || '').trim() && Number.isFinite(Number(state.section_count))) {
+    return Math.max(1, Number(state.section_count) || 1);
+  }
+  return 0;
+}
 function getSeries(number){
   const item = (state?.locomotives || []).find(x => x.number === number);
   return item ? (item.series || '') : '';
 }
 function getAxisCount(number){
+  if (state && String(number || '').trim() === String(state.locomotive || '').trim() && Number.isFinite(Number(state.wheel_pair_count))) {
+    return Math.max(1, Number(state.wheel_pair_count) || 12);
+  }
   const series = getSeries(number);
   const text = (series + ' ' + number).toLowerCase().replaceAll('ё','е');
   if (text.includes('пэ-2м') || text.includes('пэ2м') || text.includes('пэ 2м') || text.includes('pe-2m') || text.includes('pe2m')) return 12;
   if (text.includes('тэм') || text.includes('tem')) return 6;
   return 12;
+}
+function defaultSectionCount(axisCount){
+  return Number(axisCount) <= 6 ? 1 : 3;
 }
 function allowedRepairs(number){
   const series = getSeries(number);
@@ -1683,10 +1782,19 @@ function allowedRepairs(number){
   }
   return ['', 'ТО-2', 'ТО-3', 'ТО-4', 'ТР-1', 'ТР-2', 'ТР-3', 'СР', 'КР'];
 }
-function sectionSpec(axisCount){
-  return axisCount === 6
-    ? [{ start: 0, span: 6, value: '1' }]
-    : [{ start: 0, span: 4, value: '1' }, { start: 4, span: 4, value: '2' }, { start: 8, span: 4, value: '3' }];
+function sectionSpec(axisCount, sectionCount){
+  const total = Math.max(1, Number(axisCount) || 1);
+  const sections = Math.max(1, Math.min(Number(sectionCount) || defaultSectionCount(total), total));
+  const base = Math.floor(total / sections);
+  const remainder = total % sections;
+  const result = [];
+  let start = 0;
+  for (let i = 0; i < sections; i += 1) {
+    const span = base + (i < remainder ? 1 : 0);
+    result.push({ start, span, value: String(i + 1) });
+    start += span;
+  }
+  return result;
 }
 function measurementClass(col, value){
   const val = n(value);
@@ -1747,9 +1855,36 @@ function showLocoDropdown(){
 function chooseLoco(value){
   const input = document.getElementById('locomotive');
   if (!input) return;
+  locomotiveInputSource = 'picked';
   input.value = value;
   hideLocoDropdown();
   onLocomotiveCommit();
+}
+function parsePositiveInt(value){
+  const n = parseInt(String(value ?? '').trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+async function promptManualLocoCounts(loco){
+  const fallbackWheelPairs = 12;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const wheelPairText = prompt(`Локомотив ${loco} не найден в справочнике.\nСколько у него колесных пар?`, String(fallbackWheelPairs));
+    if (wheelPairText === null) return null;
+    const wheelPairCount = parsePositiveInt(wheelPairText);
+    if (!wheelPairCount) {
+      alert('Введите положительное число колесных пар.');
+      continue;
+    }
+    const defaultSections = wheelPairCount <= 6 ? 1 : 3;
+    const sectionText = prompt(`Сколько секций у локомотива ${loco}?`, String(defaultSections));
+    if (sectionText === null) return null;
+    const sectionCount = parsePositiveInt(sectionText);
+    if (!sectionCount || sectionCount > wheelPairCount) {
+      alert('Число секций должно быть положительным и не больше числа колесных пар.');
+      continue;
+    }
+    return { wheel_pair_count: wheelPairCount, section_count: sectionCount };
+  }
+  return null;
 }
 function renderArchiveLocomotives(){
   const select = document.getElementById('archiveLocomotive');
@@ -2048,8 +2183,11 @@ function renderTable(){
   const tbody = document.getElementById('inputBody');
   const loco = getCurrentLoco();
   const axisCount = getAxisCount(loco);
-  const visibleRows = axisCount === 6 ? 6 : 12;
-  const sections = sectionSpec(axisCount);
+  const sectionCount = (state && String(loco) === String(state.locomotive || ''))
+    ? Math.max(1, Number(state.section_count) || defaultSectionCount(axisCount))
+    : defaultSectionCount(axisCount);
+  const visibleRows = Math.max(1, Math.min(axisCount, INPUT_ROWS));
+  const sections = sectionSpec(axisCount, sectionCount);
   const sectionMap = new Map(sections.map(item => [item.start, item]));
   const rows = state?.measurements || [];
   let html = '';
@@ -2205,15 +2343,48 @@ function handleKeydown(event, row, col){
   if (key === 'ArrowUp' && row > 0) moveFocus(row - 1, col);
   if (key === 'ArrowDown' && row < (getVisibleAxisCount() - 1)) moveFocus(row + 1, col);
 }
-async function loadState(nextLocomotive){
-  const loco = (nextLocomotive ?? getCurrentLoco()).trim();
-  setStatus('Загрузка...');
+async function fetchStatePayload(locomotive){
+  const loco = String(locomotive ?? '').trim();
   const res = await fetch(`${API}/api/state?locomotive=${encodeURIComponent(loco)}`, { cache: 'no-store' });
   if (!res.ok) {
+    return null;
+  }
+  return res.json();
+}
+async function loadState(nextLocomotive, preloadedState = null, manualConfig = null){
+  const loco = (nextLocomotive ?? getCurrentLoco()).trim();
+  setStatus('Загрузка...');
+  let loaded = preloadedState;
+  if (!loaded) {
+    loaded = await fetchStatePayload(loco);
+  }
+  if (!loaded) {
     setStatus('Не удалось загрузить данные');
     return;
   }
-  state = await res.json();
+  if (manualConfig && !loaded.has_manual_meta) {
+    loaded.wheel_pair_count = manualConfig.wheel_pair_count;
+    loaded.section_count = manualConfig.section_count;
+    const res = await fetch(`${API}/api/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({
+        locomotive: loaded.locomotive,
+        measurement_date: loaded.measurement_date,
+        measurements: loaded.measurements,
+        wheel_pair_count: loaded.wheel_pair_count,
+        section_count: loaded.section_count,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setStatus(err.error || 'Не удалось сохранить параметры локомотива');
+      return;
+    }
+    loaded = await res.json();
+  }
+  state = loaded;
+  locomotiveInputSource = 'loaded';
   state.locomotives = state.locomotives && state.locomotives.length ? state.locomotives : (LOCOMOTIVE_CHOICES || []);
   savedState = cloneState(state);
   canceledState = null;
@@ -2250,6 +2421,45 @@ async function maybeSwitchLocomotive(nextValue){
     }
     await saveDraft();
   }
+  if (locomotiveInputSource === 'typed') {
+    const preview = await fetchStatePayload(next);
+    if (!preview) {
+      document.getElementById('locomotive').value = current;
+      setStatus('Не удалось загрузить данные локомотива');
+      return;
+    }
+    if (preview.has_manual_meta) {
+      await loadState(next, preview);
+      return;
+    }
+    const manualConfig = await promptManualLocoCounts(next);
+    if (!manualConfig) {
+      document.getElementById('locomotive').value = current;
+      return;
+    }
+    await loadState(next, preview, manualConfig);
+    return;
+  }
+  const known = isKnownLocomotive(next);
+  if (!known) {
+    const preview = await fetchStatePayload(next);
+    if (!preview) {
+      document.getElementById('locomotive').value = current;
+      setStatus('Не удалось загрузить данные локомотива');
+      return;
+    }
+    if (!preview.has_manual_meta) {
+      const manualConfig = await promptManualLocoCounts(next);
+      if (!manualConfig) {
+        document.getElementById('locomotive').value = current;
+        return;
+      }
+      await loadState(next, preview, manualConfig);
+      return;
+    }
+    await loadState(next, preview);
+    return;
+  }
   await loadState(next);
 }
 function onLocomotiveCommit(){
@@ -2275,6 +2485,8 @@ async function saveDraft(){
       locomotive: state.locomotive,
       measurement_date: state.measurement_date,
       measurements: state.measurements,
+      wheel_pair_count: state.wheel_pair_count,
+      section_count: state.section_count,
     }),
   });
   if (!res.ok) {
@@ -2309,6 +2521,8 @@ async function saveToArchive(){
     measurement_date: document.getElementById('measurementDate').value || state.measurement_date || new Date().toISOString().slice(0, 10),
     repair_type: document.getElementById('repairType').value || '',
     measurements: state.measurements,
+    wheel_pair_count: state.wheel_pair_count,
+    section_count: state.section_count,
     overwrite: false,
   };
   state.locomotive = payload.locomotive;
@@ -2397,7 +2611,10 @@ document.getElementById('locomotive').addEventListener('keydown', event => {
   }
 });
 document.getElementById('locomotive').addEventListener('focus', showLocoDropdown);
-document.getElementById('locomotive').addEventListener('input', event => renderLocoDropdown(event.target.value));
+document.getElementById('locomotive').addEventListener('input', event => {
+  locomotiveInputSource = 'typed';
+  renderLocoDropdown(event.target.value);
+});
 document.getElementById('locomotive').addEventListener('blur', () => setTimeout(hideLocoDropdown, 150));
 document.getElementById('locomotiveDropdown').addEventListener('mousedown', event => {
   const btn = event.target.closest('button[data-loco]');
