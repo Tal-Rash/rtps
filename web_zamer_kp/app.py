@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.26"
+APP_VERSION = "web-zkp-1.27"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1299,6 +1299,9 @@ let kpAllMode = false;
 let kpSearchText = '';
 let kpLoading = false;
 let kpSelectedStatus = null;
+let kpSelectionAnchor = null;
+let kpSelectionFocus = null;
+let kpSuppressFocusSelection = false;
 let archiveRows = [];
 let archiveSortDesc = true;
 let selectionAnchor = null;
@@ -1944,6 +1947,7 @@ function renderKpTable(){
   if (!head || !body || !colgroup) return;
 
   const allMode = kpAllMode;
+  if (allMode) clearKpSelection();
   const headers = allMode
     ? ['Локомотив', '№ КП', '№ оси', 'Диаметр КЦ<br>лев', 'Диаметр КЦ<br>прав']
     : ['№ КП', '№ оси', 'Диаметр КЦ<br>лев', 'Диаметр КЦ<br>прав'];
@@ -1952,6 +1956,7 @@ function renderKpTable(){
   head.innerHTML = `<tr>${headers.map(value => `<th>${value}</th>`).join('')}</tr>`;
 
   if (!kpRows.length) {
+    clearKpSelection();
     body.innerHTML = `<tr><td colspan="${headers.length}" style="padding:14px;color:var(--muted);">Нет данных</td></tr>`;
     renderKpStatus(kpStatusLabel(null, allMode, 0));
     return;
@@ -1974,13 +1979,13 @@ function renderKpTable(){
       <tr data-row="${rowIndex}" data-search="${esc(search)}">
         <td class="readonly">${esc(values[0] ?? '')}</td>
         ${[1, 2, 3].map(colIndex => `
-          <td>
+          <td data-col="${colIndex}">
             <input
               value="${esc(values[colIndex] ?? '')}"
               ${editable ? '' : 'readonly'}
               data-row="${rowIndex}"
               data-col="${colIndex}"
-              onfocus="handleKpCellFocus(this)"
+              onfocus="handleKpCellFocus(${rowIndex}, ${colIndex}, this)"
               onmousedown="return handleKpCellMouseDown(event, ${rowIndex}, ${colIndex})"
               onchange="handleKpCellChange(${rowIndex}, ${colIndex}, this.value, this)"
               onkeydown="handleKpKeydown(event, ${rowIndex}, ${colIndex})"
@@ -1989,6 +1994,7 @@ function renderKpTable(){
       </tr>`;
   }).join('');
   applyKpSearchFilter();
+  renderKpSelectionHighlight();
   renderKpStatus(kpStatusLabel(kpSelectedStatus, allMode, kpRows.length));
 }
 function applyKpSearchFilter(){
@@ -2002,12 +2008,127 @@ function applyKpSearchFilter(){
 function kpCellElement(row, col){
   return document.querySelector(`#kpBody input[data-row="${row}"][data-col="${col}"]`);
 }
+function kpCellInBounds(row, col){
+  return row >= 0 && row < kpRows.length && col >= 1 && col <= 3 && !kpAllMode;
+}
+function clearKpSelection(){
+  kpSelectionAnchor = null;
+  kpSelectionFocus = null;
+  document.querySelectorAll('#kpBody td.selected').forEach(td => td.classList.remove('selected'));
+}
+function kpSelectionRect(){
+  if (!kpSelectionAnchor || !kpSelectionFocus) return null;
+  return {
+    top: Math.min(kpSelectionAnchor.row, kpSelectionFocus.row),
+    bottom: Math.max(kpSelectionAnchor.row, kpSelectionFocus.row),
+    left: Math.min(kpSelectionAnchor.col, kpSelectionFocus.col),
+    right: Math.max(kpSelectionAnchor.col, kpSelectionFocus.col),
+  };
+}
+function renderKpSelectionHighlight(){
+  document.querySelectorAll('#kpBody td.selected').forEach(td => td.classList.remove('selected'));
+  const rect = kpSelectionRect();
+  if (!rect) return;
+  for (let r = rect.top; r <= rect.bottom; r += 1) {
+    for (let c = rect.left; c <= rect.right; c += 1) {
+      const td = document.querySelector(`#kpBody tr[data-row="${r}"] td[data-col="${c}"]`);
+      if (td) td.classList.add('selected');
+    }
+  }
+}
+function selectKpCell(row, col, extend = false){
+  if (!kpCellInBounds(row, col)) return;
+  const cell = { row, col };
+  if (!extend || !kpSelectionAnchor) {
+    kpSelectionAnchor = cell;
+  }
+  kpSelectionFocus = cell;
+  renderKpSelectionHighlight();
+}
+function focusKpCell(row, col, extend = false){
+  if (!kpCellInBounds(row, col)) return;
+  selectKpCell(row, col, extend);
+  const input = kpCellElement(row, col);
+  if (input) {
+    kpSuppressFocusSelection = true;
+    input.focus();
+    kpSuppressFocusSelection = false;
+  }
+}
+function kpCellValue(row, col){
+  const input = kpCellElement(row, col);
+  if (input) return input.value || '';
+  return kpRows[row]?.values?.[col] ?? '';
+}
+function setKpCellValue(row, col, value){
+  if (!kpRows[row] || !kpCellInBounds(row, col)) return false;
+  const next = String(value ?? '').trim();
+  kpRows[row].values[col] = next;
+  const input = kpCellElement(row, col);
+  if (input && input.value !== next) input.value = next;
+  return true;
+}
+async function copyKpSelectionToClipboard(){
+  const rect = kpSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (kpSelectionFocus || kpSelectionAnchor);
+  if (!start || !kpCellInBounds(start.row, start.col)) return;
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const lines = [];
+  for (let r = start.row; r <= end.row; r += 1) {
+    const rowValues = [];
+    for (let c = start.col; c <= end.col; c += 1) {
+      rowValues.push(kpCellValue(r, c));
+    }
+    lines.push(rowValues.join('\t'));
+  }
+  await writeClipboardText(lines.join('\n'));
+  renderKpStatus('Скопировано');
+}
+async function pasteKpClipboard(row, col){
+  if (!CAN_EDIT || kpAllMode || kpLoading) return;
+  const text = await readClipboardText();
+  if (!text) return;
+  const rect = kpSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : { row, col };
+  const lines = String(text).replace(/\r/g, '').split('\n');
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  let touched = false;
+  for (let r = 0; r < lines.length; r += 1) {
+    const cells = lines[r].split('\t');
+    for (let c = 0; c < cells.length; c += 1) {
+      const targetRow = start.row + r;
+      const targetCol = start.col + c;
+      if (!kpCellInBounds(targetRow, targetCol)) continue;
+      touched = setKpCellValue(targetRow, targetCol, cells[c]) || touched;
+    }
+  }
+  if (!touched) return;
+  focusKpCell(start.row, start.col);
+  await saveKpDataChanges();
+}
+async function clearKpSelectedCells(row, col){
+  if (!CAN_EDIT || kpAllMode || kpLoading) return;
+  const rect = kpSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (kpSelectionFocus || kpSelectionAnchor || { row, col });
+  if (!kpCellInBounds(start.row, start.col)) return;
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  let touched = false;
+  for (let r = start.row; r <= end.row; r += 1) {
+    for (let c = start.col; c <= end.col; c += 1) {
+      touched = setKpCellValue(r, c, '') || touched;
+    }
+  }
+  if (!touched) return;
+  focusKpCell(start.row, start.col);
+  await saveKpDataChanges();
+}
 function kpRowValues(rowIndex){
   const row = kpRows[rowIndex];
   if (!row) return [];
   return row.values || [];
 }
-function handleKpCellFocus(input){
+function handleKpCellFocus(row, col, input){
+  if (!kpAllMode && !kpSuppressFocusSelection) selectKpCell(row, col, false);
   if (!input) return;
   input.select?.();
 }
@@ -2015,7 +2136,18 @@ function handleKpCellMouseDown(event, row, col){
   if (!CAN_EDIT || kpAllMode) return true;
   if (event.button !== 0) return true;
   const input = event.currentTarget;
-  if (input) input.focus();
+  if (input) {
+    kpSuppressFocusSelection = true;
+    input.focus();
+    kpSuppressFocusSelection = false;
+  }
+  if (event.shiftKey && kpSelectionAnchor) {
+    selectKpCell(kpSelectionAnchor.row, kpSelectionAnchor.col, true);
+    selectKpCell(row, col, true);
+  } else {
+    selectKpCell(row, col, false);
+  }
+  if (input) input.select?.();
   event.preventDefault();
   return false;
 }
@@ -2030,13 +2162,20 @@ function handleKpCellChange(row, col, value, input){
 function handleKpKeydown(event, row, col){
   if (kpAllMode) return;
   const key = event.key;
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+  if (ctrlOrMeta && key.toLowerCase() === 'c') {
+    event.preventDefault();
+    copyKpSelectionToClipboard();
+    return;
+  }
+  if (ctrlOrMeta && key.toLowerCase() === 'v') {
+    event.preventDefault();
+    pasteKpClipboard(row, col);
+    return;
+  }
   if (key === 'Delete' || key === 'Backspace') {
     event.preventDefault();
-    const input = kpCellElement(row, col);
-    if (input) {
-      input.value = '';
-      handleKpCellChange(row, col, '', input);
-    }
+    clearKpSelectedCells(row, col);
     return;
   }
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) {
@@ -2047,8 +2186,7 @@ function handleKpKeydown(event, row, col){
     if (key === 'ArrowRight' && col < 3) nextCol = col + 1;
     if (key === 'ArrowUp' && row > 0) nextRow = row - 1;
     if (key === 'ArrowDown' && row < kpRows.length - 1) nextRow = row + 1;
-    const next = kpCellElement(nextRow, nextCol);
-    if (next) next.focus();
+    focusKpCell(nextRow, nextCol, event.shiftKey);
   }
 }
 function collectKpRowsFromView(){
@@ -2105,6 +2243,7 @@ async function loadKpData(nextValue){
     select.value = value;
   }
   kpSelectedLoco = value || (state?.locomotive || '');
+  clearKpSelection();
   kpLoading = true;
   renderKpStatus('Загрузка КП данных...');
   try {
