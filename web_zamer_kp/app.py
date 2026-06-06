@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.21"
+APP_VERSION = "web-zkp-1.22"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1306,6 +1306,7 @@ let clipboardCache = '';
 let archiveSelectionAnchor = null;
 let archiveSelectionFocus = null;
 let locomotiveInputSource = 'loaded';
+let initialLoadPromise = null;
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -1826,6 +1827,7 @@ function renderLocoOptions(){
     input.value = choices[0].number;
   }
   renderLocoDropdown('');
+  renderMeta();
 }
 function renderLocoDropdown(filterText = ''){
   const dropdown = document.getElementById('locomotiveDropdown');
@@ -2413,6 +2415,9 @@ async function loadState(nextLocomotive, preloadedState = null, manualConfig = n
   setStatus('Готово');
 }
 async function maybeSwitchLocomotive(nextValue){
+  if (initialLoadPromise) {
+    await initialLoadPromise.catch(() => undefined);
+  }
   const next = nextValue.trim();
   const current = state?.locomotive || '';
   if (!next) {
@@ -2420,7 +2425,6 @@ async function maybeSwitchLocomotive(nextValue){
     if (input) input.value = current;
     return;
   }
-  if (next === current) return;
   if (dirty && current) {
     const ok = confirm('Есть несохранённые изменения. Сохранить перед сменой локомотива?');
     if (!ok) {
@@ -2638,7 +2642,7 @@ document.getElementById('archiveLocomotive').addEventListener('change', loadArch
 document.getElementById('archiveSearch').addEventListener('input', loadArchive);
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
-loadState();
+initialLoadPromise = loadState();
 </script>
 </body>
 </html>
