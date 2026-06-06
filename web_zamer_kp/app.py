@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.27"
+APP_VERSION = "web-zkp-1.28"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2079,9 +2079,9 @@ async function copyKpSelectionToClipboard(){
     for (let c = start.col; c <= end.col; c += 1) {
       rowValues.push(kpCellValue(r, c));
     }
-    lines.push(rowValues.join('\t'));
+    lines.push(rowValues.join('\\t'));
   }
-  await writeClipboardText(lines.join('\n'));
+  await writeClipboardText(lines.join('\\n'));
   renderKpStatus('Скопировано');
 }
 async function pasteKpClipboard(row, col){
@@ -2090,11 +2090,11 @@ async function pasteKpClipboard(row, col){
   if (!text) return;
   const rect = kpSelectionRect();
   const start = rect ? { row: rect.top, col: rect.left } : { row, col };
-  const lines = String(text).replace(/\r/g, '').split('\n');
+  const lines = String(text).replace(/\\r/g, '').split('\\n');
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
   let touched = false;
   for (let r = 0; r < lines.length; r += 1) {
-    const cells = lines[r].split('\t');
+    const cells = lines[r].split('\\t');
     for (let c = 0; c < cells.length; c += 1) {
       const targetRow = start.row + r;
       const targetCol = start.col + c;
