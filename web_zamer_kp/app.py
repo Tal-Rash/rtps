@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.24"
+APP_VERSION = "web-zkp-1.25"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1285,6 +1285,7 @@ HTML = """<!doctype html>
 const API = '{{APP_PREFIX}}';
 const CAN_EDIT = {{CAN_EDIT}};
 const LOCOMOTIVE_CHOICES = {{LOCOMOTIVE_CHOICES}};
+const INPUT_ROWS = 12;
 let state = null;
 let dirty = false;
 let currentRepairType = '';
