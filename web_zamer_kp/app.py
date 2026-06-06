@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.18"
+APP_VERSION = "web-zkp-1.19"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -968,6 +968,39 @@ HTML = """<!doctype html>
     .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
     .kp-table td.readonly { background:#f7fafc; font-weight:600; }
     .kp-table td.selected { box-shadow: inset 0 0 0 2px #2f6fed; }
+    .loco-picker { position:relative; width:220px; }
+    .loco-picker input { width:100%; box-sizing:border-box; }
+    .loco-dropdown {
+      position:absolute;
+      left:0;
+      top:calc(100% + 4px);
+      z-index:30;
+      min-width:220px;
+      max-height:240px;
+      overflow:auto;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:10px;
+      box-shadow:0 12px 28px rgba(16,32,51,.12);
+      display:none;
+    }
+    .loco-dropdown.open { display:block; }
+    .loco-dropdown button {
+      display:block;
+      width:100%;
+      border:0;
+      background:#fff;
+      padding:8px 10px;
+      text-align:left;
+      font:inherit;
+      color:var(--text);
+      cursor:pointer;
+    }
+    .loco-dropdown button:hover,
+    .loco-dropdown button:focus {
+      background:#eef4ff;
+      outline:none;
+    }
     table { border-collapse:collapse; width:max-content; table-layout:fixed; }
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; font-size:14px; line-height:1.1; }
@@ -1029,7 +1062,10 @@ HTML = """<!doctype html>
     <div id="panelInput" class="panel active">
       <div class="filters" style="margin-top:0;">
         <label>Локомотив
-          <input id="locomotive" type="text" list="locomotiveList" autocomplete="off" style="width:220px">
+          <div class="loco-picker">
+            <input id="locomotive" type="text" autocomplete="off" aria-autocomplete="list" style="width:220px">
+            <div id="locomotiveDropdown" class="loco-dropdown" role="listbox" aria-label="Список локомотивов"></div>
+          </div>
         </label>
         <label>Дата замера
           <input id="measurementDate" type="date" style="width:150px">
@@ -1039,9 +1075,6 @@ HTML = """<!doctype html>
         </label>
       <button id="saveBtn" class="primary" onclick="saveToArchive()">Сохранить в архив</button>
       </div>
-
-      <datalist id="locomotiveList"></datalist>
-
       <div class="table-shell">
         <table id="inputTable" aria-label="Ввод замера КП">
           <colgroup>
@@ -1172,6 +1205,7 @@ HTML = """<!doctype html>
 <script>
 const API = '{{APP_PREFIX}}';
 const CAN_EDIT = {{CAN_EDIT}};
+const LOCOMOTIVE_CHOICES = {{LOCOMOTIVE_CHOICES}};
 let state = null;
 let dirty = false;
 let currentRepairType = '';
@@ -1673,23 +1707,53 @@ function measurementClass(col, value){
 }
 function renderLocoOptions(){
   const input = document.getElementById('locomotive');
-  const list = document.getElementById('locomotiveList');
   const items = state?.locomotives || [];
-  if (list) {
-    list.innerHTML = items.length
-      ? items.map(x => `<option value="${esc(x.number)}"></option>`).join('')
-      : '';
-  }
+  const choices = LOCOMOTIVE_CHOICES || [];
   if (!input) return;
-  if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
+  if (state?.locomotive && (items.some(x => x.number === state.locomotive) || choices.some(x => x.number === state.locomotive))) {
     input.value = state.locomotive;
-  } else if (items.length && !input.value) {
-    input.value = items[0].number;
+  } else if (choices.length && !input.value) {
+    input.value = choices[0].number;
   }
+  renderLocoDropdown('');
+}
+function renderLocoDropdown(filterText = ''){
+  const dropdown = document.getElementById('locomotiveDropdown');
+  const items = LOCOMOTIVE_CHOICES || [];
+  if (!dropdown) return;
+  const textValue = String(filterText || '').trim().toLowerCase();
+  const filtered = textValue
+    ? items.filter(item => String(item.number || '').toLowerCase().includes(textValue) || String(item.label || '').toLowerCase().includes(textValue))
+    : items;
+  if (!filtered.length) {
+    dropdown.innerHTML = '<button type="button" disabled>Нет совпадений</button>';
+    dropdown.classList.add('open');
+    return;
+  }
+  dropdown.innerHTML = filtered
+    .map(item => `<button type="button" data-loco="${esc(item.number)}">${esc(item.number)}</button>`)
+    .join('');
+  dropdown.classList.add('open');
+}
+function hideLocoDropdown(){
+  const dropdown = document.getElementById('locomotiveDropdown');
+  if (dropdown) dropdown.classList.remove('open');
+}
+function showLocoDropdown(){
+  const input = document.getElementById('locomotive');
+  if (!input) return;
+  renderLocoDropdown('');
+}
+function chooseLoco(value){
+  const input = document.getElementById('locomotive');
+  if (!input) return;
+  input.value = value;
+  hideLocoDropdown();
+  onLocomotiveCommit();
 }
 function renderArchiveLocomotives(){
   const select = document.getElementById('archiveLocomotive');
-  const items = state?.locomotives || [];
+  const items = LOCOMOTIVE_CHOICES || [];
   const current = select?.value || '';
   if (!select) return;
   select.innerHTML = items.length
@@ -1713,7 +1777,7 @@ function kpStatusLabel(status, allMode, rowCount){
 }
 function renderKpLocomotiveOptions(){
   const select = document.getElementById('kpLocomotive');
-  const items = state?.locomotives || [];
+  const items = LOCOMOTIVE_CHOICES || [];
   if (!select) return;
   const current = select.value || kpSelectedLoco || state?.locomotive || '';
   select.innerHTML = items.length
@@ -2150,6 +2214,7 @@ async function loadState(nextLocomotive){
     return;
   }
   state = await res.json();
+  state.locomotives = state.locomotives && state.locomotives.length ? state.locomotives : (LOCOMOTIVE_CHOICES || []);
   savedState = cloneState(state);
   canceledState = null;
   currentRepairType = state.repair_type || currentRepairType || '';
@@ -2331,6 +2396,15 @@ document.getElementById('locomotive').addEventListener('keydown', event => {
     onLocomotiveCommit();
   }
 });
+document.getElementById('locomotive').addEventListener('focus', showLocoDropdown);
+document.getElementById('locomotive').addEventListener('input', event => renderLocoDropdown(event.target.value));
+document.getElementById('locomotive').addEventListener('blur', () => setTimeout(hideLocoDropdown, 150));
+document.getElementById('locomotiveDropdown').addEventListener('mousedown', event => {
+  const btn = event.target.closest('button[data-loco]');
+  if (!btn) return;
+  event.preventDefault();
+  chooseLoco(btn.dataset.loco || '');
+});
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
 document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
@@ -2371,10 +2445,13 @@ UNAUTH_HTML = """<!doctype html>
 
 
 def render_page(role: str) -> str:
+    with DB_LOCK, connect() as conn:
+        loco_choices = load_locomotives(conn.cursor())
     return (
         HTML.replace("{{APP_PREFIX}}", APP_PREFIX)
         .replace("{{APP_VERSION}}", APP_VERSION)
         .replace("{{CAN_EDIT}}", "true" if role == "edit" else "false")
+        .replace("{{LOCOMOTIVE_CHOICES}}", json.dumps(loco_choices, ensure_ascii=False))
     )
 
 
