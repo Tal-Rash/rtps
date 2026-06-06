@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.23"
+APP_VERSION = "web-zkp-1.24"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1852,9 +1852,7 @@ function hideLocoDropdown(){
   if (dropdown) dropdown.classList.remove('open');
 }
 function showLocoDropdown(){
-  const input = document.getElementById('locomotive');
-  if (!input) return;
-  renderLocoDropdown(input.value, true);
+  renderLocoDropdown('', true);
 }
 function chooseLoco(value){
   const input = document.getElementById('locomotive');
@@ -2623,6 +2621,7 @@ document.getElementById('locomotive').addEventListener('keydown', event => {
   }
 });
 document.getElementById('locomotive').addEventListener('focus', showLocoDropdown);
+document.getElementById('locomotive').addEventListener('click', showLocoDropdown);
 document.getElementById('locomotive').addEventListener('input', event => {
   locomotiveInputSource = 'typed';
   renderLocoDropdown(event.target.value);
