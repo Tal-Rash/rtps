@@ -1029,7 +1029,7 @@ HTML = """<!doctype html>
     <div id="panelInput" class="panel active">
       <div class="filters" style="margin-top:0;">
         <label>Локомотив
-          <select id="locomotive" style="width:220px"></select>
+          <input id="locomotive" type="text" list="locomotiveList" autocomplete="off" style="width:220px">
         </label>
         <label>Дата замера
           <input id="measurementDate" type="date" style="width:150px">
@@ -1039,6 +1039,8 @@ HTML = """<!doctype html>
         </label>
       <button id="saveBtn" class="primary" onclick="saveToArchive()">Сохранить в архив</button>
       </div>
+
+      <datalist id="locomotiveList"></datalist>
 
       <div class="table-shell">
         <table id="inputTable" aria-label="Ввод замера КП">
@@ -1670,18 +1672,19 @@ function measurementClass(col, value){
   return '';
 }
 function renderLocoOptions(){
-  const select = document.getElementById('locomotive');
+  const input = document.getElementById('locomotive');
+  const list = document.getElementById('locomotiveList');
   const items = state?.locomotives || [];
-  select.innerHTML = items.length
-    ? ['<option value="">Выберите локомотив</option>']
-        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
-        .join('')
-    : '<option value="">Нет локомотивов в справочнике</option>';
-  select.disabled = !items.length;
+  if (list) {
+    list.innerHTML = items.length
+      ? items.map(x => `<option value="${esc(x.number)}"></option>`).join('')
+      : '';
+  }
+  if (!input) return;
   if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
-    select.value = state.locomotive;
-  } else if (items.length && !select.value) {
-    select.value = items[0].number;
+    input.value = state.locomotive;
+  } else if (items.length && !input.value) {
+    input.value = items[0].number;
   }
 }
 function renderArchiveLocomotives(){
@@ -2168,6 +2171,11 @@ async function loadState(nextLocomotive){
 async function maybeSwitchLocomotive(nextValue){
   const next = nextValue.trim();
   const current = state?.locomotive || '';
+  if (!next) {
+    const input = document.getElementById('locomotive');
+    if (input) input.value = current;
+    return;
+  }
   if (next === current) return;
   if (dirty && current) {
     const ok = confirm('Есть несохранённые изменения. Сохранить перед сменой локомотива?');
@@ -2317,6 +2325,12 @@ function restoreChanges(){
 }
 
 document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
+document.getElementById('locomotive').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    onLocomotiveCommit();
+  }
+});
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
 document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
