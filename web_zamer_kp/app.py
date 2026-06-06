@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.22"
+APP_VERSION = "web-zkp-1.23"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1826,10 +1826,10 @@ function renderLocoOptions(){
   } else if (choices.length && !input.value) {
     input.value = choices[0].number;
   }
-  renderLocoDropdown('');
+  renderLocoDropdown('', false);
   renderMeta();
 }
-function renderLocoDropdown(filterText = ''){
+function renderLocoDropdown(filterText = '', open = true){
   const dropdown = document.getElementById('locomotiveDropdown');
   const items = LOCOMOTIVE_CHOICES || [];
   if (!dropdown) return;
@@ -1839,13 +1839,13 @@ function renderLocoDropdown(filterText = ''){
     : items;
   if (!filtered.length) {
     dropdown.innerHTML = '<button type="button" disabled>Нет совпадений</button>';
-    dropdown.classList.add('open');
+    dropdown.classList.toggle('open', !!open);
     return;
   }
   dropdown.innerHTML = filtered
     .map(item => `<button type="button" data-loco="${esc(item.number)}">${esc(item.number)}</button>`)
     .join('');
-  dropdown.classList.add('open');
+  dropdown.classList.toggle('open', !!open);
 }
 function hideLocoDropdown(){
   const dropdown = document.getElementById('locomotiveDropdown');
@@ -1854,7 +1854,7 @@ function hideLocoDropdown(){
 function showLocoDropdown(){
   const input = document.getElementById('locomotive');
   if (!input) return;
-  renderLocoDropdown('');
+  renderLocoDropdown(input.value, true);
 }
 function chooseLoco(value){
   const input = document.getElementById('locomotive');
