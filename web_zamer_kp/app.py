@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.28"
+APP_VERSION = "web-zkp-1.29"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -816,6 +816,30 @@ def update_archive_cells(payload: dict) -> dict:
     return {"ok": True}
 
 
+def delete_archive_measurement(payload: dict) -> dict:
+    try:
+        year = int(payload.get("year"))
+        measurement_date = text(payload.get("measurement_date")).strip()
+        locomotive = text(payload.get("locomotive")).strip()
+        repair_type = text(payload.get("repair_type")).strip()
+    except Exception:
+        return {"error": "Некорректные данные для удаления архива."}, 400
+
+    if not measurement_date or not locomotive or not repair_type:
+        return {"error": "Не удалось определить замер для удаления."}, 400
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+            (year, measurement_date, locomotive, repair_type),
+        )
+        deleted = cur.rowcount
+        conn.commit()
+
+    return {"ok": True, "deleted": deleted}
+
+
 def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bool = True) -> list[dict]:
     locomotive = text(locomotive).strip()
     search_text = text(search_text).strip().lower()
@@ -1108,6 +1132,7 @@ HTML = """<!doctype html>
     }
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
+    .archive-table tr.selected-measurement td { box-shadow: inset 0 0 0 2px #2f6fed; }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
     .input-meta { margin-top:8px; font-size:13px; color:var(--muted); }
     @media (max-width: 900px) {
@@ -1234,6 +1259,7 @@ HTML = """<!doctype html>
           <input id="archiveSearch" type="text" placeholder="Дата, локомотив, вид ремонта" />
         </label>
         <button id="archiveSortBtn" type="button" onclick="toggleArchiveSort()">⬇ НОВЫЕ → СТАРЫЕ</button>
+        <button id="archiveDeleteBtn" type="button" onclick="deleteSelectedArchiveMeasurement()">Удалить из архива</button>
       </div>
 
       <div class="table-shell archive-table-shell">
@@ -1304,6 +1330,7 @@ let kpSelectionFocus = null;
 let kpSuppressFocusSelection = false;
 let archiveRows = [];
 let archiveSortDesc = true;
+let archiveSelectedMeasurementKey = null;
 let selectionAnchor = null;
 let selectionFocus = null;
 let clipboardCache = '';
@@ -1479,6 +1506,23 @@ function clearSelectedCells(){
 function archiveRowMeta(row){
   return archiveRows[row] || null;
 }
+function archiveMeasurementKey(meta){
+  if (!meta) return '';
+  return [meta.year, meta.measurement_date, meta.locomotive, meta.repair_type].map(value => String(value ?? '')).join('|');
+}
+function setArchiveSelectedMeasurement(rowIndex){
+  const meta = archiveRowMeta(rowIndex);
+  archiveSelectedMeasurementKey = archiveMeasurementKey(meta) || null;
+  renderArchiveMeasurementSelection();
+}
+function renderArchiveMeasurementSelection(){
+  document.querySelectorAll('#archiveBody tr').forEach(tr => {
+    const key = [tr.dataset.year, tr.dataset.measurementDate, tr.dataset.locomotive, tr.dataset.repairType]
+      .map(value => String(value ?? ''))
+      .join('|');
+    tr.classList.toggle('selected-measurement', !!archiveSelectedMeasurementKey && key === archiveSelectedMeasurementKey);
+  });
+}
 function archiveCellElement(row, col){
   return document.querySelector(`#archiveBody input[data-row="${row}"][data-col="${col}"]`);
 }
@@ -1628,6 +1672,7 @@ async function clearArchiveSelectedCells(){
 function handleArchiveCellMouseDown(event, row, col){
   if (!CAN_EDIT) return true;
   if (event.button !== 0) return true;
+  setArchiveSelectedMeasurement(row);
   if (event.shiftKey && archiveSelectionAnchor) {
     selectArchiveCell(archiveSelectionAnchor.row, archiveSelectionAnchor.col, true);
     selectArchiveCell(row, col, true);
@@ -1640,6 +1685,7 @@ function handleArchiveCellMouseDown(event, row, col){
   return false;
 }
 function handleArchiveCellFocus(row, col){
+  setArchiveSelectedMeasurement(row);
   if (!archiveSelectionAnchor || !archiveSelectionFocus || archiveSelectionAnchor.row !== row || archiveSelectionAnchor.col !== col || archiveSelectionFocus.row !== row || archiveSelectionFocus.col !== col) {
     selectArchiveCell(row, col, false);
   }
@@ -2299,6 +2345,7 @@ function renderArchiveTable(){
   const tbody = document.getElementById('archiveBody');
   if (!tbody) return;
   if (!archiveRows.length) {
+    archiveSelectedMeasurementKey = null;
     tbody.innerHTML = '<tr><td colspan="20" style="padding:14px;color:var(--muted);">Архив пуст</td></tr>';
     return;
   }
@@ -2324,9 +2371,10 @@ function renderArchiveTable(){
       const cls = index === 0 ? 'first-col' : (index === 9 ? 'axis-col' : 'summary');
       return `<td class="${cls}" data-col="${index}">${esc(value)}</td>`;
     }).join('');
-    return `<tr data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}">${cells}</tr>`;
+    return `<tr data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}" onmousedown="setArchiveSelectedMeasurement(${rowIndex})">${cells}</tr>`;
   }).join('');
   renderArchiveSelectionHighlight();
+  renderArchiveMeasurementSelection();
 }
 function renderTable(){
   const tbody = document.getElementById('inputBody');
@@ -2386,12 +2434,49 @@ async function loadArchive(){
   }
   const payload = await res.json();
   archiveRows = payload.rows || [];
+  if (archiveSelectedMeasurementKey && !archiveRows.some(row => archiveMeasurementKey(row) === archiveSelectedMeasurementKey)) {
+    archiveSelectedMeasurementKey = null;
+  }
   renderArchiveTable();
   if (status) status.textContent = archiveRows.length ? `Записей: ${archiveRows.length}` : 'Архив пуст';
 }
 function toggleArchiveSort(){
   archiveSortDesc = !archiveSortDesc;
   loadArchive();
+}
+async function deleteSelectedArchiveMeasurement(){
+  if (!CAN_EDIT) return;
+  const focusMeta = archiveSelectionFocus ? archiveRowMeta(archiveSelectionFocus.row) : null;
+  const selectedMeta = focusMeta || archiveRows.find(row => archiveMeasurementKey(row) === archiveSelectedMeasurementKey);
+  if (!selectedMeta) {
+    alert('Выберите строку архива для удаления.');
+    return;
+  }
+  const labelParts = [selectedMeta.locomotive, selectedMeta.measurement_date, selectedMeta.repair_type].filter(Boolean);
+  const ok = confirm(`Удалить замер из архива?\n\n${labelParts.join(' / ')}`);
+  if (!ok) return;
+  const status = document.getElementById('archiveStatus');
+  if (status) status.textContent = 'Удаление из архива...';
+  const res = await fetch(`${API}/api/archive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({
+      action: 'delete',
+      year: selectedMeta.year,
+      measurement_date: selectedMeta.measurement_date,
+      locomotive: selectedMeta.locomotive,
+      repair_type: selectedMeta.repair_type,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (status) status.textContent = err.error || err.message || 'Не удалось удалить запись архива';
+    return;
+  }
+  archiveSelectedMeasurementKey = null;
+  clearArchiveSelection();
+  await loadArchive();
+  if (status) status.textContent = 'Запись архива удалена';
 }
 function refreshRowClasses(rowIndex){
   const row = document.querySelector(`tr[data-row="${rowIndex}"]`);
@@ -2924,7 +3009,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 payload = json.loads(raw.decode("utf-8"))
-                if payload.get("changes"):
+                if payload.get("action") == "delete":
+                    result = delete_archive_measurement(payload)
+                elif payload.get("changes"):
                     result = update_archive_cells(payload)
                 else:
                     result = save_archive(payload)
