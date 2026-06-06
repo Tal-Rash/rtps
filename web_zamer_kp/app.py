@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.20"
+APP_VERSION = "web-zkp-1.21"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1109,6 +1109,7 @@ HTML = """<!doctype html>
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
+    .input-meta { margin-top:8px; font-size:13px; color:var(--muted); }
     @media (max-width: 900px) {
       .top { display:block; }
       .actions, .filters { margin-top:10px; }
@@ -1152,6 +1153,7 @@ HTML = """<!doctype html>
         </label>
       <button id="saveBtn" class="primary" onclick="saveToArchive()">Сохранить в архив</button>
       </div>
+      <div id="inputMeta" class="input-meta"></div>
       <div class="table-shell">
         <table id="inputTable" aria-label="Ввод замера КП">
           <colgroup>
@@ -2144,7 +2146,13 @@ function updateArchiveSortButton(){
   }
 }
 function renderMeta(){
-  return;
+  const meta = document.getElementById('inputMeta');
+  if (!meta) return;
+  const loco = getCurrentLoco() || state?.locomotive || '';
+  const axisCount = getAxisCount(loco);
+  const wheelPairCount = Math.max(1, Number(state?.wheel_pair_count) || axisCount);
+  const sectionCount = Math.max(1, Number(state?.section_count) || defaultSectionCount(axisCount));
+  meta.textContent = `Колесных пар: ${wheelPairCount} · Секций: ${sectionCount}`;
 }
 function renderArchiveTable(){
   const tbody = document.getElementById('archiveBody');
