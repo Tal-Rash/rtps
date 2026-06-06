@@ -25,7 +25,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.29"
+APP_VERSION = "web-zkp-1.30"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -840,6 +840,94 @@ def delete_archive_measurement(payload: dict) -> dict:
     return {"ok": True, "deleted": deleted}
 
 
+def load_norms_rows() -> list[dict[str, str | bool]]:
+    default_keys = [item[0] for item in DEFAULT_NORMS]
+    with DB_LOCK, connect() as conn:
+        rows = conn.execute(
+            "SELECT metric_key, label, condition, yellow_value, red_value FROM kp_norms_data ORDER BY rowid"
+        ).fetchall()
+
+    db_norms = {text(row["metric_key"]): row for row in rows}
+    result: list[dict[str, str | bool]] = []
+    for metric_key, label, condition, yellow, red in DEFAULT_NORMS:
+        row = db_norms.get(metric_key)
+        result.append(
+            {
+                "metric_key": metric_key,
+                "label": label,
+                "condition": text(row["condition"] if row else condition),
+                "yellow_value": text(row["yellow_value"] if row else yellow),
+                "red_value": text(row["red_value"] if row else red),
+                "is_default": True,
+            }
+        )
+
+    for row in rows:
+        metric_key = text(row["metric_key"])
+        if metric_key in default_keys:
+            continue
+        result.append(
+            {
+                "metric_key": metric_key,
+                "label": text(row["label"]),
+                "condition": text(row["condition"]),
+                "yellow_value": text(row["yellow_value"]),
+                "red_value": text(row["red_value"]),
+                "is_default": False,
+            }
+        )
+    return result
+
+
+def save_norms_rows(payload: dict) -> dict:
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        return {"error": "rows"}, HTTPStatus.BAD_REQUEST
+
+    normalized: list[tuple[str, str, str, str, str]] = []
+    seen: set[str] = set()
+    default_keys = {item[0] for item in DEFAULT_NORMS}
+    conditions = {"меньше или равно", "больше или равно"}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        metric_key = text(row.get("metric_key")).strip()
+        label = text(row.get("label")).strip()
+        condition = text(row.get("condition")).strip()
+        yellow = text(row.get("yellow_value")).strip()
+        red = text(row.get("red_value")).strip()
+        if not label:
+            continue
+        if not metric_key:
+            metric_key = f"custom_{index + 1}"
+        if metric_key in seen:
+            suffix = 2
+            base_key = metric_key
+            while f"{base_key}_{suffix}" in seen:
+                suffix += 1
+            metric_key = f"{base_key}_{suffix}"
+        if condition not in conditions:
+            condition = "меньше или равно"
+        if metric_key in default_keys:
+            default_label = next((item[1] for item in DEFAULT_NORMS if item[0] == metric_key), label)
+            label = default_label
+        seen.add(metric_key)
+        normalized.append((metric_key, label, condition, yellow, red))
+
+    with DB_LOCK, connect() as conn:
+        conn.execute("DELETE FROM kp_norms_data")
+        conn.executemany(
+            """
+            INSERT INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value)
+            VALUES(?,?,?,?,?)
+            """,
+            normalized,
+        )
+        conn.commit()
+
+    return {"ok": True, "rows": load_norms_rows()}
+
+
 def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bool = True) -> list[dict]:
     locomotive = text(locomotive).strip()
     search_text = text(search_text).strip().lower()
@@ -1133,6 +1221,35 @@ HTML = """<!doctype html>
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
     .archive-table tr.selected-measurement td { box-shadow: inset 0 0 0 2px #2f6fed; }
+    .modal-backdrop {
+      position:fixed;
+      inset:0;
+      z-index:80;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      background:rgba(16,32,51,.38);
+    }
+    .modal-backdrop.open { display:flex; }
+    .modal {
+      width:min(800px, 100%);
+      max-height:calc(100vh - 48px);
+      overflow:auto;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:10px;
+      box-shadow:0 18px 44px rgba(16,32,51,.2);
+      padding:14px;
+    }
+    .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .modal-head h2 { margin:0; font-size:20px; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    .norms-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+    .norms-table { width:100%; table-layout:fixed; }
+    .norms-table th, .norms-table td { height:38px; padding:4px; }
+    .norms-table th { font-size:13px; }
+    .norms-table input, .norms-table select { width:100%; height:30px; padding:4px 6px; border-radius:6px; }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
     .input-meta { margin-top:8px; font-size:13px; color:var(--muted); }
     @media (max-width: 900px) {
@@ -1151,6 +1268,7 @@ HTML = """<!doctype html>
       </div>
       <div class="actions">
         <a href="/">На главную</a>
+        <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
         <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       </div>
@@ -1307,6 +1425,40 @@ HTML = """<!doctype html>
     </div>
   </div>
 
+  <div id="normsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="normsTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="normsTitle">Нормы колесных пар</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closeNormsDialog()">×</button>
+      </div>
+      <div class="norms-toolbar">
+        <button id="addNormBtn" type="button" onclick="addNormRow()">Добавить показатель</button>
+      </div>
+      <table class="norms-table" aria-label="Нормы колесных пар">
+        <colgroup>
+          <col style="width:300px">
+          <col style="width:170px">
+          <col style="width:130px">
+          <col style="width:130px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Показатель (название)</th>
+            <th>Условие</th>
+            <th>Желтый порог</th>
+            <th>Красный порог</th>
+          </tr>
+        </thead>
+        <tbody id="normsBody"></tbody>
+      </table>
+      <div id="normsStatus" class="status"></div>
+      <div class="modal-actions">
+        <button type="button" onclick="closeNormsDialog()">Отмена</button>
+        <button id="saveNormsBtn" class="primary" type="button" onclick="saveNormsDialog()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 const API = '{{APP_PREFIX}}';
 const CAN_EDIT = {{CAN_EDIT}};
@@ -1339,6 +1491,7 @@ let archiveSelectionFocus = null;
 let locomotiveInputSource = 'loaded';
 let initialLoadPromise = null;
 let locomotiveSwitchPromise = null;
+let normsRows = [];
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -1430,6 +1583,122 @@ function writeClipboardText(text){
     ta.remove();
   }
   return Promise.resolve();
+}
+function renderNormsTable(){
+  const body = document.getElementById('normsBody');
+  if (!body) return;
+  body.innerHTML = normsRows.map((row, index) => `
+    <tr data-index="${index}">
+      <td>
+        <input
+          value="${esc(row.label)}"
+          data-field="label"
+          data-index="${index}"
+          ${row.is_default || !CAN_EDIT ? 'readonly' : ''}
+        >
+      </td>
+      <td>
+        <select data-field="condition" data-index="${index}" ${CAN_EDIT ? '' : 'disabled'}>
+          <option value="меньше или равно" ${row.condition === 'меньше или равно' ? 'selected' : ''}>меньше или равно</option>
+          <option value="больше или равно" ${row.condition === 'больше или равно' ? 'selected' : ''}>больше или равно</option>
+        </select>
+      </td>
+      <td><input value="${esc(row.yellow_value)}" data-field="yellow_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
+      <td><input value="${esc(row.red_value)}" data-field="red_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
+    </tr>
+  `).join('');
+}
+async function openNormsDialog(){
+  const modal = document.getElementById('normsModal');
+  const status = document.getElementById('normsStatus');
+  const saveBtn = document.getElementById('saveNormsBtn');
+  const addBtn = document.getElementById('addNormBtn');
+  if (saveBtn) saveBtn.disabled = !CAN_EDIT;
+  if (addBtn) addBtn.disabled = !CAN_EDIT;
+  if (status) status.textContent = 'Загрузка...';
+  if (modal) modal.classList.add('open');
+  try {
+    const res = await fetch(`${API}/api/norms`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Не удалось загрузить нормы');
+    const payload = await res.json();
+    normsRows = payload.rows || [];
+    renderNormsTable();
+    if (status) status.textContent = CAN_EDIT ? '' : 'Режим просмотра';
+  } catch (error) {
+    normsRows = [];
+    renderNormsTable();
+    if (status) status.textContent = error.message || 'Не удалось загрузить нормы';
+  }
+}
+function closeNormsDialog(){
+  const modal = document.getElementById('normsModal');
+  if (modal) modal.classList.remove('open');
+}
+function addNormRow(){
+  if (!CAN_EDIT) return;
+  const suffix = Math.random().toString(16).slice(2, 10);
+  normsRows.push({
+    metric_key: `custom_${suffix}`,
+    label: 'Новый показатель',
+    condition: 'меньше или равно',
+    yellow_value: '',
+    red_value: '',
+    is_default: false,
+  });
+  renderNormsTable();
+  const index = normsRows.length - 1;
+  const input = document.querySelector(`#normsBody input[data-index="${index}"][data-field="label"]`);
+  if (input) input.focus();
+}
+function collectNormsRows(){
+  const rows = normsRows.map(row => ({ ...row }));
+  document.querySelectorAll('#normsBody [data-index][data-field]').forEach(input => {
+    const index = Number(input.dataset.index);
+    const field = input.dataset.field;
+    if (!rows[index] || !field) return;
+    rows[index][field] = input.value;
+  });
+  return rows;
+}
+function applyNormRows(rows){
+  if (!state) return;
+  const map = {};
+  (rows || []).forEach(row => {
+    map[row.metric_key] = {
+      label: row.label || '',
+      condition: row.condition || '',
+      yellow_value: row.yellow_value || '',
+      red_value: row.red_value || '',
+    };
+  });
+  state.norms = map;
+  renderTable();
+}
+async function saveNormsDialog(){
+  if (!CAN_EDIT) return;
+  const status = document.getElementById('normsStatus');
+  const saveBtn = document.getElementById('saveNormsBtn');
+  const rows = collectNormsRows();
+  if (status) status.textContent = 'Сохранение...';
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/norms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows }),
+    });
+    const payload = await res.json();
+    if (!res.ok || payload.error) throw new Error(payload.error || 'Не удалось сохранить нормы');
+    normsRows = payload.rows || [];
+    applyNormRows(normsRows);
+    renderNormsTable();
+    if (status) status.textContent = 'Сохранено';
+    closeNormsDialog();
+  } catch (error) {
+    if (status) status.textContent = error.message || 'Не удалось сохранить нормы';
+  } finally {
+    if (saveBtn) saveBtn.disabled = !CAN_EDIT;
+  }
 }
 async function copySelectionToClipboard(){
   const rect = selectionRect();
@@ -2881,6 +3150,14 @@ document.addEventListener('mousedown', event => {
   const picker = event.target.closest?.('.loco-picker');
   if (!picker) hideLocoDropdown();
 });
+document.getElementById('normsModal').addEventListener('mousedown', event => {
+  if (event.target.id === 'normsModal') closeNormsDialog();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('normsModal')?.classList.contains('open')) {
+    closeNormsDialog();
+  }
+});
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
 document.getElementById('repairType').addEventListener('change', onRepairChange);
 document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
@@ -2986,6 +3263,12 @@ class Handler(BaseHTTPRequestHandler):
             send_json(self, load_kp_view(locomotive))
             return
 
+        if route == "/api/norms":
+            if not require_auth(self):
+                return
+            send_json(self, {"rows": load_norms_rows()})
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self):
@@ -3030,6 +3313,21 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = json.loads(raw.decode("utf-8"))
                 result = save_kp_data(payload)
+                if isinstance(result, tuple):
+                    body, status = result
+                    send_json(self, body, status)
+                else:
+                    send_json(self, result)
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/norms":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                result = save_norms_rows(payload)
                 if isinstance(result, tuple):
                     body, status = result
                     send_json(self, body, status)
