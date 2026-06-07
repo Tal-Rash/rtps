@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.31"
+APP_VERSION = "web-zkp-1.32"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -1199,6 +1199,389 @@ def archive_excel_export_bytes(selected_locomotives: list[str] | None = None, da
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue(), len(rows)
+
+
+def upsert_inventory_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, inv: str = "") -> None:
+    locomotive = text(locomotive).strip()
+    if not locomotive:
+        return
+    series = text(series).strip()
+    inv = text(inv).strip()
+    year = dt.date.today().year
+    cur.execute("DELETE FROM inventory WHERE TRIM(COALESCE(num, ''))=?", (locomotive,))
+    cur.execute("INSERT INTO inventory (y, ser, num, inv) VALUES (?, ?, ?, ?)", (year, series, locomotive, inv))
+
+
+def phone_reference_export_payload() -> dict:
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        locomotives = load_locomotives(cur)
+        kp_rows = cur.execute(
+            "SELECT locomotive, r, c, v FROM kp_data WHERE TRIM(COALESCE(locomotive, '')) <> '' ORDER BY locomotive, r, c"
+        ).fetchall()
+
+    kp_map: dict[str, dict[int, dict[int, str]]] = {}
+    for row in kp_rows:
+        locomotive = text(row["locomotive"]).strip()
+        kp_map.setdefault(locomotive, {}).setdefault(int(row["r"]), {})[int(row["c"])] = text(row["v"])
+
+    payload_locomotives: list[dict[str, object]] = []
+    for locomotive in locomotives:
+        number = text(locomotive.get("number")).strip()
+        series = text(locomotive.get("series")).strip()
+        wheel_pair_count = max(1, locomotive_axis_count(series, number))
+        row_map = kp_map.get(number, {})
+        wheel_pairs: list[dict[str, object]] = []
+        for pair_index in range(wheel_pair_count):
+            row = row_map.get(pair_index, {})
+            wheel_pairs.append(
+                {
+                    "number": pair_index + 1,
+                    "axisNumber": parse_excel_int(row.get(1, "")) or (pair_index + 1),
+                    "diameterLeft": parse_float_value(row.get(2, "")),
+                    "diameterRight": parse_float_value(row.get(3, "")),
+                }
+            )
+        payload_locomotives.append(
+            {
+                "series": series,
+                "number": number,
+                "wheelPairCount": wheel_pair_count,
+                "wheelPairs": wheel_pairs,
+            }
+        )
+
+    return {
+        "formatVersion": 2,
+        "exportType": "referenceData",
+        "exportedAt": dt.datetime.now().isoformat(timespec="seconds"),
+        "locomotives": payload_locomotives,
+    }
+
+
+def phone_archive_export_payload(selected_locomotives: list[str] | None = None, date_from: str = "", date_to: str = "") -> dict:
+    locomotives_filter = {text(item).strip() for item in selected_locomotives or [] if text(item).strip()}
+    date_from = text(date_from).strip()
+    date_to = text(date_to).strip()
+    query = """
+        SELECT y, measurement_date, locomotive, repair_type, r, c, v
+        FROM archive_data
+        WHERE TRIM(COALESCE(measurement_date, '')) <> ''
+    """
+    params: list[str] = []
+    if locomotives_filter:
+        query += f" AND locomotive IN ({','.join('?' for _ in locomotives_filter)})"
+        params.extend(sorted(locomotives_filter))
+    if date_from:
+        query += " AND measurement_date >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND measurement_date <= ?"
+        params.append(date_to)
+    query += " ORDER BY y, measurement_date, locomotive, repair_type, r, c"
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        rows = cur.execute(query, params).fetchall()
+        grouped: dict[tuple[int, str, str, str], dict[int, list[str]]] = {}
+        series_cache: dict[str, str] = {}
+        kp_cache: dict[str, dict[tuple[int, int], str]] = {}
+        for row in rows:
+            key = (
+                int(row["y"] or 0),
+                text(row["measurement_date"]).strip(),
+                text(row["locomotive"]).strip(),
+                text(row["repair_type"]).strip(),
+            )
+            grouped.setdefault(key, {})[int(row["r"])] = grouped.setdefault(key, {}).get(int(row["r"]), [""] * 12)
+            grouped[key][int(row["r"])][int(row["c"])] = text(row["v"])
+
+        archive_items: list[dict[str, object]] = []
+        for (year, measurement_date, locomotive, repair_type), rows_by_r in sorted(grouped.items()):
+            series = series_cache.get(locomotive)
+            if series is None:
+                series = series_for_locomotive(cur, locomotive)
+                series_cache[locomotive] = series
+            wheel_pair_count = max(1, locomotive_axis_count(series, locomotive))
+            if locomotive not in kp_cache:
+                kp_rows = cur.execute(
+                    "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3)",
+                    (locomotive,),
+                ).fetchall()
+                kp_cache[locomotive] = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
+            kp_values = kp_cache.get(locomotive, {})
+            wheel_pairs: list[dict[str, object]] = []
+            for row_index in sorted(rows_by_r):
+                row = rows_by_r[row_index]
+                pair_number = parse_excel_int(row[1]) or max(1, row_index - 1)
+                left_band = row[8] or ""
+                right_band = row[9] or ""
+                diameter_left = row[10] or ""
+                diameter_right = row[11] or ""
+                if not diameter_left:
+                    kp_left = parse_float_value(kp_values.get((pair_number - 1, 2), ""))
+                    bandage_left_value = parse_float_value(left_band)
+                    if kp_left is not None and bandage_left_value is not None:
+                        diameter_left = str(int(round(kp_left + bandage_left_value * 2)))
+                if not diameter_right:
+                    kp_right = parse_float_value(kp_values.get((pair_number - 1, 3), ""))
+                    bandage_right_value = parse_float_value(right_band)
+                    if kp_right is not None and bandage_right_value is not None:
+                        diameter_right = str(int(round(kp_right + bandage_right_value * 2)))
+
+                wheel_pairs.append(
+                    {
+                        "number": pair_number,
+                        "left": {
+                            "flangeThickness": parse_float_value(row[2]),
+                            "flangeWear": parse_float_value(row[4]),
+                            "flangeSteepness": parse_float_value(row[6]),
+                            "bandageThickness": parse_float_value(left_band),
+                            "bandageDiameter": parse_float_value(diameter_left),
+                        },
+                        "right": {
+                            "flangeThickness": parse_float_value(row[3]),
+                            "flangeWear": parse_float_value(row[5]),
+                            "flangeSteepness": parse_float_value(row[7]),
+                            "bandageThickness": parse_float_value(right_band),
+                            "bandageDiameter": parse_float_value(diameter_right),
+                        },
+                    }
+                )
+
+            archive_items.append(
+                {
+                    "formatVersion": 1,
+                    "createdAt": dt.datetime.now().isoformat(timespec="seconds"),
+                    "measurementId": f"{year}:{measurement_date}:{locomotive}:{repair_type}",
+                    "locomotive": {
+                        "series": series,
+                        "number": locomotive,
+                        "wheelPairCount": wheel_pair_count,
+                        "comment": "",
+                        "isNew": False,
+                    },
+                    "repairType": repair_type,
+                    "measurementDate": measurement_date,
+                    "wheelPairs": wheel_pairs,
+                }
+            )
+
+    return {
+        "formatVersion": 1,
+        "exportType": "archiveData",
+        "exportedAt": dt.datetime.now().isoformat(timespec="seconds"),
+        "archive": archive_items,
+    }
+
+
+def phone_export_payload(kind: str, selected_locomotives: list[str] | None = None, date_from: str = "", date_to: str = "") -> dict:
+    kind = text(kind).strip().lower()
+    if kind == "reference":
+        return phone_reference_export_payload()
+    if kind == "archive":
+        return phone_archive_export_payload(selected_locomotives, date_from, date_to)
+    raise ValueError("Неизвестный тип экспорта.")
+
+
+def parse_phone_json_payload(raw: bytes) -> object:
+    data = json.loads(raw.decode("utf-8"))
+    if isinstance(data, dict) and "payload" in data:
+        payload = data.get("payload")
+        if isinstance(payload, str):
+            return json.loads(payload)
+        return payload
+    if isinstance(data, str):
+        text_data = data.strip()
+        if text_data.startswith("{") or text_data.startswith("["):
+            try:
+                return json.loads(text_data)
+            except Exception:
+                pass
+        try:
+            decoded = base64.b64decode(text_data)
+            try:
+                return json.loads(zlib.decompress(decoded).decode("utf-8"))
+            except Exception:
+                return json.loads(decoded.decode("utf-8"))
+        except Exception:
+            return data
+    return data
+
+
+def import_phone_reference_payload(payload: dict) -> dict:
+    reference = payload.get("referenceData") if isinstance(payload.get("referenceData"), dict) else payload
+    locomotives = reference.get("locomotives") if isinstance(reference, dict) else None
+    if not isinstance(locomotives, list):
+        return {"error": "Некорректный справочник локомотивов."}, HTTPStatus.BAD_REQUEST
+
+    imported_locomotives = 0
+    imported_wheel_pairs = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        for item in locomotives:
+            if not isinstance(item, dict):
+                continue
+            series = text(item.get("series")).strip()
+            number = text(item.get("number")).strip()
+            if not number:
+                continue
+            wheel_pair_count = parse_excel_int(item.get("wheelPairCount")) or len(item.get("wheelPairs") or []) or locomotive_axis_count(series, number)
+            upsert_inventory_locomotive(cur, series, number, "")
+            cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
+            wheel_pairs = item.get("wheelPairs")
+            if not isinstance(wheel_pairs, list) or not wheel_pairs:
+                wheel_pairs = [{"number": index + 1, "axisNumber": index + 1} for index in range(max(1, wheel_pair_count))]
+            for pair in wheel_pairs:
+                if not isinstance(pair, dict):
+                    continue
+                pair_number = parse_excel_int(pair.get("number")) or 0
+                if pair_number <= 0:
+                    continue
+                axis_number = parse_excel_int(pair.get("axisNumber")) or pair_number
+                cur.execute(
+                    "INSERT OR REPLACE INTO kp_data(locomotive, r, c, v) VALUES(?, ?, ?, ?)",
+                    (number, pair_number - 1, 1, str(axis_number)),
+                )
+                diameter_left = parse_float_value(pair.get("diameterLeft"))
+                diameter_right = parse_float_value(pair.get("diameterRight"))
+                if diameter_left is not None:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO kp_data(locomotive, r, c, v) VALUES(?, ?, ?, ?)",
+                        (number, pair_number - 1, 2, str(diameter_left)),
+                    )
+                if diameter_right is not None:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO kp_data(locomotive, r, c, v) VALUES(?, ?, ?, ?)",
+                        (number, pair_number - 1, 3, str(diameter_right)),
+                    )
+            imported_locomotives += 1
+            imported_wheel_pairs += len(wheel_pairs)
+        conn.commit()
+
+    return {"ok": True, "imported_locomotives": imported_locomotives, "imported_wheel_pairs": imported_wheel_pairs}
+
+
+def import_phone_measurement_payload(payload: dict) -> dict:
+    measurement = payload.get("measurement") if isinstance(payload.get("measurement"), dict) else payload
+    if not isinstance(measurement, dict):
+        return {"error": "Некорректный замер."}, HTTPStatus.BAD_REQUEST
+
+    locomotive = measurement.get("locomotive")
+    if not isinstance(locomotive, dict):
+        return {"error": "Не найден локомотив в замере."}, HTTPStatus.BAD_REQUEST
+
+    series = text(locomotive.get("series")).strip()
+    number = text(locomotive.get("number")).strip()
+    measurement_date = text(measurement.get("measurementDate")).strip() or dt.date.today().isoformat()
+    repair_type = text(measurement.get("repairType")).strip()
+    measurement_id = text(measurement.get("measurementId")).strip() or f"{measurement_date}:{number}:{repair_type}"
+    wheel_pairs = measurement.get("wheelPairs")
+    if not isinstance(wheel_pairs, list) or not wheel_pairs:
+        return {"error": "В замере нет колесных пар."}, HTTPStatus.BAD_REQUEST
+
+    try:
+        year = int(measurement_date[:4])
+    except Exception:
+        year = dt.date.today().year
+
+    wheel_pair_count = parse_excel_int(locomotive.get("wheelPairCount")) or len(wheel_pairs) or locomotive_axis_count(series, number)
+    section_count = default_section_count(wheel_pair_count)
+    section_sizes: list[int] = []
+    base = max(1, wheel_pair_count) // max(1, section_count)
+    remainder = max(1, wheel_pair_count) % max(1, section_count)
+    for index in range(max(1, section_count)):
+        section_sizes.append(base + (1 if index < remainder else 0))
+
+    archive_rows: list[tuple[int, str, str, str, int, int, str]] = []
+    imported_cells = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        upsert_inventory_locomotive(cur, series, number, "")
+        cur.execute(
+            "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+            (year, measurement_date, number, repair_type),
+        )
+        for pair in wheel_pairs:
+            if not isinstance(pair, dict):
+                continue
+            pair_number = parse_excel_int(pair.get("number")) or 0
+            if pair_number <= 0:
+                continue
+            row_index = pair_number - 1
+            running = 0
+            section_value = "1"
+            for section_index, span in enumerate(section_sizes, start=1):
+                running += span
+                if row_index < running:
+                    section_value = str(section_index)
+                    break
+            left = pair.get("left") if isinstance(pair.get("left"), dict) else {}
+            right = pair.get("right") if isinstance(pair.get("right"), dict) else {}
+            values = {
+                0: section_value,
+                1: str(pair_number),
+                2: excel_num_text(left.get("flangeThickness")),
+                3: excel_num_text(right.get("flangeThickness")),
+                4: excel_num_text(left.get("flangeWear")),
+                5: excel_num_text(right.get("flangeWear")),
+                6: excel_num_text(left.get("flangeSteepness")),
+                7: excel_num_text(right.get("flangeSteepness")),
+                8: excel_num_text(left.get("bandageThickness")),
+                9: excel_num_text(right.get("bandageThickness")),
+                10: excel_num_text(left.get("bandageDiameter")),
+                11: excel_num_text(right.get("bandageDiameter")),
+            }
+            for col, value in values.items():
+                value = text(value).strip()
+                if value:
+                    archive_rows.append((year, measurement_date, number, repair_type, row_index + 2, col, value))
+                    imported_cells += 1
+        cur.executemany(
+            "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            archive_rows,
+        )
+        conn.commit()
+
+    return {
+        "ok": True,
+        "imported_measurements": 1,
+        "imported_cells": imported_cells,
+        "measurement_id": measurement_id,
+    }
+
+
+def import_phone_payload(payload: object) -> dict:
+    if isinstance(payload, dict):
+        export_type = text(payload.get("exportType")).strip()
+        if payload.get("archiveData") is not None or export_type == "archiveData":
+            archive = payload.get("archiveData") if isinstance(payload.get("archiveData"), dict) else payload
+            archive_items = archive.get("archive") if isinstance(archive, dict) else None
+            if isinstance(archive_items, list):
+                imported_measurements = 0
+                imported_cells = 0
+                for item in archive_items:
+                    result = import_phone_measurement_payload(item)
+                    if isinstance(result, tuple):
+                        return result[0], result[1]
+                    imported_measurements += int(result.get("imported_measurements", 0))
+                    imported_cells += int(result.get("imported_cells", 0))
+                return {"ok": True, "imported_measurements": imported_measurements, "imported_cells": imported_cells}
+            return import_phone_measurement_payload(archive if isinstance(archive, dict) else payload)
+        if payload.get("referenceData") is not None or export_type == "referenceData":
+            reference = payload.get("referenceData") if isinstance(payload.get("referenceData"), dict) else payload
+            return import_phone_reference_payload(reference)
+        if payload.get("measurement") is not None:
+            measurement = payload.get("measurement")
+            if isinstance(measurement, dict):
+                return import_phone_measurement_payload(measurement)
+        if "locomotives" in payload:
+            return import_phone_reference_payload(payload)
+        if "wheelPairs" in payload and "measurementDate" in payload:
+            return import_phone_measurement_payload(payload)
+    return {"error": "Не удалось распознать телефонные данные."}, HTTPStatus.BAD_REQUEST
 
 
 def ensure_import_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, wheel_pair_count: int) -> None:
@@ -3921,6 +4304,21 @@ class Handler(BaseHTTPRequestHandler):
                 send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
 
+        if route == "/api/phone-export":
+            if not require_auth(self):
+                return
+            try:
+                qs = parse_qs(parsed.query)
+                kind = text(qs.get("kind", ["archive"])[0]).strip().lower()
+                selected_locomotives = [text(item).strip() for item in qs.get("locomotive", []) if text(item).strip()]
+                date_from = text(qs.get("date_from", [""])[0]).strip()
+                date_to = text(qs.get("date_to", [""])[0]).strip()
+                payload = phone_export_payload(kind, selected_locomotives, date_from, date_to)
+                send_json(self, payload)
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
         if route == "/api/archive-excel-export":
             if not require_auth(self):
                 return
@@ -4018,6 +4416,21 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 data = base64.b64decode(encoded)
                 result = import_archive_excel_bytes(data)
+                if isinstance(result, tuple):
+                    body, status = result
+                    send_json(self, body, status)
+                else:
+                    send_json(self, result)
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/phone-import":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = parse_phone_json_payload(raw)
+                result = import_phone_payload(payload)
                 if isinstance(result, tuple):
                     body, status = result
                     send_json(self, body, status)
