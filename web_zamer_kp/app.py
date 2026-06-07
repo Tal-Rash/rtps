@@ -3722,15 +3722,29 @@ function getCurrentLoco(){
 function isKnownLocomotive(number){
   return (LOCOMOTIVE_CHOICES || []).some(item => item.number === String(number || '').trim());
 }
+function getInventoryItem(number){
+  const target = String(number || '').trim();
+  if (!target) return null;
+  const items = state?.locomotives || LOCOMOTIVE_CHOICES || [];
+  return items.find(item => String(item.number || '').trim() === target) || null;
+}
 function currentWheelPairCount(number){
   if (state && String(number || '').trim() === String(state.locomotive || '').trim() && Number.isFinite(Number(state.wheel_pair_count))) {
     return Number(state.wheel_pair_count) || 12;
+  }
+  const item = getInventoryItem(number);
+  if (item && Number.isFinite(Number(item.wheelPairCount)) && Number(item.wheelPairCount) > 0) {
+    return Math.max(1, Number(item.wheelPairCount) || 12);
   }
   return 12;
 }
 function currentSectionCount(number){
   if (state && String(number || '').trim() === String(state.locomotive || '').trim() && Number.isFinite(Number(state.section_count))) {
     return Math.max(1, Number(state.section_count) || 1);
+  }
+  const item = getInventoryItem(number);
+  if (item && Number.isFinite(Number(item.sectionCount)) && Number(item.sectionCount) > 0) {
+    return Math.max(1, Number(item.sectionCount) || 1);
   }
   return 0;
 }
@@ -3741,6 +3755,10 @@ function getSeries(number){
 function getAxisCount(number){
   if (state && String(number || '').trim() === String(state.locomotive || '').trim() && Number.isFinite(Number(state.wheel_pair_count))) {
     return Math.max(1, Number(state.wheel_pair_count) || 12);
+  }
+  const item = getInventoryItem(number);
+  if (item && Number.isFinite(Number(item.wheelPairCount)) && Number(item.wheelPairCount) > 0) {
+    return Math.max(1, Number(item.wheelPairCount) || 12);
   }
   const series = getSeries(number);
   const text = (series + ' ' + number).toLowerCase().replaceAll('ё','е');
@@ -4259,9 +4277,8 @@ function renderMeta(){
   const meta = document.getElementById('inputMeta');
   if (!meta) return;
   const loco = getCurrentLoco() || state?.locomotive || '';
-  const axisCount = getAxisCount(loco);
-  const wheelPairCount = Math.max(1, Number(state?.wheel_pair_count) || axisCount);
-  const sectionCount = Math.max(1, Number(state?.section_count) || defaultSectionCount(axisCount));
+  const wheelPairCount = currentWheelPairCount(loco);
+  const sectionCount = Math.max(1, currentSectionCount(loco) || defaultSectionCount(wheelPairCount));
   meta.textContent = `Колесных пар: ${wheelPairCount} · Секций: ${sectionCount}`;
 }
 function renderArchiveTable(){
@@ -4305,7 +4322,7 @@ function renderTable(){
   const axisCount = getAxisCount(loco);
   const sectionCount = (state && String(loco) === String(state.locomotive || ''))
     ? Math.max(1, Number(state.section_count) || defaultSectionCount(axisCount))
-    : defaultSectionCount(axisCount);
+    : Math.max(1, currentSectionCount(loco) || defaultSectionCount(axisCount));
   const visibleRows = Math.max(1, Math.min(axisCount, INPUT_ROWS));
   const sections = sectionSpec(axisCount, sectionCount);
   const sectionMap = new Map(sections.map(item => [item.start, item]));
