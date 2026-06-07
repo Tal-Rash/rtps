@@ -148,6 +148,8 @@ def ensure_db() -> None:
             cur.execute("ALTER TABLE inventory ADD COLUMN wheel_pair_count INT")
         if "section_count" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN section_count INT")
+        if "eight_digit_number" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN eight_digit_number TEXT")
         cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.execute(
             """
@@ -347,7 +349,7 @@ def load_state(year: int) -> dict:
             employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["milk_note"])])
         for row in cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number
             FROM inventory
             WHERE y=?
             ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid
@@ -357,9 +359,10 @@ def load_state(year: int) -> dict:
             inventory.append([
                 text(row["ser"]),
                 text(row["num"]),
+                text(row["inv"]),
                 int(row["wheel_pair_count"] or 0),
                 int(row["section_count"] or 0),
-                text(row["inv"]),
+                text(row["eight_digit_number"]),
                 int(row["deleted_at"] or 0),
             ])
     return {"year": year, "norms": norms, "employees": employees, "inventory": inventory}
@@ -402,7 +405,7 @@ def save_state(payload: dict) -> None:
 
         existing_rows = cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number
             FROM inventory
             WHERE y=?
             """,
@@ -412,19 +415,20 @@ def save_state(payload: dict) -> None:
         submitted_keys: set[tuple[str, str]] = set()
         now = int(dt.datetime.now().timestamp() * 1000)
         for order_index, row in enumerate(inventory, start=1):
-            row = list(row or []) + [""] * 6
+            row = list(row or []) + [""] * 7
             ser, num = [text(v).strip() for v in row[:2]]
             try:
-                wheel_pair_count = int(row[2] or 0)
+                wheel_pair_count = int(row[3] or 0)
             except Exception:
                 wheel_pair_count = 0
             try:
-                section_count = int(row[3] or 0)
+                section_count = int(row[4] or 0)
             except Exception:
                 section_count = 0
-            inv = text(row[4]).strip()
+            inv = text(row[2]).strip()
+            eight_digit_number = text(row[5]).strip()
             try:
-                deleted_at = int(row[5] or 0)
+                deleted_at = int(row[6] or 0)
             except Exception:
                 deleted_at = 0
             if not (ser or num):
@@ -436,18 +440,29 @@ def save_state(payload: dict) -> None:
                 cur.execute(
                     """
                     UPDATE inventory
-                    SET inv=?, wheel_pair_count=?, section_count=?, sort_order=?, updated_at=?, deleted_at=?
+                    SET inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, sort_order=?, updated_at=?, deleted_at=?
                     WHERE y=? AND ser=? AND num=?
                     """,
-                    (inv_value, wheel_pair_count or None, section_count or None, order_index, now, deleted_at, year, ser, num),
+                    (
+                        inv_value,
+                        wheel_pair_count or None,
+                        section_count or None,
+                        eight_digit_number,
+                        order_index,
+                        now,
+                        deleted_at,
+                        year,
+                        ser,
+                        num,
+                    ),
                 )
             else:
                 cur.execute(
                     """
-                    INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, sort_order, updated_at, deleted_at)
-                    VALUES (?,?,?,?,?,?,?,?,?)
+                    INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
                     """,
-                    (year, ser, num, inv, wheel_pair_count or None, section_count or None, order_index, now, deleted_at),
+                    (year, ser, num, inv, wheel_pair_count or None, section_count or None, eight_digit_number, order_index, now, deleted_at),
                 )
         for (ser, num), row in existing_map.items():
             if (ser, num) in submitted_keys:
@@ -597,8 +612,11 @@ HTML = """<!doctype html>
       <label>Кол-во секций
         <input id="newLocoSections" type="number" min="1" step="1" value="1">
       </label>
+      <label>Инвентарный №
+        <input id="newLocoInv" autocomplete="off">
+      </label>
       <label style="grid-column:1 / -1">8-значный номер
-        <input id="newLocoInv" autocomplete="off" inputmode="numeric" maxlength="8" placeholder="00000000">
+        <input id="newLocoEight" autocomplete="off" inputmode="numeric" maxlength="8" placeholder="00000000">
       </label>
     </div>
     <div class="modal-actions">
@@ -616,7 +634,7 @@ let canceledState = null;
 const headers = {
   norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
   employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Молоко прим.'],
-  inventory: ['Серия','Номер','Кол-во КП','Ко-во секций','8-значный номер']
+  inventory: ['Серия','Номер','Инвентарный №','Кол-во КП','Ко-во секций','8-значный номер']
 };
 
 function fillYears(){
@@ -660,7 +678,7 @@ function renderTable(name, rows, editableRows){
       name === 'inventory'
         ? (() => {
             const selectedRow = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
-            const isDeleted = selectedRow ? Number(selectedRow[5] || 0) > 0 : false;
+            const isDeleted = selectedRow ? Number(selectedRow[6] || 0) > 0 : false;
             return `<div class="rowbar">
               <button onclick="openAddLocomotiveModal()">Добавить локомотив</button>
               <button onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
@@ -673,7 +691,7 @@ function renderTable(name, rows, editableRows){
     : '';
   let html = rowbar + '<table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
-    const isDeleted = name === 'inventory' && Number(row[5] || 0) > 0;
+    const isDeleted = name === 'inventory' && Number(row[6] || 0) > 0;
     const draggable = name === 'inventory' && CAN_EDIT
       ? ' draggable="true" ondragstart="dragStartRow(event, ' + r + ')" ondragover="dragOverRow(event, ' + r + ')" ondrop="dropRow(event, ' + r + ')" ondragend="dragEndRow(event)"'
       : '';
@@ -683,11 +701,16 @@ function renderTable(name, rows, editableRows){
       if(name === 'employees' && (c === 4 || c === 5)){
         html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
       } else if (name === 'inventory' && c === 2) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        const cls = 'left';
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 3) {
         html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 4) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 5) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else {
-        const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 4) ? 'left' : '';
+        const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 2) ? 'left' : '';
         html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       }
     });
@@ -733,23 +756,23 @@ function softDeleteInventory(){
   const row = selected.inventory >= 0 ? selected.inventory : -1;
   if (row < 0) return;
   const current = state.inventory[row];
-  if (Number(current[5] || 0) > 0) return;
-  current[5] = Date.now();
+  if (Number(current[6] || 0) > 0) return;
+  current[6] = Date.now();
   renderTable('inventory', state.inventory, true);
   updateSaveButton();
 }
 function restoreInventoryRow(){
   if (!CAN_EDIT) return;
   const current = getSelectedInventoryRow();
-  if (!current || Number(current[5] || 0) <= 0) return;
-  current[5] = 0;
+  if (!current || Number(current[6] || 0) <= 0) return;
+  current[6] = 0;
   renderTable('inventory', state.inventory, true);
   updateSaveButton();
 }
 async function purgeSelectedInventory(){
   if (!CAN_EDIT) return;
   const row = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
-  if (!row || Number(row[5] || 0) <= 0) return;
+  if (!row || Number(row[6] || 0) <= 0) return;
   if (!confirm('Удалить окончательно выбранный локомотив?')) return;
   const target = state.inventory[selected.inventory];
   const year = Number(document.getElementById('year').value);
@@ -769,7 +792,7 @@ async function purgeSelectedInventory(){
 }
 function dragStartRow(event, row){
   if (!CAN_EDIT) return;
-  if ((state.inventory[row] && Number(state.inventory[row][5] || 0) > 0)) {
+  if ((state.inventory[row] && Number(state.inventory[row][6] || 0) > 0)) {
     event.preventDefault();
     return;
   }
@@ -865,6 +888,8 @@ function openAddLocomotiveModal(){
   document.getElementById('newLocoNumber').value = '';
   document.getElementById('newLocoWheelPairs').value = '6';
   document.getElementById('newLocoSections').value = '1';
+  document.getElementById('newLocoInv').value = '';
+  document.getElementById('newLocoEight').value = '';
   document.getElementById('addLocoModal').classList.add('show');
   setTimeout(() => document.getElementById('newLocoSeries').focus(), 0);
 }
@@ -879,6 +904,7 @@ function submitAddLocomotive(){
   const wheelPairs = Math.max(1, Number(document.getElementById('newLocoWheelPairs').value) || 1);
   const sections = Math.max(1, Number(document.getElementById('newLocoSections').value) || 1);
   const inv = document.getElementById('newLocoInv').value.trim();
+  const eightDigit = document.getElementById('newLocoEight').value.trim();
   if (!series || !number) {
     alert('Заполните серию и номер локомотива');
     return;
@@ -888,7 +914,7 @@ function submitAddLocomotive(){
     alert('Такой локомотив уже есть в справочнике');
     return;
   }
-  state.inventory.push([series, number, wheelPairs, sections, inv, 0]);
+  state.inventory.push([series, number, inv, wheelPairs, sections, eightDigit, 0]);
   selected.inventory = state.inventory.length - 1;
   closeAddLocomotiveModal();
   renderTable('inventory', state.inventory, true);

@@ -167,6 +167,8 @@ def ensure_db() -> None:
             cur.execute("ALTER TABLE inventory ADD COLUMN wheel_pair_count INT")
         if "section_count" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN section_count INT")
+        if "eight_digit_number" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN eight_digit_number TEXT")
         cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
@@ -346,7 +348,7 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
 
 def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -> list[dict[str, str]]:
     query = """
-        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count
+        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
     """
@@ -369,6 +371,7 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
         deleted_at = int(row["deleted_at"] or 0)
         wheel_pair_count = int(row["wheel_pair_count"] or 0)
         section_count = int(row["section_count"] or 0)
+        eight_digit_number = text(row["eight_digit_number"]).strip()
         if deleted_at > 0 and not include_deleted:
             continue
         label = f"{series} {number}".strip()
@@ -384,6 +387,7 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
                 "deletedAt": deleted_at,
                 "wheelPairCount": wheel_pair_count,
                 "sectionCount": section_count,
+                "eightDigitNumber": eight_digit_number,
             }
         )
     return result
@@ -1285,7 +1289,7 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
         return
     if existing:
         return
-    upsert_inventory_locomotive(cur, series, loco_number, wheel_pair_count, deleted_at=0)
+    upsert_inventory_locomotive(cur, series, loco_number, wheel_pair_count=wheel_pair_count, deleted_at=0)
 
 
 def phone_measurement_missing_fields(payload: dict) -> list[str]:
@@ -1431,7 +1435,14 @@ def import_phone_reference_payload(payload: dict) -> dict:
             updated_at = int(loco.get("updatedAt") or 0)
             deleted_at = int(loco.get("deletedAt") or 0)
             wheel_pair_count = int(loco.get("wheelPairCount") or 6)
-            upsert_inventory_locomotive(cur, series, number, wheel_pair_count, sort_order=sort_order, deleted_at=deleted_at)
+            upsert_inventory_locomotive(
+                cur,
+                series,
+                number,
+                wheel_pair_count=wheel_pair_count,
+                sort_order=sort_order,
+                deleted_at=deleted_at,
+            )
             wheel_pairs = loco.get("wheelPairs", [])
             if not isinstance(wheel_pairs, list):
                 continue
@@ -1805,6 +1816,9 @@ def upsert_inventory_locomotive(
     series: str,
     locomotive: str,
     inv: str = "",
+    wheel_pair_count: int = 0,
+    section_count: int = 0,
+    eight_digit_number: str = "",
     sort_order: int = 0,
     updated_at: int | None = None,
     deleted_at: int | None = None,
@@ -1814,6 +1828,7 @@ def upsert_inventory_locomotive(
         return
     series = text(series).strip()
     inv = text(inv).strip()
+    eight_digit_number = text(eight_digit_number).strip()
     year = dt.date.today().year
     sort_order_value = int(sort_order or 0)
     updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
@@ -1831,21 +1846,27 @@ def upsert_inventory_locomotive(
         sort_order_value = int(max_row["max_sort_order"] or 0) + 1
     if deleted_at is None:
         existing = cur.execute(
-            "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
+            "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number "
             "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
             (locomotive,),
         ).fetchone()
         if existing and sort_order_value <= 0:
             sort_order_value = int(existing["sort_order"] or 0)
+        if not wheel_pair_count:
+            wheel_pair_count = int(existing["wheel_pair_count"] or 0) if existing else 0
+        if not section_count:
+            section_count = int(existing["section_count"] or 0) if existing else 0
+        if not eight_digit_number:
+            eight_digit_number = text(existing["eight_digit_number"]).strip() if existing else ""
         deleted_at = int(existing["deleted_at"] or 0) if existing else 0
     else:
         deleted_at = int(deleted_at or 0)
     cur.execute(
         """
-        INSERT OR REPLACE INTO inventory (y, ser, num, inv, sort_order, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (year, series, locomotive, inv, sort_order_value, updated_at, deleted_at),
+        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, deleted_at),
     )
 
 
@@ -1884,6 +1905,7 @@ def phone_reference_export_payload() -> dict:
                 "series": series,
                 "number": number,
                 "wheelPairCount": wheel_pair_count,
+                "eightDigitNumber": text(locomotive.get("eightDigitNumber") or ""),
                 "sortOrder": int(locomotive.get("sortOrder") or 0),
                 "updatedAt": int(locomotive.get("updatedAt") or 0),
                 "deletedAt": int(locomotive.get("deletedAt") or 0),
@@ -2071,7 +2093,18 @@ def import_phone_reference_payload(payload: dict) -> dict:
             sort_order = parse_excel_int(item.get("sortOrder")) or 0
             updated_at = parse_excel_int(item.get("updatedAt")) or 0
             deleted_at = parse_excel_int(item.get("deletedAt")) or 0
-            upsert_inventory_locomotive(cur, series, number, "", sort_order=sort_order, updated_at=updated_at or None, deleted_at=deleted_at)
+            eight_digit_number = text(item.get("eightDigitNumber")).strip()
+            upsert_inventory_locomotive(
+                cur,
+                series,
+                number,
+                "",
+                wheel_pair_count=wheel_pair_count,
+                eight_digit_number=eight_digit_number,
+                sort_order=sort_order,
+                updated_at=updated_at or None,
+                deleted_at=deleted_at,
+            )
             if deleted_at <= 0:
                 cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
             wheel_pairs = item.get("wheelPairs")
@@ -2143,7 +2176,7 @@ def import_phone_measurement_payload(payload: dict) -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         cur.execute("BEGIN")
-        upsert_inventory_locomotive(cur, series, number, "")
+        upsert_inventory_locomotive(cur, series, number)
         cur.execute(
             "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
             (year, measurement_date, number, repair_type),
