@@ -430,13 +430,15 @@ def save_state(payload: dict) -> None:
                 continue
             submitted_keys.add((ser, num))
             if (ser, num) in existing_map:
+                existing_inv = text(existing_map[(ser, num)]["inv"]).strip()
+                inv_value = inv if inv else existing_inv
                 cur.execute(
                     """
                     UPDATE inventory
                     SET inv=?, wheel_pair_count=?, section_count=?, sort_order=?, updated_at=?, deleted_at=?
                     WHERE y=? AND ser=? AND num=?
                     """,
-                    (inv, wheel_pair_count or None, section_count or None, order_index, now, deleted_at, year, ser, num),
+                    (inv_value, wheel_pair_count or None, section_count or None, order_index, now, deleted_at, year, ser, num),
                 )
             else:
                 cur.execute(
