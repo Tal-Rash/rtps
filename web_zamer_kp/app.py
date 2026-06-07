@@ -28,7 +28,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.34"
+APP_VERSION = "web-zkp-1.35"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2218,6 +2218,19 @@ HTML = """<!doctype html>
     .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
     .modal-head h2 { margin:0; font-size:20px; }
     .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    .error-banner {
+      display:none;
+      margin:12px 0 0;
+      padding:10px 12px;
+      border:1px solid #f0b3b3;
+      border-radius:10px;
+      background:#fff3f3;
+      color:#8c1d1d;
+      font-size:13px;
+      line-height:1.45;
+      white-space:pre-wrap;
+    }
+    .error-banner.open { display:block; }
     .phone-import-grid {
       display:grid;
       grid-template-columns:minmax(280px, 1.3fr) minmax(220px, .9fr);
@@ -2284,6 +2297,7 @@ HTML = """<!doctype html>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       </div>
     </div>
+    <div id="runtimeErrorBanner" class="error-banner" role="alert" aria-live="polite"></div>
 
     <div class="tabs" role="tablist" aria-label="Разделы">
       <button id="tabInput" class="tab active" type="button" onclick="switchTab('input')">Ввод замера</button>
@@ -2578,6 +2592,24 @@ HTML = """<!doctype html>
   </div>
 
 <script>
+function showRuntimeError(message, detail){
+  const banner = document.getElementById('runtimeErrorBanner');
+  if (!banner) return;
+  const text = [message || 'Ошибка в странице', detail || ''].filter(Boolean).join('\n\n');
+  banner.textContent = text;
+  banner.classList.add('open');
+}
+window.addEventListener('error', event => {
+  const message = event?.message || 'Ошибка в странице';
+  const detail = event?.error?.stack || `${event?.filename || ''}${event?.lineno ? `:${event.lineno}` : ''}${event?.colno ? `:${event.colno}` : ''}`;
+  showRuntimeError(message, detail);
+});
+window.addEventListener('unhandledrejection', event => {
+  const reason = event?.reason;
+  const message = reason?.message || String(reason || 'Необработанное отклонение promise');
+  const detail = reason?.stack || '';
+  showRuntimeError(message, detail);
+});
 const API = '{{APP_PREFIX}}';
 const CAN_EDIT = {{CAN_EDIT}};
 const LOCOMOTIVE_CHOICES = {{LOCOMOTIVE_CHOICES}};
