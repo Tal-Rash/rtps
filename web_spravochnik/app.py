@@ -138,10 +138,13 @@ def ensure_db() -> None:
             """
         )
         existing_inventory_cols = {row[1] for row in cur.execute("PRAGMA table_info(inventory)").fetchall()}
+        if "sort_order" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN sort_order INT")
         if "updated_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT NOT NULL DEFAULT 0")
         if "deleted_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT NOT NULL DEFAULT 0")
+        cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS ts_norms_data (
@@ -340,10 +343,10 @@ def load_state(year: int) -> dict:
             employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["milk_note"])])
         for row in cur.execute(
             """
-            SELECT ser, num, inv
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order
             FROM inventory
             WHERE y=? AND COALESCE(deleted_at, 0) = 0
-            ORDER BY COALESCE(updated_at, 0) DESC, rowid
+            ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid
             """,
             (year,),
         ):
@@ -388,7 +391,7 @@ def save_state(payload: dict) -> None:
 
         existing_rows = cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
             FROM inventory
             WHERE y=?
             """,
@@ -397,7 +400,7 @@ def save_state(payload: dict) -> None:
         existing_map = {(text(row["ser"]).strip(), text(row["num"]).strip()): row for row in existing_rows}
         submitted_keys: set[tuple[str, str]] = set()
         now = int(dt.datetime.now().timestamp() * 1000)
-        for row in inventory:
+        for order_index, row in enumerate(inventory, start=1):
             row = list(row or []) + [""] * 3
             ser, num, inv = [text(v).strip() for v in row[:3]]
             if not (ser or num):
@@ -407,18 +410,18 @@ def save_state(payload: dict) -> None:
                 cur.execute(
                     """
                     UPDATE inventory
-                    SET inv=?, updated_at=?, deleted_at=0
+                    SET inv=?, sort_order=?, updated_at=?, deleted_at=0
                     WHERE y=? AND ser=? AND num=?
                     """,
-                    (inv, now, year, ser, num),
+                    (inv, order_index, now, year, ser, num),
                 )
             else:
                 cur.execute(
                     """
-                    INSERT INTO inventory (y, ser, num, inv, updated_at, deleted_at)
-                    VALUES (?,?,?,?,?,0)
+                    INSERT INTO inventory (y, ser, num, inv, sort_order, updated_at, deleted_at)
+                    VALUES (?,?,?,?,?,?,0)
                     """,
-                    (year, ser, num, inv, now),
+                    (year, ser, num, inv, order_index, now),
                 )
         for (ser, num), row in existing_map.items():
             if (ser, num) in submitted_keys:
@@ -428,10 +431,10 @@ def save_state(payload: dict) -> None:
             cur.execute(
                 """
                 UPDATE inventory
-                SET updated_at=?, deleted_at=?
+                SET updated_at=?, deleted_at=?, sort_order=COALESCE(sort_order, ?)
                 WHERE y=? AND ser=? AND num=?
                 """,
-                (now, now, year, ser, num),
+                (now, now, len(inventory) + 1, year, ser, num),
             )
         conn.commit()
 
@@ -561,7 +564,10 @@ function renderTable(name, rows, editableRows){
   const rowbar = (editableRows && CAN_EDIT) ? `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>` : '';
   let html = rowbar + '<table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
-    html += `<tr onclick="selectRow('${name}', ${r})"><td>${r + 1}</td>`;
+    const draggable = name === 'inventory' && CAN_EDIT
+      ? ' draggable="true" ondragstart="dragStartRow(event, ' + r + ')" ondragover="dragOverRow(event, ' + r + ')" ondrop="dropRow(event, ' + r + ')" ondragend="dragEndRow(event)"'
+      : '';
+    html += `<tr onclick="selectRow('${name}', ${r})"${draggable}><td>${r + 1}</td>`;
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
@@ -578,6 +584,7 @@ function renderTable(name, rows, editableRows){
 }
 
 let selected = {employees: -1, inventory: -1};
+let draggedRowIndex = -1;
 function selectRow(name, row){ selected[name] = row; }
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; }
 function addRow(name){
@@ -592,6 +599,33 @@ function deleteRow(name){
   if(row >= 0) state[name].splice(row, 1);
   selected[name] = -1;
   renderTable(name, state[name], true);
+}
+function dragStartRow(event, row){
+  if (!CAN_EDIT) return;
+  draggedRowIndex = row;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', String(row));
+}
+function dragOverRow(event, row){
+  if (!CAN_EDIT) return;
+  if (draggedRowIndex < 0 || draggedRowIndex === row) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+}
+function dropRow(event, row){
+  if (!CAN_EDIT) return;
+  event.preventDefault();
+  const from = draggedRowIndex;
+  if (from < 0 || from === row) return;
+  const rows = state.inventory;
+  const [moved] = rows.splice(from, 1);
+  rows.splice(row, 0, moved);
+  selected.inventory = row;
+  draggedRowIndex = -1;
+  renderTable('inventory', rows, true);
+}
+function dragEndRow(){
+  draggedRowIndex = -1;
 }
 async function saveAll(){
   if (!CAN_EDIT) return;

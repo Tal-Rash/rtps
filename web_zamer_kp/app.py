@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.38"
+APP_VERSION = "web-zkp-1.39"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -155,12 +155,15 @@ def ensure_db() -> None:
         if "section_count" not in existing_input_meta_cols:
             cur.execute("ALTER TABLE input_meta ADD COLUMN section_count INT")
         existing_inventory_cols = {row[1] for row in cur.execute("PRAGMA table_info(inventory)").fetchall()}
+        if "sort_order" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN sort_order INT")
         if "updated_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT")
             cur.execute("UPDATE inventory SET updated_at = 0 WHERE updated_at IS NULL")
         if "deleted_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT")
             cur.execute("UPDATE inventory SET deleted_at = 0 WHERE deleted_at IS NULL")
+        cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
             DEFAULT_NORMS,
@@ -305,7 +308,7 @@ def series_for_locomotive(cur: sqlite3.Cursor, locomotive: str) -> str:
     if not locomotive:
         return ""
     row = cur.execute(
-        "SELECT ser FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
+        "SELECT ser FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
         (locomotive,),
     ).fetchone()
     if row:
@@ -339,13 +342,13 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
 
 def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -> list[dict[str, str]]:
     query = """
-        SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
+        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
     """
     if not include_deleted:
         query += " AND COALESCE(deleted_at, 0) = 0"
-    query += " ORDER BY num, y DESC, COALESCE(updated_at, 0) DESC, rowid DESC"
+    query += " ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid DESC"
     rows = cur.execute(query).fetchall()
 
     seen: set[str] = set()
@@ -357,6 +360,7 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
         seen.add(number)
         series = text(row["ser"]).strip()
         inv = text(row["inv"]).strip()
+        sort_order = int(row["sort_order"] or 0)
         updated_at = int(row["updated_at"] or 0)
         deleted_at = int(row["deleted_at"] or 0)
         if deleted_at > 0 and not include_deleted:
@@ -369,6 +373,7 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
                 "series": series,
                 "number": number,
                 "label": label,
+                "sortOrder": sort_order,
                 "updatedAt": updated_at,
                 "deletedAt": deleted_at,
             }
@@ -1067,6 +1072,7 @@ def build_phone_reference_payload(selected_numbers: list[str] | None = None) -> 
                     "number": number,
                     "wheelPairCount": axis_count,
                     "wheelPairs": wheel_pairs,
+                    "sortOrder": int(loco.get("sortOrder") or 0),
                     "updatedAt": int(loco.get("updatedAt") or 0),
                     "deletedAt": int(loco.get("deletedAt") or 0),
                 }
@@ -1211,6 +1217,7 @@ def upsert_inventory_locomotive(
     loco_number: str,
     wheel_pair_count: int,
     *,
+    sort_order: int = 0,
     deleted_at: int = 0,
 ) -> None:
     series = text(series).strip()
@@ -1220,27 +1227,37 @@ def upsert_inventory_locomotive(
     year = dt.date.today().year
     now_ms = int(dt.datetime.now().timestamp() * 1000)
     existing = cur.execute(
-        "SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
+        "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
+        "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
         (loco_number,),
     ).fetchone()
     inv = text(existing["inv"]).strip() if existing else ""
+    sort_order_value = int(sort_order or 0)
     if existing:
         series = series or text(existing["ser"]).strip()
+        if sort_order_value <= 0:
+            sort_order_value = int(existing["sort_order"] or 0)
+    if sort_order_value <= 0:
+        max_row = cur.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM inventory"
+        ).fetchone()
+        sort_order_value = int(max_row["max_sort_order"] or 0) + 1
     cur.execute(
-        "INSERT OR REPLACE INTO inventory (y, ser, num, inv, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO inventory (y, ser, num, inv, sort_order, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
             year,
             series,
             loco_number,
             inv,
+            sort_order_value,
             now_ms,
             int(deleted_at or 0),
         ),
     )
-    for index in range(max(1, int(wheel_pair_count or 1))):
-        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (loco_number, index, str(index + 1)))
-        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (loco_number, index, str(index + 1)))
+    if int(deleted_at or 0) <= 0:
+        for index in range(max(1, int(wheel_pair_count or 1))):
+            cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (loco_number, index, str(index + 1)))
+            cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (loco_number, index, str(index + 1)))
 
 
 def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, wheel_pair_count: int) -> None:
@@ -1397,10 +1414,11 @@ def import_phone_reference_payload(payload: dict) -> dict:
             number = text(loco.get("number")).strip()
             if not number:
                 continue
+            sort_order = int(loco.get("sortOrder") or 0)
             updated_at = int(loco.get("updatedAt") or 0)
             deleted_at = int(loco.get("deletedAt") or 0)
             wheel_pair_count = int(loco.get("wheelPairCount") or 6)
-            upsert_inventory_locomotive(cur, series, number, wheel_pair_count, deleted_at=deleted_at)
+            upsert_inventory_locomotive(cur, series, number, wheel_pair_count, sort_order=sort_order, deleted_at=deleted_at)
             wheel_pairs = loco.get("wheelPairs", [])
             if not isinstance(wheel_pairs, list):
                 continue
