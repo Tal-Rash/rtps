@@ -973,6 +973,27 @@ def phone_json_number(value):
     return int(number) if number.is_integer() else number
 
 
+def decode_phone_payload_text(raw_text: str) -> dict | None:
+    raw_text = text(raw_text).strip()
+    if not raw_text:
+        return None
+    try:
+        decoded_bytes = base64.b64decode(raw_text.encode("utf-8"))
+        decompressed = zlib.decompress(decoded_bytes)
+        payload = json.loads(decompressed.decode("utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    try:
+        payload = json.loads(raw_text)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return None
+
+
 def require_qrcode():
     try:
         import qrcode
@@ -2197,6 +2218,42 @@ HTML = """<!doctype html>
     .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
     .modal-head h2 { margin:0; font-size:20px; }
     .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    .phone-import-grid {
+      display:grid;
+      grid-template-columns:minmax(280px, 1.3fr) minmax(220px, .9fr);
+      gap:12px;
+      align-items:start;
+    }
+    .phone-preview {
+      width:100%;
+      aspect-ratio:4 / 3;
+      background:#10161f;
+      border:1px solid var(--line);
+      border-radius:10px;
+      overflow:hidden;
+      object-fit:cover;
+    }
+    .phone-import-side {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .phone-import-actions {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-start;
+    }
+    .phone-import-status {
+      min-height:40px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:#f7fafc;
+      color:var(--muted);
+      white-space:pre-line;
+    }
     .norms-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
     .norms-table { width:100%; table-layout:fixed; }
     .norms-table th, .norms-table td { height:38px; padding:4px; }
@@ -2221,7 +2278,7 @@ HTML = """<!doctype html>
       <div class="actions">
         <a href="/">На главную</a>
         <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
-        <button id="phoneImportBtn" type="button" onclick="choosePhoneImportFile()">Импорт с телефона</button>
+        <button id="phoneImportBtn" type="button" onclick="openPhoneImportDialog()">Импорт с телефона</button>
         <button id="phoneExportBtn" type="button" onclick="openPhoneExportDialog()">Экспорт на телефон</button>
         <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
@@ -2383,8 +2440,6 @@ HTML = """<!doctype html>
     </div>
   </div>
 
-  <input id="phoneImportFile" type="file" accept=".json,application/json" style="display:none">
-
   <div id="normsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="normsTitle">
     <div class="modal">
       <div class="modal-head">
@@ -2472,6 +2527,31 @@ HTML = """<!doctype html>
     </div>
   </div>
 
+  <div id="phoneImportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="phoneImportTitle">
+    <div class="modal" style="width:min(980px, 100%);">
+      <div class="modal-head">
+        <h2 id="phoneImportTitle">Импорт с телефона</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closePhoneImportDialog()">×</button>
+      </div>
+      <div class="phone-import-grid">
+        <div>
+          <video id="phoneImportVideo" class="phone-preview" autoplay muted playsinline></video>
+          <canvas id="phoneImportCanvas" style="display:none;"></canvas>
+        </div>
+        <div class="phone-import-side">
+          <div id="phoneImportStatus" class="phone-import-status">Нажмите «Сканировать QR», затем наведите камеру на код с телефона.</div>
+          <div class="phone-import-actions">
+            <button type="button" onclick="startPhoneQrScan()">Сканировать QR</button>
+            <button type="button" onclick="stopPhoneQrScan()">Стоп</button>
+            <button type="button" onclick="choosePhoneImportFile()">JSON-файл</button>
+          </div>
+          <div class="muted">Поддерживается QR с JSON или сжатым JSON из телефонной версии.</div>
+        </div>
+      </div>
+      <input id="phoneImportFile" type="file" accept=".json,application/json" style="display:none">
+    </div>
+  </div>
+
   <div id="archiveExportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="archiveExportTitle">
     <div class="modal">
       <div class="modal-head">
@@ -2533,6 +2613,11 @@ let normsRows = [];
 let phoneQrTimer = null;
 let phoneQrFrames = [];
 let phoneQrIndex = 0;
+let phoneImportStream = null;
+let phoneImportDetector = null;
+let phoneImportFrameHandle = null;
+let phoneImportBusy = false;
+let phoneImportLastText = '';
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -2829,6 +2914,148 @@ function closePhoneQrDialog(){
   phoneQrIndex = 0;
   if (modal) modal.classList.remove('open');
 }
+function getPhoneImportStatus(){
+  return document.getElementById('phoneImportStatus');
+}
+function setPhoneImportStatus(text){
+  const status = getPhoneImportStatus();
+  if (status) status.textContent = text;
+}
+function stopPhoneQrScan(){
+  if (phoneImportFrameHandle) {
+    cancelAnimationFrame(phoneImportFrameHandle);
+    phoneImportFrameHandle = null;
+  }
+  phoneImportBusy = false;
+  phoneImportLastText = '';
+  const video = document.getElementById('phoneImportVideo');
+  if (video) {
+    try {
+      video.pause();
+    } catch (error) {
+      void error;
+    }
+    video.srcObject = null;
+  }
+  if (phoneImportStream) {
+    phoneImportStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (error) {
+        void error;
+      }
+    });
+    phoneImportStream = null;
+  }
+  phoneImportDetector = null;
+}
+function closePhoneImportDialog(){
+  stopPhoneQrScan();
+  const modal = document.getElementById('phoneImportModal');
+  if (modal) modal.classList.remove('open');
+}
+async function openPhoneImportDialog(){
+  const modal = document.getElementById('phoneImportModal');
+  if (modal) modal.classList.add('open');
+  setPhoneImportStatus('Наведите камеру на QR-код с телефона или выберите JSON-файл.');
+  if ('BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia) {
+    await startPhoneQrScan();
+  } else {
+    setPhoneImportStatus('Для QR-сканирования нужен браузер с камерой и BarcodeDetector. Можно загрузить JSON-файл.');
+  }
+}
+async function importPhoneText(rawText, sourceLabel = 'QR', overwrite = false){
+  const status = getPhoneImportStatus() || document.getElementById('archiveStatus');
+  if (status) status.textContent = `${sourceLabel}: импорт...`;
+  const res = await fetch(`${API}/api/phone-import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ payload: rawText, overwrite: !!overwrite }),
+  });
+  const response = await res.json().catch(() => ({}));
+  if (res.status === 409 && response.duplicate) {
+    const ok = confirm(response.message || 'Обнаружены дубликаты. Перезаписать их?');
+    if (!ok) {
+      if (status) status.textContent = 'Импорт отменён.';
+      return false;
+    }
+    return importPhoneText(rawText, sourceLabel, true);
+  }
+  if (!res.ok || response.error) {
+    const missing = Array.isArray(response.missing) && response.missing.length ? `\n\n${response.missing.slice(0, 12).join('\n')}` : '';
+    throw new Error((response.error || 'Не удалось импортировать телефонные данные') + missing);
+  }
+  await loadState(getCurrentLoco());
+  await loadArchive();
+  renderPhoneExportLocomotives();
+  closePhoneImportDialog();
+  if (status) {
+    status.textContent = response.imported_measurements
+      ? `Импортировано замеров: ${response.imported_measurements}.`
+      : (response.imported_count ? `Импортировано локомотивов: ${response.imported_count}.` : 'Импорт выполнен.');
+  }
+  return response;
+}
+async function startPhoneQrScan(){
+  if (!CAN_EDIT) return;
+  const hostname = String(location.hostname || '').toLowerCase();
+  const secureHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  if (!window.isSecureContext && !secureHost) {
+    setPhoneImportStatus('Для работы камеры нужен HTTPS или localhost. На обычном http:// QR-сканер не запустится.');
+    return;
+  }
+  if (!('BarcodeDetector' in window)) {
+    setPhoneImportStatus('Этот браузер не умеет сканировать QR-коды. Можно загрузить JSON-файл.');
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setPhoneImportStatus('Камера недоступна в этом браузере. Можно загрузить JSON-файл.');
+    return;
+  }
+  stopPhoneQrScan();
+  try {
+    phoneImportDetector = new BarcodeDetector({ formats: ['qr_code'] });
+    phoneImportStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    const video = document.getElementById('phoneImportVideo');
+    if (!video) throw new Error('Не найден элемент видео');
+    video.srcObject = phoneImportStream;
+    await video.play();
+    setPhoneImportStatus('Камера включена. Наведите QR-код на экран телефона.');
+    const scanFrame = async () => {
+      if (!phoneImportStream) return;
+      if (phoneImportBusy) {
+        phoneImportFrameHandle = requestAnimationFrame(scanFrame);
+        return;
+      }
+      if (!video || video.readyState < 2) {
+        phoneImportFrameHandle = requestAnimationFrame(scanFrame);
+        return;
+      }
+      phoneImportBusy = true;
+      try {
+        const codes = await phoneImportDetector.detect(video);
+        const raw = codes?.[0]?.rawValue || '';
+        if (raw && raw !== phoneImportLastText) {
+          phoneImportLastText = raw;
+          await importPhoneText(raw, 'QR');
+          return;
+        }
+      } catch (error) {
+        setPhoneImportStatus(error.message || 'Ошибка сканирования QR-кода');
+      } finally {
+        phoneImportBusy = false;
+      }
+      phoneImportFrameHandle = requestAnimationFrame(scanFrame);
+    };
+    phoneImportFrameHandle = requestAnimationFrame(scanFrame);
+  } catch (error) {
+    stopPhoneQrScan();
+    setPhoneImportStatus(error.message || 'Не удалось запустить камеру');
+  }
+}
 function selectedPhoneExportLocomotives(kind){
   const select = document.getElementById(kind === 'reference' ? 'phoneReferenceLocomotives' : 'phoneExportLocomotives');
   if (!select) return [];
@@ -2923,7 +3150,7 @@ async function importPhonePayload(payload){
   return response;
 }
 async function handlePhoneImportFile(file){
-  const status = document.getElementById('archiveStatus');
+  const status = getPhoneImportStatus() || document.getElementById('archiveStatus');
   try {
     if (status) status.textContent = 'Импорт с телефона...';
     const payload = await readPhoneImportFile(file);
@@ -2933,6 +3160,7 @@ async function handlePhoneImportFile(file){
     renderPhoneExportLocomotives();
     const message = result.imported_measurements ? `Импортировано замеров: ${result.imported_measurements}.` : (result.imported_count ? `Импортировано локомотивов: ${result.imported_count}.` : 'Импорт выполнен.');
     if (status) status.textContent = message;
+    closePhoneImportDialog();
   } catch (error) {
     if (status) status.textContent = error.message || 'Не удалось импортировать телефонные данные';
   }
@@ -4494,6 +4722,9 @@ document.getElementById('phoneExportModal').addEventListener('mousedown', event 
 document.getElementById('phoneQrModal').addEventListener('mousedown', event => {
   if (event.target.id === 'phoneQrModal') closePhoneQrDialog();
 });
+document.getElementById('phoneImportModal').addEventListener('mousedown', event => {
+  if (event.target.id === 'phoneImportModal') closePhoneImportDialog();
+});
 document.getElementById('archiveExportModal').addEventListener('mousedown', event => {
   if (event.target.id === 'archiveExportModal') closeArchiveExportDialog();
 });
@@ -4506,6 +4737,9 @@ document.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape' && document.getElementById('phoneQrModal')?.classList.contains('open')) {
     closePhoneQrDialog();
+  }
+  if (event.key === 'Escape' && document.getElementById('phoneImportModal')?.classList.contains('open')) {
+    closePhoneImportDialog();
   }
   if (event.key === 'Escape' && document.getElementById('archiveExportModal')?.classList.contains('open')) {
     closeArchiveExportDialog();
@@ -4526,6 +4760,7 @@ document.getElementById('archiveExcelFile').addEventListener('change', event => 
   if (file) importArchiveExcelFile(file);
 });
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
+document.getElementById('phoneImportBtn').style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
 initialLoadPromise = loadState();
 </script>
@@ -4792,6 +5027,26 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 payload = json.loads(raw.decode("utf-8"))
+                if isinstance(payload, str):
+                    decoded = decode_phone_payload_text(payload)
+                    if decoded is None:
+                        send_json(self, {"error": "Не удалось распознать QR/JSON."}, HTTPStatus.BAD_REQUEST)
+                        return
+                    payload = decoded
+                if isinstance(payload, dict) and "payload" in payload:
+                    incoming = payload.get("payload")
+                    if isinstance(incoming, str):
+                        decoded = decode_phone_payload_text(incoming)
+                        if decoded is not None:
+                            payload = decoded
+                        else:
+                            send_json(self, {"error": "Не удалось распознать QR/JSON."}, HTTPStatus.BAD_REQUEST)
+                            return
+                    elif isinstance(incoming, dict):
+                        payload = incoming
+                    else:
+                        send_json(self, {"error": "Не удалось распознать QR/JSON."}, HTTPStatus.BAD_REQUEST)
+                        return
                 result = import_phone_payload(payload)
                 if isinstance(result, tuple):
                     body, status = result
