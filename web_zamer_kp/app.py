@@ -28,7 +28,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.35"
+APP_VERSION = "web-zkp-1.36"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2297,6 +2297,7 @@ HTML = """<!doctype html>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       </div>
     </div>
+    <div id="runtimeState" class="status" style="margin-top:8px; display:block;">Загрузка интерфейса...</div>
     <div id="runtimeErrorBanner" class="error-banner" role="alert" aria-live="polite"></div>
 
     <div class="tabs" role="tablist" aria-label="Разделы">
@@ -2598,6 +2599,10 @@ function showRuntimeError(message, detail){
   const text = [message || 'Ошибка в странице', detail || ''].filter(Boolean).join('\n\n');
   banner.textContent = text;
   banner.classList.add('open');
+}
+function setRuntimeState(text){
+  const node = document.getElementById('runtimeState');
+  if (node) node.textContent = text;
 }
 window.addEventListener('error', event => {
   const message = event?.message || 'Ошибка в странице';
@@ -4799,6 +4804,10 @@ document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
 document.getElementById('phoneImportBtn').style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
 initialLoadPromise = loadState();
+setRuntimeState('Интерфейс загружен, идет подгрузка данных...');
+initialLoadPromise.then(() => setRuntimeState('Интерфейс готов')).catch(error => {
+  setRuntimeState(`Ошибка загрузки: ${error?.message || error}`);
+});
 </script>
 </body>
 </html>
