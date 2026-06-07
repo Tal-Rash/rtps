@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.32"
+APP_VERSION = "web-zkp-1.33"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -157,6 +157,9 @@ def ensure_db() -> None:
         if "updated_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT")
             cur.execute("UPDATE inventory SET updated_at = 0 WHERE updated_at IS NULL")
+        if "deleted_at" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT")
+            cur.execute("UPDATE inventory SET deleted_at = 0 WHERE deleted_at IS NULL")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
             DEFAULT_NORMS,
@@ -322,12 +325,18 @@ def allowed_repairs(series: str, locomotive: str) -> list[str]:
 
 
 def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
+    return load_inventory_records(cur, include_deleted=False)
+
+
+def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -> list[dict[str, str]]:
     rows = cur.execute(
         """
-        SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at
+        SELECT y, ser, num, inv,
+               COALESCE(updated_at, 0) AS updated_at,
+               COALESCE(deleted_at, 0) AS deleted_at
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
-        ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC
+        ORDER BY num, y DESC, COALESCE(updated_at, 0) DESC, rowid DESC
         """
     ).fetchall()
 
@@ -341,10 +350,19 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
         series = text(row["ser"]).strip()
         inv = text(row["inv"]).strip()
         updated_at = int(row["updated_at"] or 0)
+        deleted_at = int(row["deleted_at"] or 0)
+        if deleted_at > 0 and not include_deleted:
+            continue
         label = f"{series} {number}".strip()
         if inv:
             label = f"{label} (инв. {inv})"
-        result.append({"series": series, "number": number, "label": label, "updatedAt": updated_at})
+        result.append({
+            "series": series,
+            "number": number,
+            "label": label,
+            "updatedAt": updated_at,
+            "deletedAt": deleted_at,
+        })
     return result
 
 
@@ -1206,7 +1224,14 @@ def archive_excel_export_bytes(selected_locomotives: list[str] | None = None, da
     return output.getvalue(), len(rows)
 
 
-def upsert_inventory_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, inv: str = "", updated_at: int | None = None) -> None:
+def upsert_inventory_locomotive(
+    cur: sqlite3.Cursor,
+    series: str,
+    locomotive: str,
+    inv: str = "",
+    updated_at: int | None = None,
+    deleted_at: int | None = None,
+) -> None:
     locomotive = text(locomotive).strip()
     if not locomotive:
         return
@@ -1214,14 +1239,28 @@ def upsert_inventory_locomotive(cur: sqlite3.Cursor, series: str, locomotive: st
     inv = text(inv).strip()
     year = dt.date.today().year
     updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
-    cur.execute("DELETE FROM inventory WHERE TRIM(COALESCE(num, ''))=?", (locomotive,))
-    cur.execute("INSERT INTO inventory (y, ser, num, inv, updated_at) VALUES (?, ?, ?, ?, ?)", (year, series, locomotive, inv, updated_at))
+    if deleted_at is None:
+        existing = cur.execute(
+            "SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
+            "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
+            (locomotive,),
+        ).fetchone()
+        deleted_at = int(existing["deleted_at"] or 0) if existing else 0
+    else:
+        deleted_at = int(deleted_at or 0)
+    cur.execute(
+        """
+        INSERT OR REPLACE INTO inventory (y, ser, num, inv, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (year, series, locomotive, inv, updated_at, deleted_at),
+    )
 
 
 def phone_reference_export_payload() -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
-        locomotives = load_locomotives(cur)
+        locomotives = load_inventory_records(cur, include_deleted=True)
         kp_rows = cur.execute(
             "SELECT locomotive, r, c, v FROM kp_data WHERE TRIM(COALESCE(locomotive, '')) <> '' ORDER BY locomotive, r, c"
         ).fetchall()
@@ -1254,6 +1293,7 @@ def phone_reference_export_payload() -> dict:
                 "number": number,
                 "wheelPairCount": wheel_pair_count,
                 "updatedAt": int(locomotive.get("updatedAt") or 0),
+                "deletedAt": int(locomotive.get("deletedAt") or 0),
                 "wheelPairs": wheel_pairs,
             }
         )
@@ -1436,8 +1476,10 @@ def import_phone_reference_payload(payload: dict) -> dict:
                 continue
             wheel_pair_count = parse_excel_int(item.get("wheelPairCount")) or len(item.get("wheelPairs") or []) or locomotive_axis_count(series, number)
             updated_at = parse_excel_int(item.get("updatedAt")) or 0
-            upsert_inventory_locomotive(cur, series, number, "", updated_at=updated_at or None)
-            cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
+            deleted_at = parse_excel_int(item.get("deletedAt")) or 0
+            upsert_inventory_locomotive(cur, series, number, "", updated_at=updated_at or None, deleted_at=deleted_at)
+            if deleted_at <= 0:
+                cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
             wheel_pairs = item.get("wheelPairs")
             if not isinstance(wheel_pairs, list) or not wheel_pairs:
                 wheel_pairs = [{"number": index + 1, "axisNumber": index + 1} for index in range(max(1, wheel_pair_count))]
