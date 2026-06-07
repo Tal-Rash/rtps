@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import datetime as dt
+import base64
 import hashlib
 import hmac
+import io
 import json
 import os
 import secrets
@@ -25,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.30"
+APP_VERSION = "web-zkp-1.31"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -41,6 +43,24 @@ DEFAULT_NORMS = [
     ("min_bandage_thickness", "Толщина бандажа", "меньше или равно", "", ""),
     ("max_diameter_diff", "Разница диаметров", "больше или равно", "", ""),
     ("prokat_6_count", "Число КП с прокатом 6 мм и более", "больше или равно", "", ""),
+]
+ARCHIVE_EXCEL_HEADERS = [
+    "Дата замера",
+    "Локомотив",
+    "Вид ремонта",
+    "Серия",
+    "Секция",
+    "Номер КП",
+    "Прокат лев",
+    "Прокат прав",
+    "Толщина гребня лев",
+    "Толщина гребня прав",
+    "Крутизна гребня лев",
+    "Крутизна гребня прав",
+    "Толщина бандажа лев",
+    "Толщина бандажа прав",
+    "Диаметр бандажа лев",
+    "Диаметр бандажа прав",
 ]
 
 
@@ -223,6 +243,19 @@ def send_json(handler: BaseHTTPRequestHandler, payload, status: int = 200) -> No
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def send_file(handler: BaseHTTPRequestHandler, data: bytes, filename: str, content_type: str) -> None:
+    safe_filename = filename.replace('"', "").replace("\r", "").replace("\n", "")
+    encoded = "".join(f"%{byte:02X}" for byte in safe_filename.encode("utf-8"))
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Content-Disposition", f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded}')
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
     handler.wfile.write(data)
@@ -928,6 +961,455 @@ def save_norms_rows(payload: dict) -> dict:
     return {"ok": True, "rows": load_norms_rows()}
 
 
+def require_openpyxl():
+    try:
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.worksheet.datavalidation import DataValidation
+    except ImportError as exc:
+        raise RuntimeError("Для работы с Excel нужен пакет openpyxl.") from exc
+    return Workbook, load_workbook, Alignment, Border, Font, PatternFill, Side, DataValidation
+
+
+def archive_excel_template_bytes() -> bytes:
+    Workbook, _, Alignment, Border, Font, PatternFill, Side, DataValidation = require_openpyxl()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Архив"
+    ws.append(ARCHIVE_EXCEL_HEADERS)
+
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    thin = Side(style="thin", color="BFBFBF")
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    widths = [14, 12, 14, 12, 10, 10, 14, 14, 18, 18, 18, 18, 18, 18, 18, 18]
+    for index, width in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(1, index).column_letter].width = width
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = "A1:P1"
+    ws.row_dimensions[1].height = 34
+
+    notes = wb.create_sheet("Памятка")
+    notes["A1"] = "Как заполнять шаблон"
+    notes["A1"].font = Font(bold=True, size=14)
+    notes["A3"] = "1. Каждая строка = одна колесная пара."
+    notes["A4"] = "2. Для 6 КП просто заполните 6 строк подряд с одинаковыми датой, локомотивом и видом ремонта."
+    notes["A5"] = "3. Для импорта важны дата замера, локомотив, вид ремонта, номер КП и значения по сторонам КП."
+    notes["A6"] = "4. Для чисел можно использовать запятую или точку."
+    notes["A7"] = "5. Пустые обязательные поля импорт не примет."
+    notes.column_dimensions["A"].width = 120
+
+    repair_dv = DataValidation(type="list", formula1='"ТО-1,ТО-2,ТО-3,ТР-1,ТР-2,ТР-3"', allow_blank=True)
+    ws.add_data_validation(repair_dv)
+    repair_dv.add("C2:C5000")
+
+    output = io.BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+
+def parse_excel_date(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dt.datetime):
+        return value.date().isoformat()
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    raw = text(value).strip()
+    if not raw:
+        return ""
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y", "%Y/%m/%d"):
+        try:
+            return dt.datetime.strptime(raw, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return raw
+
+
+def format_excel_export_date(value: str) -> str:
+    raw = text(value).strip()
+    if not raw:
+        return ""
+    try:
+        return dt.datetime.strptime(raw, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        return raw
+
+
+def parse_excel_int(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    raw = text(value).strip().replace(",", ".")
+    if not raw:
+        return None
+    try:
+        number = float(raw)
+    except ValueError:
+        return None
+    return int(number) if number.is_integer() else None
+
+
+def parse_float_value(value) -> float | None:
+    raw = text(value).strip().replace(",", ".")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def excel_cell_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dt.datetime):
+        return value.date().isoformat()
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    return text(value).strip()
+
+
+def excel_num_text(value) -> str:
+    raw = text(value).strip()
+    return raw.replace(".", ",") if raw else ""
+
+
+def normalize_excel_header(value) -> str:
+    return "".join(ch for ch in text(value).strip().lower() if ch.isalnum())
+
+
+def archive_export_locomotives(cur: sqlite3.Cursor) -> list[str]:
+    rows = cur.execute(
+        "SELECT DISTINCT locomotive FROM archive_data WHERE TRIM(COALESCE(locomotive, '')) <> '' ORDER BY locomotive"
+    ).fetchall()
+    return [text(row["locomotive"]).strip() for row in rows if text(row["locomotive"]).strip()]
+
+
+def build_archive_export_rows(selected_locomotives: list[str] | None = None, date_from: str = "", date_to: str = "") -> list[list[str]]:
+    locomotives_filter = {text(item).strip() for item in selected_locomotives or [] if text(item).strip()}
+    date_from = text(date_from).strip()
+    date_to = text(date_to).strip()
+    query = """
+        SELECT y, measurement_date, locomotive, repair_type, r, c, v
+        FROM archive_data
+        WHERE TRIM(COALESCE(measurement_date, '')) <> ''
+    """
+    params: list[str] = []
+    if locomotives_filter:
+        query += f" AND locomotive IN ({','.join('?' for _ in locomotives_filter)})"
+        params.extend(sorted(locomotives_filter))
+    if date_from:
+        query += " AND measurement_date >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND measurement_date <= ?"
+        params.append(date_to)
+    query += " ORDER BY y, measurement_date, locomotive, repair_type, r, c"
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        rows = cur.execute(query, params).fetchall()
+        grouped: dict[tuple[int, str, str, str, int], list[str]] = {}
+        for row in rows:
+            r = int(row["r"])
+            if r < 2:
+                continue
+            key = (int(row["y"] or 0), text(row["measurement_date"]), text(row["locomotive"]), text(row["repair_type"]), r)
+            grouped.setdefault(key, [""] * 12)
+            c = int(row["c"])
+            if 0 <= c < 12:
+                grouped[key][c] = text(row["v"])
+
+        kp_cache: dict[str, dict[tuple[int, int], str]] = {}
+        export_rows: list[list[str]] = []
+        for (_, measurement_date, locomotive, repair_type, r), values in sorted(grouped.items()):
+            series = series_for_locomotive(cur, locomotive)
+            if locomotive not in kp_cache:
+                kp_rows = cur.execute(
+                    "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3)",
+                    (locomotive,),
+                ).fetchall()
+                kp_cache[locomotive] = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
+
+            kp_values = kp_cache.get(locomotive, {})
+            kp_row_index = r - 1
+            bandage_left = values[8] or ""
+            bandage_right = values[9] or ""
+            diameter_left = values[10] or ""
+            diameter_right = values[11] or ""
+
+            if not diameter_left:
+                kp_left = parse_float_value(kp_values.get((kp_row_index, 2), ""))
+                bandage_left_value = parse_float_value(bandage_left)
+                if kp_left is not None and bandage_left_value is not None:
+                    diameter_left = str(int(round(kp_left + bandage_left_value * 2)))
+            if not diameter_right:
+                kp_right = parse_float_value(kp_values.get((kp_row_index, 3), ""))
+                bandage_right_value = parse_float_value(bandage_right)
+                if kp_right is not None and bandage_right_value is not None:
+                    diameter_right = str(int(round(kp_right + bandage_right_value * 2)))
+
+            export_rows.append(
+                [
+                    format_excel_export_date(measurement_date),
+                    locomotive,
+                    repair_type,
+                    series,
+                    values[0] or "1",
+                    values[1] or str(r - 1),
+                    excel_num_text(values[2]),
+                    excel_num_text(values[3]),
+                    excel_num_text(values[4]),
+                    excel_num_text(values[5]),
+                    excel_num_text(values[6]),
+                    excel_num_text(values[7]),
+                    excel_num_text(bandage_left),
+                    excel_num_text(bandage_right),
+                    excel_num_text(diameter_left),
+                    excel_num_text(diameter_right),
+                ]
+            )
+        return export_rows
+
+
+def archive_excel_export_bytes(selected_locomotives: list[str] | None = None, date_from: str = "", date_to: str = "") -> tuple[bytes, int]:
+    _, _, Alignment, _, _, _, _, _ = require_openpyxl()
+    from openpyxl import load_workbook
+
+    template = archive_excel_template_bytes()
+    wb = load_workbook(io.BytesIO(template))
+    ws = wb.active
+    rows = build_archive_export_rows(selected_locomotives, date_from, date_to)
+    out_row = 2
+    for row_data in rows:
+        for col, value in enumerate(row_data, start=1):
+            cell = ws.cell(out_row, col, value)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        out_row += 1
+    ws.auto_filter.ref = f"A1:P{max(1, out_row - 1)}"
+    output = io.BytesIO()
+    wb.save(output)
+    return output.getvalue(), len(rows)
+
+
+def ensure_import_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, wheel_pair_count: int) -> None:
+    locomotive = text(locomotive).strip()
+    if not locomotive:
+        return
+    series = text(series).strip()
+    year = dt.date.today().year
+    exists = cur.execute("SELECT 1 FROM inventory WHERE TRIM(COALESCE(num,''))=? LIMIT 1", (locomotive,)).fetchone()
+    if not exists:
+        cur.execute("INSERT OR IGNORE INTO inventory (y, ser, num, inv) VALUES (?, ?, ?, '')", (year, series, locomotive))
+    for index in range(max(1, int(wheel_pair_count or 1))):
+        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (locomotive, index, str(index + 1)))
+        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (locomotive, index, str(index + 1)))
+
+
+def import_archive_excel_bytes(data: bytes) -> dict:
+    _, load_workbook, *_ = require_openpyxl()
+    wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    ws = wb.active
+
+    aliases = {
+        "measurement_date": {"датазамера", "датавыполненияобмера", "датаобмера", "measurementdate"},
+        "series": {"серия", "series"},
+        "locomotive": {"локомотив", "номерлокомотива", "locomotive"},
+        "repair_type": {"видремонта", "видрем", "repairtype"},
+        "wheel_pair": {"номеркп", "wheelpair", "wheelpairnumber", "ось", "номероси", "kp"},
+        "section": {"секция", "вагон", "section"},
+        "prokat_left": {"прокатлев", "левпрокат", "prokatleft", "flangewearleft"},
+        "prokat_right": {"прокатправ", "правпрокат", "prokatright", "flangewearright"},
+        "greben_left": {"толщинагребнялев", "левтолщинагребня", "grebenleft", "flangethicknessleft"},
+        "greben_right": {"толщинагребняправ", "правтолщинагребня", "grebenright", "flangethicknessright"},
+        "krut_left": {"крутизнагребнялев", "левкрутизнагребня", "krutleft", "flangesteepnessleft"},
+        "krut_right": {"крутизнагребняправ", "правкрутизнагребня", "krutright", "flangesteepnessright"},
+        "bandage_thickness_left": {"толщинабандажалева", "толщинабандажалев", "leftbandagethickness", "bandagethicknessleft"},
+        "bandage_thickness_right": {"толщинабандажаправ", "rightbandagethickness", "bandagethicknessright"},
+        "bandage_diameter_left": {"диаметрбандажалева", "диаметрбандажалев", "leftbandagediameter", "bandagediameterleft"},
+        "bandage_diameter_right": {"диаметрбандажаправ", "rightbandagediameter", "bandagediameterright"},
+    }
+
+    header_row_index = None
+    header_columns: dict[str, int] = {}
+    for row_index, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
+        normalized = [normalize_excel_header(value) for value in row]
+        found: dict[str, int] = {}
+        for key, alias_set in aliases.items():
+            for idx, header in enumerate(normalized):
+                if header in alias_set:
+                    found[key] = idx
+                    break
+        if len(found) >= 5:
+            header_row_index = row_index
+            header_columns = found
+            break
+
+    if header_row_index is None:
+        return {"error": "Не найдена строка заголовков."}, HTTPStatus.BAD_REQUEST
+
+    missing_headers = [name for name in ("measurement_date", "locomotive", "repair_type", "wheel_pair") if name not in header_columns]
+    if missing_headers:
+        return {"error": "В Excel не найдены обязательные колонки: " + ", ".join(missing_headers)}, HTTPStatus.BAD_REQUEST
+
+    required_metric_columns = {
+        "prokat_left": 2,
+        "prokat_right": 3,
+        "greben_left": 4,
+        "greben_right": 5,
+        "krut_left": 6,
+        "krut_right": 7,
+        "bandage_thickness_left": 8,
+        "bandage_thickness_right": 9,
+    }
+    optional_metric_columns = {"bandage_diameter_left": 10, "bandage_diameter_right": 11}
+
+    measurements: dict[tuple[str, str, str], dict] = {}
+    errors: list[str] = []
+    current_series = current_date = current_loco = current_repair = current_section = ""
+
+    def row_value(row, column_name: str) -> str:
+        idx = header_columns.get(column_name)
+        if idx is None or idx >= len(row):
+            return ""
+        return excel_cell_text(row[idx])
+
+    for row_index, row in enumerate(ws.iter_rows(min_row=header_row_index + 1, values_only=True), start=header_row_index + 1):
+        if not row or all(cell is None or text(cell).strip() == "" for cell in row):
+            continue
+        row_date = parse_excel_date(row_value(row, "measurement_date")) or current_date
+        row_loco = row_value(row, "locomotive") or current_loco
+        row_repair = row_value(row, "repair_type") or current_repair
+        row_series = row_value(row, "series") or current_series
+        row_section = row_value(row, "section") or current_section
+        wheel_pair_number = parse_excel_int(row_value(row, "wheel_pair"))
+
+        if row_value(row, "measurement_date"):
+            current_date = row_date
+        if row_value(row, "locomotive"):
+            current_loco = row_loco
+        if row_value(row, "repair_type"):
+            current_repair = row_repair
+        if row_value(row, "series"):
+            current_series = row_series
+        if row_value(row, "section"):
+            current_section = row_section
+
+        if not row_date or not row_loco or not row_repair:
+            errors.append(f"Строка {row_index}: не заполнены дата, локомотив или вид ремонта.")
+            continue
+        if wheel_pair_number is None or wheel_pair_number <= 0:
+            errors.append(f"Строка {row_index}: не указан корректный номер КП.")
+            continue
+
+        values: dict[int, str] = {}
+        missing_fields = []
+        for column_name, db_col in required_metric_columns.items():
+            value = row_value(row, column_name)
+            if value == "":
+                missing_fields.append(column_name)
+            else:
+                values[db_col] = value
+        for column_name, db_col in optional_metric_columns.items():
+            value = row_value(row, column_name)
+            if value != "":
+                values[db_col] = value
+        if missing_fields:
+            errors.append(f"Строка {row_index}: не заполнены поля " + ", ".join(missing_fields))
+            continue
+
+        group = measurements.setdefault((row_date, row_loco, row_repair), {"series": row_series, "rows": {}, "sections": {}})
+        if row_series and not group["series"]:
+            group["series"] = row_series
+        if row_section:
+            group["sections"][wheel_pair_number] = row_section
+        group["rows"][wheel_pair_number] = values
+
+    if not measurements:
+        return {"error": "Не удалось импортировать ни одного замера.", "errors": errors[:20]}, HTTPStatus.BAD_REQUEST
+
+    imported_measurements = 0
+    imported_cells = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        kp_cache: dict[str, dict[tuple[int, int], str]] = {}
+        cur.execute("BEGIN")
+        for (measurement_date, locomotive, repair_type), meta in sorted(measurements.items()):
+            wheel_pair_numbers = sorted(meta["rows"].keys())
+            if not wheel_pair_numbers:
+                continue
+            year = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+            series = meta["series"] or series_for_locomotive(cur, locomotive)
+            ensure_import_locomotive(cur, series, locomotive, max(wheel_pair_numbers))
+            if locomotive not in kp_cache:
+                kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3)", (locomotive,)).fetchall()
+                kp_cache[locomotive] = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
+
+            axis_count = locomotive_axis_count(series_for_locomotive(cur, locomotive), locomotive)
+            db_rows: list[tuple[int, str, str, str, int, int, str]] = []
+            for wheel_pair_number in wheel_pair_numbers:
+                row_values = meta["rows"][wheel_pair_number]
+                table_row = wheel_pair_number + 1
+                section_value = meta["sections"].get(wheel_pair_number, "1" if axis_count == 6 else str(((wheel_pair_number - 1) // 4) + 1))
+                kp_index = wheel_pair_number - 1
+                bandage_left = row_values.get(8, "")
+                bandage_right = row_values.get(9, "")
+                diameter_left = row_values.get(10, "")
+                diameter_right = row_values.get(11, "")
+                if not diameter_left:
+                    kp_left = parse_float_value(kp_cache[locomotive].get((kp_index, 2), ""))
+                    bandage_left_value = parse_float_value(bandage_left)
+                    if kp_left is not None and bandage_left_value is not None:
+                        diameter_left = str(int(round(kp_left + bandage_left_value * 2)))
+                if not diameter_right:
+                    kp_right = parse_float_value(kp_cache[locomotive].get((kp_index, 3), ""))
+                    bandage_right_value = parse_float_value(bandage_right)
+                    if kp_right is not None and bandage_right_value is not None:
+                        diameter_right = str(int(round(kp_right + bandage_right_value * 2)))
+
+                full_values = {
+                    0: section_value,
+                    1: str(wheel_pair_number),
+                    2: row_values.get(2, ""),
+                    3: row_values.get(3, ""),
+                    4: row_values.get(4, ""),
+                    5: row_values.get(5, ""),
+                    6: row_values.get(6, ""),
+                    7: row_values.get(7, ""),
+                    8: bandage_left,
+                    9: bandage_right,
+                    10: diameter_left,
+                    11: diameter_right,
+                }
+                for col, value in full_values.items():
+                    if value != "":
+                        db_rows.append((year, measurement_date, locomotive, repair_type, table_row, col, value))
+            if not db_rows:
+                continue
+            cur.execute(
+                "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+                (year, measurement_date, locomotive, repair_type),
+            )
+            cur.executemany(
+                "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                db_rows,
+            )
+            imported_measurements += 1
+            imported_cells += len(db_rows)
+        conn.commit()
+
+    return {"ok": True, "imported_measurements": imported_measurements, "imported_cells": imported_cells, "errors": errors[:10]}
+
+
 def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bool = True) -> list[dict]:
     locomotive = text(locomotive).strip()
     search_text = text(search_text).strip().lower()
@@ -1378,6 +1860,10 @@ HTML = """<!doctype html>
         </label>
         <button id="archiveSortBtn" type="button" onclick="toggleArchiveSort()">⬇ НОВЫЕ → СТАРЫЕ</button>
         <button id="archiveDeleteBtn" type="button" onclick="deleteSelectedArchiveMeasurement()">Удалить из архива</button>
+        <button id="archiveImportExcelBtn" type="button" onclick="chooseArchiveExcelFile()">Импорт из Excel</button>
+        <button id="archiveExportExcelBtn" type="button" onclick="openArchiveExportDialog()">Экспорт в Excel</button>
+        <button id="archiveTemplateExcelBtn" type="button" onclick="downloadArchiveTemplate()">Шаблон Excel</button>
+        <input id="archiveExcelFile" type="file" accept=".xlsx,.xlsm" style="display:none">
       </div>
 
       <div class="table-shell archive-table-shell">
@@ -1455,6 +1941,31 @@ HTML = """<!doctype html>
       <div class="modal-actions">
         <button type="button" onclick="closeNormsDialog()">Отмена</button>
         <button id="saveNormsBtn" class="primary" type="button" onclick="saveNormsDialog()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="archiveExportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="archiveExportTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="archiveExportTitle">Экспорт архива в Excel</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closeArchiveExportDialog()">×</button>
+      </div>
+      <div class="filters" style="align-items:flex-start;">
+        <label>Локомотивы
+          <select id="archiveExportLocomotives" multiple size="8" style="width:260px"></select>
+        </label>
+        <label>Дата с
+          <input id="archiveExportDateFrom" type="date" style="width:160px">
+        </label>
+        <label>Дата по
+          <input id="archiveExportDateTo" type="date" style="width:160px">
+        </label>
+      </div>
+      <div id="archiveExportStatus" class="status">Если локомотивы не выбраны, экспортируются все.</div>
+      <div class="modal-actions">
+        <button type="button" onclick="closeArchiveExportDialog()">Отмена</button>
+        <button class="primary" type="button" onclick="downloadArchiveExport()">Экспорт</button>
       </div>
     </div>
   </div>
@@ -1698,6 +2209,122 @@ async function saveNormsDialog(){
     if (status) status.textContent = error.message || 'Не удалось сохранить нормы';
   } finally {
     if (saveBtn) saveBtn.disabled = !CAN_EDIT;
+  }
+}
+async function downloadBlob(url, fallbackName, statusElement){
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || 'Не удалось скачать файл');
+  }
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  if (statusElement) statusElement.textContent = 'Файл скачан';
+}
+async function downloadArchiveTemplate(){
+  const status = document.getElementById('archiveStatus');
+  try {
+    if (status) status.textContent = 'Файл готовится...';
+    await downloadBlob(`${API}/api/archive-excel-template`, 'Шаблон_импорта_архива.xlsx', status);
+  } catch (error) {
+    if (status) status.textContent = error.message || 'Не удалось скачать шаблон';
+  }
+}
+function renderArchiveExportLocomotives(){
+  const select = document.getElementById('archiveExportLocomotives');
+  if (!select) return;
+  const numbers = [];
+  const seen = new Set();
+  archiveRows.forEach(row => {
+    const number = String(row.locomotive || '').trim();
+    if (number && !seen.has(number)) {
+      seen.add(number);
+      numbers.push(number);
+    }
+  });
+  (state?.locomotives || LOCOMOTIVE_CHOICES || []).forEach(item => {
+    const number = String(item.number || '').trim();
+    if (number && !seen.has(number)) {
+      seen.add(number);
+      numbers.push(number);
+    }
+  });
+  select.innerHTML = numbers.map(number => `<option value="${esc(number)}">${esc(number)}</option>`).join('');
+}
+function openArchiveExportDialog(){
+  const modal = document.getElementById('archiveExportModal');
+  const status = document.getElementById('archiveExportStatus');
+  renderArchiveExportLocomotives();
+  if (status) status.textContent = 'Если локомотивы не выбраны, экспортируются все.';
+  if (modal) modal.classList.add('open');
+}
+function closeArchiveExportDialog(){
+  const modal = document.getElementById('archiveExportModal');
+  if (modal) modal.classList.remove('open');
+}
+function selectedArchiveExportLocomotives(){
+  const select = document.getElementById('archiveExportLocomotives');
+  if (!select) return [];
+  return Array.from(select.selectedOptions || []).map(option => option.value).filter(Boolean);
+}
+function downloadArchiveExport(){
+  const status = document.getElementById('archiveExportStatus');
+  const params = new URLSearchParams();
+  selectedArchiveExportLocomotives().forEach(loco => params.append('locomotive', loco));
+  const dateFrom = document.getElementById('archiveExportDateFrom')?.value || '';
+  const dateTo = document.getElementById('archiveExportDateTo')?.value || '';
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  if (status) status.textContent = 'Файл готовится...';
+  downloadBlob(`${API}/api/archive-excel-export?${params.toString()}`, 'Экспорт_архива.xlsx', status)
+    .then(() => closeArchiveExportDialog())
+    .catch(error => {
+      if (status) status.textContent = error.message || 'Не удалось скачать экспорт';
+    });
+}
+function chooseArchiveExcelFile(){
+  if (!CAN_EDIT) return;
+  const input = document.getElementById('archiveExcelFile');
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+function readFileAsBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve(value.includes(',') ? value.split(',').pop() : value);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать файл'));
+    reader.readAsDataURL(file);
+  });
+}
+async function importArchiveExcelFile(file){
+  if (!CAN_EDIT || !file) return;
+  const status = document.getElementById('archiveStatus');
+  if (status) status.textContent = 'Импорт Excel...';
+  try {
+    const data = await readFileAsBase64(file);
+    const res = await fetch(`${API}/api/archive-excel-import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ filename: file.name, data }),
+    });
+    const payload = await res.json();
+    if (!res.ok || payload.error) throw new Error(payload.error || 'Не удалось импортировать Excel');
+    await loadState(getCurrentLoco());
+    await loadArchive();
+    const skipped = payload.errors?.length ? ` Пропущено строк: ${payload.errors.length}.` : '';
+    if (status) status.textContent = `Импортировано замеров: ${payload.imported_measurements}; ячеек: ${payload.imported_cells}.${skipped}`;
+  } catch (error) {
+    if (status) status.textContent = error.message || 'Не удалось импортировать Excel';
   }
 }
 async function copySelectionToClipboard(){
@@ -3153,9 +3780,15 @@ document.addEventListener('mousedown', event => {
 document.getElementById('normsModal').addEventListener('mousedown', event => {
   if (event.target.id === 'normsModal') closeNormsDialog();
 });
+document.getElementById('archiveExportModal').addEventListener('mousedown', event => {
+  if (event.target.id === 'archiveExportModal') closeArchiveExportDialog();
+});
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.getElementById('normsModal')?.classList.contains('open')) {
     closeNormsDialog();
+  }
+  if (event.key === 'Escape' && document.getElementById('archiveExportModal')?.classList.contains('open')) {
+    closeArchiveExportDialog();
   }
 });
 document.getElementById('measurementDate').addEventListener('change', onDateChange);
@@ -3164,6 +3797,10 @@ document.getElementById('kpLocomotive').addEventListener('change', e => loadKpDa
 document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilter);
 document.getElementById('archiveLocomotive').addEventListener('change', loadArchive);
 document.getElementById('archiveSearch').addEventListener('input', loadArchive);
+document.getElementById('archiveExcelFile').addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  if (file) importArchiveExcelFile(file);
+});
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
 initialLoadPromise = loadState();
@@ -3269,6 +3906,39 @@ class Handler(BaseHTTPRequestHandler):
             send_json(self, {"rows": load_norms_rows()})
             return
 
+        if route == "/api/archive-excel-template":
+            if not require_auth(self):
+                return
+            try:
+                data = archive_excel_template_bytes()
+                send_file(
+                    self,
+                    data,
+                    "Шаблон_импорта_архива.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/archive-excel-export":
+            if not require_auth(self):
+                return
+            try:
+                qs = parse_qs(parsed.query)
+                selected_locomotives = [text(item).strip() for item in qs.get("locomotive", []) if text(item).strip()]
+                date_from = text(qs.get("date_from", [""])[0]).strip()
+                date_to = text(qs.get("date_to", [""])[0]).strip()
+                data, row_count = archive_excel_export_bytes(selected_locomotives, date_from, date_to)
+                if row_count <= 0:
+                    send_json(self, {"error": "По выбранным фильтрам данных нет."}, HTTPStatus.BAD_REQUEST)
+                    return
+                filename = f"Экспорт_архива_{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+                send_file(self, data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self):
@@ -3328,6 +3998,26 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = json.loads(raw.decode("utf-8"))
                 result = save_norms_rows(payload)
+                if isinstance(result, tuple):
+                    body, status = result
+                    send_json(self, body, status)
+                else:
+                    send_json(self, result)
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/archive-excel-import":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                encoded = text(payload.get("data")).strip()
+                if not encoded:
+                    send_json(self, {"error": "Файл Excel не передан."}, HTTPStatus.BAD_REQUEST)
+                    return
+                data = base64.b64decode(encoded)
+                result = import_archive_excel_bytes(data)
                 if isinstance(result, tuple):
                     body, status = result
                     send_json(self, body, status)
