@@ -497,7 +497,7 @@ HTML = """<!doctype html>
       <a href="/">На главную</a>
       <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
       <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-      <button id="purgeBtn" title="Удалить окончательно" aria-label="Удалить окончательно" onclick="purgeDeleted()">✕</button>
+      <button id="purgeBtn" title="Удалить окончательно" aria-label="Удалить окончательно" onclick="purgeDeleted()">Окончательно удалить</button>
       <label>Год <select id="year"></select></label>
       <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
     </div>
