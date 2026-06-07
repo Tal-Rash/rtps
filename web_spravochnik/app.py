@@ -483,6 +483,34 @@ def purge_deleted_inventory() -> dict:
         return {"ok": True, "purged": len(deleted_rows)}
 
 
+def purge_inventory_row(year: int, ser: str, num: str) -> dict:
+    year = int(year)
+    ser = text(ser).strip()
+    num = text(num).strip()
+    if not ser or not num:
+        return {"ok": False, "error": "Некорректные данные локомотива."}
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        row = cur.execute(
+            """
+            SELECT y, ser, num
+            FROM inventory
+            WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=?
+            LIMIT 1
+            """,
+            (year, ser, num),
+        ).fetchone()
+        if not row:
+            return {"ok": True, "purged": 0}
+        cur.execute(
+            "DELETE FROM inventory WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=?",
+            (year, ser, num),
+        )
+        cur.execute("DELETE FROM kp_data WHERE TRIM(COALESCE(locomotive, ''))=?", (num,))
+        conn.commit()
+        return {"ok": True, "purged": 1}
+
+
 HTML = """<!doctype html>
 <html lang="ru">
 <head>
@@ -499,6 +527,7 @@ HTML = """<!doctype html>
     .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     button,a,select{border:1px solid var(--line);border-radius:8px;padding:10px 13px;background:#fff;color:#001b3d;font-weight:700;text-decoration:none;font:inherit}
     button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+    button.primary:disabled{opacity:.78}
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
     .tab{cursor:pointer}.tab.active{background:var(--blue);color:#fff;border-color:var(--blue)}
     .panel{display:none;background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;overflow:auto}
@@ -536,7 +565,7 @@ HTML = """<!doctype html>
       <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       <button id="purgeBtn" title="Удалить окончательно" aria-label="Удалить окончательно" onclick="purgeDeleted()">Окончательно удалить</button>
       <label>Год <select id="year"></select></label>
-      <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
+      <button id="saveBtn" onclick="saveAll()">Сохранить</button>
     </div>
   </div>
   <div class="tabs">
@@ -614,6 +643,7 @@ function renderAll(){
     saveBtn.style.display = CAN_EDIT ? '' : 'none';
   }
   updateHistoryButtons();
+  updateSaveButton();
 }
 
 function renderTable(name, rows, editableRows){
@@ -621,7 +651,16 @@ function renderTable(name, rows, editableRows){
   const rowbar = (editableRows && CAN_EDIT)
     ? (
       name === 'inventory'
-        ? `<div class="rowbar"><button onclick="openAddLocomotiveModal()">Добавить локомотив</button><button onclick="toggleInventoryDeleted()">Удалить</button></div>`
+        ? (() => {
+            const selectedRow = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
+            const isDeleted = selectedRow ? Number(selectedRow[5] || 0) > 0 : false;
+            return `<div class="rowbar">
+              <button onclick="openAddLocomotiveModal()">Добавить локомотив</button>
+              <button onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
+              <button onclick="restoreInventoryRow()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
+              <button onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
+            </div>`;
+          })()
         : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
     )
     : '';
@@ -650,7 +689,7 @@ function renderTable(name, rows, editableRows){
 let selected = {employees: -1, inventory: -1};
 let draggedRowIndex = -1;
 function selectRow(name, row){ selected[name] = row; }
-function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; }
+function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
 function addRow(name){
   if (!CAN_EDIT) return;
   if (name === 'inventory') {
@@ -660,26 +699,62 @@ function addRow(name){
   const cols = headers[name].length;
   state[name].push(Array(cols).fill(''));
   renderTable(name, state[name], true);
+  updateSaveButton();
 }
 function deleteRow(name){
   if (!CAN_EDIT) return;
   if (name === 'inventory') {
-    toggleInventoryDeleted();
+    softDeleteInventory();
     return;
   }
   const row = selected[name] >= 0 ? selected[name] : state[name].length - 1;
   if(row >= 0) state[name].splice(row, 1);
   selected[name] = -1;
   renderTable(name, state[name], true);
+  updateSaveButton();
 }
-function toggleInventoryDeleted(){
+function getSelectedInventoryRow(){
+  if (selected.inventory < 0 || !state.inventory[selected.inventory]) return null;
+  return state.inventory[selected.inventory];
+}
+function softDeleteInventory(){
   if (!CAN_EDIT) return;
-  const row = selected.inventory >= 0 ? selected.inventory : state.inventory.length - 1;
+  const row = selected.inventory >= 0 ? selected.inventory : -1;
   if (row < 0) return;
   const current = state.inventory[row];
-  const deletedAt = Number(current[5] || 0);
-  current[5] = deletedAt > 0 ? 0 : Date.now();
+  if (Number(current[5] || 0) > 0) return;
+  current[5] = Date.now();
   renderTable('inventory', state.inventory, true);
+  updateSaveButton();
+}
+function restoreInventoryRow(){
+  if (!CAN_EDIT) return;
+  const current = getSelectedInventoryRow();
+  if (!current || Number(current[5] || 0) <= 0) return;
+  current[5] = 0;
+  renderTable('inventory', state.inventory, true);
+  updateSaveButton();
+}
+async function purgeSelectedInventory(){
+  if (!CAN_EDIT) return;
+  const row = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
+  if (!row || Number(row[5] || 0) <= 0) return;
+  if (!confirm('Удалить окончательно выбранный локомотив?')) return;
+  const target = state.inventory[selected.inventory];
+  const year = Number(document.getElementById('year').value);
+  const res = await fetch(`${API}/api/purge_inventory_row`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({year, ser: target[0], num: target[1]})
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || data.ok === false){
+    alert(data.error || 'Не удалось удалить окончательно');
+    return;
+  }
+  selected.inventory = -1;
+  await loadState();
+  return;
 }
 function dragStartRow(event, row){
   if (!CAN_EDIT) return;
@@ -708,22 +783,35 @@ function dropRow(event, row){
   selected.inventory = row;
   draggedRowIndex = -1;
   renderTable('inventory', rows, true);
+  updateSaveButton();
 }
 function dragEndRow(){
   draggedRowIndex = -1;
 }
 async function saveAll(){
   if (!CAN_EDIT) return;
+  if (!hasUnsavedChanges()) return;
   state.year = Number(document.getElementById('year').value);
   const res = await fetch(`${API}/api/save`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
   if(!res.ok){ alert('Ошибка сохранения'); return; }
   savedState = cloneState(state);
   canceledState = null;
   updateHistoryButtons();
-  alert('Сохранено');
+  updateSaveButton();
 }
 function cloneState(value){
   return value ? JSON.parse(JSON.stringify(value)) : null;
+}
+function hasUnsavedChanges(){
+  return JSON.stringify(state) !== JSON.stringify(savedState);
+}
+function updateSaveButton(){
+  const saveBtn = document.getElementById('saveBtn');
+  if (!saveBtn) return;
+  const dirty = CAN_EDIT && hasUnsavedChanges();
+  saveBtn.classList.toggle('primary', dirty);
+  saveBtn.disabled = !CAN_EDIT;
+  saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Изменений нет';
 }
 function updateHistoryButtons(){
   const cancelBtn = document.getElementById('cancelBtn');
@@ -759,7 +847,6 @@ async function purgeDeleted(){
     return;
   }
   await loadState();
-  alert(data.purged ? `Окончательно удалено: ${data.purged}` : 'Нечего удалять');
 }
 function openAddLocomotiveModal(){
   if (!CAN_EDIT) return;
@@ -793,6 +880,7 @@ function submitAddLocomotive(){
   selected.inventory = state.inventory.length - 1;
   closeAddLocomotiveModal();
   renderTable('inventory', state.inventory, true);
+  updateSaveButton();
 }
 function showTab(id, btn){
   document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
@@ -915,6 +1003,22 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 send_json(self, purge_deleted_inventory())
+            except Exception as exc:
+                send_json(self, {"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if path == "/api/purge_inventory_row":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                send_json(
+                    self,
+                    purge_inventory_row(
+                        payload.get("year", dt.date.today().year),
+                        payload.get("ser", ""),
+                        payload.get("num", ""),
+                    ),
+                )
             except Exception as exc:
                 send_json(self, {"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
