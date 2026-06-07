@@ -1792,6 +1792,7 @@ def upsert_inventory_locomotive(
     series: str,
     locomotive: str,
     inv: str = "",
+    sort_order: int = 0,
     updated_at: int | None = None,
     deleted_at: int | None = None,
 ) -> None:
@@ -1801,22 +1802,37 @@ def upsert_inventory_locomotive(
     series = text(series).strip()
     inv = text(inv).strip()
     year = dt.date.today().year
+    sort_order_value = int(sort_order or 0)
     updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
+    if sort_order_value <= 0:
+        existing = cur.execute(
+            "SELECT COALESCE(sort_order, 0) AS sort_order FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
+            (locomotive,),
+        ).fetchone()
+        if existing:
+            sort_order_value = int(existing["sort_order"] or 0)
+    if sort_order_value <= 0:
+        max_row = cur.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM inventory"
+        ).fetchone()
+        sort_order_value = int(max_row["max_sort_order"] or 0) + 1
     if deleted_at is None:
         existing = cur.execute(
-            "SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
+            "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
             "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
             (locomotive,),
         ).fetchone()
+        if existing and sort_order_value <= 0:
+            sort_order_value = int(existing["sort_order"] or 0)
         deleted_at = int(existing["deleted_at"] or 0) if existing else 0
     else:
         deleted_at = int(deleted_at or 0)
     cur.execute(
         """
-        INSERT OR REPLACE INTO inventory (y, ser, num, inv, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO inventory (y, ser, num, inv, sort_order, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (year, series, locomotive, inv, updated_at, deleted_at),
+        (year, series, locomotive, inv, sort_order_value, updated_at, deleted_at),
     )
 
 
@@ -1855,6 +1871,7 @@ def phone_reference_export_payload() -> dict:
                 "series": series,
                 "number": number,
                 "wheelPairCount": wheel_pair_count,
+                "sortOrder": int(locomotive.get("sortOrder") or 0),
                 "updatedAt": int(locomotive.get("updatedAt") or 0),
                 "deletedAt": int(locomotive.get("deletedAt") or 0),
                 "wheelPairs": wheel_pairs,
@@ -2038,9 +2055,10 @@ def import_phone_reference_payload(payload: dict) -> dict:
             if not number:
                 continue
             wheel_pair_count = parse_excel_int(item.get("wheelPairCount")) or len(item.get("wheelPairs") or []) or locomotive_axis_count(series, number)
+            sort_order = parse_excel_int(item.get("sortOrder")) or 0
             updated_at = parse_excel_int(item.get("updatedAt")) or 0
             deleted_at = parse_excel_int(item.get("deletedAt")) or 0
-            upsert_inventory_locomotive(cur, series, number, "", updated_at=updated_at or None, deleted_at=deleted_at)
+            upsert_inventory_locomotive(cur, series, number, "", sort_order=sort_order, updated_at=updated_at or None, deleted_at=deleted_at)
             if deleted_at <= 0:
                 cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
             wheel_pairs = item.get("wheelPairs")
