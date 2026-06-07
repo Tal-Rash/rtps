@@ -153,6 +153,10 @@ def ensure_db() -> None:
             cur.execute("ALTER TABLE input_meta ADD COLUMN wheel_pair_count INT")
         if "section_count" not in existing_input_meta_cols:
             cur.execute("ALTER TABLE input_meta ADD COLUMN section_count INT")
+        existing_inventory_cols = {row[1] for row in cur.execute("PRAGMA table_info(inventory)").fetchall()}
+        if "updated_at" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT")
+            cur.execute("UPDATE inventory SET updated_at = 0 WHERE updated_at IS NULL")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
             DEFAULT_NORMS,
@@ -289,7 +293,7 @@ def series_for_locomotive(cur: sqlite3.Cursor, locomotive: str) -> str:
     if not locomotive:
         return ""
     row = cur.execute(
-        "SELECT ser FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, rowid DESC LIMIT 1",
+        "SELECT ser FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
         (locomotive,),
     ).fetchone()
     if row:
@@ -320,10 +324,10 @@ def allowed_repairs(series: str, locomotive: str) -> list[str]:
 def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
     rows = cur.execute(
         """
-        SELECT y, ser, num, inv
+        SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
-        ORDER BY y DESC, rowid
+        ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC
         """
     ).fetchall()
 
@@ -336,10 +340,11 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
         seen.add(number)
         series = text(row["ser"]).strip()
         inv = text(row["inv"]).strip()
+        updated_at = int(row["updated_at"] or 0)
         label = f"{series} {number}".strip()
         if inv:
             label = f"{label} (инв. {inv})"
-        result.append({"series": series, "number": number, "label": label})
+        result.append({"series": series, "number": number, "label": label, "updatedAt": updated_at})
     return result
 
 
@@ -1201,15 +1206,16 @@ def archive_excel_export_bytes(selected_locomotives: list[str] | None = None, da
     return output.getvalue(), len(rows)
 
 
-def upsert_inventory_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, inv: str = "") -> None:
+def upsert_inventory_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, inv: str = "", updated_at: int | None = None) -> None:
     locomotive = text(locomotive).strip()
     if not locomotive:
         return
     series = text(series).strip()
     inv = text(inv).strip()
     year = dt.date.today().year
+    updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
     cur.execute("DELETE FROM inventory WHERE TRIM(COALESCE(num, ''))=?", (locomotive,))
-    cur.execute("INSERT INTO inventory (y, ser, num, inv) VALUES (?, ?, ?, ?)", (year, series, locomotive, inv))
+    cur.execute("INSERT INTO inventory (y, ser, num, inv, updated_at) VALUES (?, ?, ?, ?, ?)", (year, series, locomotive, inv, updated_at))
 
 
 def phone_reference_export_payload() -> dict:
@@ -1247,6 +1253,7 @@ def phone_reference_export_payload() -> dict:
                 "series": series,
                 "number": number,
                 "wheelPairCount": wheel_pair_count,
+                "updatedAt": int(locomotive.get("updatedAt") or 0),
                 "wheelPairs": wheel_pairs,
             }
         )
@@ -1428,7 +1435,8 @@ def import_phone_reference_payload(payload: dict) -> dict:
             if not number:
                 continue
             wheel_pair_count = parse_excel_int(item.get("wheelPairCount")) or len(item.get("wheelPairs") or []) or locomotive_axis_count(series, number)
-            upsert_inventory_locomotive(cur, series, number, "")
+            updated_at = parse_excel_int(item.get("updatedAt")) or 0
+            upsert_inventory_locomotive(cur, series, number, "", updated_at=updated_at or None)
             cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
             wheel_pairs = item.get("wheelPairs")
             if not isinstance(wheel_pairs, list) or not wheel_pairs:
