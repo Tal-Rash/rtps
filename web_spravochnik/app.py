@@ -558,6 +558,7 @@ HTML = """<!doctype html>
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
     .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
+    .selected-row{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
     .deleted-row{opacity:.55}
     .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
     .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
@@ -582,7 +583,6 @@ HTML = """<!doctype html>
       <a href="/">На главную</a>
       <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
       <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-      <button id="purgeBtn" title="Удалить окончательно" aria-label="Удалить окончательно" onclick="purgeDeleted()">Окончательно удалить</button>
       <label>Год <select id="year"></select></label>
       <button id="saveBtn" onclick="saveAll()">Сохранить</button>
     </div>
@@ -680,10 +680,10 @@ function renderTable(name, rows, editableRows){
             const selectedRow = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
             const isDeleted = selectedRow ? Number(selectedRow[6] || 0) > 0 : false;
             return `<div class="rowbar">
-              <button onclick="openAddLocomotiveModal()">Добавить локомотив</button>
-              <button onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
-              <button onclick="restoreInventoryRow()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
-              <button onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
+              <button type="button" onclick="openAddLocomotiveModal()">Добавить локомотив</button>
+              <button type="button" onclick="softDeleteInventory(${selected.inventory})" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
+              <button type="button" onclick="restoreInventoryRow(${selected.inventory})" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
+              <button type="button" onclick="purgeSelectedInventory(${selected.inventory})" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
             </div>`;
           })()
         : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
@@ -695,7 +695,12 @@ function renderTable(name, rows, editableRows){
     const draggable = name === 'inventory' && CAN_EDIT
       ? ' draggable="true" ondragstart="dragStartRow(event, ' + r + ')" ondragover="dragOverRow(event, ' + r + ')" ondrop="dropRow(event, ' + r + ')" ondragend="dragEndRow(event)"'
       : '';
-    html += `<tr class="${isDeleted ? 'deleted-row' : ''}" onclick="selectRow('${name}', ${r})"${draggable}><td>${r + 1}</td>`;
+    const isSelected = name === 'inventory' && selected.inventory === r;
+    const rowClass = [
+      isDeleted ? 'deleted-row' : '',
+      isSelected ? 'selected-row' : '',
+    ].filter(Boolean).join(' ');
+    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${draggable}><td>${r + 1}</td>`;
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
@@ -722,7 +727,12 @@ function renderTable(name, rows, editableRows){
 
 let selected = {employees: -1, inventory: -1};
 let draggedRowIndex = -1;
-function selectRow(name, row){ selected[name] = row; }
+function selectRow(name, row){
+  selected[name] = row;
+  if (name === 'inventory') {
+    renderTable('inventory', state.inventory, true);
+  }
+}
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
 function addRow(name){
   if (!CAN_EDIT) return;
@@ -751,30 +761,34 @@ function getSelectedInventoryRow(){
   if (selected.inventory < 0 || !state.inventory[selected.inventory]) return null;
   return state.inventory[selected.inventory];
 }
-function softDeleteInventory(){
+function softDeleteInventory(row){
   if (!CAN_EDIT) return;
-  const row = selected.inventory >= 0 ? selected.inventory : -1;
-  if (row < 0) return;
-  const current = state.inventory[row];
+  const targetRow = Number.isInteger(row) ? row : selected.inventory;
+  if (targetRow < 0) return;
+  const current = state.inventory[targetRow];
   if (Number(current[6] || 0) > 0) return;
   current[6] = Date.now();
+  selected.inventory = targetRow;
   renderTable('inventory', state.inventory, true);
   updateSaveButton();
 }
-function restoreInventoryRow(){
+function restoreInventoryRow(row){
   if (!CAN_EDIT) return;
-  const current = getSelectedInventoryRow();
+  const targetRow = Number.isInteger(row) ? row : selected.inventory;
+  const current = targetRow >= 0 ? state.inventory[targetRow] : null;
   if (!current || Number(current[6] || 0) <= 0) return;
   current[6] = 0;
+  selected.inventory = targetRow;
   renderTable('inventory', state.inventory, true);
   updateSaveButton();
 }
-async function purgeSelectedInventory(){
+async function purgeSelectedInventory(row){
   if (!CAN_EDIT) return;
-  const row = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
-  if (!row || Number(row[6] || 0) <= 0) return;
+  const targetRowIndex = Number.isInteger(row) ? row : selected.inventory;
+  const targetRow = targetRowIndex >= 0 ? state.inventory[targetRowIndex] : null;
+  if (!targetRow || Number(targetRow[6] || 0) <= 0) return;
   if (!confirm('Удалить окончательно выбранный локомотив?')) return;
-  const target = state.inventory[selected.inventory];
+  const target = targetRow;
   const year = Number(document.getElementById('year').value);
   const res = await fetch(`${API}/api/purge_inventory_row`, {
     method:'POST',

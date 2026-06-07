@@ -1282,14 +1282,33 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
     if not loco_number:
         return
     existing = cur.execute(
-        "SELECT COALESCE(deleted_at, 0) AS deleted_at FROM inventory WHERE TRIM(COALESCE(num, ''))=? LIMIT 1",
+        "SELECT inv, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(sort_order, 0) AS sort_order, COALESCE(deleted_at, 0) AS deleted_at "
+        "FROM inventory WHERE TRIM(COALESCE(num, ''))=? LIMIT 1",
         (loco_number,),
     ).fetchone()
     if existing and int(existing["deleted_at"] or 0) > 0:
         return
     if existing:
+        upsert_inventory_locomotive(
+            cur,
+            series,
+            loco_number,
+            inv=text(existing["inv"]).strip(),
+            wheel_pair_count=int(existing["wheel_pair_count"] or 0),
+            section_count=int(existing["section_count"] or 0),
+            eight_digit_number=text(existing["eight_digit_number"]).strip(),
+            sort_order=int(existing["sort_order"] or 0),
+            deleted_at=0,
+        )
         return
-    upsert_inventory_locomotive(cur, series, loco_number, wheel_pair_count=wheel_pair_count, deleted_at=0)
+    upsert_inventory_locomotive(
+        cur,
+        series,
+        loco_number,
+        wheel_pair_count=wheel_pair_count,
+        section_count=default_section_count(wheel_pair_count),
+        deleted_at=0,
+    )
 
 
 def phone_measurement_missing_fields(payload: dict) -> list[str]:
