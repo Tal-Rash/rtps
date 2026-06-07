@@ -28,7 +28,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.33"
+APP_VERSION = "web-zkp-1.34"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2955,14 +2955,16 @@ function closePhoneImportDialog(){
   if (modal) modal.classList.remove('open');
 }
 async function openPhoneImportDialog(){
+  const canUseQr = window.isSecureContext && ('BarcodeDetector' in window) && navigator.mediaDevices?.getUserMedia;
+  if (!canUseQr) {
+    setPhoneImportStatus('QR-сканер на этом устройстве недоступен. Открою JSON-файл.');
+    choosePhoneImportFile();
+    return;
+  }
   const modal = document.getElementById('phoneImportModal');
   if (modal) modal.classList.add('open');
   setPhoneImportStatus('Наведите камеру на QR-код с телефона или выберите JSON-файл.');
-  if ('BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia) {
-    await startPhoneQrScan();
-  } else {
-    setPhoneImportStatus('Для QR-сканирования нужен браузер с камерой и BarcodeDetector. Можно загрузить JSON-файл.');
-  }
+  await startPhoneQrScan();
 }
 async function importPhoneText(rawText, sourceLabel = 'QR', overwrite = false){
   const status = getPhoneImportStatus() || document.getElementById('archiveStatus');
@@ -3054,6 +3056,8 @@ async function startPhoneQrScan(){
   } catch (error) {
     stopPhoneQrScan();
     setPhoneImportStatus(error.message || 'Не удалось запустить камеру');
+    const modal = document.getElementById('phoneImportModal');
+    if (modal) modal.classList.remove('open');
   }
 }
 function selectedPhoneExportLocomotives(kind){
