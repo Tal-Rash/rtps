@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.33"
+APP_VERSION = "web-zkp-1.38"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -115,6 +115,7 @@ def ensure_db() -> None:
             "CREATE TABLE IF NOT EXISTS input_data (y INT, locomotive TEXT, r INT, c INT, v TEXT, PRIMARY KEY(y, locomotive, r, c))"
         )
         cur.execute("CREATE TABLE IF NOT EXISTS inventory (y INT, ser TEXT, num TEXT, inv TEXT, PRIMARY KEY(y, ser, num))")
+        _ensure_inventory_sync_columns(conn)
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS kp_data (
@@ -165,6 +166,14 @@ def ensure_db() -> None:
             DEFAULT_NORMS,
         )
         conn.commit()
+
+
+def _ensure_inventory_sync_columns(conn: sqlite3.Connection) -> None:
+    columns = {text(row[1]).strip().lower() for row in conn.execute("PRAGMA table_info(inventory)").fetchall()}
+    if "updated_at" not in columns:
+        conn.execute("ALTER TABLE inventory ADD COLUMN updated_at INT NOT NULL DEFAULT 0")
+    if "deleted_at" not in columns:
+        conn.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT NOT NULL DEFAULT 0")
 
 
 def text(value) -> str:
@@ -296,7 +305,7 @@ def series_for_locomotive(cur: sqlite3.Cursor, locomotive: str) -> str:
     if not locomotive:
         return ""
     row = cur.execute(
-        "SELECT ser FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
+        "SELECT ser FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
         (locomotive,),
     ).fetchone()
     if row:
@@ -329,16 +338,15 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
 
 
 def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -> list[dict[str, str]]:
-    rows = cur.execute(
-        """
-        SELECT y, ser, num, inv,
-               COALESCE(updated_at, 0) AS updated_at,
-               COALESCE(deleted_at, 0) AS deleted_at
+    query = """
+        SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
-        ORDER BY num, y DESC, COALESCE(updated_at, 0) DESC, rowid DESC
-        """
-    ).fetchall()
+    """
+    if not include_deleted:
+        query += " AND COALESCE(deleted_at, 0) = 0"
+    query += " ORDER BY num, y DESC, COALESCE(updated_at, 0) DESC, rowid DESC"
+    rows = cur.execute(query).fetchall()
 
     seen: set[str] = set()
     result: list[dict[str, str]] = []
@@ -356,13 +364,15 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
         label = f"{series} {number}".strip()
         if inv:
             label = f"{label} (инв. {inv})"
-        result.append({
-            "series": series,
-            "number": number,
-            "label": label,
-            "updatedAt": updated_at,
-            "deletedAt": deleted_at,
-        })
+        result.append(
+            {
+                "series": series,
+                "number": number,
+                "label": label,
+                "updatedAt": updated_at,
+                "deletedAt": deleted_at,
+            }
+        )
     return result
 
 
@@ -982,6 +992,541 @@ def save_norms_rows(payload: dict) -> dict:
         conn.commit()
 
     return {"ok": True, "rows": load_norms_rows()}
+def phone_json_number(value):
+    raw = text(value).strip()
+    if not raw:
+        return None
+    try:
+        number = float(raw.replace(",", "."))
+    except ValueError:
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def decode_phone_payload_text(raw_text: str) -> dict | None:
+    raw_text = text(raw_text).strip()
+    if not raw_text:
+        return None
+    try:
+        decoded_bytes = base64.b64decode(raw_text.encode("utf-8"))
+        decompressed = zlib.decompress(decoded_bytes)
+        payload = json.loads(decompressed.decode("utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    try:
+        payload = json.loads(raw_text)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return None
+
+
+def require_qrcode():
+    try:
+        import qrcode
+        from qrcode.image.svg import SvgImage
+    except ImportError as exc:
+        raise RuntimeError("Для QR нужен пакет qrcode.") from exc
+    return qrcode, SvgImage
+
+
+def build_phone_reference_payload(selected_numbers: list[str] | None = None) -> dict:
+    selected = {text(number).strip() for number in (selected_numbers or []) if text(number).strip()}
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        locomotives = load_locomotives(cur)
+        if selected:
+            locomotives = [item for item in locomotives if item["number"] in selected]
+
+        exported = []
+        for loco in locomotives:
+            number = loco["number"]
+            series = loco.get("series", "")
+            axis_count = locomotive_axis_count(series, number)
+            kp_rows = cur.execute(
+                "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (0, 1, 2, 3) ORDER BY r, c",
+                (number,),
+            ).fetchall()
+            kp_values = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
+            wheel_pairs = []
+            for row_index in range(axis_count):
+                wheel_pairs.append(
+                    {
+                        "number": phone_json_number(kp_values.get((row_index, 0), str(row_index + 1))),
+                        "axisNumber": phone_json_number(kp_values.get((row_index, 1), str(row_index + 1))),
+                        "diameterLeft": phone_json_number(kp_values.get((row_index, 2), "")),
+                        "diameterRight": phone_json_number(kp_values.get((row_index, 3), "")),
+                    }
+                )
+            exported.append(
+                {
+                    "series": series,
+                    "number": number,
+                    "wheelPairCount": axis_count,
+                    "wheelPairs": wheel_pairs,
+                    "updatedAt": int(loco.get("updatedAt") or 0),
+                    "deletedAt": int(loco.get("deletedAt") or 0),
+                }
+            )
+
+    return {
+        "formatVersion": 2,
+        "exportType": "referenceData",
+        "exportedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "locomotives": exported,
+    }
+
+
+def build_phone_archive_measurement_record(year_value, measurement_date, locomotive_value, repair_type_value, rows_by_index) -> dict | None:
+    locomotive_value = text(locomotive_value).strip()
+    repair_type_value = text(repair_type_value).strip()
+    measurement_date = text(measurement_date).strip()
+    if not locomotive_value or not repair_type_value or not measurement_date:
+        return None
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        series = series_for_locomotive(cur, locomotive_value)
+        wheel_pair_count = locomotive_axis_count(series, locomotive_value)
+        wheel_pairs = []
+        for row_index in sorted(rows_by_index.keys()):
+            if row_index < 2:
+                continue
+            values = rows_by_index.get(row_index, {})
+            pair_number = row_index - 1
+            left = {
+                "flangeThickness": phone_json_number(values.get(4, "")),
+                "flangeWear": phone_json_number(values.get(2, "")),
+                "flangeSteepness": phone_json_number(values.get(6, "")),
+                "bandageThickness": phone_json_number(values.get(8, "")),
+                "bandageDiameter": phone_json_number(values.get(10, "")),
+            }
+            right = {
+                "flangeThickness": phone_json_number(values.get(5, "")),
+                "flangeWear": phone_json_number(values.get(3, "")),
+                "flangeSteepness": phone_json_number(values.get(7, "")),
+                "bandageThickness": phone_json_number(values.get(9, "")),
+                "bandageDiameter": phone_json_number(values.get(11, "")),
+            }
+            wheel_pairs.append({"number": pair_number, "left": left, "right": right})
+
+    return {
+        "createdAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "measurementId": f"pc-{year_value}-{measurement_date}-{locomotive_value}-{repair_type_value}",
+        "locomotive": {
+            "series": series,
+            "number": locomotive_value,
+            "wheelPairCount": wheel_pair_count,
+            "comment": "",
+            "isNew": False,
+        },
+        "repairType": repair_type_value,
+        "measurementDate": measurement_date,
+        "wheelPairs": wheel_pairs,
+        "source": "pc",
+    }
+
+
+def build_phone_archive_payload(selected_locomotives: list[str] | None = None, selected_period: tuple[str, str] | None = None) -> dict:
+    locomotives_filter = {text(item).strip() for item in (selected_locomotives or []) if text(item).strip()}
+    date_from = date_to = ""
+    if selected_period:
+        date_from, date_to = selected_period
+    with DB_LOCK, connect() as conn:
+        query = """
+            SELECT y, measurement_date, locomotive, repair_type, r, c, v
+            FROM archive_data
+            WHERE TRIM(COALESCE(measurement_date, '')) <> ''
+        """
+        params: list[str] = []
+        if locomotives_filter:
+            placeholders = ",".join("?" for _ in locomotives_filter)
+            query += f" AND locomotive IN ({placeholders})"
+            params.extend(sorted(locomotives_filter))
+        if date_from:
+            query += " AND measurement_date >= ?"
+            params.append(date_from)
+        if date_to:
+            query += " AND measurement_date <= ?"
+            params.append(date_to)
+        query += " ORDER BY y DESC, measurement_date, locomotive, repair_type, r, c"
+        rows = conn.execute(query, params).fetchall()
+
+    grouped: dict[tuple[int, str, str, str], dict[int, dict[int, str]]] = {}
+    for row in rows:
+        r = int(row["r"])
+        if r < 2:
+            continue
+        key = (int(row["y"] or 0), text(row["measurement_date"]), text(row["locomotive"]), text(row["repair_type"]))
+        grouped.setdefault(key, {})
+        grouped[key].setdefault(r, {})[int(row["c"])] = text(row["v"])
+
+    archive = []
+    for (year, measurement_date, locomotive, repair_type), values_by_row in grouped.items():
+        record = build_phone_archive_measurement_record(year, measurement_date, locomotive, repair_type, values_by_row)
+        if record:
+            archive.append(record)
+
+    return {
+        "formatVersion": 1,
+        "exportType": "archiveData",
+        "exportedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "archive": archive,
+    }
+
+
+def build_phone_qr_frames(payload: dict) -> list[str]:
+    qrcode, SvgImage = require_qrcode()
+    json_data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    compressed = zlib.compress(json_data.encode("utf-8"), level=9)
+    base64_str = base64.b64encode(compressed).decode("utf-8")
+    chunk_size = 400
+    chunks = [base64_str[i : i + chunk_size] for i in range(0, len(base64_str), chunk_size)] or [""]
+    frames = []
+    for index, chunk in enumerate(chunks):
+        frame_header = f"{index + 1:02d}/{len(chunks):02d}|{chunk}"
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+        qr.add_data(frame_header)
+        qr.make(fit=True)
+        image = qr.make_image(image_factory=SvgImage)
+        buf = io.BytesIO()
+        image.save(buf)
+        frames.append("data:image/svg+xml;base64," + base64.b64encode(buf.getvalue()).decode("ascii"))
+    return frames
+
+
+def build_phone_export_payload(kind: str, selected_locomotives: list[str] | None = None, selected_period: tuple[str, str] | None = None) -> dict:
+    kind = text(kind).strip().lower()
+    if kind == "reference":
+        return build_phone_reference_payload(selected_locomotives)
+    return build_phone_archive_payload(selected_locomotives, selected_period)
+
+
+def upsert_inventory_locomotive(
+    cur: sqlite3.Cursor,
+    series: str,
+    loco_number: str,
+    wheel_pair_count: int,
+    *,
+    deleted_at: int = 0,
+) -> None:
+    series = text(series).strip()
+    loco_number = text(loco_number).strip()
+    if not loco_number:
+        return
+    year = dt.date.today().year
+    now_ms = int(dt.datetime.now().timestamp() * 1000)
+    existing = cur.execute(
+        "SELECT y, ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
+        "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
+        (loco_number,),
+    ).fetchone()
+    inv = text(existing["inv"]).strip() if existing else ""
+    if existing:
+        series = series or text(existing["ser"]).strip()
+    cur.execute(
+        "INSERT OR REPLACE INTO inventory (y, ser, num, inv, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            year,
+            series,
+            loco_number,
+            inv,
+            now_ms,
+            int(deleted_at or 0),
+        ),
+    )
+    for index in range(max(1, int(wheel_pair_count or 1))):
+        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (loco_number, index, str(index + 1)))
+        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (loco_number, index, str(index + 1)))
+
+
+def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, wheel_pair_count: int) -> None:
+    loco_number = text(loco_number).strip()
+    if not loco_number:
+        return
+    existing = cur.execute(
+        "SELECT COALESCE(deleted_at, 0) AS deleted_at FROM inventory WHERE TRIM(COALESCE(num, ''))=? LIMIT 1",
+        (loco_number,),
+    ).fetchone()
+    if existing and int(existing["deleted_at"] or 0) > 0:
+        return
+    if existing:
+        return
+    upsert_inventory_locomotive(cur, series, loco_number, wheel_pair_count, deleted_at=0)
+
+
+def phone_measurement_missing_fields(payload: dict) -> list[str]:
+    missing = []
+
+    def has_value(value):
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return value.strip() != ""
+        return True
+
+    if not has_value(payload.get("formatVersion")):
+        missing.append("formatVersion")
+    if not has_value(payload.get("createdAt")):
+        missing.append("createdAt")
+    if not has_value(payload.get("measurementId")):
+        missing.append("measurementId")
+    if not has_value(payload.get("repairType")):
+        missing.append("repairType")
+    if not has_value(payload.get("measurementDate")):
+        missing.append("measurementDate")
+
+    locomotive = payload.get("locomotive")
+    if not isinstance(locomotive, dict):
+        missing.append("locomotive")
+        locomotive = {}
+
+    for key in ("series", "number", "wheelPairCount"):
+        if not has_value(locomotive.get(key)):
+            missing.append(f"locomotive.{key}")
+
+    wheel_pairs = payload.get("wheelPairs")
+    if not isinstance(wheel_pairs, list) or not wheel_pairs:
+        missing.append("wheelPairs")
+        return missing
+
+    side_fields = ("flangeThickness", "flangeWear", "flangeSteepness", "bandageThickness")
+    for pair_index, pair in enumerate(wheel_pairs, start=1):
+        if not isinstance(pair, dict):
+            missing.append(f"wheelPairs[{pair_index}]")
+            continue
+        if not has_value(pair.get("number")):
+            missing.append(f"wheelPairs[{pair_index}].number")
+        for side_name in ("left", "right"):
+            side = pair.get(side_name)
+            if not isinstance(side, dict):
+                missing.append(f"wheelPairs[{pair_index}].{side_name}")
+                continue
+            for field_name in side_fields:
+                if not has_value(side.get(field_name)):
+                    missing.append(f"wheelPairs[{pair_index}].{side_name}.{field_name}")
+
+    return missing
+
+
+def phone_archive_rows_from_payload(
+    measurement_date: str,
+    loco_number: str,
+    repair_type: str,
+    wheel_pairs: list[dict],
+    kp_values: dict[tuple[int, int], str] | None = None,
+) -> list[tuple[int, str, str, str, int, int, str]]:
+    year_value = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+    rows: list[tuple[int, str, str, str, int, int, str]] = []
+    kp_values = kp_values or {}
+
+    def parse_float(v):
+        if v is None:
+            return None
+        try:
+            return float(text(v).replace(",", "."))
+        except ValueError:
+            return None
+
+    axis_count = len(wheel_pairs)
+    for pair in wheel_pairs:
+        pair_number = int(pair.get("number") or 1)
+        kp_row_index = pair_number - 1
+        table_row = pair_number + 1
+        section_value = "1" if axis_count == 6 else str(((pair_number - 1) // 4) + 1)
+        left = pair.get("left") or {}
+        right = pair.get("right") or {}
+
+        left_thick = parse_float(left.get("bandageThickness"))
+        right_thick = parse_float(right.get("bandageThickness"))
+
+        left_diam = left.get("bandageDiameter")
+        if left_diam is None or text(left_diam).strip() == "":
+            kp_left = parse_float(kp_values.get((kp_row_index, 2), ""))
+            if kp_left is not None and left_thick is not None:
+                left_diam = str(int(round(kp_left + left_thick * 2)))
+            else:
+                left_diam = ""
+
+        right_diam = right.get("bandageDiameter")
+        if right_diam is None or text(right_diam).strip() == "":
+            kp_right = parse_float(kp_values.get((kp_row_index, 3), ""))
+            if kp_right is not None and right_thick is not None:
+                right_diam = str(int(round(kp_right + right_thick * 2)))
+            else:
+                right_diam = ""
+
+        values = {
+            0: section_value,
+            1: str(pair_number),
+            2: phone_json_number(left.get("flangeWear")),
+            3: phone_json_number(right.get("flangeWear")),
+            4: phone_json_number(left.get("flangeThickness")),
+            5: phone_json_number(right.get("flangeThickness")),
+            6: phone_json_number(left.get("flangeSteepness")),
+            7: phone_json_number(right.get("flangeSteepness")),
+            8: phone_json_number(left.get("bandageThickness")),
+            9: phone_json_number(right.get("bandageThickness")),
+            10: phone_json_number(left_diam),
+            11: phone_json_number(right_diam),
+        }
+
+        for col, value in values.items():
+            if value != "" and value is not None:
+                rows.append((year_value, measurement_date, loco_number, repair_type, table_row, col, text(value)))
+
+    return rows
+
+
+def import_phone_reference_payload(payload: dict) -> dict:
+    locomotives = payload.get("locomotives", [])
+    if not isinstance(locomotives, list) or not locomotives:
+        return {"error": "В файле справочника нет локомотивов."}, HTTPStatus.BAD_REQUEST
+
+    imported_count = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        for loco in locomotives:
+            if not isinstance(loco, dict):
+                continue
+            series = text(loco.get("series")).strip()
+            number = text(loco.get("number")).strip()
+            if not number:
+                continue
+            updated_at = int(loco.get("updatedAt") or 0)
+            deleted_at = int(loco.get("deletedAt") or 0)
+            wheel_pair_count = int(loco.get("wheelPairCount") or 6)
+            upsert_inventory_locomotive(cur, series, number, wheel_pair_count, deleted_at=deleted_at)
+            wheel_pairs = loco.get("wheelPairs", [])
+            if not isinstance(wheel_pairs, list):
+                continue
+            if deleted_at > 0:
+                cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
+                imported_count += 1
+                continue
+            cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
+            for pair in wheel_pairs:
+                if not isinstance(pair, dict):
+                    continue
+                try:
+                    r = int(pair.get("number") or 1) - 1
+                except Exception:
+                    continue
+                kp_number = text(pair.get("number") or r + 1)
+                axis_number = text(pair.get("axisNumber") or kp_number)
+                diameter_left = text(pair.get("diameterLeft") or "").strip()
+                diameter_right = text(pair.get("diameterRight") or "").strip()
+                cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (number, r, kp_number))
+                cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (number, r, axis_number))
+                if diameter_left:
+                    cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 2, ?)", (number, r, diameter_left))
+                if diameter_right:
+                    cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 3, ?)", (number, r, diameter_right))
+            imported_count += 1
+        conn.commit()
+
+    return {"ok": True, "imported_count": imported_count}
+
+
+def import_phone_archive_payload(payload: dict) -> dict:
+    archive_items = payload.get("archive", [])
+    if not isinstance(archive_items, list) or not archive_items:
+        return {"error": "В архивном JSON нет данных."}, HTTPStatus.BAD_REQUEST
+
+    imported_measurements = 0
+    imported_cells = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        for item in archive_items:
+            if not isinstance(item, dict):
+                continue
+            locomotive = item.get("locomotive") or {}
+            if not isinstance(locomotive, dict):
+                continue
+            series = text(locomotive.get("series")).strip()
+            loco_number = text(locomotive.get("number")).strip()
+            measurement_date = text(item.get("measurementDate")).strip()
+            repair_type = text(item.get("repairType")).strip()
+            wheel_pairs = item.get("wheelPairs") or []
+            if not loco_number or not measurement_date or not repair_type or not isinstance(wheel_pairs, list) or not wheel_pairs:
+                continue
+            wheel_pair_count = int(locomotive.get("wheelPairCount") or len(wheel_pairs))
+            ensure_phone_locomotive(cur, series, loco_number, wheel_pair_count)
+            kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive=?", (loco_number,)).fetchall()
+            kp_values = {(int(r), int(c)): text(v) for r, c, v in kp_rows}
+            rows = phone_archive_rows_from_payload(measurement_date, loco_number, repair_type, wheel_pairs, kp_values)
+            if not rows:
+                continue
+            year_value = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+            cur.execute(
+                "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+                (year_value, measurement_date, loco_number, repair_type),
+            )
+            cur.executemany(
+                "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            imported_measurements += 1
+            imported_cells += len(rows)
+        conn.commit()
+
+    return {"ok": True, "imported_measurements": imported_measurements, "imported_cells": imported_cells}
+
+
+def import_phone_measurement_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"error": "Некорректный JSON."}, HTTPStatus.BAD_REQUEST
+
+    missing = phone_measurement_missing_fields(payload)
+    if missing:
+        return {"error": "В замере не заполнены обязательные данные.", "missing": missing[:20]}, HTTPStatus.BAD_REQUEST
+
+    locomotive = payload.get("locomotive") or {}
+    series = text(locomotive.get("series")).strip()
+    loco_number = text(locomotive.get("number")).strip()
+    measurement_date = text(payload.get("measurementDate")).strip()
+    repair_type = text(payload.get("repairType")).strip()
+    wheel_pairs = payload.get("wheelPairs") or []
+    wheel_pair_count = int(locomotive.get("wheelPairCount") or len(wheel_pairs))
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        ensure_phone_locomotive(cur, series, loco_number, wheel_pair_count)
+        kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive=?", (loco_number,)).fetchall()
+        kp_values = {(int(r), int(c)): text(v) for r, c, v in kp_rows}
+        rows = phone_archive_rows_from_payload(measurement_date, loco_number, repair_type, wheel_pairs, kp_values)
+        if not rows:
+            return {"error": "Не удалось собрать строки замера."}, HTTPStatus.BAD_REQUEST
+        year_value = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+        cur.execute(
+            "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+            (year_value, measurement_date, loco_number, repair_type),
+        )
+        cur.executemany(
+            "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+
+    return {"ok": True, "imported_measurements": 1, "imported_cells": len(rows)}
+
+
+def import_phone_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"error": "Некорректный JSON."}, HTTPStatus.BAD_REQUEST
+    if payload.get("exportType") == "archiveData" or "archive" in payload:
+        return import_phone_archive_payload(payload)
+    if payload.get("exportType") == "referenceData" or "locomotives" in payload:
+        return import_phone_reference_payload(payload)
+    if int(payload.get("formatVersion", 0) or 0) == 1:
+        return import_phone_measurement_payload(payload)
+    return {"error": "Нераспознанный формат телефона."}, HTTPStatus.BAD_REQUEST
 
 
 def require_openpyxl():
