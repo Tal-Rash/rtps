@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import threading
 import webbrowser
+import zlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -27,7 +28,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.31"
+APP_VERSION = "web-zkp-1.32"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -961,6 +962,475 @@ def save_norms_rows(payload: dict) -> dict:
     return {"ok": True, "rows": load_norms_rows()}
 
 
+def phone_json_number(value):
+    raw = text(value).strip()
+    if not raw:
+        return None
+    try:
+        number = float(raw.replace(",", "."))
+    except ValueError:
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def require_qrcode():
+    try:
+        import qrcode
+        from qrcode.image.svg import SvgImage
+    except ImportError as exc:
+        raise RuntimeError("Для QR нужен пакет qrcode.") from exc
+    return qrcode, SvgImage
+
+
+def build_phone_reference_payload(selected_numbers: list[str] | None = None) -> dict:
+    selected = {text(number).strip() for number in (selected_numbers or []) if text(number).strip()}
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        locomotives = load_locomotives(cur)
+        if selected:
+            locomotives = [item for item in locomotives if item["number"] in selected]
+
+        exported = []
+        for loco in locomotives:
+            number = loco["number"]
+            series = loco.get("series", "")
+            axis_count = locomotive_axis_count(series, number)
+            kp_rows = cur.execute(
+                "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (0, 1, 2, 3) ORDER BY r, c",
+                (number,),
+            ).fetchall()
+            kp_values = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
+            wheel_pairs = []
+            for row_index in range(axis_count):
+                wheel_pairs.append(
+                    {
+                        "number": phone_json_number(kp_values.get((row_index, 0), str(row_index + 1))),
+                        "axisNumber": phone_json_number(kp_values.get((row_index, 1), str(row_index + 1))),
+                        "diameterLeft": phone_json_number(kp_values.get((row_index, 2), "")),
+                        "diameterRight": phone_json_number(kp_values.get((row_index, 3), "")),
+                    }
+                )
+            exported.append(
+                {
+                    "series": series,
+                    "number": number,
+                    "wheelPairCount": axis_count,
+                    "wheelPairs": wheel_pairs,
+                }
+            )
+
+    return {
+        "formatVersion": 2,
+        "exportType": "referenceData",
+        "exportedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "locomotives": exported,
+    }
+
+
+def build_phone_archive_measurement_record(year_value, measurement_date, locomotive_value, repair_type_value, rows_by_index) -> dict | None:
+    locomotive_value = text(locomotive_value).strip()
+    repair_type_value = text(repair_type_value).strip()
+    measurement_date = text(measurement_date).strip()
+    if not locomotive_value or not repair_type_value or not measurement_date:
+        return None
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        series = series_for_locomotive(cur, locomotive_value)
+        wheel_pair_count = locomotive_axis_count(series, locomotive_value)
+        wheel_pairs = []
+        for row_index in sorted(rows_by_index.keys()):
+            if row_index < 2:
+                continue
+            values = rows_by_index.get(row_index, {})
+            pair_number = row_index - 1
+            left = {
+                "flangeThickness": phone_json_number(values.get(4, "")),
+                "flangeWear": phone_json_number(values.get(2, "")),
+                "flangeSteepness": phone_json_number(values.get(6, "")),
+                "bandageThickness": phone_json_number(values.get(8, "")),
+                "bandageDiameter": phone_json_number(values.get(10, "")),
+            }
+            right = {
+                "flangeThickness": phone_json_number(values.get(5, "")),
+                "flangeWear": phone_json_number(values.get(3, "")),
+                "flangeSteepness": phone_json_number(values.get(7, "")),
+                "bandageThickness": phone_json_number(values.get(9, "")),
+                "bandageDiameter": phone_json_number(values.get(11, "")),
+            }
+            wheel_pairs.append({"number": pair_number, "left": left, "right": right})
+
+    return {
+        "createdAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "measurementId": f"pc-{year_value}-{measurement_date}-{locomotive_value}-{repair_type_value}",
+        "locomotive": {
+            "series": series,
+            "number": locomotive_value,
+            "wheelPairCount": wheel_pair_count,
+            "comment": "",
+            "isNew": False,
+        },
+        "repairType": repair_type_value,
+        "measurementDate": measurement_date,
+        "wheelPairs": wheel_pairs,
+        "source": "pc",
+    }
+
+
+def build_phone_archive_payload(selected_locomotives: list[str] | None = None, selected_period: tuple[str, str] | None = None) -> dict:
+    locomotives_filter = {text(item).strip() for item in (selected_locomotives or []) if text(item).strip()}
+    date_from = date_to = ""
+    if selected_period:
+        date_from, date_to = selected_period
+    with DB_LOCK, connect() as conn:
+        query = """
+            SELECT y, measurement_date, locomotive, repair_type, r, c, v
+            FROM archive_data
+            WHERE TRIM(COALESCE(measurement_date, '')) <> ''
+        """
+        params: list[str] = []
+        if locomotives_filter:
+            placeholders = ",".join("?" for _ in locomotives_filter)
+            query += f" AND locomotive IN ({placeholders})"
+            params.extend(sorted(locomotives_filter))
+        if date_from:
+            query += " AND measurement_date >= ?"
+            params.append(date_from)
+        if date_to:
+            query += " AND measurement_date <= ?"
+            params.append(date_to)
+        query += " ORDER BY y DESC, measurement_date, locomotive, repair_type, r, c"
+        rows = conn.execute(query, params).fetchall()
+
+    grouped: dict[tuple[int, str, str, str], dict[int, dict[int, str]]] = {}
+    for row in rows:
+        r = int(row["r"])
+        if r < 2:
+            continue
+        key = (int(row["y"] or 0), text(row["measurement_date"]), text(row["locomotive"]), text(row["repair_type"]))
+        grouped.setdefault(key, {})
+        grouped[key].setdefault(r, {})[int(row["c"])] = text(row["v"])
+
+    archive = []
+    for (year, measurement_date, locomotive, repair_type), values_by_row in grouped.items():
+        record = build_phone_archive_measurement_record(year, measurement_date, locomotive, repair_type, values_by_row)
+        if record:
+            archive.append(record)
+
+    return {
+        "formatVersion": 1,
+        "exportType": "archiveData",
+        "exportedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "archive": archive,
+    }
+
+
+def build_phone_qr_frames(payload: dict) -> list[str]:
+    qrcode, SvgImage = require_qrcode()
+    json_data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    compressed = zlib.compress(json_data.encode("utf-8"), level=9)
+    base64_str = base64.b64encode(compressed).decode("utf-8")
+    chunk_size = 400
+    chunks = [base64_str[i : i + chunk_size] for i in range(0, len(base64_str), chunk_size)] or [""]
+    frames = []
+    for index, chunk in enumerate(chunks):
+        frame_header = f"{index + 1:02d}/{len(chunks):02d}|{chunk}"
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+        qr.add_data(frame_header)
+        qr.make(fit=True)
+        image = qr.make_image(image_factory=SvgImage)
+        buf = io.BytesIO()
+        image.save(buf)
+        frames.append("data:image/svg+xml;base64," + base64.b64encode(buf.getvalue()).decode("ascii"))
+    return frames
+
+
+def build_phone_export_payload(kind: str, selected_locomotives: list[str] | None = None, selected_period: tuple[str, str] | None = None) -> dict:
+    kind = text(kind).strip().lower()
+    if kind == "reference":
+        return build_phone_reference_payload(selected_locomotives)
+    return build_phone_archive_payload(selected_locomotives, selected_period)
+
+
+def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, wheel_pair_count: int) -> None:
+    series = text(series).strip()
+    loco_number = text(loco_number).strip()
+    if not loco_number:
+        return
+    year = dt.date.today().year
+    exists = cur.execute("SELECT 1 FROM inventory WHERE TRIM(COALESCE(num, ''))=? LIMIT 1", (loco_number,)).fetchone()
+    if not exists:
+        cur.execute("INSERT OR IGNORE INTO inventory (y, ser, num, inv) VALUES (?, ?, ?, '')", (year, series, loco_number))
+    for index in range(max(1, int(wheel_pair_count or 1))):
+        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (loco_number, index, str(index + 1)))
+        cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (loco_number, index, str(index + 1)))
+
+
+def phone_measurement_missing_fields(payload: dict) -> list[str]:
+    missing = []
+
+    def has_value(value):
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return value.strip() != ""
+        return True
+
+    if not has_value(payload.get("formatVersion")):
+        missing.append("formatVersion")
+    if not has_value(payload.get("createdAt")):
+        missing.append("createdAt")
+    if not has_value(payload.get("measurementId")):
+        missing.append("measurementId")
+    if not has_value(payload.get("repairType")):
+        missing.append("repairType")
+    if not has_value(payload.get("measurementDate")):
+        missing.append("measurementDate")
+
+    locomotive = payload.get("locomotive")
+    if not isinstance(locomotive, dict):
+        missing.append("locomotive")
+        locomotive = {}
+
+    for key in ("series", "number", "wheelPairCount"):
+        if not has_value(locomotive.get(key)):
+            missing.append(f"locomotive.{key}")
+
+    wheel_pairs = payload.get("wheelPairs")
+    if not isinstance(wheel_pairs, list) or not wheel_pairs:
+        missing.append("wheelPairs")
+        return missing
+
+    side_fields = ("flangeThickness", "flangeWear", "flangeSteepness", "bandageThickness")
+    for pair_index, pair in enumerate(wheel_pairs, start=1):
+        if not isinstance(pair, dict):
+            missing.append(f"wheelPairs[{pair_index}]")
+            continue
+        if not has_value(pair.get("number")):
+            missing.append(f"wheelPairs[{pair_index}].number")
+        for side_name in ("left", "right"):
+            side = pair.get(side_name)
+            if not isinstance(side, dict):
+                missing.append(f"wheelPairs[{pair_index}].{side_name}")
+                continue
+            for field_name in side_fields:
+                if not has_value(side.get(field_name)):
+                    missing.append(f"wheelPairs[{pair_index}].{side_name}.{field_name}")
+
+    return missing
+
+
+def phone_archive_rows_from_payload(
+    measurement_date: str,
+    loco_number: str,
+    repair_type: str,
+    wheel_pairs: list[dict],
+    kp_values: dict[tuple[int, int], str] | None = None,
+) -> list[tuple[int, str, str, str, int, int, str]]:
+    year_value = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+    rows: list[tuple[int, str, str, str, int, int, str]] = []
+    kp_values = kp_values or {}
+
+    def parse_float(v):
+        if v is None:
+            return None
+        try:
+            return float(text(v).replace(",", "."))
+        except ValueError:
+            return None
+
+    axis_count = len(wheel_pairs)
+    for pair in wheel_pairs:
+        pair_number = int(pair.get("number") or 1)
+        kp_row_index = pair_number - 1
+        table_row = pair_number + 1
+        section_value = "1" if axis_count == 6 else str(((pair_number - 1) // 4) + 1)
+        left = pair.get("left") or {}
+        right = pair.get("right") or {}
+
+        left_thick = parse_float(left.get("bandageThickness"))
+        right_thick = parse_float(right.get("bandageThickness"))
+
+        left_diam = left.get("bandageDiameter")
+        if left_diam is None or text(left_diam).strip() == "":
+            kp_left = parse_float(kp_values.get((kp_row_index, 2), ""))
+            if kp_left is not None and left_thick is not None:
+                left_diam = str(int(round(kp_left + left_thick * 2)))
+            else:
+                left_diam = ""
+
+        right_diam = right.get("bandageDiameter")
+        if right_diam is None or text(right_diam).strip() == "":
+            kp_right = parse_float(kp_values.get((kp_row_index, 3), ""))
+            if kp_right is not None and right_thick is not None:
+                right_diam = str(int(round(kp_right + right_thick * 2)))
+            else:
+                right_diam = ""
+
+        values = {
+            0: section_value,
+            1: str(pair_number),
+            2: phone_json_number(left.get("flangeWear")),
+            3: phone_json_number(right.get("flangeWear")),
+            4: phone_json_number(left.get("flangeThickness")),
+            5: phone_json_number(right.get("flangeThickness")),
+            6: phone_json_number(left.get("flangeSteepness")),
+            7: phone_json_number(right.get("flangeSteepness")),
+            8: phone_json_number(left.get("bandageThickness")),
+            9: phone_json_number(right.get("bandageThickness")),
+            10: phone_json_number(left_diam),
+            11: phone_json_number(right_diam),
+        }
+
+        for col, value in values.items():
+            if value != "" and value is not None:
+                rows.append((year_value, measurement_date, loco_number, repair_type, table_row, col, text(value)))
+
+    return rows
+
+
+def import_phone_reference_payload(payload: dict) -> dict:
+    locomotives = payload.get("locomotives", [])
+    if not isinstance(locomotives, list) or not locomotives:
+        return {"error": "В файле справочника нет локомотивов."}, HTTPStatus.BAD_REQUEST
+
+    imported_count = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        for loco in locomotives:
+            if not isinstance(loco, dict):
+                continue
+            series = text(loco.get("series")).strip()
+            number = text(loco.get("number")).strip()
+            if not number:
+                continue
+            wheel_pair_count = int(loco.get("wheelPairCount") or 6)
+            ensure_phone_locomotive(cur, series, number, wheel_pair_count)
+            wheel_pairs = loco.get("wheelPairs", [])
+            if not isinstance(wheel_pairs, list):
+                continue
+            cur.execute("DELETE FROM kp_data WHERE locomotive=?", (number,))
+            for pair in wheel_pairs:
+                if not isinstance(pair, dict):
+                    continue
+                try:
+                    r = int(pair.get("number") or 1) - 1
+                except Exception:
+                    continue
+                kp_number = text(pair.get("number") or r + 1)
+                axis_number = text(pair.get("axisNumber") or kp_number)
+                diameter_left = text(pair.get("diameterLeft") or "").strip()
+                diameter_right = text(pair.get("diameterRight") or "").strip()
+                cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (number, r, kp_number))
+                cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (number, r, axis_number))
+                if diameter_left:
+                    cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 2, ?)", (number, r, diameter_left))
+                if diameter_right:
+                    cur.execute("INSERT OR REPLACE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 3, ?)", (number, r, diameter_right))
+            imported_count += 1
+        conn.commit()
+
+    return {"ok": True, "imported_count": imported_count}
+
+
+def import_phone_archive_payload(payload: dict) -> dict:
+    archive_items = payload.get("archive", [])
+    if not isinstance(archive_items, list) or not archive_items:
+        return {"error": "В архивном JSON нет данных."}, HTTPStatus.BAD_REQUEST
+
+    imported_measurements = 0
+    imported_cells = 0
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        for item in archive_items:
+            if not isinstance(item, dict):
+                continue
+            locomotive = item.get("locomotive") or {}
+            if not isinstance(locomotive, dict):
+                continue
+            series = text(locomotive.get("series")).strip()
+            loco_number = text(locomotive.get("number")).strip()
+            measurement_date = text(item.get("measurementDate")).strip()
+            repair_type = text(item.get("repairType")).strip()
+            wheel_pairs = item.get("wheelPairs") or []
+            if not loco_number or not measurement_date or not repair_type or not isinstance(wheel_pairs, list) or not wheel_pairs:
+                continue
+            wheel_pair_count = int(locomotive.get("wheelPairCount") or len(wheel_pairs))
+            ensure_phone_locomotive(cur, series, loco_number, wheel_pair_count)
+            kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive=?", (loco_number,)).fetchall()
+            kp_values = {(int(r), int(c)): text(v) for r, c, v in kp_rows}
+            rows = phone_archive_rows_from_payload(measurement_date, loco_number, repair_type, wheel_pairs, kp_values)
+            if not rows:
+                continue
+            year_value = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+            cur.execute(
+                "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+                (year_value, measurement_date, loco_number, repair_type),
+            )
+            cur.executemany(
+                "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            imported_measurements += 1
+            imported_cells += len(rows)
+        conn.commit()
+
+    return {"ok": True, "imported_measurements": imported_measurements, "imported_cells": imported_cells}
+
+
+def import_phone_measurement_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"error": "Некорректный JSON."}, HTTPStatus.BAD_REQUEST
+
+    missing = phone_measurement_missing_fields(payload)
+    if missing:
+        return {"error": "В замере не заполнены обязательные данные.", "missing": missing[:20]}, HTTPStatus.BAD_REQUEST
+
+    locomotive = payload.get("locomotive") or {}
+    series = text(locomotive.get("series")).strip()
+    loco_number = text(locomotive.get("number")).strip()
+    measurement_date = text(payload.get("measurementDate")).strip()
+    repair_type = text(payload.get("repairType")).strip()
+    wheel_pairs = payload.get("wheelPairs") or []
+    wheel_pair_count = int(locomotive.get("wheelPairCount") or len(wheel_pairs))
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        ensure_phone_locomotive(cur, series, loco_number, wheel_pair_count)
+        kp_rows = cur.execute("SELECT r, c, v FROM kp_data WHERE locomotive=?", (loco_number,)).fetchall()
+        kp_values = {(int(r), int(c)): text(v) for r, c, v in kp_rows}
+        rows = phone_archive_rows_from_payload(measurement_date, loco_number, repair_type, wheel_pairs, kp_values)
+        if not rows:
+            return {"error": "Не удалось собрать строки замера."}, HTTPStatus.BAD_REQUEST
+        year_value = int(measurement_date[:4]) if len(measurement_date) >= 4 and measurement_date[:4].isdigit() else dt.date.today().year
+        cur.execute(
+            "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=?",
+            (year_value, measurement_date, loco_number, repair_type),
+        )
+        cur.executemany(
+            "INSERT OR REPLACE INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+
+    return {"ok": True, "imported_measurements": 1, "imported_cells": len(rows)}
+
+
+def import_phone_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"error": "Некорректный JSON."}, HTTPStatus.BAD_REQUEST
+    if payload.get("exportType") == "archiveData" or "archive" in payload:
+        return import_phone_archive_payload(payload)
+    if payload.get("exportType") == "referenceData" or "locomotives" in payload:
+        return import_phone_reference_payload(payload)
+    if int(payload.get("formatVersion", 0) or 0) == 1:
+        return import_phone_measurement_payload(payload)
+    return {"error": "Нераспознанный формат телефона."}, HTTPStatus.BAD_REQUEST
+
+
 def require_openpyxl():
     try:
         from openpyxl import Workbook, load_workbook
@@ -1751,6 +2221,8 @@ HTML = """<!doctype html>
       <div class="actions">
         <a href="/">На главную</a>
         <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
+        <button id="phoneImportBtn" type="button" onclick="choosePhoneImportFile()">Импорт с телефона</button>
+        <button id="phoneExportBtn" type="button" onclick="openPhoneExportDialog()">Экспорт на телефон</button>
         <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       </div>
@@ -1911,6 +2383,8 @@ HTML = """<!doctype html>
     </div>
   </div>
 
+  <input id="phoneImportFile" type="file" accept=".json,application/json" style="display:none">
+
   <div id="normsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="normsTitle">
     <div class="modal">
       <div class="modal-head">
@@ -1941,6 +2415,59 @@ HTML = """<!doctype html>
       <div class="modal-actions">
         <button type="button" onclick="closeNormsDialog()">Отмена</button>
         <button id="saveNormsBtn" class="primary" type="button" onclick="saveNormsDialog()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="phoneExportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="phoneExportTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="phoneExportTitle">Экспорт на телефон</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closePhoneExportDialog()">×</button>
+      </div>
+      <div class="norms-toolbar" style="flex-wrap:wrap;">
+        <label><input type="radio" name="phoneExportKind" value="archive" checked onchange="renderPhoneExportForm()"> Архив</label>
+        <label><input type="radio" name="phoneExportKind" value="reference" onchange="renderPhoneExportForm()"> Справочник</label>
+        <label><input type="radio" name="phoneExportFormat" value="json" checked> JSON-файл</label>
+        <label><input type="radio" name="phoneExportFormat" value="qr"> Анимированный QR</label>
+      </div>
+      <div id="phoneArchiveSection" class="filters" style="align-items:flex-start; margin-bottom:8px;">
+        <label>Локомотивы
+          <select id="phoneExportLocomotives" multiple size="8" style="width:260px"></select>
+        </label>
+        <label>Дата с
+          <input id="phoneExportDateFrom" type="date" style="width:160px">
+        </label>
+        <label>Дата по
+          <input id="phoneExportDateTo" type="date" style="width:160px">
+        </label>
+      </div>
+      <div id="phoneReferenceSection" class="filters" style="align-items:flex-start; margin-bottom:8px;">
+        <label>Локомотивы
+          <select id="phoneReferenceLocomotives" multiple size="8" style="width:260px"></select>
+        </label>
+      </div>
+      <div id="phoneExportStatus" class="status">Если ничего не выбрать, экспортируется весь архив или весь справочник.</div>
+      <div class="modal-actions">
+        <button type="button" onclick="closePhoneExportDialog()">Отмена</button>
+        <button class="primary" type="button" onclick="runPhoneExport()">Экспорт</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="phoneQrModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="phoneQrTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="phoneQrTitle">Анимированный QR-код</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closePhoneQrDialog()">×</button>
+      </div>
+      <div id="phoneQrStatus" class="status" style="text-align:center; margin-top:0;">Подготовка...</div>
+      <div style="display:flex; justify-content:center;">
+        <img id="phoneQrImage" alt="QR" style="width:320px; height:320px; border:1px solid var(--line); background:#fff; border-radius:10px; padding:8px;">
+      </div>
+      <div id="phoneQrHint" class="status" style="text-align:center; margin-top:10px;"></div>
+      <div class="modal-actions">
+        <button type="button" onclick="closePhoneQrDialog()">Закрыть</button>
       </div>
     </div>
   </div>
@@ -2003,6 +2530,9 @@ let locomotiveInputSource = 'loaded';
 let initialLoadPromise = null;
 let locomotiveSwitchPromise = null;
 let normsRows = [];
+let phoneQrTimer = null;
+let phoneQrFrames = [];
+let phoneQrIndex = 0;
 
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -2242,6 +2772,177 @@ function downloadArchiveTemplate(){
       current.textContent = 'Файл скачивается';
     }
   }, 300);
+}
+function phoneExportKind(){
+  return document.querySelector('input[name="phoneExportKind"]:checked')?.value || 'archive';
+}
+function phoneExportFormat(){
+  return document.querySelector('input[name="phoneExportFormat"]:checked')?.value || 'json';
+}
+function renderPhoneExportLocomotives(){
+  const archiveSelect = document.getElementById('phoneExportLocomotives');
+  const referenceSelect = document.getElementById('phoneReferenceLocomotives');
+  const items = [];
+  const seen = new Set();
+  const addNumber = number => {
+    const value = String(number || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    items.push(value);
+  };
+  (archiveRows || []).forEach(row => addNumber(row.locomotive));
+  (state?.locomotives || LOCOMOTIVE_CHOICES || []).forEach(item => addNumber(item.number));
+  const html = items.map(number => `<option value="${esc(number)}">${esc(number)}</option>`).join('');
+  if (archiveSelect) archiveSelect.innerHTML = html;
+  if (referenceSelect) referenceSelect.innerHTML = html;
+}
+function renderPhoneExportForm(){
+  const kind = phoneExportKind();
+  const archiveSection = document.getElementById('phoneArchiveSection');
+  const referenceSection = document.getElementById('phoneReferenceSection');
+  const status = document.getElementById('phoneExportStatus');
+  if (archiveSection) archiveSection.style.display = kind === 'archive' ? 'flex' : 'none';
+  if (referenceSection) referenceSection.style.display = kind === 'reference' ? 'flex' : 'none';
+  if (status) {
+    status.textContent = kind === 'archive'
+      ? 'Если ничего не выбрать, экспортируется весь архив.'
+      : 'Если ничего не выбрать, экспортируется весь справочник.';
+  }
+}
+function openPhoneExportDialog(){
+  const modal = document.getElementById('phoneExportModal');
+  renderPhoneExportLocomotives();
+  renderPhoneExportForm();
+  if (modal) modal.classList.add('open');
+}
+function closePhoneExportDialog(){
+  const modal = document.getElementById('phoneExportModal');
+  if (modal) modal.classList.remove('open');
+}
+function closePhoneQrDialog(){
+  const modal = document.getElementById('phoneQrModal');
+  if (phoneQrTimer) {
+    clearInterval(phoneQrTimer);
+    phoneQrTimer = null;
+  }
+  phoneQrFrames = [];
+  phoneQrIndex = 0;
+  if (modal) modal.classList.remove('open');
+}
+function selectedPhoneExportLocomotives(kind){
+  const select = document.getElementById(kind === 'reference' ? 'phoneReferenceLocomotives' : 'phoneExportLocomotives');
+  if (!select) return [];
+  return Array.from(select.selectedOptions || []).map(option => option.value).filter(Boolean);
+}
+async function downloadPhoneExport(kind, format){
+  const params = new URLSearchParams();
+  params.set('kind', kind);
+  params.set('format', format);
+  selectedPhoneExportLocomotives(kind).forEach(loco => params.append('locomotive', loco));
+  const dateFrom = document.getElementById('phoneExportDateFrom')?.value || '';
+  const dateTo = document.getElementById('phoneExportDateTo')?.value || '';
+  if (kind === 'archive') {
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+  }
+  if (format === 'json') {
+    await downloadBlob(`${API}/api/phone-export?${params.toString()}`, kind === 'reference' ? 'export_reference.json' : 'archive_export.json', document.getElementById('phoneExportStatus'));
+    return;
+  }
+  const res = await fetch(`${API}/api/phone-export?${params.toString()}`, { cache: 'no-store' });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.error) {
+    throw new Error(payload.error || 'Не удалось подготовить QR');
+  }
+  phoneQrFrames = payload.frames || [];
+  phoneQrIndex = 0;
+  const img = document.getElementById('phoneQrImage');
+  const status = document.getElementById('phoneQrStatus');
+  const hint = document.getElementById('phoneQrHint');
+  if (img && phoneQrFrames.length) img.src = phoneQrFrames[0];
+  if (status) status.textContent = `Передача кадра: 01 / ${String(payload.total_frames || phoneQrFrames.length).padStart(2, '0')}`;
+  if (hint) hint.textContent = kind === 'reference'
+    ? 'Откройте на телефоне импорт справочника и наведите камеру на мерцающий QR.'
+    : 'Откройте на телефоне импорт замера и наведите камеру на мерцающий QR.';
+  closePhoneExportDialog();
+  const modal = document.getElementById('phoneQrModal');
+  if (modal) modal.classList.add('open');
+  if (phoneQrTimer) clearInterval(phoneQrTimer);
+  phoneQrTimer = setInterval(() => {
+    if (!phoneQrFrames.length) return;
+    phoneQrIndex = (phoneQrIndex + 1) % phoneQrFrames.length;
+    if (img) img.src = phoneQrFrames[phoneQrIndex];
+    if (status) status.textContent = `Передача кадра: ${String(phoneQrIndex + 1).padStart(2, '0')} / ${String(phoneQrFrames.length).padStart(2, '0')}`;
+  }, 160);
+}
+function runPhoneExport(){
+  const status = document.getElementById('phoneExportStatus');
+  const kind = phoneExportKind();
+  const format = phoneExportFormat();
+  if (status) status.textContent = 'Подготовка...';
+  downloadPhoneExport(kind, format).then(() => {
+    if (format === 'json' && status) status.textContent = 'Файл скачан';
+    if (format === 'json') closePhoneExportDialog();
+  }).catch(error => {
+    if (status) status.textContent = error.message || 'Не удалось экспортировать на телефон';
+  });
+}
+function choosePhoneImportFile(){
+  if (!CAN_EDIT) return;
+  const input = document.getElementById('phoneImportFile');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+function readPhoneImportFile(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(JSON.parse(String(reader.result || '{}')));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать файл'));
+    reader.readAsText(file, 'utf-8');
+  });
+}
+async function importPhonePayload(payload){
+  const res = await fetch(`${API}/api/phone-import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify(payload),
+  });
+  const response = await res.json().catch(() => ({}));
+  if (!res.ok || response.error) {
+    const missing = Array.isArray(response.missing) && response.missing.length ? `\\n\\n${response.missing.slice(0, 12).join('\\n')}` : '';
+    throw new Error((response.error || 'Не удалось импортировать телефонные данные') + missing);
+  }
+  return response;
+}
+async function handlePhoneImportFile(file){
+  const status = document.getElementById('archiveStatus');
+  try {
+    if (status) status.textContent = 'Импорт с телефона...';
+    const payload = await readPhoneImportFile(file);
+    const result = await importPhonePayload(payload);
+    await loadState(getCurrentLoco());
+    await loadArchive();
+    renderPhoneExportLocomotives();
+    const message = result.imported_measurements ? `Импортировано замеров: ${result.imported_measurements}.` : (result.imported_count ? `Импортировано локомотивов: ${result.imported_count}.` : 'Импорт выполнен.');
+    if (status) status.textContent = message;
+  } catch (error) {
+    if (status) status.textContent = error.message || 'Не удалось импортировать телефонные данные';
+  }
+}
+function renderPhoneQrFrame(){
+  const img = document.getElementById('phoneQrImage');
+  const status = document.getElementById('phoneQrStatus');
+  if (!img || !phoneQrFrames.length) return;
+  img.src = phoneQrFrames[phoneQrIndex];
+  if (status) status.textContent = `Передача кадра: ${String(phoneQrIndex + 1).padStart(2, '0')} / ${String(phoneQrFrames.length).padStart(2, '0')}`;
 }
 function renderArchiveExportLocomotives(){
   const select = document.getElementById('archiveExportLocomotives');
@@ -3787,12 +4488,24 @@ document.addEventListener('mousedown', event => {
 document.getElementById('normsModal').addEventListener('mousedown', event => {
   if (event.target.id === 'normsModal') closeNormsDialog();
 });
+document.getElementById('phoneExportModal').addEventListener('mousedown', event => {
+  if (event.target.id === 'phoneExportModal') closePhoneExportDialog();
+});
+document.getElementById('phoneQrModal').addEventListener('mousedown', event => {
+  if (event.target.id === 'phoneQrModal') closePhoneQrDialog();
+});
 document.getElementById('archiveExportModal').addEventListener('mousedown', event => {
   if (event.target.id === 'archiveExportModal') closeArchiveExportDialog();
 });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.getElementById('normsModal')?.classList.contains('open')) {
     closeNormsDialog();
+  }
+  if (event.key === 'Escape' && document.getElementById('phoneExportModal')?.classList.contains('open')) {
+    closePhoneExportDialog();
+  }
+  if (event.key === 'Escape' && document.getElementById('phoneQrModal')?.classList.contains('open')) {
+    closePhoneQrDialog();
   }
   if (event.key === 'Escape' && document.getElementById('archiveExportModal')?.classList.contains('open')) {
     closeArchiveExportDialog();
@@ -3804,6 +4517,10 @@ document.getElementById('kpLocomotive').addEventListener('change', e => loadKpDa
 document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilter);
 document.getElementById('archiveLocomotive').addEventListener('change', loadArchive);
 document.getElementById('archiveSearch').addEventListener('input', loadArchive);
+document.getElementById('phoneImportFile').addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  if (file) handlePhoneImportFile(file);
+});
 document.getElementById('archiveExcelFile').addEventListener('change', event => {
   const file = event.target.files?.[0];
   if (file) importArchiveExcelFile(file);
@@ -3946,6 +4663,42 @@ class Handler(BaseHTTPRequestHandler):
                 send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
 
+        if route == "/api/phone-export":
+            if not require_auth(self):
+                return
+            try:
+                qs = parse_qs(parsed.query)
+                kind = text(qs.get("kind", ["archive"])[0]).strip().lower()
+                fmt = text(qs.get("format", ["json"])[0]).strip().lower()
+                selected_locomotives = [text(item).strip() for item in qs.get("locomotive", []) if text(item).strip()]
+                date_from = text(qs.get("date_from", [""])[0]).strip()
+                date_to = text(qs.get("date_to", [""])[0]).strip()
+                selected_period = (date_from, date_to) if (date_from or date_to) else None
+                payload = build_phone_export_payload(kind, selected_locomotives, selected_period)
+                if fmt == "qr":
+                    frames = build_phone_qr_frames(payload)
+                    send_json(self, {
+                        "ok": True,
+                        "kind": kind,
+                        "format": fmt,
+                        "frames": frames,
+                        "total_frames": len(frames),
+                        "payload_summary": {
+                            "exportType": payload.get("exportType"),
+                            "formatVersion": payload.get("formatVersion"),
+                        },
+                    })
+                    return
+                if kind == "reference":
+                    filename = f"export_{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+                else:
+                    filename = f"archive_export_{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+                data = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+                send_file(self, data, filename, "application/json; charset=utf-8")
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self):
@@ -4025,6 +4778,21 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 data = base64.b64decode(encoded)
                 result = import_archive_excel_bytes(data)
+                if isinstance(result, tuple):
+                    body, status = result
+                    send_json(self, body, status)
+                else:
+                    send_json(self, result)
+            except Exception as exc:
+                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if route == "/api/phone-import":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                result = import_phone_payload(payload)
                 if isinstance(result, tuple):
                     body, status = result
                     send_json(self, body, status)
