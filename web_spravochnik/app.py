@@ -144,6 +144,10 @@ def ensure_db() -> None:
             cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT NOT NULL DEFAULT 0")
         if "deleted_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT NOT NULL DEFAULT 0")
+        if "wheel_pair_count" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN wheel_pair_count INT")
+        if "section_count" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN section_count INT")
         cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.execute(
             """
@@ -343,14 +347,21 @@ def load_state(year: int) -> dict:
             employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["milk_note"])])
         for row in cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at
             FROM inventory
-            WHERE y=? AND COALESCE(deleted_at, 0) = 0
+            WHERE y=?
             ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid
             """,
             (year,),
         ):
-            inventory.append([text(row["ser"]), text(row["num"]), text(row["inv"])])
+            inventory.append([
+                text(row["ser"]),
+                text(row["num"]),
+                text(row["inv"]),
+                int(row["wheel_pair_count"] or 0),
+                int(row["section_count"] or 0),
+                int(row["deleted_at"] or 0),
+            ])
     return {"year": year, "norms": norms, "employees": employees, "inventory": inventory}
 
 
@@ -391,7 +402,7 @@ def save_state(payload: dict) -> None:
 
         existing_rows = cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count
             FROM inventory
             WHERE y=?
             """,
@@ -401,8 +412,20 @@ def save_state(payload: dict) -> None:
         submitted_keys: set[tuple[str, str]] = set()
         now = int(dt.datetime.now().timestamp() * 1000)
         for order_index, row in enumerate(inventory, start=1):
-            row = list(row or []) + [""] * 3
+            row = list(row or []) + [""] * 6
             ser, num, inv = [text(v).strip() for v in row[:3]]
+            try:
+                wheel_pair_count = int(row[3] or 0)
+            except Exception:
+                wheel_pair_count = 0
+            try:
+                section_count = int(row[4] or 0)
+            except Exception:
+                section_count = 0
+            try:
+                deleted_at = int(row[5] or 0)
+            except Exception:
+                deleted_at = 0
             if not (ser or num):
                 continue
             submitted_keys.add((ser, num))
@@ -410,18 +433,18 @@ def save_state(payload: dict) -> None:
                 cur.execute(
                     """
                     UPDATE inventory
-                    SET inv=?, sort_order=?, updated_at=?, deleted_at=0
+                    SET inv=?, wheel_pair_count=?, section_count=?, sort_order=?, updated_at=?, deleted_at=?
                     WHERE y=? AND ser=? AND num=?
                     """,
-                    (inv, order_index, now, year, ser, num),
+                    (inv, wheel_pair_count or None, section_count or None, order_index, now, deleted_at, year, ser, num),
                 )
             else:
                 cur.execute(
                     """
-                    INSERT INTO inventory (y, ser, num, inv, sort_order, updated_at, deleted_at)
-                    VALUES (?,?,?,?,?,?,0)
+                    INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, sort_order, updated_at, deleted_at)
+                    VALUES (?,?,?,?,?,?,?,?,?)
                     """,
-                    (year, ser, num, inv, order_index, now),
+                    (year, ser, num, inv, wheel_pair_count or None, section_count or None, order_index, now, deleted_at),
                 )
         for (ser, num), row in existing_map.items():
             if (ser, num) in submitted_keys:
@@ -487,6 +510,17 @@ HTML = """<!doctype html>
     td input[type=checkbox]{width:auto;height:auto}
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
+    .deleted-row{opacity:.55}
+    .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+    .modal-backdrop.show{display:flex}
+    .modal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(16,32,51,.2)}
+    .modal h2{margin:0 0 12px;font-size:22px}
+    .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .modal-grid label{display:flex;flex-direction:column;gap:6px;font-weight:700}
+    .modal-grid input{padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+    .modal-actions button{min-width:120px}
   </style>
 </head>
 <body>
@@ -513,6 +547,29 @@ HTML = """<!doctype html>
   <div id="norms" class="panel active"></div>
   <div id="employees" class="panel"></div>
   <div id="inventory" class="panel"></div>
+</div>
+<div id="addLocoModal" class="modal-backdrop" onclick="closeAddLocomotiveModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>Добавить локомотив</h2>
+    <div class="modal-grid">
+      <label>Серия
+        <input id="newLocoSeries" autocomplete="off">
+      </label>
+      <label>Номер
+        <input id="newLocoNumber" autocomplete="off">
+      </label>
+      <label>Кол-во к. пар
+        <input id="newLocoWheelPairs" type="number" min="1" step="1" value="6">
+      </label>
+      <label>Кол-во секций
+        <input id="newLocoSections" type="number" min="1" step="1" value="1">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" onclick="closeAddLocomotiveModal()">Отмена</button>
+      <button type="button" class="primary" onclick="submitAddLocomotive()">Добавить</button>
+    </div>
+  </div>
 </div>
 <script>
 const API = '/spravochnik';
@@ -561,13 +618,20 @@ function renderAll(){
 
 function renderTable(name, rows, editableRows){
   const panel = document.getElementById(name);
-  const rowbar = (editableRows && CAN_EDIT) ? `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>` : '';
+  const rowbar = (editableRows && CAN_EDIT)
+    ? (
+      name === 'inventory'
+        ? `<div class="rowbar"><button onclick="openAddLocomotiveModal()">Добавить локомотив</button><button onclick="toggleInventoryDeleted()">Удалить</button></div>`
+        : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
+    )
+    : '';
   let html = rowbar + '<table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
+    const isDeleted = name === 'inventory' && Number(row[5] || 0) > 0;
     const draggable = name === 'inventory' && CAN_EDIT
       ? ' draggable="true" ondragstart="dragStartRow(event, ' + r + ')" ondragover="dragOverRow(event, ' + r + ')" ondrop="dropRow(event, ' + r + ')" ondragend="dragEndRow(event)"'
       : '';
-    html += `<tr onclick="selectRow('${name}', ${r})"${draggable}><td>${r + 1}</td>`;
+    html += `<tr class="${isDeleted ? 'deleted-row' : ''}" onclick="selectRow('${name}', ${r})"${draggable}><td>${r + 1}</td>`;
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
@@ -589,19 +653,40 @@ function selectRow(name, row){ selected[name] = row; }
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; }
 function addRow(name){
   if (!CAN_EDIT) return;
+  if (name === 'inventory') {
+    openAddLocomotiveModal();
+    return;
+  }
   const cols = headers[name].length;
   state[name].push(Array(cols).fill(''));
   renderTable(name, state[name], true);
 }
 function deleteRow(name){
   if (!CAN_EDIT) return;
+  if (name === 'inventory') {
+    toggleInventoryDeleted();
+    return;
+  }
   const row = selected[name] >= 0 ? selected[name] : state[name].length - 1;
   if(row >= 0) state[name].splice(row, 1);
   selected[name] = -1;
   renderTable(name, state[name], true);
 }
+function toggleInventoryDeleted(){
+  if (!CAN_EDIT) return;
+  const row = selected.inventory >= 0 ? selected.inventory : state.inventory.length - 1;
+  if (row < 0) return;
+  const current = state.inventory[row];
+  const deletedAt = Number(current[5] || 0);
+  current[5] = deletedAt > 0 ? 0 : Date.now();
+  renderTable('inventory', state.inventory, true);
+}
 function dragStartRow(event, row){
   if (!CAN_EDIT) return;
+  if ((state.inventory[row] && Number(state.inventory[row][5] || 0) > 0)) {
+    event.preventDefault();
+    return;
+  }
   draggedRowIndex = row;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', String(row));
@@ -675,6 +760,39 @@ async function purgeDeleted(){
   }
   await loadState();
   alert(data.purged ? `Окончательно удалено: ${data.purged}` : 'Нечего удалять');
+}
+function openAddLocomotiveModal(){
+  if (!CAN_EDIT) return;
+  document.getElementById('newLocoSeries').value = '';
+  document.getElementById('newLocoNumber').value = '';
+  document.getElementById('newLocoWheelPairs').value = '6';
+  document.getElementById('newLocoSections').value = '1';
+  document.getElementById('addLocoModal').classList.add('show');
+  setTimeout(() => document.getElementById('newLocoSeries').focus(), 0);
+}
+function closeAddLocomotiveModal(event){
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('addLocoModal').classList.remove('show');
+}
+function submitAddLocomotive(){
+  if (!CAN_EDIT) return;
+  const series = document.getElementById('newLocoSeries').value.trim();
+  const number = document.getElementById('newLocoNumber').value.trim();
+  const wheelPairs = Math.max(1, Number(document.getElementById('newLocoWheelPairs').value) || 1);
+  const sections = Math.max(1, Number(document.getElementById('newLocoSections').value) || 1);
+  if (!series || !number) {
+    alert('Заполните серию и номер локомотива');
+    return;
+  }
+  const exists = state.inventory.some(row => (row[0] || '').trim() === series && (row[1] || '').trim() === number);
+  if (exists) {
+    alert('Такой локомотив уже есть в справочнике');
+    return;
+  }
+  state.inventory.push([series, number, '', wheelPairs, sections, 0]);
+  selected.inventory = state.inventory.length - 1;
+  closeAddLocomotiveModal();
+  renderTable('inventory', state.inventory, true);
 }
 function showTab(id, btn){
   document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));

@@ -163,6 +163,10 @@ def ensure_db() -> None:
         if "deleted_at" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT")
             cur.execute("UPDATE inventory SET deleted_at = 0 WHERE deleted_at IS NULL")
+        if "wheel_pair_count" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN wheel_pair_count INT")
+        if "section_count" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN section_count INT")
         cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
@@ -342,7 +346,7 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
 
 def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -> list[dict[str, str]]:
     query = """
-        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
+        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
     """
@@ -363,6 +367,8 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
         sort_order = int(row["sort_order"] or 0)
         updated_at = int(row["updated_at"] or 0)
         deleted_at = int(row["deleted_at"] or 0)
+        wheel_pair_count = int(row["wheel_pair_count"] or 0)
+        section_count = int(row["section_count"] or 0)
         if deleted_at > 0 and not include_deleted:
             continue
         label = f"{series} {number}".strip()
@@ -376,6 +382,8 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
                 "sortOrder": sort_order,
                 "updatedAt": updated_at,
                 "deletedAt": deleted_at,
+                "wheelPairCount": wheel_pair_count,
+                "sectionCount": section_count,
             }
         )
     return result
@@ -401,6 +409,7 @@ def load_state(locomotive: str | None = None, wheel_pair_count: int | None = Non
         series = series_for_locomotive(cur, locomotive)
         axis_count = locomotive_axis_count(series, locomotive)
         repair_options = allowed_repairs(series, locomotive)
+        locomotive_record = next((item for item in locomotives if text(item.get("number")).strip() == locomotive), None)
 
         meta = None
         if locomotive:
@@ -412,9 +421,13 @@ def load_state(locomotive: str | None = None, wheel_pair_count: int | None = Non
         measurement_date = dt.date.today().isoformat()
         year = dt.date.today().year
         if wheel_pair_count is None:
-            wheel_pair_count = axis_count
+            wheel_pair_count = int(locomotive_record.get("wheelPairCount") or 0) if locomotive_record else 0
+            if wheel_pair_count <= 0:
+                wheel_pair_count = axis_count
         if section_count is None:
-            section_count = default_section_count(axis_count)
+            section_count = int(locomotive_record.get("sectionCount") or 0) if locomotive_record else 0
+            if section_count <= 0:
+                section_count = default_section_count(axis_count)
         has_manual_meta = False
         if meta:
             year = int(meta["y"] or year)
