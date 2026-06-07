@@ -357,9 +357,9 @@ def load_state(year: int) -> dict:
             inventory.append([
                 text(row["ser"]),
                 text(row["num"]),
-                text(row["inv"]),
                 int(row["wheel_pair_count"] or 0),
                 int(row["section_count"] or 0),
+                text(row["inv"]),
                 int(row["deleted_at"] or 0),
             ])
     return {"year": year, "norms": norms, "employees": employees, "inventory": inventory}
@@ -413,15 +413,16 @@ def save_state(payload: dict) -> None:
         now = int(dt.datetime.now().timestamp() * 1000)
         for order_index, row in enumerate(inventory, start=1):
             row = list(row or []) + [""] * 6
-            ser, num, inv = [text(v).strip() for v in row[:3]]
+            ser, num = [text(v).strip() for v in row[:2]]
             try:
-                wheel_pair_count = int(row[3] or 0)
+                wheel_pair_count = int(row[2] or 0)
             except Exception:
                 wheel_pair_count = 0
             try:
-                section_count = int(row[4] or 0)
+                section_count = int(row[3] or 0)
             except Exception:
                 section_count = 0
+            inv = text(row[4]).strip()
             try:
                 deleted_at = int(row[5] or 0)
             except Exception:
@@ -541,6 +542,7 @@ HTML = """<!doctype html>
     td input[type=checkbox]{width:auto;height:auto}
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
+    .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
     .deleted-row{opacity:.55}
     .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
     .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
@@ -595,6 +597,9 @@ HTML = """<!doctype html>
       <label>Кол-во секций
         <input id="newLocoSections" type="number" min="1" step="1" value="1">
       </label>
+      <label style="grid-column:1 / -1">8-значный номер
+        <input id="newLocoInv" autocomplete="off" inputmode="numeric" maxlength="8" placeholder="00000000">
+      </label>
     </div>
     <div class="modal-actions">
       <button type="button" onclick="closeAddLocomotiveModal()">Отмена</button>
@@ -611,7 +616,7 @@ let canceledState = null;
 const headers = {
   norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
   employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Молоко прим.'],
-  inventory: ['Серия','Номер','Инвентарный №']
+  inventory: ['Серия','Номер','Кол-во КП','Ко-во секций','8-значный номер']
 };
 
 function fillYears(){
@@ -677,8 +682,12 @@ function renderTable(name, rows, editableRows){
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
         html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
+      } else if (name === 'inventory' && c === 2) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 3) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else {
-        const cls = c === 0 || (name === 'employees' && c < 3) ? 'left' : '';
+        const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 4) ? 'left' : '';
         html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       }
     });
@@ -869,6 +878,7 @@ function submitAddLocomotive(){
   const number = document.getElementById('newLocoNumber').value.trim();
   const wheelPairs = Math.max(1, Number(document.getElementById('newLocoWheelPairs').value) || 1);
   const sections = Math.max(1, Number(document.getElementById('newLocoSections').value) || 1);
+  const inv = document.getElementById('newLocoInv').value.trim();
   if (!series || !number) {
     alert('Заполните серию и номер локомотива');
     return;
@@ -878,7 +888,7 @@ function submitAddLocomotive(){
     alert('Такой локомотив уже есть в справочнике');
     return;
   }
-  state.inventory.push([series, number, '', wheelPairs, sections, 0]);
+  state.inventory.push([series, number, wheelPairs, sections, inv, 0]);
   selected.inventory = state.inventory.length - 1;
   closeAddLocomotiveModal();
   renderTable('inventory', state.inventory, true);
