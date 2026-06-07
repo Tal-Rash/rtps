@@ -137,6 +137,11 @@ def ensure_db() -> None:
             )
             """
         )
+        existing_inventory_cols = {row[1] for row in cur.execute("PRAGMA table_info(inventory)").fetchall()}
+        if "updated_at" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT NOT NULL DEFAULT 0")
+        if "deleted_at" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT NOT NULL DEFAULT 0")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS ts_norms_data (
@@ -333,7 +338,15 @@ def load_state(year: int) -> dict:
             (year,),
         ):
             employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["milk_note"])])
-        for row in cur.execute("SELECT ser, num, inv FROM inventory WHERE y=? ORDER BY rowid", (year,)):
+        for row in cur.execute(
+            """
+            SELECT ser, num, inv
+            FROM inventory
+            WHERE y=? AND COALESCE(deleted_at, 0) = 0
+            ORDER BY COALESCE(updated_at, 0) DESC, rowid
+            """,
+            (year,),
+        ):
             inventory.append([text(row["ser"]), text(row["num"]), text(row["inv"])])
     return {"year": year, "norms": norms, "employees": employees, "inventory": inventory}
 
@@ -373,14 +386,53 @@ def save_state(payload: dict) -> None:
             emp_rows,
         )
 
-        cur.execute("DELETE FROM inventory WHERE y=?", (year,))
-        inv_rows = []
+        existing_rows = cur.execute(
+            """
+            SELECT ser, num, inv, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at
+            FROM inventory
+            WHERE y=?
+            """,
+            (year,),
+        ).fetchall()
+        existing_map = {(text(row["ser"]).strip(), text(row["num"]).strip()): row for row in existing_rows}
+        submitted_keys: set[tuple[str, str]] = set()
+        now = int(dt.datetime.now().timestamp() * 1000)
         for row in inventory:
             row = list(row or []) + [""] * 3
             ser, num, inv = [text(v).strip() for v in row[:3]]
-            if ser or num:
-                inv_rows.append((year, ser, num, inv))
-        cur.executemany("INSERT INTO inventory VALUES (?,?,?,?)", inv_rows)
+            if not (ser or num):
+                continue
+            submitted_keys.add((ser, num))
+            if (ser, num) in existing_map:
+                cur.execute(
+                    """
+                    UPDATE inventory
+                    SET inv=?, updated_at=?, deleted_at=0
+                    WHERE y=? AND ser=? AND num=?
+                    """,
+                    (inv, now, year, ser, num),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO inventory (y, ser, num, inv, updated_at, deleted_at)
+                    VALUES (?,?,?,?,?,0)
+                    """,
+                    (year, ser, num, inv, now),
+                )
+        for (ser, num), row in existing_map.items():
+            if (ser, num) in submitted_keys:
+                continue
+            if int(row["deleted_at"] or 0) > 0:
+                continue
+            cur.execute(
+                """
+                UPDATE inventory
+                SET updated_at=?, deleted_at=?
+                WHERE y=? AND ser=? AND num=?
+                """,
+                (now, now, year, ser, num),
+            )
         conn.commit()
 
 
