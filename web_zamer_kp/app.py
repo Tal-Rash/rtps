@@ -1037,7 +1037,7 @@ def build_phone_reference_payload(selected_numbers: list[str] | None = None) -> 
     selected = {text(number).strip() for number in (selected_numbers or []) if text(number).strip()}
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
-        locomotives = load_locomotives(cur)
+        locomotives = load_inventory_records(cur, include_deleted=True)
         if selected:
             locomotives = [item for item in locomotives if item["number"] in selected]
 

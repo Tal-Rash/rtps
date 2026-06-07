@@ -436,6 +436,27 @@ def save_state(payload: dict) -> None:
         conn.commit()
 
 
+def purge_deleted_inventory() -> dict:
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        deleted_rows = cur.execute(
+            """
+            SELECT y, ser, num
+            FROM inventory
+            WHERE COALESCE(deleted_at, 0) > 0
+            """
+        ).fetchall()
+        if not deleted_rows:
+            return {"ok": True, "purged": 0}
+        numbers = [text(row["num"]).strip() for row in deleted_rows if text(row["num"]).strip()]
+        cur.execute("DELETE FROM inventory WHERE COALESCE(deleted_at, 0) > 0")
+        if numbers:
+            placeholders = ",".join("?" for _ in numbers)
+            cur.execute(f"DELETE FROM kp_data WHERE TRIM(COALESCE(locomotive, '')) IN ({placeholders})", numbers)
+        conn.commit()
+        return {"ok": True, "purged": len(deleted_rows)}
+
+
 HTML = """<!doctype html>
 <html lang="ru">
 <head>
@@ -476,6 +497,7 @@ HTML = """<!doctype html>
       <a href="/">На главную</a>
       <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
       <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+      <button id="purgeBtn" title="Удалить окончательно" aria-label="Удалить окончательно" onclick="purgeDeleted()">✕</button>
       <label>Год <select id="year"></select></label>
       <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
     </div>
@@ -608,6 +630,18 @@ function restoreChanges(){
   renderAll();
   alert('Восстановлено');
 }
+async function purgeDeleted(){
+  if (!CAN_EDIT) return;
+  if (!confirm('Удалить окончательно все помеченные как удалённые локомотивы?')) return;
+  const res = await fetch(`${API}/api/purge_deleted_inventory`, {method:'POST'});
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || data.ok === false){
+    alert(data.error || 'Не удалось удалить окончательно');
+    return;
+  }
+  await loadState();
+  alert(data.purged ? `Окончательно удалено: ${data.purged}` : 'Нечего удалять');
+}
 function showTab(id, btn){
   document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -721,6 +755,14 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(raw.decode("utf-8"))
                 save_state(payload)
                 send_json(self, {"ok": True})
+            except Exception as exc:
+                send_json(self, {"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if path == "/api/purge_deleted_inventory":
+            if not require_auth(self, need_edit=True):
+                return
+            try:
+                send_json(self, purge_deleted_inventory())
             except Exception as exc:
                 send_json(self, {"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
