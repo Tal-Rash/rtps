@@ -28,7 +28,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.36"
+APP_VERSION = "web-zkp-1.37"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2605,14 +2605,14 @@ function setRuntimeState(text){
   if (node) node.textContent = text;
 }
 window.addEventListener('error', event => {
-  const message = event?.message || 'Ошибка в странице';
-  const detail = event?.error?.stack || `${event?.filename || ''}${event?.lineno ? `:${event.lineno}` : ''}${event?.colno ? `:${event.colno}` : ''}`;
+  const message = event.message || 'Ошибка в странице';
+  const detail = event.error.stack || `${event.filename || ''}${event.lineno ? `:${event.lineno}` : ''}${event.colno ? `:${event.colno}` : ''}`;
   showRuntimeError(message, detail);
 });
 window.addEventListener('unhandledrejection', event => {
-  const reason = event?.reason;
-  const message = reason?.message || String(reason || 'Необработанное отклонение promise');
-  const detail = reason?.stack || '';
+  const reason = event.reason;
+  const message = reason.message || String(reason || 'Необработанное отклонение promise');
+  const detail = reason.stack || '';
   showRuntimeError(message, detail);
 });
 const API = '{{APP_PREFIX}}';
@@ -2657,10 +2657,10 @@ let phoneImportBusy = false;
 let phoneImportLastText = '';
 
 function esc(value){
-  return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+  return String(value || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 }
 function n(value){
-  const x = parseFloat(String(value ?? '').replace(',', '.'));
+  const x = parseFloat(String(value || '').replace(',', '.'));
   return Number.isFinite(x) ? x : null;
 }
 function clampCell(row, col){
@@ -2715,23 +2715,23 @@ function focusCell(row, col, extend = false){
   if (target) target.focus();
 }
 function cellValue(row, col){
-  return state?.measurements?.[row]?.[col] ?? '';
+  return state.measurements[row][col] || '';
 }
 function setCellValue(row, col, value){
-  if (!state?.measurements?.[row]) return;
+  if (!state.measurements[row]) return;
   state.measurements[row][col] = value;
   const input = document.querySelector(`input[data-row="${row}"][data-col="${col}"]`);
   if (input && input.value !== value) input.value = value;
 }
 function readClipboardText(){
-  if (navigator.clipboard?.readText) {
+  if (navigator.clipboard.readText) {
     return navigator.clipboard.readText().catch(() => clipboardCache || '');
   }
   return Promise.resolve(clipboardCache || '');
 }
 function writeClipboardText(text){
-  clipboardCache = String(text ?? '');
-  if (navigator.clipboard?.writeText) {
+  clipboardCache = String(text || '');
+  if (navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(clipboardCache).catch(() => undefined);
   }
   const ta = document.createElement('textarea');
@@ -2896,10 +2896,10 @@ function downloadArchiveTemplate(){
   }, 300);
 }
 function phoneExportKind(){
-  return document.querySelector('input[name="phoneExportKind"]:checked')?.value || 'archive';
+  return document.querySelector('input[name="phoneExportKind"]:checked').value || 'archive';
 }
 function phoneExportFormat(){
-  return document.querySelector('input[name="phoneExportFormat"]:checked')?.value || 'json';
+  return document.querySelector('input[name="phoneExportFormat"]:checked').value || 'json';
 }
 function renderPhoneExportLocomotives(){
   const archiveSelect = document.getElementById('phoneExportLocomotives');
@@ -2913,7 +2913,7 @@ function renderPhoneExportLocomotives(){
     items.push(value);
   };
   (archiveRows || []).forEach(row => addNumber(row.locomotive));
-  (state?.locomotives || LOCOMOTIVE_CHOICES || []).forEach(item => addNumber(item.number));
+  (state.locomotives || LOCOMOTIVE_CHOICES || []).forEach(item => addNumber(item.number));
   const html = items.map(number => `<option value="${esc(number)}">${esc(number)}</option>`).join('');
   if (archiveSelect) archiveSelect.innerHTML = html;
   if (referenceSelect) referenceSelect.innerHTML = html;
@@ -2992,7 +2992,7 @@ function closePhoneImportDialog(){
   if (modal) modal.classList.remove('open');
 }
 async function openPhoneImportDialog(){
-  const canUseQr = window.isSecureContext && ('BarcodeDetector' in window) && navigator.mediaDevices?.getUserMedia;
+  const canUseQr = window.isSecureContext && ('BarcodeDetector' in window) && navigator.mediaDevices.getUserMedia;
   if (!canUseQr) {
     setPhoneImportStatus('QR-сканер на этом устройстве недоступен. Открою JSON-файл.');
     choosePhoneImportFile();
@@ -3047,7 +3047,7 @@ async function startPhoneQrScan(){
     setPhoneImportStatus('Этот браузер не умеет сканировать QR-коды. Можно загрузить JSON-файл.');
     return;
   }
-  if (!navigator.mediaDevices?.getUserMedia) {
+  if (!navigator.mediaDevices.getUserMedia) {
     setPhoneImportStatus('Камера недоступна в этом браузере. Можно загрузить JSON-файл.');
     return;
   }
@@ -3076,7 +3076,7 @@ async function startPhoneQrScan(){
       phoneImportBusy = true;
       try {
         const codes = await phoneImportDetector.detect(video);
-        const raw = codes?.[0]?.rawValue || '';
+        const raw = codes[0].rawValue || '';
         if (raw && raw !== phoneImportLastText) {
           phoneImportLastText = raw;
           await importPhoneText(raw, 'QR');
@@ -3107,8 +3107,8 @@ async function downloadPhoneExport(kind, format){
   params.set('kind', kind);
   params.set('format', format);
   selectedPhoneExportLocomotives(kind).forEach(loco => params.append('locomotive', loco));
-  const dateFrom = document.getElementById('phoneExportDateFrom')?.value || '';
-  const dateTo = document.getElementById('phoneExportDateTo')?.value || '';
+  const dateFrom = document.getElementById('phoneExportDateFrom').value || '';
+  const dateTo = document.getElementById('phoneExportDateTo').value || '';
   if (kind === 'archive') {
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
@@ -3225,7 +3225,7 @@ function renderArchiveExportLocomotives(){
       numbers.push(number);
     }
   });
-  (state?.locomotives || LOCOMOTIVE_CHOICES || []).forEach(item => {
+  (state.locomotives || LOCOMOTIVE_CHOICES || []).forEach(item => {
     const number = String(item.number || '').trim();
     if (number && !seen.has(number)) {
       seen.add(number);
@@ -3254,8 +3254,8 @@ function downloadArchiveExport(){
   const status = document.getElementById('archiveExportStatus');
   const params = new URLSearchParams();
   selectedArchiveExportLocomotives().forEach(loco => params.append('locomotive', loco));
-  const dateFrom = document.getElementById('archiveExportDateFrom')?.value || '';
-  const dateTo = document.getElementById('archiveExportDateTo')?.value || '';
+  const dateFrom = document.getElementById('archiveExportDateFrom').value || '';
+  const dateTo = document.getElementById('archiveExportDateTo').value || '';
   if (dateFrom) params.set('date_from', dateFrom);
   if (dateTo) params.set('date_to', dateTo);
   if (status) status.textContent = 'Файл готовится...';
@@ -3298,7 +3298,7 @@ async function importArchiveExcelFile(file){
     if (!res.ok || payload.error) throw new Error(payload.error || 'Не удалось импортировать Excel');
     await loadState(getCurrentLoco());
     await loadArchive();
-    const skipped = payload.errors?.length ? ` Пропущено строк: ${payload.errors.length}.` : '';
+    const skipped = payload.errors.length ? ` Пропущено строк: ${payload.errors.length}.` : '';
     if (status) status.textContent = `Импортировано замеров: ${payload.imported_measurements}; ячеек: ${payload.imported_cells}.${skipped}`;
   } catch (error) {
     if (status) status.textContent = error.message || 'Не удалось импортировать Excel';
@@ -3322,7 +3322,7 @@ async function copySelectionToClipboard(){
 }
 function applyPastedBlock(text, startRow, startCol){
   if (!CAN_EDIT || !state) return;
-  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  const rows = String(text || '').replace(/\\r/g, '').split('\\n');
   if (rows.length && rows[rows.length - 1] === '') rows.pop();
   if (!rows.length) return;
   let touched = false;
@@ -3381,7 +3381,7 @@ function archiveRowMeta(row){
 }
 function archiveMeasurementKey(meta){
   if (!meta) return '';
-  return [meta.year, meta.measurement_date, meta.locomotive, meta.repair_type].map(value => String(value ?? '')).join('|');
+  return [meta.year, meta.measurement_date, meta.locomotive, meta.repair_type].map(value => String(value || '')).join('|');
 }
 function setArchiveSelectedMeasurement(rowIndex){
   const meta = archiveRowMeta(rowIndex);
@@ -3391,7 +3391,7 @@ function setArchiveSelectedMeasurement(rowIndex){
 function renderArchiveMeasurementSelection(){
   document.querySelectorAll('#archiveBody tr').forEach(tr => {
     const key = [tr.dataset.year, tr.dataset.measurementDate, tr.dataset.locomotive, tr.dataset.repairType]
-      .map(value => String(value ?? ''))
+      .map(value => String(value || ''))
       .join('|');
     tr.classList.toggle('selected-measurement', !!archiveSelectedMeasurementKey && key === archiveSelectedMeasurementKey);
   });
@@ -3401,8 +3401,8 @@ function archiveCellElement(row, col){
 }
 function archiveCellValue(row, col){
   const input = archiveCellElement(row, col);
-  if (input) return input.value ?? '';
-  return archiveRowMeta(row)?.values?.[col] ?? '';
+  if (input) return input.value || '';
+  return archiveRowMeta(row).values[col] || '';
 }
 function archiveCellInBounds(row, col){
   return row >= 0 && row < archiveRows.length && col >= 10 && col <= 19;
@@ -3499,7 +3499,7 @@ async function copyArchiveSelectionToClipboard(){
 }
 async function applyArchivePastedBlock(text, startRow, startCol){
   if (!CAN_EDIT) return false;
-  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  const rows = String(text || '').replace(/\\r/g, '').split('\\n');
   if (rows.length && rows[rows.length - 1] === '') rows.pop();
   if (!rows.length) return false;
   const changes = [];
@@ -3567,8 +3567,8 @@ async function handleArchiveCellChange(row, col, value, input){
   if (!CAN_EDIT) return;
   const meta = archiveRowMeta(row);
   if (!meta) return;
-  const current = String(input?.dataset?.original ?? '');
-  const next = String(value ?? '').trim();
+  const current = String(input.dataset.original || '');
+  const next = String(value || '').trim();
   if (current === next) return;
   const ok = confirm('Вы уверены, что хотите изменить данные в архиве?');
   if (!ok) {
@@ -3660,7 +3660,7 @@ async function switchTab(tab){
   setActiveTab(tab);
   if (tab === 'kp') {
     renderKpLocomotiveOptions();
-    await loadKpData(document.getElementById('kpLocomotive')?.value || kpSelectedLoco || state?.locomotive || '');
+    await loadKpData(document.getElementById('kpLocomotive').value || kpSelectedLoco || state.locomotive || '');
   }
   if (tab === 'archive') {
     await loadArchive();
@@ -3685,7 +3685,7 @@ function currentSectionCount(number){
   return 0;
 }
 function getSeries(number){
-  const item = (state?.locomotives || []).find(x => x.number === number);
+  const item = (state.locomotives || []).find(x => x.number === number);
   return item ? (item.series || '') : '';
 }
 function getAxisCount(number){
@@ -3726,7 +3726,7 @@ function sectionSpec(axisCount, sectionCount){
 function measurementClass(col, value){
   const val = n(value);
   if (val === null) return '';
-  const norm = state?.norms || {};
+  const norm = state.norms || {};
   const pair = (left, right) => col === left || col === right;
   let item = null;
   if (pair(0,1)) item = norm.max_prokat;
@@ -3742,10 +3742,10 @@ function measurementClass(col, value){
 }
 function renderLocoOptions(){
   const input = document.getElementById('locomotive');
-  const items = state?.locomotives || [];
+  const items = state.locomotives || [];
   const choices = LOCOMOTIVE_CHOICES || [];
   if (!input) return;
-  if (state?.locomotive && (items.some(x => x.number === state.locomotive) || choices.some(x => x.number === state.locomotive))) {
+  if (state.locomotive && (items.some(x => x.number === state.locomotive) || choices.some(x => x.number === state.locomotive))) {
     input.value = state.locomotive;
   } else if (choices.length && !input.value) {
     input.value = choices[0].number;
@@ -3755,7 +3755,7 @@ function renderLocoOptions(){
 }
 function renderLocoDropdown(filterText = '', open = true){
   const dropdown = document.getElementById('locomotiveDropdown');
-  const items = (LOCOMOTIVE_CHOICES && LOCOMOTIVE_CHOICES.length ? LOCOMOTIVE_CHOICES : (state?.locomotives || []));
+  const items = (LOCOMOTIVE_CHOICES && LOCOMOTIVE_CHOICES.length ? LOCOMOTIVE_CHOICES : (state.locomotives || []));
   if (!dropdown) return;
   const textValue = String(filterText || '').trim().toLowerCase();
   const filtered = textValue
@@ -3787,7 +3787,7 @@ function chooseLoco(value){
   onLocomotiveCommit();
 }
 function parsePositiveInt(value){
-  const n = parseInt(String(value ?? '').trim(), 10);
+  const n = parseInt(String(value || '').trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 async function promptManualLocoCounts(loco){
@@ -3815,7 +3815,7 @@ async function promptManualLocoCounts(loco){
 function renderArchiveLocomotives(){
   const select = document.getElementById('archiveLocomotive');
   const items = LOCOMOTIVE_CHOICES || [];
-  const current = select?.value || '';
+  const current = select.value || '';
   if (!select) return;
   select.innerHTML = items.length
     ? ['<option value="">Все локомотивы</option>']
@@ -3824,7 +3824,7 @@ function renderArchiveLocomotives(){
     : '<option value="">Нет локомотивов в справочнике</option>';
   if (current && items.some(x => x.number === current)) {
     select.value = current;
-  } else if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
+  } else if (state.locomotive && items.some(x => x.number === state.locomotive)) {
     select.value = state.locomotive;
   }
 }
@@ -3840,7 +3840,7 @@ function renderKpLocomotiveOptions(){
   const select = document.getElementById('kpLocomotive');
   const items = LOCOMOTIVE_CHOICES || [];
   if (!select) return;
-  const current = select.value || kpSelectedLoco || state?.locomotive || '';
+  const current = select.value || kpSelectedLoco || state.locomotive || '';
   select.innerHTML = items.length
     ? ['<option value="">Выберите локомотив</option>', '<option value="Все локомотивы">Все локомотивы</option>']
         .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
@@ -3848,7 +3848,7 @@ function renderKpLocomotiveOptions(){
     : '<option value="">Нет локомотивов в справочнике</option>';
   if (current && (current === 'Все локомотивы' || items.some(x => x.number === current))) {
     select.value = current;
-  } else if (state?.locomotive && items.some(x => x.number === state.locomotive)) {
+  } else if (state.locomotive && items.some(x => x.number === state.locomotive)) {
     select.value = state.locomotive;
   } else if (items.length) {
     select.value = items[0].number;
@@ -3883,7 +3883,7 @@ function renderKpTable(){
 
   body.innerHTML = kpRows.map((row, rowIndex) => {
     const values = row.values || [];
-    const search = row.search || values.map(value => String(value ?? '').trim().toLowerCase()).join(' ');
+    const search = row.search || values.map(value => String(value || '').trim().toLowerCase()).join(' ');
     const editable = !!row.editable && CAN_EDIT && !allMode;
     if (allMode) {
       return `
@@ -3896,11 +3896,11 @@ function renderKpTable(){
     }
     return `
       <tr data-row="${rowIndex}" data-search="${esc(search)}">
-        <td class="readonly">${esc(values[0] ?? '')}</td>
+        <td class="readonly">${esc(values[0] || '')}</td>
         ${[1, 2, 3].map(colIndex => `
           <td data-col="${colIndex}">
             <input
-              value="${esc(values[colIndex] ?? '')}"
+              value="${esc(values[colIndex] || '')}"
               ${editable ? '' : 'readonly'}
               data-row="${rowIndex}"
               data-col="${colIndex}"
@@ -3917,7 +3917,7 @@ function renderKpTable(){
   renderKpStatus(kpStatusLabel(kpSelectedStatus, allMode, kpRows.length));
 }
 function applyKpSearchFilter(){
-  const textValue = (document.getElementById('kpSearch')?.value || kpSearchText || '').trim().toLowerCase();
+  const textValue = (document.getElementById('kpSearch').value || kpSearchText || '').trim().toLowerCase();
   kpSearchText = textValue;
   document.querySelectorAll('#kpBody tr').forEach(tr => {
     const haystack = (tr.dataset.search || tr.textContent || '').toLowerCase();
@@ -3977,11 +3977,11 @@ function focusKpCell(row, col, extend = false){
 function kpCellValue(row, col){
   const input = kpCellElement(row, col);
   if (input) return input.value || '';
-  return kpRows[row]?.values?.[col] ?? '';
+  return kpRows[row].values[col] || '';
 }
 function setKpCellValue(row, col, value){
   if (!kpRows[row] || !kpCellInBounds(row, col)) return false;
-  const next = String(value ?? '').trim();
+  const next = String(value || '').trim();
   kpRows[row].values[col] = next;
   const input = kpCellElement(row, col);
   if (input && input.value !== next) input.value = next;
@@ -4049,7 +4049,7 @@ function kpRowValues(rowIndex){
 function handleKpCellFocus(row, col, input){
   if (!kpAllMode && !kpSuppressFocusSelection) selectKpCell(row, col, false);
   if (!input) return;
-  input.select?.();
+  input.select();
 }
 function handleKpCellMouseDown(event, row, col){
   if (!CAN_EDIT || kpAllMode) return true;
@@ -4066,13 +4066,13 @@ function handleKpCellMouseDown(event, row, col){
   } else {
     selectKpCell(row, col, false);
   }
-  if (input) input.select?.();
+  if (input) input.select();
   event.preventDefault();
   return false;
 }
 function handleKpCellChange(row, col, value, input){
   if (!CAN_EDIT || kpAllMode || kpLoading) return;
-  const next = String(value ?? '').trim();
+  const next = String(value || '').trim();
   if (!kpRows[row]) return;
   kpRows[row].values[col] = next;
   if (input) input.value = next;
@@ -4112,10 +4112,10 @@ function collectKpRowsFromView(){
   return kpRows.map((row, rowIndex) => {
     if (kpAllMode) return row.values || [];
     const values = [`${rowIndex + 1}`, '', '', ''];
-    values[1] = kpCellElement(rowIndex, 1)?.value ?? row.values?.[1] ?? '';
-    values[2] = kpCellElement(rowIndex, 2)?.value ?? row.values?.[2] ?? '';
-    values[3] = kpCellElement(rowIndex, 3)?.value ?? row.values?.[3] ?? '';
-    return values.map(value => String(value ?? '').trim());
+    values[1] = kpCellElement(rowIndex, 1).value || row.values[1] || '';
+    values[2] = kpCellElement(rowIndex, 2).value || row.values[2] || '';
+    values[3] = kpCellElement(rowIndex, 3).value || row.values[3] || '';
+    return values.map(value => String(value || '').trim());
   });
 }
 async function saveKpDataChanges(){
@@ -4157,11 +4157,11 @@ async function saveKpDataChanges(){
 }
 async function loadKpData(nextValue){
   const select = document.getElementById('kpLocomotive');
-  const value = String(nextValue ?? select?.value ?? kpSelectedLoco ?? state?.locomotive ?? '').trim();
+  const value = String(nextValue || select.value || kpSelectedLoco || state.locomotive || '').trim();
   if (select && value && select.value !== value) {
     select.value = value;
   }
-  kpSelectedLoco = value || (state?.locomotive || '');
+  kpSelectedLoco = value || (state.locomotive || '');
   clearKpSelection();
   kpLoading = true;
   renderKpStatus('Загрузка КП данных...');
@@ -4208,10 +4208,10 @@ function updateArchiveSortButton(){
 function renderMeta(){
   const meta = document.getElementById('inputMeta');
   if (!meta) return;
-  const loco = getCurrentLoco() || state?.locomotive || '';
+  const loco = getCurrentLoco() || state.locomotive || '';
   const axisCount = getAxisCount(loco);
-  const wheelPairCount = Math.max(1, Number(state?.wheel_pair_count) || axisCount);
-  const sectionCount = Math.max(1, Number(state?.section_count) || defaultSectionCount(axisCount));
+  const wheelPairCount = Math.max(1, Number(state.wheel_pair_count) || axisCount);
+  const sectionCount = Math.max(1, Number(state.section_count) || defaultSectionCount(axisCount));
   meta.textContent = `Колесных пар: ${wheelPairCount} · Секций: ${sectionCount}`;
 }
 function renderArchiveTable(){
@@ -4259,7 +4259,7 @@ function renderTable(){
   const visibleRows = Math.max(1, Math.min(axisCount, INPUT_ROWS));
   const sections = sectionSpec(axisCount, sectionCount);
   const sectionMap = new Map(sections.map(item => [item.start, item]));
-  const rows = state?.measurements || [];
+  const rows = state.measurements || [];
   let html = '';
   for (let r = 0; r < visibleRows; r += 1) {
     const section = sectionMap.get(r);
@@ -4269,7 +4269,7 @@ function renderTable(){
     }
     html += `<td class="fixed number-col">${r + 1}</td>`;
     for (let c = 0; c < 10; c += 1) {
-      const value = rows[r]?.[c] ?? '';
+      const value = rows[r][c] || '';
       const cls = measurementClass(c, value);
       html += `
         <td class="measure-cell ${cls}" data-col="${c}">
@@ -4293,8 +4293,8 @@ function renderTable(){
 }
 async function loadArchive(){
   const status = document.getElementById('archiveStatus');
-  const loco = document.getElementById('archiveLocomotive')?.value || '';
-  const search = document.getElementById('archiveSearch')?.value || '';
+  const loco = document.getElementById('archiveLocomotive').value || '';
+  const search = document.getElementById('archiveSearch').value || '';
   if (status) status.textContent = 'Загрузка архива...';
   clearArchiveSelection();
   updateArchiveSortButton();
@@ -4364,14 +4364,14 @@ function refreshRowClasses(rowIndex){
 function recalcDiameters(){
   const loco = getCurrentLoco();
   const axisCount = getAxisCount(loco);
-  const kpMap = state?.kp || {};
-  const rows = state?.measurements || [];
+  const kpMap = state.kp || {};
+  const rows = state.measurements || [];
   for (let r = 0; r < axisCount; r += 1) {
     const kpRow = r;
-    const leftKp = n(kpMap[kpRow]?.[2]);
-    const rightKp = n(kpMap[kpRow]?.[3]);
-    const leftBand = n(rows[r]?.[6]);
-    const rightBand = n(rows[r]?.[7]);
+    const leftKp = n(kpMap[kpRow][2]);
+    const rightKp = n(kpMap[kpRow][3]);
+    const leftBand = n(rows[r][6]);
+    const rightBand = n(rows[r][7]);
     const leftValue = (leftKp !== null && leftBand !== null) ? String(Math.round(leftKp + leftBand * 2)) : '';
     const rightValue = (rightKp !== null && rightBand !== null) ? String(Math.round(rightKp + rightBand * 2)) : '';
     rows[r][8] = leftValue;
@@ -4451,7 +4451,7 @@ function handleKeydown(event, row, col){
   if (key === 'ArrowDown' && row < (getVisibleAxisCount() - 1)) moveFocus(row + 1, col);
 }
 async function fetchStatePayload(locomotive){
-  const loco = String(locomotive ?? '').trim();
+  const loco = String(locomotive || '').trim();
   const res = await fetch(`${API}/api/state?locomotive=${encodeURIComponent(loco)}`, { cache: 'no-store' });
   if (!res.ok) {
     return null;
@@ -4459,7 +4459,7 @@ async function fetchStatePayload(locomotive){
   return res.json();
 }
 async function loadState(nextLocomotive, preloadedState = null, manualConfig = null){
-  const loco = (nextLocomotive ?? getCurrentLoco()).trim();
+  const loco = (nextLocomotive || getCurrentLoco()).trim();
   setStatus('Загрузка...');
   let loaded = preloadedState;
   if (!loaded) {
@@ -4515,7 +4515,7 @@ async function maybeSwitchLocomotive(nextValue){
   if (locomotiveSwitchPromise) {
     await locomotiveSwitchPromise.catch(() => undefined);
   }
-  locomotiveSwitchPromise = switchLocomotive(String(nextValue ?? '').trim()).finally(() => {
+  locomotiveSwitchPromise = switchLocomotive(String(nextValue || '').trim()).finally(() => {
     locomotiveSwitchPromise = null;
   });
   return locomotiveSwitchPromise;
@@ -4524,7 +4524,7 @@ async function switchLocomotive(next){
   if (initialLoadPromise) {
     await initialLoadPromise.catch(() => undefined);
   }
-  const current = state?.locomotive || '';
+  const current = state.locomotive || '';
   if (!next) {
     const input = document.getElementById('locomotive');
     if (input) input.value = current;
@@ -4751,7 +4751,7 @@ document.getElementById('locomotiveDropdown').addEventListener('mousedown', even
   chooseLoco(btn.dataset.loco || '');
 });
 document.addEventListener('mousedown', event => {
-  const picker = event.target.closest?.('.loco-picker');
+  const picker = event.target.closest('.loco-picker');
   if (!picker) hideLocoDropdown();
 });
 document.getElementById('normsModal').addEventListener('mousedown', event => {
@@ -4770,19 +4770,19 @@ document.getElementById('archiveExportModal').addEventListener('mousedown', even
   if (event.target.id === 'archiveExportModal') closeArchiveExportDialog();
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && document.getElementById('normsModal')?.classList.contains('open')) {
+  if (event.key === 'Escape' && document.getElementById('normsModal').classList.contains('open')) {
     closeNormsDialog();
   }
-  if (event.key === 'Escape' && document.getElementById('phoneExportModal')?.classList.contains('open')) {
+  if (event.key === 'Escape' && document.getElementById('phoneExportModal').classList.contains('open')) {
     closePhoneExportDialog();
   }
-  if (event.key === 'Escape' && document.getElementById('phoneQrModal')?.classList.contains('open')) {
+  if (event.key === 'Escape' && document.getElementById('phoneQrModal').classList.contains('open')) {
     closePhoneQrDialog();
   }
-  if (event.key === 'Escape' && document.getElementById('phoneImportModal')?.classList.contains('open')) {
+  if (event.key === 'Escape' && document.getElementById('phoneImportModal').classList.contains('open')) {
     closePhoneImportDialog();
   }
-  if (event.key === 'Escape' && document.getElementById('archiveExportModal')?.classList.contains('open')) {
+  if (event.key === 'Escape' && document.getElementById('archiveExportModal').classList.contains('open')) {
     closeArchiveExportDialog();
   }
 });
@@ -4793,11 +4793,11 @@ document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilte
 document.getElementById('archiveLocomotive').addEventListener('change', loadArchive);
 document.getElementById('archiveSearch').addEventListener('input', loadArchive);
 document.getElementById('phoneImportFile').addEventListener('change', event => {
-  const file = event.target.files?.[0];
+  const file = event.target.files[0];
   if (file) handlePhoneImportFile(file);
 });
 document.getElementById('archiveExcelFile').addEventListener('change', event => {
-  const file = event.target.files?.[0];
+  const file = event.target.files[0];
   if (file) importArchiveExcelFile(file);
 });
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
@@ -4806,7 +4806,7 @@ updateHistoryButtons();
 initialLoadPromise = loadState();
 setRuntimeState('Интерфейс загружен, идет подгрузка данных...');
 initialLoadPromise.then(() => setRuntimeState('Интерфейс готов')).catch(error => {
-  setRuntimeState(`Ошибка загрузки: ${error?.message || error}`);
+  setRuntimeState(`Ошибка загрузки: ${error.message || error}`);
 });
 </script>
 </body>
