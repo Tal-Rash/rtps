@@ -2227,14 +2227,21 @@ async function downloadBlob(url, fallbackName, statusElement){
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   if (statusElement) statusElement.textContent = 'Файл скачан';
 }
-async function downloadArchiveTemplate(){
+function downloadArchiveTemplate(){
   const status = document.getElementById('archiveStatus');
-  try {
-    if (status) status.textContent = 'Файл готовится...';
-    await downloadBlob(`${API}/api/archive-excel-template`, 'Шаблон_импорта_архива.xlsx', status);
-  } catch (error) {
-    if (status) status.textContent = error.message || 'Не удалось скачать шаблон';
-  }
+  if (status) status.textContent = 'Файл готовится...';
+  const link = document.createElement('a');
+  link.href = `${API}/api/archive-excel-template`;
+  link.download = 'Шаблон_импорта_архива.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => {
+    const current = document.getElementById('archiveStatus');
+    if (current && current.textContent === 'Файл готовится...') {
+      current.textContent = 'Файл скачивается';
+    }
+  }, 300);
 }
 function renderArchiveExportLocomotives(){
   const select = document.getElementById('archiveExportLocomotives');
