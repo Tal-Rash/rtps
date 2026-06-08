@@ -1390,7 +1390,7 @@ HTML_TEMPLATE = """<!doctype html>
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
-    .topbar,.panel { background:rgba(255,255,255,.88); border:1px solid rgba(217,226,239,.9); border-radius:var(--radius); box-shadow:var(--shadow); }
+    .topbar,.panel { background:rgba(255,255,255,.88); border:1px solid var(--accent); border-radius:var(--radius); box-shadow:var(--shadow); }
     .topbar {
       position:sticky;
       top:12px;
@@ -1701,7 +1701,7 @@ HTML_TEMPLATE = """<!doctype html>
       cursor:pointer;
     }
     .act-start:disabled { opacity:.5; cursor:default; }
-    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
+    .table-wrap { overflow:auto; border:1px solid var(--accent); border-radius:18px; background:#fff; }
     .table-wrap > table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     .table-wrap > table th,
     .table-wrap > table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
