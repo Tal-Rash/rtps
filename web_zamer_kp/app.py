@@ -2698,6 +2698,22 @@ HTML = """<!doctype html>
     .panel { display:none; background:#fff; border:1px solid var(--line); border-top:none; border-radius:0 16px 16px 16px; padding:12px; }
     .panel.active { display:block; }
     .archive-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+    .archive-actions-menu { position:relative; display:inline-flex; }
+    .archive-actions-menu .menu-panel {
+      position:absolute;
+      top:calc(100% + 6px);
+      right:0;
+      min-width:220px;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:10px;
+      box-shadow:0 14px 36px rgba(0,27,61,.14);
+      padding:6px;
+      display:none;
+      z-index:12;
+    }
+    .archive-actions-menu.open .menu-panel { display:flex; flex-direction:column; gap:6px; }
+    .archive-actions-menu .menu-panel button { width:100%; justify-content:flex-start; }
     .archive-controls label { display:flex; align-items:center; gap:8px; }
     .archive-controls input { width:240px; }
     .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; display:flex; justify-content:center; margin-top:16px; }
@@ -2939,10 +2955,15 @@ HTML = """<!doctype html>
         </label>
         <button id="archiveSortBtn" type="button" onclick="toggleArchiveSort()">⬇ НОВЫЕ → СТАРЫЕ</button>
         <button id="archiveDeleteBtn" type="button" onclick="deleteSelectedArchiveMeasurement()">Удалить из архива</button>
-        <button id="archiveImportExcelBtn" type="button" onclick="chooseArchiveExcelFile()">Импорт из Excel</button>
-        <button id="archiveExportExcelBtn" type="button" onclick="openArchiveExportDialog()">Экспорт в Excel</button>
-        <button id="archiveTemplateExcelBtn" type="button" onclick="downloadArchiveTemplate()">Шаблон Excel</button>
-        <input id="archiveExcelFile" type="file" accept=".xlsx,.xlsm" style="display:none">
+        <div class="archive-actions-menu" id="archiveActionsMenu">
+          <button id="archiveActionsBtn" type="button" onclick="toggleArchiveActionsMenu(event)">Импорт / экспорт ▾</button>
+          <div class="menu-panel" role="menu" aria-label="Импорт и экспорт архива">
+            <button type="button" onclick="chooseArchiveExcelFile(); closeArchiveActionsMenu()">Импорт из Excel</button>
+            <button type="button" onclick="openArchiveExportDialog(); closeArchiveActionsMenu()">Экспорт в Excel</button>
+            <button type="button" onclick="downloadArchiveTemplate(); closeArchiveActionsMenu()">Шаблон Excel</button>
+          </div>
+          <input id="archiveExcelFile" type="file" accept=".xlsx,.xlsm" style="display:none">
+        </div>
       </div>
 
       <div class="table-shell archive-table-shell">
@@ -3315,6 +3336,22 @@ async function downloadArchiveTemplate(){
     if (status) status.textContent = error.message || 'Не удалось скачать шаблон';
   }
 }
+function toggleArchiveActionsMenu(event){
+  if (event) event.stopPropagation();
+  const menu = document.getElementById('archiveActionsMenu');
+  if (!menu) return;
+  menu.classList.toggle('open');
+}
+function closeArchiveActionsMenu(){
+  const menu = document.getElementById('archiveActionsMenu');
+  if (menu) menu.classList.remove('open');
+}
+document.addEventListener('click', (event) => {
+  const menu = document.getElementById('archiveActionsMenu');
+  if (!menu || !menu.classList.contains('open')) return;
+  if (menu.contains(event.target)) return;
+  closeArchiveActionsMenu();
+});
 function renderArchiveExportLocomotives(){
   const select = document.getElementById('archiveExportLocomotives');
   if (!select) return;
@@ -3342,6 +3379,7 @@ function openArchiveExportDialog(){
   renderArchiveExportLocomotives();
   if (status) status.textContent = 'Если локомотивы не выбраны, экспортируются все.';
   if (modal) modal.classList.add('open');
+  closeArchiveActionsMenu();
 }
 function closeArchiveExportDialog(){
   const modal = document.getElementById('archiveExportModal');
