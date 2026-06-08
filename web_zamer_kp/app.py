@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.66"
+APP_VERSION = "web-zkp-1.67"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2943,6 +2943,7 @@ HTML = """<!doctype html>
     .archive-table thead:focus-within .archive-head-collapsed { display:none; }
     .archive-table thead:hover .archive-head-expanded,
     .archive-table thead:focus-within .archive-head-expanded { display:inline; }
+    .archive-vert-head { text-align:center; }
     .archive-table thead tr:first-child th {
       height:28px !important;
       padding-top:2px !important;
@@ -2959,6 +2960,16 @@ HTML = """<!doctype html>
       line-height:1.15 !important;
       padding-top:4px !important;
       padding-bottom:4px !important;
+    }
+    .archive-table thead:hover tr:first-child th.archive-vert-head,
+    .archive-table thead:focus-within tr:first-child th.archive-vert-head {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: rotate(180deg);
+      white-space: normal;
+      line-height:1.05 !important;
+      padding-left:0 !important;
+      padding-right:0 !important;
     }
     .archive-table thead:hover tr:last-child th,
     .archive-table thead:focus-within tr:last-child th {
@@ -3185,34 +3196,34 @@ HTML = """<!doctype html>
           </colgroup>
           <thead>
             <tr>
-              <th rowspan="2">
+              <th class="archive-vert-head" rowspan="2">
                 <span class="archive-head-collapsed">Дата<br>ремонт</span>
                 <span class="archive-head-expanded">Дата выполнения обмера<br>и вид ремонта</span>
               </th>
-              <th rowspan="2">Секция</th>
-              <th rowspan="2">
+              <th class="archive-vert-head" rowspan="2">Секция</th>
+              <th class="archive-vert-head" rowspan="2">
                 <span class="archive-head-collapsed">Прокат</span>
                 <span class="archive-head-expanded">Наибольший прокат,<br>мм</span>
               </th>
-              <th rowspan="2">
+              <th class="archive-vert-head" rowspan="2">
                 <span class="archive-head-collapsed">Гребень</span>
                 <span class="archive-head-expanded">Наименьшая толщина<br>гребня, мм</span>
               </th>
-              <th rowspan="2">
+              <th class="archive-vert-head" rowspan="2">
                 <span class="archive-head-collapsed">Крутизна</span>
                 <span class="archive-head-expanded">Наибольший параметр<br>крутизны гребня, мм</span>
               </th>
-              <th rowspan="2">
+              <th class="archive-vert-head" rowspan="2">
                 <span class="archive-head-collapsed">Бандаж</span>
                 <span class="archive-head-expanded">Наименьшая толщ. бандажа<br>(за вычетом проката), мм</span>
               </th>
-              <th rowspan="2">
+              <th class="archive-vert-head" rowspan="2">
                 <span class="archive-head-collapsed">Диаметр</span>
                 <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
               </th>
-              <th rowspan="2">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</th>
-              <th rowspan="2">Число колесных пар с<br>прокатом 6 мм и более</th>
-              <th rowspan="2">Номер<br>КП</th>
+              <th class="archive-vert-head" rowspan="2">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</th>
+              <th class="archive-vert-head" rowspan="2">Число колесных пар с<br>прокатом 6 мм и более</th>
+              <th class="archive-vert-head" rowspan="2">Номер<br>КП</th>
               <th colspan="2">Прокат</th>
               <th colspan="2">Толщина<br>гребня</th>
               <th colspan="2">Крутизна<br>гребня</th>
