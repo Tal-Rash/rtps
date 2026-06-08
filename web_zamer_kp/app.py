@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.75"
+APP_VERSION = "web-zkp-1.78"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2862,7 +2862,15 @@ HTML = """<!doctype html>
     .archive-controls input { width:240px; }
     .input-locomotive-filter { display:flex; align-items:center; gap:8px; }
     .table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:12px; overflow:hidden; display:flex; justify-content:center; margin-top:16px; }
-    .archive-table-shell { margin-top:0; padding-top:10px; justify-content:flex-start; overflow-x:auto; }
+    .archive-table-shell {
+      margin-top:0;
+      padding-top:10px;
+      justify-content:flex-start;
+      max-height:calc(100vh - 280px);
+      overflow-y:auto;
+      overflow-x:hidden;
+      position:relative;
+    }
     .kp-shell { margin-top:12px; }
     .kp-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
     .kp-note { margin:6px 0 8px; color:var(--muted); font-size:13px; line-height:1.4; }
@@ -2933,6 +2941,48 @@ HTML = """<!doctype html>
     .archive-table th, .archive-table td { font-size:12px !important; text-align:center; vertical-align:middle; height:12px !important; padding:0 !important; line-height:12px !important; }
     .archive-table td { white-space:pre-line; }
     .archive-table tr { height:12px !important; }
+    .archive-table { width:max-content; min-width:100%; table-layout:fixed; --archive-head-row1-height:28px; }
+    .archive-table thead:hover,
+    .archive-table thead:focus-within { --archive-head-row1-height:145px; }
+    .archive-sticky-col {
+      position:sticky;
+      background:#fff;
+      z-index:4;
+    }
+    .archive-table thead .archive-sticky-col {
+      z-index:6;
+      background:#eef3f8;
+    }
+    .archive-table thead tr:first-child th {
+      position:sticky;
+      top:0;
+      z-index:8;
+    }
+    .archive-table thead tr:last-child th {
+      position:sticky;
+      top:var(--archive-head-row1-height);
+      z-index:7;
+    }
+    .archive-table thead tr:first-child th:nth-child(1),
+    .archive-table tbody td[data-col="0"] { left:0; }
+    .archive-table thead tr:first-child th:nth-child(2),
+    .archive-table tbody td[data-col="1"] { left:80px; }
+    .archive-table thead tr:first-child th:nth-child(3),
+    .archive-table tbody td[data-col="2"] { left:160px; }
+    .archive-table thead tr:first-child th:nth-child(4),
+    .archive-table tbody td[data-col="3"] { left:240px; }
+    .archive-table thead tr:first-child th:nth-child(5),
+    .archive-table tbody td[data-col="4"] { left:320px; }
+    .archive-table thead tr:first-child th:nth-child(6),
+    .archive-table tbody td[data-col="5"] { left:400px; }
+    .archive-table thead tr:first-child th:nth-child(7),
+    .archive-table tbody td[data-col="6"] { left:480px; }
+    .archive-table thead tr:first-child th:nth-child(8),
+    .archive-table tbody td[data-col="7"] { left:560px; }
+    .archive-table thead tr:first-child th:nth-child(9),
+    .archive-table tbody td[data-col="8"] { left:640px; }
+    .archive-table thead tr:first-child th:nth-child(10),
+    .archive-table tbody td[data-col="9"] { left:720px; }
     .archive-table thead th {
       line-height:1.05 !important;
       overflow:hidden;
@@ -3002,8 +3052,8 @@ HTML = """<!doctype html>
       box-sizing:border-box;
     }
     .archive-table { margin-left:0; }
-    .archive-table td.summary { width:110px; }
-    .archive-table td.first-col { width:220px; }
+    .archive-table td.summary { width:80px; }
+    .archive-table td.first-col { width:80px; }
     .archive-table tr.measurement-start td { border-top:2px solid #2f6fed; }
     .archive-table tr.measurement-start td:first-child { border-left:2px solid #2f6fed; }
     .archive-table tr.measurement-row td:last-child { border-right:2px solid #2f6fed; }
@@ -3179,15 +3229,15 @@ HTML = """<!doctype html>
       <div class="table-shell archive-table-shell">
         <table id="archiveTable" class="archive-table" aria-label="Архив замеров">
           <colgroup>
-            <col style="width:220px">
             <col style="width:80px">
-            <col style="width:110px">
-            <col style="width:110px">
-            <col style="width:110px">
-            <col style="width:110px">
-            <col style="width:110px">
-            <col style="width:90px">
-            <col style="width:90px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:80px">
             <col style="width:80px">
             <col style="width:60px"><col style="width:60px">
             <col style="width:60px"><col style="width:60px">
@@ -3197,40 +3247,40 @@ HTML = """<!doctype html>
           </colgroup>
           <thead>
             <tr>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">Дата<br>ремонт</span>
                 <span class="archive-head-expanded">Дата выполнения обмера<br>и вид ремонта</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">Секция</th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">Секция</th>
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">Прокат</span>
                 <span class="archive-head-expanded">Наибольший прокат,<br>мм</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">Гребень</span>
                 <span class="archive-head-expanded">Наименьшая толщина<br>гребня, мм</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">Крутизна</span>
                 <span class="archive-head-expanded">Наибольший параметр<br>крутизны гребня, мм</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">Бандаж</span>
                 <span class="archive-head-expanded">Наименьшая толщ. бандажа<br>(за вычетом проката), мм</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">Диаметр</span>
                 <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">КП с бандажом</span>
                 <span class="archive-head-expanded">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">
                 <span class="archive-head-collapsed">КП с прокатом 6+</span>
                 <span class="archive-head-expanded">Число колесных пар с<br>прокатом 6 мм и более</span>
               </th>
-              <th class="archive-vert-head" rowspan="2">Номер<br>КП</th>
+              <th class="archive-vert-head archive-sticky-col" rowspan="2">Номер<br>КП</th>
               <th colspan="2">Прокат</th>
               <th colspan="2">Толщина<br>гребня</th>
               <th colspan="2">Крутизна<br>гребня</th>
@@ -4674,18 +4724,18 @@ function renderArchiveTable(){
       if (index === 0) {
         const span = measurementSpans.get(rowIndex);
         if (!span) return '';
-        return `<td class="first-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        return `<td class="first-col archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index === 1) {
         const span = sectionSpans.get(rowIndex);
         if (!span) return '';
-        return `<td class="section-merged" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        return `<td class="section-merged archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 2 && index <= 8) {
         const span = measurementSpans.get(rowIndex);
         if (!span) return '';
         const summaryClass = index === 7 || index === 8 ? 'summary-merged' : 'summary-merged';
-        return `<td class="${summaryClass}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        return `<td class="${summaryClass} archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 10) {
         return `
@@ -4703,7 +4753,7 @@ function renderArchiveTable(){
             >
           </td>`;
       }
-      const cls = index === 9 ? 'axis-col' : 'summary';
+      const cls = index === 9 ? 'axis-col archive-sticky-col' : 'summary archive-sticky-col';
       return `<td class="${cls}" data-col="${index}">${esc(value)}</td>`;
     }).filter(Boolean).join('');
     return `<tr class="${rowClasses.join(' ')}" data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}" onmousedown="setArchiveSelectedMeasurement(${rowIndex})">${cells}</tr>`;
