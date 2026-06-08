@@ -2451,7 +2451,7 @@ function renderMonthTable(type, title, m, headers){
     '<col style="width:var(--number-col-width)">',
     '<col style="width:var(--cat-col-width)">',
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
-    '<col style="width:180px">'
+    '<col style="width:120px">'
   ].join('');
   const controlsHtml = type === 'plan' ? rowActionsHtml() : '<div></div>';
   return `
@@ -2463,7 +2463,7 @@ function renderMonthTable(type, title, m, headers){
       ${controlsHtml}
     </div>
     <div class="table-wrap">
-      <table class="compact month-table" style="width:${45 + 100 + 60 + 80 + (m.days * 36) + 180}px">
+      <table class="compact month-table" style="width:${45 + 100 + 60 + 80 + (m.days * 36) + 120}px">
         <colgroup>${colHtml}</colgroup>
         <thead><tr>${headHtml}</tr></thead>
         <tbody>${tableRows}</tbody>
