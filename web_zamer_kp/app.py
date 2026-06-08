@@ -2868,9 +2868,13 @@ HTML = """<!doctype html>
       background:#eef4ff;
       outline:none;
     }
-    table { border-collapse:collapse; width:max-content; table-layout:fixed; }
+    table { border-collapse:collapse; width:max-content; table-layout:fixed; border-radius:18px; overflow:hidden; }
     th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
     thead th { background:#eef3f8; font-weight:700; font-size:14px; line-height:1.1; }
+    table thead tr:first-child th:first-child { border-top-left-radius:18px; }
+    table thead tr:first-child th:last-child { border-top-right-radius:18px; }
+    table tbody tr:last-child td:first-child { border-bottom-left-radius:18px; }
+    table tbody tr:last-child td:last-child { border-bottom-right-radius:18px; }
     th.small { font-size:14px; line-height:1.1; }
     th.measure-head, td.measure-cell { width:60px; }
     th.section-col, td.section-col { width:80px; }
