@@ -1749,7 +1749,7 @@ HTML_TEMPLATE = """<!doctype html>
     }
     .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:28px; font-size:16px; }
     .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--accent); background:transparent; cursor:pointer; font-weight:800; font-size:15px; }
-    .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:1px solid var(--accent); background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
+    .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { border-color:var(--accent); color:var(--accent); background:transparent; }
