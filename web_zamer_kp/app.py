@@ -2886,22 +2886,26 @@ HTML = """<!doctype html>
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
-    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; height:24px; }
+    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; height:20px; }
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
     .archive-table td.section-merged { vertical-align:middle; font-weight:600; }
     .archive-table td.summary-merged { vertical-align:middle; }
+    .archive-table td.section-merged,
+    .archive-table td.summary-merged,
+    .archive-table td.axis-col,
+    .archive-table td.first-col { padding-top:0; padding-bottom:0; line-height:1.0; }
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
-      height:24px;
+      height:20px;
       border:0;
       text-align:center;
       background:transparent;
       padding:0;
       font-size:12px;
-      line-height:24px;
+      line-height:20px;
       display:block;
       box-sizing:border-box;
     }
