@@ -547,7 +547,7 @@ HTML = """<!doctype html>
     button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
     button.primary:disabled{opacity:.78}
-    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:22px}
+    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:12px}
     .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:700;cursor:pointer;color:#1f57d6}
     .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
@@ -831,8 +831,12 @@ async function purgeSelectedInventory(row){
     alert(data.error || 'Не удалось удалить окончательно');
     return;
   }
-  selected.inventory = -1;
-  await loadState();
+  state.inventory.splice(targetRowIndex, 1);
+  selected.inventory = state.inventory.length ? Math.min(targetRowIndex, state.inventory.length - 1) : -1;
+  renderTable('inventory', state.inventory, true);
+  syncInventoryActionButtons();
+  updateInventorySelectionHighlight();
+  updateSaveButton();
   return;
 }
 function dragStartRow(event, row){
