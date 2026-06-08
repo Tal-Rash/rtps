@@ -1429,7 +1429,7 @@ HTML_TEMPLATE = """<!doctype html>
     .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
     .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
     .month-strip button { border:1px solid var(--accent); background:transparent; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
-    .month-strip button.active { border-color:var(--accent); color:var(--accent); box-shadow:inset 0 -3px 0 var(--accent); }
+    .month-strip button.active { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:none; }
     .repair-strip { display:flex; gap:3px; flex-wrap:nowrap; margin:0; justify-content:center; }
     .repair-strip button { border:1px solid var(--accent); background:transparent; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
     .month-tools { display:none; }
