@@ -2886,7 +2886,7 @@ HTML = """<!doctype html>
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
-    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; }
+    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; height:28px; }
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
@@ -2895,12 +2895,15 @@ HTML = """<!doctype html>
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
-      height:34px;
+      height:28px;
       border:0;
       text-align:center;
       background:transparent;
-      padding:2px 3px;
+      padding:0;
       font-size:12px;
+      line-height:28px;
+      display:block;
+      box-sizing:border-box;
     }
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
