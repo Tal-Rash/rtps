@@ -1727,6 +1727,7 @@ HTML_TEMPLATE = """<!doctype html>
     }
     .act-start:disabled { opacity:.5; cursor:default; }
     .table-wrap { overflow:auto; border:1px solid var(--accent); border-radius:18px; background:#fff; }
+    .month-table-wrap { width:fit-content; max-width:100%; margin:0 auto; }
     .table-wrap > table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     .table-wrap > table th,
     .table-wrap > table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
@@ -2462,8 +2463,8 @@ function renderMonthTable(type, title, m, headers){
       <div class="section-title month-table-title">${title}</div>
       ${controlsHtml}
     </div>
-    <div class="table-wrap">
-      <table class="compact month-table" style="width:${45 + 100 + 72 + 100 + (m.days * 36) + 120}px">
+    <div class="table-wrap month-table-wrap">
+      <table class="compact month-table">
         <colgroup>${colHtml}</colgroup>
         <thead><tr>${headHtml}</tr></thead>
         <tbody>${tableRows}</tbody>
