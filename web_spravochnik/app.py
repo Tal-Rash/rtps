@@ -861,6 +861,11 @@ function updateSaveButton(){
   saveBtn.disabled = !CAN_EDIT;
   saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Изменений нет';
 }
+window.addEventListener('beforeunload', (event) => {
+  if (!CAN_EDIT || !hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 function updateHistoryButtons(){
   const cancelBtn = document.getElementById('cancelBtn');
   const restoreBtn = document.getElementById('restoreBtn');
