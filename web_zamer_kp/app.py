@@ -2904,10 +2904,8 @@ HTML = """<!doctype html>
     }
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
-    .archive-table tr.selected-measurement-start td { border-top:2px solid #2f6fed; }
+    .archive-table tr.selected-measurement-start td[rowspan] { border-bottom:2px solid #2f6fed; }
     .archive-table tr.selected-measurement-end td { border-bottom:2px solid #2f6fed; }
-    .archive-table tr.selected-measurement td:first-child { border-left:2px solid #2f6fed; }
-    .archive-table tr.selected-measurement td:last-child { border-right:2px solid #2f6fed; }
     .modal-backdrop {
       position:fixed;
       inset:0;
