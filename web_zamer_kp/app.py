@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.50"
+APP_VERSION = "web-zkp-1.51"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2886,8 +2886,9 @@ HTML = """<!doctype html>
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
-    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; height:16px; padding:0; line-height:1.0; }
+    .archive-table th, .archive-table td { font-size:12px !important; text-align:center; vertical-align:middle; height:12px !important; padding:0 !important; line-height:12px !important; }
     .archive-table td { white-space:pre-line; }
+    .archive-table tr { height:12px !important; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
     .archive-table td.section-merged { vertical-align:middle; font-weight:600; }
@@ -2895,13 +2896,14 @@ HTML = """<!doctype html>
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
-      height:16px;
+      height:12px !important;
       border:0;
       text-align:center;
       background:transparent;
-      padding:0;
-      font-size:12px;
-      line-height:16px;
+      padding:0 !important;
+      margin:0;
+      font-size:12px !important;
+      line-height:12px !important;
       display:block;
       box-sizing:border-box;
     }
