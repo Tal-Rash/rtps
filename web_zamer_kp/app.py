@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.57"
+APP_VERSION = "web-zkp-1.59"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2933,18 +2933,31 @@ HTML = """<!doctype html>
     .archive-table td { white-space:pre-line; }
     .archive-table tr { height:12px !important; }
     .archive-table thead th {
-      height:28px !important;
       line-height:1.05 !important;
       overflow:hidden;
       white-space:normal;
       transition:height 0.18s ease, line-height 0.18s ease, padding 0.18s ease;
     }
-    .archive-table thead:hover th,
-    .archive-table thead:focus-within th {
+    .archive-table thead tr:first-child th {
+      height:28px !important;
+      padding-top:2px !important;
+      padding-bottom:2px !important;
+    }
+    .archive-table thead tr:last-child th {
+      height:20px !important;
+      padding-top:0 !important;
+      padding-bottom:0 !important;
+    }
+    .archive-table thead:hover tr:first-child th,
+    .archive-table thead:focus-within tr:first-child th {
       height:145px !important;
       line-height:1.15 !important;
       padding-top:4px !important;
       padding-bottom:4px !important;
+    }
+    .archive-table thead:hover tr:last-child th,
+    .archive-table thead:focus-within tr:last-child th {
+      height:24px !important;
     }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
@@ -3167,21 +3180,28 @@ HTML = """<!doctype html>
           </colgroup>
           <thead>
             <tr>
-              <th>Локомотив<br>Дата<br>Вид ремонта</th>
-              <th>Секция</th>
-              <th>Прокат,<br>макс</th>
-              <th>Гребень,<br>мин</th>
-              <th>Крутизна,<br>мин</th>
-              <th>Бандаж,<br>мин</th>
-              <th>Диаметр,<br>разница</th>
-              <th>КП с<br>бандажом</th>
-              <th>КП с<br>прокатом 6+</th>
-              <th>Номер<br>КП</th>
-              <th>Прокат<br>лев</th><th>Прокат<br>прав</th>
-              <th>Гребень<br>лев</th><th>Гребень<br>прав</th>
-              <th>Крутизна<br>лев</th><th>Крутизна<br>прав</th>
-              <th>Бандаж<br>лев</th><th>Бандаж<br>прав</th>
-              <th>Диаметр<br>лев</th><th>Диаметр<br>прав</th>
+              <th rowspan="2">Локомотив<br>Дата<br>Вид ремонта</th>
+              <th rowspan="2">Секция</th>
+              <th rowspan="2">Прокат,<br>макс</th>
+              <th rowspan="2">Гребень,<br>мин</th>
+              <th rowspan="2">Крутизна,<br>мин</th>
+              <th rowspan="2">Бандаж,<br>мин</th>
+              <th rowspan="2">Диаметр,<br>разница</th>
+              <th rowspan="2">КП с<br>бандажом</th>
+              <th rowspan="2">КП с<br>прокатом 6+</th>
+              <th rowspan="2">Номер<br>КП</th>
+              <th colspan="2">Прокат</th>
+              <th colspan="2">Толщина гребня</th>
+              <th colspan="2">Крутизна гребня</th>
+              <th colspan="2">Толщина бандажа</th>
+              <th colspan="2">Диаметр бандажа</th>
+            </tr>
+            <tr>
+              <th>лев</th><th>прав</th>
+              <th>лев</th><th>прав</th>
+              <th>лев</th><th>прав</th>
+              <th>лев</th><th>прав</th>
+              <th>лев</th><th>прав</th>
             </tr>
           </thead>
           <tbody id="archiveBody"></tbody>
