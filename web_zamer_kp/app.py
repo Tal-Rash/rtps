@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.84"
+APP_VERSION = "web-zkp-1.85"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -3087,10 +3087,20 @@ HTML = """<!doctype html>
     .archive-table tr.measurement-start td:first-child { border-left:1px solid #2f6fed; }
     .archive-table tr.measurement-row td:last-child { border-right:1px solid #2f6fed; }
     .archive-table tr.measurement-end td { border-bottom:1px solid #2f6fed; }
-    .archive-table tr.selected-measurement td,
-    .archive-table tr.selected-measurement-start td,
+    .archive-table tr.selected-measurement td {
+      background:#f7fbff;
+    }
+    .archive-table tr.selected-measurement-start td {
+      border-top:1px solid #2f6fed !important;
+    }
     .archive-table tr.selected-measurement-end td {
-      box-shadow: inset 0 0 0 1px #2f6fed;
+      border-bottom:1px solid #2f6fed !important;
+    }
+    .archive-table tr.selected-measurement-start td:first-child {
+      border-left:1px solid #2f6fed !important;
+    }
+    .archive-table tr.selected-measurement-end td:last-child {
+      border-right:1px solid #2f6fed !important;
     }
     .modal-backdrop {
       position:fixed;
