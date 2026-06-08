@@ -612,13 +612,17 @@ HTML = """<!doctype html>
     th{background:#eef4fb;font-weight:700}
     td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
     td input[type=checkbox]{width:auto;height:auto}
-    .table-shell tbody tr:focus-within{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
     .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
     .selected-row{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
     .deleted-row{opacity:.55}
     .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
+    td input:focus,
+    td input:focus-visible{
+      outline:none;
+      box-shadow:none;
+    }
     .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
     .modal-backdrop.show{display:flex}
     .modal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(16,32,51,.2)}
