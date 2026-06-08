@@ -1863,29 +1863,44 @@ def upsert_inventory_locomotive(
             "SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM inventory"
         ).fetchone()
         sort_order_value = int(max_row["max_sort_order"] or 0) + 1
-    if deleted_at is None:
-        existing = cur.execute(
-            "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number "
-            "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY y DESC, COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
-            (locomotive,),
-        ).fetchone()
-        if existing and sort_order_value <= 0:
-            sort_order_value = int(existing["sort_order"] or 0)
+    exact = cur.execute(
+        "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(deleted_at, 0) AS deleted_at "
+        "FROM inventory WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=? "
+        "ORDER BY COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
+        (year, series, locomotive),
+    ).fetchone()
+    if exact:
+        if sort_order_value <= 0:
+            sort_order_value = int(exact["sort_order"] or 0)
         if not wheel_pair_count:
-            wheel_pair_count = int(existing["wheel_pair_count"] or 0) if existing else 0
+            wheel_pair_count = int(exact["wheel_pair_count"] or 0)
         if not section_count:
-            section_count = int(existing["section_count"] or 0) if existing else 0
+            section_count = int(exact["section_count"] or 0)
         if not eight_digit_number:
-            eight_digit_number = text(existing["eight_digit_number"]).strip() if existing else ""
-        deleted_at = int(existing["deleted_at"] or 0) if existing else 0
-    else:
-        deleted_at = int(deleted_at or 0)
+            eight_digit_number = text(exact["eight_digit_number"]).strip()
+        if deleted_at is None:
+            deleted_at = int(exact["deleted_at"] or 0)
+        cur.execute(
+            """
+            UPDATE inventory
+            SET ser=?, num=?, inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, sort_order=?, updated_at=?, deleted_at=?
+            WHERE rowid=?
+            """,
+            (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
+        )
+        cur.execute(
+            "DELETE FROM inventory WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
+            (year, series, locomotive, int(exact["rowid"])),
+        )
+        return
+    if deleted_at is None:
+        deleted_at = 0
     cur.execute(
         """
-        INSERT OR REPLACE INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
+        INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, deleted_at),
+        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0)),
     )
 
 
@@ -2285,10 +2300,7 @@ def ensure_import_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, 
     if not locomotive:
         return
     series = text(series).strip()
-    year = dt.date.today().year
-    exists = cur.execute("SELECT 1 FROM inventory WHERE TRIM(COALESCE(num,''))=? LIMIT 1", (locomotive,)).fetchone()
-    if not exists:
-        cur.execute("INSERT OR IGNORE INTO inventory (y, ser, num, inv) VALUES (?, ?, ?, '')", (year, series, locomotive))
+    upsert_inventory_locomotive(cur, series, locomotive)
     for index in range(max(1, int(wheel_pair_count or 1))):
         cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (locomotive, index, str(index + 1)))
         cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (locomotive, index, str(index + 1)))
