@@ -2904,8 +2904,10 @@ HTML = """<!doctype html>
     }
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
-    .archive-table tr.selected-measurement-start td[rowspan] { border-bottom:2px solid #2f6fed; }
-    .archive-table tr.selected-measurement-end td { border-bottom:2px solid #2f6fed; }
+    .archive-table tr.measurement-start td { border-top:2px solid #2f6fed; }
+    .archive-table tr.measurement-start td:first-child { border-left:2px solid #2f6fed; }
+    .archive-table tr.measurement-row td:last-child { border-right:2px solid #2f6fed; }
+    .archive-table tr.measurement-end td { border-bottom:2px solid #2f6fed; }
     .modal-backdrop {
       position:fixed;
       inset:0;
@@ -4530,6 +4532,13 @@ function renderArchiveTable(){
   }
   tbody.innerHTML = archiveRows.map((row, rowIndex) => {
     const values = row.values || [];
+    const rowMeta = archiveRows[rowIndex];
+    const rowKey = archiveMeasurementKey(rowMeta);
+    const prevKey = rowIndex > 0 ? archiveMeasurementKey(archiveRows[rowIndex - 1]) : '';
+    const nextKey = rowIndex < archiveRows.length - 1 ? archiveMeasurementKey(archiveRows[rowIndex + 1]) : '';
+    const rowClasses = ['measurement-row'];
+    if (rowKey && rowKey !== prevKey) rowClasses.push('measurement-start');
+    if (rowKey && rowKey !== nextKey) rowClasses.push('measurement-end');
     const cells = values.map((value, index) => {
       if (index === 0) {
         const span = measurementSpans.get(rowIndex);
@@ -4566,7 +4575,7 @@ function renderArchiveTable(){
       const cls = index === 9 ? 'axis-col' : 'summary';
       return `<td class="${cls}" data-col="${index}">${esc(value)}</td>`;
     }).filter(Boolean).join('');
-    return `<tr data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}" onmousedown="setArchiveSelectedMeasurement(${rowIndex})">${cells}</tr>`;
+    return `<tr class="${rowClasses.join(' ')}" data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}" onmousedown="setArchiveSelectedMeasurement(${rowIndex})">${cells}</tr>`;
   }).join('');
   renderArchiveSelectionHighlight();
   renderArchiveMeasurementSelection();
