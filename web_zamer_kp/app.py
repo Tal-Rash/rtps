@@ -2890,6 +2890,7 @@ HTML = """<!doctype html>
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
+    .archive-table td.section-merged { vertical-align:middle; font-weight:600; background:#f7fafc; }
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
@@ -4481,9 +4482,37 @@ function renderArchiveTable(){
     tbody.innerHTML = '<tr><td colspan="20" style="padding:14px;color:var(--muted);">Архив пуст</td></tr>';
     return;
   }
+  const sectionSpans = new Map();
+  let start = 0;
+  while (start < archiveRows.length) {
+    const base = archiveRows[start];
+    const key = `${base.year}|${base.measurement_date}|${base.locomotive}|${base.repair_type}`;
+    const section = String(base.section || base.values?.[0] || '1').trim() || '1';
+    let end = start + 1;
+    while (end < archiveRows.length) {
+      const row = archiveRows[end];
+      const rowKey = `${row.year}|${row.measurement_date}|${row.locomotive}|${row.repair_type}`;
+      const rowSection = String(row.section || row.values?.[0] || '1').trim() || '1';
+      if (rowKey !== key || rowSection !== section) break;
+      end += 1;
+    }
+    sectionSpans.set(start, end - start);
+    start = end;
+  }
   tbody.innerHTML = archiveRows.map((row, rowIndex) => {
     const values = row.values || [];
     const cells = values.map((value, index) => {
+      if (index === 1) {
+        const span = sectionSpans.get(rowIndex);
+        if (!span) return '';
+        return `<td class="section-merged" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+      }
+      if (rowIndex > 0) {
+        const prev = archiveRows[rowIndex - 1];
+        const sameMeasurement = prev && prev.year === row.year && prev.measurement_date === row.measurement_date && prev.locomotive === row.locomotive && prev.repair_type === row.repair_type;
+        const sameSection = sameMeasurement && String(prev.section || prev.values?.[0] || '1').trim() === String(row.section || row.values?.[0] || '1').trim();
+        if (sameSection && index === 1) return '';
+      }
       if (index >= 10) {
         return `
           <td class="measure-cell archive-raw" data-col="${index}">
@@ -4502,7 +4531,7 @@ function renderArchiveTable(){
       }
       const cls = index === 0 ? 'first-col' : (index === 9 ? 'axis-col' : 'summary');
       return `<td class="${cls}" data-col="${index}">${esc(value)}</td>`;
-    }).join('');
+    }).filter(Boolean).join('');
     return `<tr data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}" onmousedown="setArchiveSelectedMeasurement(${rowIndex})">${cells}</tr>`;
   }).join('');
   renderArchiveSelectionHighlight();
