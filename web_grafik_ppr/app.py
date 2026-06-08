@@ -1214,8 +1214,13 @@ EDIT_TOOLBAR = """
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
         <button onclick="openReport()">Отчет</button>
         <button id="saveButton" onclick="saveState()">Сохранить</button>
-        <button onclick="downloadJson()">Экспорт JSON</button>
-        <button onclick="document.getElementById('importFile').click()">Импорт JSON</button>
+        <div class="json-menu" id="jsonMenuWrap">
+          <button type="button" onclick="toggleJsonMenu(event)">JSON</button>
+          <div class="json-menu-panel" id="jsonMenuPanel" aria-hidden="true">
+            <button type="button" onclick="downloadJson(); closeJsonMenu()">Экспорт JSON</button>
+            <button type="button" onclick="triggerImportJson()">Импорт JSON</button>
+          </div>
+        </div>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
       </div>
 """
@@ -1411,10 +1416,30 @@ HTML_TEMPLATE = """<!doctype html>
     button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
     button:disabled { opacity:.55; cursor:default; }
     .toolbar input,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
+    .toolbar #yearInput { border-color:var(--accent); }
     .toolbar button { font-weight:400; }
     .toolbar button.save-ready { background:var(--accent); border-color:var(--accent); color:#fff; }
     .toolbar button.save-ready:hover { background:#1f63df; border-color:#1f63df; color:#fff; }
-    .home-link { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; color:#001b3d; font:inherit; font-weight:400; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
+    .home-link { border:1px solid var(--accent); border-radius:8px; background:#fff; padding:10px 12px; color:var(--accent); font:inherit; font-weight:400; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
+    .json-menu { position:relative; display:inline-flex; }
+    .json-menu > button { min-width:84px; }
+    .json-menu-panel {
+      position:absolute;
+      right:0;
+      top:calc(100% + 6px);
+      display:none;
+      flex-direction:column;
+      gap:6px;
+      padding:8px;
+      background:#fff;
+      border:1px solid var(--accent);
+      border-radius:12px;
+      box-shadow:0 16px 30px rgba(16,32,51,.12);
+      z-index:40;
+      min-width:168px;
+    }
+    .json-menu.open .json-menu-panel { display:flex; }
+    .json-menu-panel button { width:100%; text-align:left; border:1px solid var(--accent); }
     .nav { display:flex; gap:10px; flex-wrap:wrap; padding:0; margin:0; background:transparent; border:0; box-shadow:none; }
     .nav button { font-weight:400; box-shadow:none; }
     .nav button.active { border-color:var(--accent); color:var(--accent); box-shadow:inset 0 -3px 0 var(--accent); }
@@ -1422,12 +1447,12 @@ HTML_TEMPLATE = """<!doctype html>
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
     .section-title { font-size:18px; font-weight:800; }
-    .month-table-head { display:grid; grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr); gap:10px; align-items:center; }
+    .month-table-head { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:10px; align-items:center; }
     .month-table-actions { justify-self:start; min-width:0; }
     .month-table-title { justify-self:center; text-align:center; }
-    .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
+    .months-row { position:sticky; top:0; z-index:4; display:flex; align-items:flex-start; gap:10px; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
-    .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
+    .months-row .row-actions { display:none; }
     .month-strip button { border:1px solid var(--accent); background:transparent; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
     .month-strip button.active { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:none; }
     .repair-strip { display:flex; gap:3px; flex-wrap:nowrap; margin:0; justify-content:center; }
@@ -1945,6 +1970,26 @@ function normalizeRepairCode(v){
     .replace(/[ABCEHKMOPTXY]/g, (ch) => map[ch] || ch);
 }
 function setStatus(t){ void t; }
+function closeJsonMenu(){
+  const wrap = document.getElementById('jsonMenuWrap');
+  const panel = document.getElementById('jsonMenuPanel');
+  if (wrap) wrap.classList.remove('open');
+  if (panel) panel.setAttribute('aria-hidden', 'true');
+}
+function toggleJsonMenu(event){
+  if (event) event.stopPropagation();
+  const wrap = document.getElementById('jsonMenuWrap');
+  const panel = document.getElementById('jsonMenuPanel');
+  if (!wrap || !panel) return;
+  const open = !wrap.classList.contains('open');
+  wrap.classList.toggle('open', open);
+  panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+function triggerImportJson(){
+  const input = document.getElementById('importFile');
+  if (input) input.click();
+  closeJsonMenu();
+}
 function showErrorModal(message){
   const modal = document.getElementById('errorModal');
   const body = document.getElementById('errorModalBody');
@@ -2188,6 +2233,15 @@ function handleMonthPaste(e){
 document.addEventListener('mouseup', endMonthSelection, true);
 document.addEventListener('copy', handleMonthCopy, true);
 document.addEventListener('paste', handleMonthPaste, true);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeJsonMenu();
+});
+document.addEventListener('click', event => {
+  const wrap = document.getElementById('jsonMenuWrap');
+  if (!wrap || !wrap.classList.contains('open')) return;
+  if (wrap.contains(event.target)) return;
+  closeJsonMenu();
+});
 function setPath(path, value){
   if (!CAN_EDIT) return;
   if (typeof value === 'string') value = value.toUpperCase();
@@ -2320,15 +2374,25 @@ window.addEventListener('error', (event) => {
 function repairButtonsHtml(){
   return `
       <div class="repair-strip">
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО2')">ТО2</button>
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО3')">ТО3</button>
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР1')">ТР1</button>
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР2')">ТР2</button>
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР3')">ТР3</button>
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО')">ТО</button>
-        <button ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР')">ТР</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО2')">ТО2</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО3')">ТО3</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР1')">ТР1</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР2')">ТР2</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР3')">ТР3</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТО')">ТО</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="insertRepair('ТР')">ТР</button>
       </div>
     `;
+}
+function rowActionsHtml(){
+  return `
+      <div class="row-actions">
+        <button type="button" onclick="addRow('plan'); addRow('fact')">+ строку</button>
+        <button type="button" class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
+        <button type="button" id="cancelButton" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+        <button type="button" id="restoreButton" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+      </div>
+  `;
 }
 function monthSelectHtml(){
   return `
@@ -2344,12 +2408,6 @@ function renderMonths(){
   return `
     <div class="months-row">
       <div class="month-strip">${monthButtons}</div>
-      <div class="row-actions">
-        <button onclick="addRow('plan'); addRow('fact')">+ строку</button>
-        <button class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
-        <button id="cancelButton" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
-        <button id="restoreButton" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-      </div>
     </div>
     ${renderMonthTable('plan', 'План', m, headers)}
     ${renderMonthTable('fact', 'Факт', m, headers)}
@@ -2395,13 +2453,14 @@ function renderMonthTable(type, title, m, headers){
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
     '<col style="width:180px">'
   ].join('');
+  const controlsHtml = type === 'plan' ? rowActionsHtml() : '<div></div>';
   return `
     <div class="section-head month-table-head" style="margin-top:16px;">
       <div class="month-table-actions">
         ${repairButtonsHtml()}
       </div>
       <div class="section-title month-table-title">${title}</div>
-      <div></div>
+      ${controlsHtml}
     </div>
     <div class="table-wrap">
       <table class="compact month-table" style="width:${45 + 100 + 60 + 80 + (m.days * 36) + 180}px">
