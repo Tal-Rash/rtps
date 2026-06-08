@@ -2904,7 +2904,10 @@ HTML = """<!doctype html>
     }
     .archive-table td.summary { width:110px; }
     .archive-table td.first-col { width:220px; }
-    .archive-table tr.selected-measurement td { box-shadow: inset 0 0 0 2px #2f6fed; }
+    .archive-table tr.selected-measurement-start td { border-top:2px solid #2f6fed; }
+    .archive-table tr.selected-measurement-end td { border-bottom:2px solid #2f6fed; }
+    .archive-table tr.selected-measurement td:first-child { border-left:2px solid #2f6fed; }
+    .archive-table tr.selected-measurement td:last-child { border-right:2px solid #2f6fed; }
     .modal-backdrop {
       position:fixed;
       inset:0;
@@ -3637,10 +3640,22 @@ function setArchiveSelectedMeasurement(rowIndex){
 }
 function renderArchiveMeasurementSelection(){
   document.querySelectorAll('#archiveBody tr').forEach(tr => {
-    const key = [tr.dataset.year, tr.dataset.measurementDate, tr.dataset.locomotive, tr.dataset.repairType]
-      .map(value => String(value ?? ''))
-      .join('|');
-    tr.classList.toggle('selected-measurement', !!archiveSelectedMeasurementKey && key === archiveSelectedMeasurementKey);
+    tr.classList.remove('selected-measurement', 'selected-measurement-start', 'selected-measurement-end');
+  });
+  if (!archiveSelectedMeasurementKey) return;
+  document.querySelectorAll('#archiveBody tr').forEach(tr => {
+    const rowIndex = Number(tr.dataset.row || -1);
+    const row = archiveRows[rowIndex];
+    if (!row) return;
+    const key = archiveMeasurementKey(row);
+    if (key !== archiveSelectedMeasurementKey) return;
+    const prev = archiveRows[rowIndex - 1];
+    const next = archiveRows[rowIndex + 1];
+    const prevKey = prev ? archiveMeasurementKey(prev) : '';
+    const nextKey = next ? archiveMeasurementKey(next) : '';
+    tr.classList.add('selected-measurement');
+    if (prevKey !== archiveSelectedMeasurementKey) tr.classList.add('selected-measurement-start');
+    if (nextKey !== archiveSelectedMeasurementKey) tr.classList.add('selected-measurement-end');
   });
 }
 function archiveCellElement(row, col){
