@@ -2869,7 +2869,7 @@ HTML = """<!doctype html>
       outline:none;
     }
     table { border-collapse:collapse; width:max-content; table-layout:fixed; border-radius:18px; overflow:hidden; }
-    th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; }
+    th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; vertical-align:middle; }
     thead th { background:#eef3f8; font-weight:700; font-size:14px; line-height:1.1; }
     table thead tr:first-child th:first-child { border-top-left-radius:18px; }
     table thead tr:first-child th:last-child { border-top-right-radius:18px; }
@@ -2880,9 +2880,9 @@ HTML = """<!doctype html>
     th.section-col, td.section-col { width:80px; }
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
-    td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
+    td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; line-height:34px; display:block; box-sizing:border-box; }
     td.measure-cell.selected { box-shadow: inset 0 0 0 2px #2f6fed; }
-    td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:5px 7px; }
+    td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; line-height:34px; display:block; box-sizing:border-box; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
