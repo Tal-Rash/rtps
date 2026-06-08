@@ -2685,7 +2685,8 @@ HTML = """<!doctype html>
     h1 { margin:0; font-size:24px; }
     .muted { color:var(--muted); font-size:13px; }
     .actions, .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    button, a, input, select { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:#1f57d6; font:inherit; text-decoration:none; }
+    button, a { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:#1f57d6; font:inherit; text-decoration:none; }
+    input, select { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:var(--text); font:inherit; }
     button { cursor:pointer; font-weight:700; }
     button:hover, a:hover { box-shadow:0 0 0 2px rgba(47,111,237,.10); }
     .primary { background:var(--blue); border-color:var(--blue); color:#fff; }
@@ -2717,6 +2718,7 @@ HTML = """<!doctype html>
     .archive-actions-menu .menu-panel button { width:100%; justify-content:flex-start; }
     .archive-controls label { display:flex; align-items:center; gap:8px; }
     .archive-controls input { width:240px; }
+    .input-locomotive-filter { display:flex; align-items:center; gap:8px; }
     .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; display:flex; justify-content:center; margin-top:16px; }
     .archive-table-shell { margin-top:0; padding-top:10px; }
     .kp-shell { margin-top:12px; }
@@ -2860,7 +2862,7 @@ HTML = """<!doctype html>
 
     <div id="panelInput" class="panel active">
       <div class="filters" style="margin-top:0;">
-        <label>Локомотив
+        <label class="input-locomotive-filter">Локомотив
           <div class="loco-picker">
             <input id="locomotive" type="text" autocomplete="off" aria-autocomplete="list" style="width:220px">
             <div id="locomotiveDropdown" class="loco-dropdown" role="listbox" aria-label="Список локомотивов"></div>
