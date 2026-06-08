@@ -2886,7 +2886,7 @@ HTML = """<!doctype html>
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
-    .archive-table th, .archive-table td { font-size:12px; }
+    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; }
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
