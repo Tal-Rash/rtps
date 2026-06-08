@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.65"
+APP_VERSION = "web-zkp-1.66"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -3185,7 +3185,10 @@ HTML = """<!doctype html>
           </colgroup>
           <thead>
             <tr>
-              <th rowspan="2">Дата выполнения обмера<br>и вид ремонта</th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">Дата<br>ремонт</span>
+                <span class="archive-head-expanded">Дата выполнения обмера<br>и вид ремонта</span>
+              </th>
               <th rowspan="2">Секция</th>
               <th rowspan="2">
                 <span class="archive-head-collapsed">Прокат</span>
