@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.81"
+APP_VERSION = "web-zkp-1.82"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -3074,6 +3074,10 @@ HTML = """<!doctype html>
       box-sizing:border-box;
     }
     .archive-table { margin-left:0; }
+    .archive-body-table {
+      border-radius:0 !important;
+      overflow:visible !important;
+    }
     .archive-table td.summary { width:80px; }
     .archive-table td.first-col { width:80px; }
     .archive-table tr.measurement-start td { border-top:1px solid #2f6fed; }
