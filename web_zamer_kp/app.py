@@ -4482,8 +4482,23 @@ function renderArchiveTable(){
     tbody.innerHTML = '<tr><td colspan="20" style="padding:14px;color:var(--muted);">Архив пуст</td></tr>';
     return;
   }
+  const measurementSpans = new Map();
   const sectionSpans = new Map();
   let start = 0;
+  while (start < archiveRows.length) {
+    const base = archiveRows[start];
+    const key = `${base.year}|${base.measurement_date}|${base.locomotive}|${base.repair_type}`;
+    let end = start + 1;
+    while (end < archiveRows.length) {
+      const row = archiveRows[end];
+      const rowKey = `${row.year}|${row.measurement_date}|${row.locomotive}|${row.repair_type}`;
+      if (rowKey !== key) break;
+      end += 1;
+    }
+    measurementSpans.set(start, end - start);
+    start = end;
+  }
+  start = 0;
   while (start < archiveRows.length) {
     const base = archiveRows[start];
     const key = `${base.year}|${base.measurement_date}|${base.locomotive}|${base.repair_type}`;
@@ -4502,16 +4517,15 @@ function renderArchiveTable(){
   tbody.innerHTML = archiveRows.map((row, rowIndex) => {
     const values = row.values || [];
     const cells = values.map((value, index) => {
+      if (index === 0) {
+        const span = measurementSpans.get(rowIndex);
+        if (!span) return '';
+        return `<td class="first-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+      }
       if (index === 1) {
         const span = sectionSpans.get(rowIndex);
         if (!span) return '';
         return `<td class="section-merged" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
-      }
-      if (rowIndex > 0) {
-        const prev = archiveRows[rowIndex - 1];
-        const sameMeasurement = prev && prev.year === row.year && prev.measurement_date === row.measurement_date && prev.locomotive === row.locomotive && prev.repair_type === row.repair_type;
-        const sameSection = sameMeasurement && String(prev.section || prev.values?.[0] || '1').trim() === String(row.section || row.values?.[0] || '1').trim();
-        if (sameSection && index === 1) return '';
       }
       if (index >= 10) {
         return `
@@ -4529,7 +4543,7 @@ function renderArchiveTable(){
             >
           </td>`;
       }
-      const cls = index === 0 ? 'first-col' : (index === 9 ? 'axis-col' : 'summary');
+      const cls = index === 9 ? 'axis-col' : 'summary';
       return `<td class="${cls}" data-col="${index}">${esc(value)}</td>`;
     }).filter(Boolean).join('');
     return `<tr data-row="${rowIndex}" data-year="${esc(row.year)}" data-measurement-date="${esc(row.measurement_date)}" data-locomotive="${esc(row.locomotive)}" data-repair-type="${esc(row.repair_type)}" data-source-r="${esc(row.source_r)}" onmousedown="setArchiveSelectedMeasurement(${rowIndex})">${cells}</tr>`;
