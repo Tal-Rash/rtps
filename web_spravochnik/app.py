@@ -547,11 +547,11 @@ HTML = """<!doctype html>
     button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
     button.primary:disabled{opacity:.78}
-    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:12px}
+    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:22px}
     .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:700;cursor:pointer;color:#1f57d6}
     .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
-    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px;overflow:auto}
+    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:24px;padding:14px;overflow:auto}
     .panel.active{display:block}
     table{border-collapse:collapse;width:100%;min-width:760px}
     th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center}
