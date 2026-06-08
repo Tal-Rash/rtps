@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.61"
+APP_VERSION = "web-zkp-1.63"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -3207,8 +3207,14 @@ HTML = """<!doctype html>
                 <span class="archive-head-collapsed">Диаметр</span>
                 <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
               </th>
-              <th rowspan="2">КП с<br>бандажом</th>
-              <th rowspan="2">КП с<br>прокатом 6+</th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">КП с бандажом</span>
+                <span class="archive-head-expanded">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</span>
+              </th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">КП с прокатом 6+</span>
+                <span class="archive-head-expanded">Число колесных пар с<br>прокатом 6 мм и более</span>
+              </th>
               <th rowspan="2">Номер<br>КП</th>
               <th colspan="2">Прокат</th>
               <th colspan="2">Толщина<br>гребня</th>
