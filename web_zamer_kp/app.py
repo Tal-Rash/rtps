@@ -2890,8 +2890,8 @@ HTML = """<!doctype html>
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
-    .archive-table td.section-merged { vertical-align:middle; font-weight:600; background:#f7fafc; }
-    .archive-table td.summary-merged { vertical-align:middle; background:#f7fafc; }
+    .archive-table td.section-merged { vertical-align:middle; font-weight:600; }
+    .archive-table td.summary-merged { vertical-align:middle; }
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
