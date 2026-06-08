@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.60"
+APP_VERSION = "web-zkp-1.61"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2938,6 +2938,11 @@ HTML = """<!doctype html>
       white-space:normal;
       transition:height 0.18s ease, line-height 0.18s ease, padding 0.18s ease;
     }
+    .archive-head-expanded { display:none; }
+    .archive-table thead:hover .archive-head-collapsed,
+    .archive-table thead:focus-within .archive-head-collapsed { display:none; }
+    .archive-table thead:hover .archive-head-expanded,
+    .archive-table thead:focus-within .archive-head-expanded { display:inline; }
     .archive-table thead tr:first-child th {
       height:28px !important;
       padding-top:2px !important;
@@ -3182,11 +3187,26 @@ HTML = """<!doctype html>
             <tr>
               <th rowspan="2">Локомотив<br>Дата<br>Вид ремонта</th>
               <th rowspan="2">Секция</th>
-              <th rowspan="2">Прокат,<br>макс</th>
-              <th rowspan="2">Гребень,<br>мин</th>
-              <th rowspan="2">Крутизна,<br>мин</th>
-              <th rowspan="2">Бандаж,<br>мин</th>
-              <th rowspan="2">Диаметр,<br>разница</th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">Прокат</span>
+                <span class="archive-head-expanded">Наибольший прокат,<br>мм</span>
+              </th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">Гребень</span>
+                <span class="archive-head-expanded">Наименьшая толщина<br>гребня, мм</span>
+              </th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">Крутизна</span>
+                <span class="archive-head-expanded">Наибольший параметр<br>крутизны гребня, мм</span>
+              </th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">Бандаж</span>
+                <span class="archive-head-expanded">Наименьшая толщ. бандажа<br>(за вычетом проката), мм</span>
+              </th>
+              <th rowspan="2">
+                <span class="archive-head-collapsed">Диаметр</span>
+                <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
+              </th>
               <th rowspan="2">КП с<br>бандажом</th>
               <th rowspan="2">КП с<br>прокатом 6+</th>
               <th rowspan="2">Номер<br>КП</th>
