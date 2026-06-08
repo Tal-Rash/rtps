@@ -543,11 +543,12 @@ HTML = """<!doctype html>
     .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:14px}
     h1{margin:0;font-size:24px}.muted{color:var(--muted);font-size:13px}
     .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    button,a,select{border:1px solid var(--line);border-radius:8px;padding:10px 13px;background:#fff;color:#001b3d;font-weight:700;text-decoration:none;font:inherit}
+    button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 13px;background:#fff;color:#1f57d6;font-weight:700;text-decoration:none;font:inherit}
+    button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
     button.primary:disabled{opacity:.78}
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-    .tab{cursor:pointer}.tab.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+    .tab{cursor:pointer;color:#1f57d6}.tab.active{background:var(--blue);color:#fff;border-color:var(--blue)}
     .panel{display:none;background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;overflow:auto}
     .panel.active{display:block}
     table{border-collapse:collapse;width:100%;min-width:760px}
