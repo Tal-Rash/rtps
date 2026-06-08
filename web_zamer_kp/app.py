@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.73"
+APP_VERSION = "web-zkp-1.74"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2820,6 +2820,7 @@ HTML = """<!doctype html>
   <style>
     :root { --line:#d8e0ea; --text:#102033; --muted:#66758a; --blue:#276ef1; --bg:#f5f7fb; --ok:#eef7f0; --warn:#fff8d5; --bad:#ffe5e5; }
     * { box-sizing:border-box; }
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
     body { margin:0; font-family:Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
     .wrap { max-width: 1540px; margin:0 auto; padding:16px; }
     .top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; background:#fff; border:1px solid #2f6fed; border-radius:16px; padding:14px 16px; }
