@@ -18,7 +18,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-0.6"
+APP_VERSION = "web-gpp-0.7"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -1237,7 +1237,7 @@ LOGIN_TEMPLATE = """<!doctype html>
     body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; }
     .card { max-width:420px; margin:10vh auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
     input,button { width:100%; padding:12px; border-radius:8px; border:1px solid #d9e2ef; font:inherit; }
-    button { background:#276ef1; color:#fff; font-weight:700; cursor:pointer; border:0; }
+    button { background:transparent; color:#1d4ed8; font-weight:700; cursor:pointer; border-color:#9fb4d2; }
     .muted { color:#607086; font-size:13px; }
   </style>
 </head>
@@ -1407,14 +1407,17 @@ HTML_TEMPLATE = """<!doctype html>
     .titlebox h1 { margin:0; font-size:22px; }
     .titlebox .sub { color:var(--muted); font-size:13px; margin-top:2px; }
     .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-    .toolbar input,.toolbar button,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
-    .toolbar button { font-weight:400; cursor:pointer; background:linear-gradient(180deg,#fff,#f3f7ff); }
-    .toolbar button.save-ready { background:linear-gradient(180deg,#f0fff2,#d9f4dd); border-color:#7dc68a; color:#12582a; }
-    .toolbar button.save-ready:hover { background:linear-gradient(180deg,#e7fced,#cfeed4); }
+    button { border:1px solid #9fb4d2; border-radius:8px; background:transparent; padding:10px 12px; font:inherit; color:var(--text); cursor:pointer; }
+    button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+    button:disabled { opacity:.55; cursor:default; }
+    .toolbar input,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
+    .toolbar button { font-weight:400; }
+    .toolbar button.save-ready { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .toolbar button.save-ready:hover { background:#1f63df; border-color:#1f63df; color:#fff; }
     .home-link { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; color:#001b3d; font:inherit; font-weight:400; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
     .nav { display:flex; gap:10px; flex-wrap:wrap; padding:0; margin:0; background:transparent; border:0; box-shadow:none; }
-    .nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:10px 14px; font-weight:400; cursor:pointer; box-shadow:0 4px 12px rgba(16,32,51,.06); }
-    .nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .nav button { font-weight:400; box-shadow:none; }
+    .nav button.active { border-color:var(--accent); color:var(--accent); box-shadow:inset 0 -3px 0 var(--accent); }
     .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
     .panel { padding:14px; }
     .section-head { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:10px; }
@@ -1425,17 +1428,17 @@ HTML_TEMPLATE = """<!doctype html>
     .months-row { position:sticky; top:0; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:start; margin:6px 0 10px; background:rgba(255,255,255,.96); padding:0 0 6px; }
     .months-row .month-strip { display:flex; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; overflow:visible; }
     .months-row .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; justify-self:end; align-self:start; flex-shrink:0; }
-    .month-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
-    .month-strip button.active { background:#0e5bd8; border-color:#0e5bd8; color:#fff; }
+    .month-strip button { border:1px solid #9fb4d2; background:transparent; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
+    .month-strip button.active { border-color:var(--accent); color:var(--accent); box-shadow:inset 0 -3px 0 var(--accent); }
     .repair-strip { display:flex; gap:3px; flex-wrap:nowrap; margin:0; justify-content:center; }
-    .repair-strip button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
+    .repair-strip button { border:1px solid #9fb4d2; background:transparent; border-radius:8px; padding:4px 7px; font-weight:700; font-size:12px; cursor:pointer; min-width:40px; }
     .month-tools { display:none; }
     .row-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; flex-shrink:0; }
-    .row-actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
-    .row-actions button.danger { background:#fff; }
+    .row-actions button { border:1px solid #9fb4d2; background:transparent; border-radius:8px; padding:6px 10px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; }
+    .row-actions button.danger { border-color:#efb8bd; color:#b6404b; }
     .act-report {
-      border:1px solid var(--line);
-      background:linear-gradient(180deg,#fff,#f3f7ff);
+      border:1px solid #9fb4d2;
+      background:transparent;
       border-radius:8px;
       padding:6px 10px;
       font:inherit;
@@ -1478,8 +1481,8 @@ HTML_TEMPLATE = """<!doctype html>
       font-weight:800;
     }
     .modal-close {
-      border:1px solid var(--line);
-      background:#fff;
+      border:1px solid #9fb4d2;
+      background:transparent;
       border-radius:8px;
       width:30px;
       height:30px;
@@ -1509,7 +1512,7 @@ HTML_TEMPLATE = """<!doctype html>
       font-size:16px;
       cursor:pointer;
     }
-    .modal-actions button.primary { background:#dcedc8; }
+    .modal-actions button.primary { border-color:var(--accent); color:var(--accent); }
     .leave-window {
       width:min(460px, calc(100vw - 36px));
     }
@@ -1635,7 +1638,7 @@ HTML_TEMPLATE = """<!doctype html>
     #tu28StaffModal .tu28-staff-select { width:100%; min-width:240px; padding:6px 10px; }
     .acts-table input[type="checkbox"] { display:block; margin:0 auto; transform:scale(1.15); }
     .acts-table td:nth-child(2) { padding:0; }
-    .acts-table .act-start { width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center; font-size:16px; border:0; background:linear-gradient(180deg,#fff,#f3f7ff); }
+    .acts-table .act-start { width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center; font-size:16px; border:1px solid #9fb4d2; background:transparent; }
     .section-modal-actions {
       display:flex;
       gap:8px;
@@ -1645,8 +1648,8 @@ HTML_TEMPLATE = """<!doctype html>
     }
     .section-modal-actions button {
       flex:1;
-      border:1px solid var(--line);
-      background:#fff;
+      border:1px solid #9fb4d2;
+      background:transparent;
       border-radius:8px;
       padding:8px 10px;
       font:inherit;
@@ -1654,7 +1657,7 @@ HTML_TEMPLATE = """<!doctype html>
       font-size:16px;
       cursor:pointer;
     }
-    .section-modal-actions button.primary { background:#dcedc8; }
+    .section-modal-actions button.primary { border-color:var(--accent); color:var(--accent); }
     .error-modal-text {
       white-space:pre-wrap;
       word-break:break-word;
@@ -1688,8 +1691,8 @@ HTML_TEMPLATE = """<!doctype html>
     .norms-table .col-agr { width:60px; }
     .act-start {
       width:100%;
-      border:1px solid var(--line);
-      background:linear-gradient(180deg,#fff,#f3f7ff);
+      border:1px solid #9fb4d2;
+      background:transparent;
       border-radius:8px;
       padding:8px 12px;
       font:inherit;
@@ -1745,11 +1748,11 @@ HTML_TEMPLATE = """<!doctype html>
       text-align:center;
     }
     .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:28px; font-size:16px; }
-    .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:800; font-size:15px; }
+    .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid #9fb4d2; background:transparent; cursor:pointer; font-weight:800; font-size:15px; }
     .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
-    .danger { background:#fff3f3; }
+    .danger { border-color:#efb8bd; color:#b6404b; background:transparent; }
     .small { width:100%; min-width:0; text-align:center; font-size:12px; }
     .notes { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--line); border-radius:14px; }
     .excluded-row > * { color:#9aa5b1 !important; }
