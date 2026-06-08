@@ -2785,7 +2785,7 @@ HTML = """<!doctype html>
     .actions, .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     button, a { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:#1f57d6; font:inherit; text-decoration:none; }
     input, select { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:var(--text); font:inherit; }
-    button { cursor:pointer; font-weight:700; }
+    button { cursor:pointer; font-weight:400; }
     button:hover, a:hover { box-shadow:0 0 0 2px rgba(47,111,237,.10); }
     .primary { background:var(--blue); border-color:var(--blue); color:#fff; }
     .meta { display:none; }
@@ -2793,7 +2793,7 @@ HTML = """<!doctype html>
     .badge strong { font-weight:700; }
     #saveBtn { margin-left:auto; }
     .tabs { display:flex; gap:8px; margin-top:12px; margin-bottom:-1px; padding-left:17px; }
-    .tab { background:#fff; border:1px solid #2f6fed; border-bottom-color:#2f6fed; padding:10px 14px; border-radius:10px 10px 0 0; font-weight:700; cursor:pointer; color:#1f57d6; }
+    .tab { background:#fff; border:1px solid #2f6fed; border-bottom-color:#2f6fed; padding:10px 14px; border-radius:10px 10px 0 0; font-weight:400; cursor:pointer; color:#1f57d6; }
     .tab.active { background:#2f6fed; color:#fff; border-color:#2f6fed; border-bottom-color:#2f6fed; }
     .panel { display:none; background:#fff; border:1px solid #2f6fed; border-radius:16px; padding:12px; }
     .panel.active { display:block; }

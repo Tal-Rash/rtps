@@ -596,12 +596,12 @@ HTML = """<!doctype html>
     .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px 16px;margin-bottom:14px}
     h1{margin:0;font-size:24px}.muted{color:var(--muted);font-size:13px}
     .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 13px;background:#fff;color:#1f57d6;font-weight:700;text-decoration:none;font:inherit}
+    button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 13px;background:#fff;color:#1f57d6;font-weight:400;text-decoration:none;font:inherit}
     button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
     button.primary:disabled{opacity:.78}
     .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:17px}
-    .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:700;cursor:pointer;color:#1f57d6}
+    .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:400;cursor:pointer;color:#1f57d6}
     .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
     .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px;overflow:auto}
@@ -1057,7 +1057,7 @@ LOGIN_HTML = """<!doctype html>
     body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f7fb;color:#102033}
     .card{max-width:420px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
     input,button{width:100%;padding:12px;border-radius:8px;border:1px solid #d9e2ef;font:inherit}
-    button{background:#276ef1;color:#fff;font-weight:700;cursor:pointer;border:0}
+    button{background:#276ef1;color:#fff;font-weight:400;cursor:pointer;border:0}
     .muted{color:#607086;font-size:13px}
   </style>
 </head>
