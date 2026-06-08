@@ -705,19 +705,19 @@ function renderTable(name, rows, editableRows){
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
-        html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
+        html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
       } else if (name === 'inventory' && c === 2) {
         const cls = 'left';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 3) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 4) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 5) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else {
         const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 2) ? 'left' : '';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       }
     });
     html += '</tr>';
