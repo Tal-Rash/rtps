@@ -2685,18 +2685,21 @@ HTML = """<!doctype html>
     h1 { margin:0; font-size:24px; }
     .muted { color:var(--muted); font-size:13px; }
     .actions, .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    button, a { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:#1f57d6; font:inherit; text-decoration:none; }
-    input, select { border:1px solid #2f6fed; border-radius:8px; padding:9px 11px; background:#fff; color:var(--text); font:inherit; }
-    button { cursor:pointer; font-weight:700; }
-    button:hover, a:hover { box-shadow:0 0 0 2px rgba(47,111,237,.10); }
-    .primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+    button, a, input, select { border:1px solid var(--line); border-radius:8px; padding:9px 11px; background:#fff; color:var(--text); font:inherit; text-decoration:none; }
+    button { cursor:pointer; font-weight:700; background:transparent; border-color:#9fb4d2; }
+    button:hover:not(:disabled),
+    a:hover,
+    .tab:hover { border-color:var(--blue); }
+    button:disabled { cursor:default; opacity:.55; }
+    .primary { background:transparent; border-color:#9fb4d2; color:var(--text); }
+    .primary.save-ready { background:var(--blue); border-color:var(--blue); color:#fff; }
     .meta { display:none; }
     .badge { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:13px; }
     .badge strong { font-weight:700; }
     #saveBtn { margin-left:auto; }
     .tabs { display:flex; gap:8px; margin-top:12px; }
-    .tab { background:#fff; border:1px solid #2f6fed; border-bottom-color:#2f6fed; padding:10px 14px; border-radius:10px 10px 0 0; font-weight:700; cursor:pointer; color:#1f57d6; }
-    .tab.active { background:#2f6fed; color:#fff; border-color:#2f6fed; border-bottom-color:#2f6fed; }
+    .tab { background:transparent; border:1px solid #9fb4d2; border-bottom-color:#c9d4e3; padding:10px 14px; border-radius:10px 10px 0 0; font-weight:700; cursor:pointer; }
+    .tab.active { background:transparent; border-color:var(--blue) var(--blue) #eef3f8; color:var(--blue); box-shadow:inset 0 -3px 0 var(--blue); }
     .panel { display:none; background:#fff; border:1px solid var(--line); border-top:none; border-radius:0 16px 16px 16px; padding:12px; }
     .panel.active { display:block; }
     .archive-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
@@ -3772,6 +3775,7 @@ function setStatus(text){
 }
 function setDirty(flag){
   dirty = !!flag;
+  updateSaveButtonState();
   updateHistoryButtons();
 }
 function cloneState(value){
@@ -3784,6 +3788,13 @@ function updateHistoryButtons(){
   if (restoreBtn) restoreBtn.style.display = '';
   if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
+}
+function updateSaveButtonState(){
+  const saveBtn = document.getElementById('saveBtn');
+  if (!saveBtn) return;
+  const canSave = !!CAN_EDIT && !!dirty;
+  saveBtn.disabled = !canSave;
+  saveBtn.classList.toggle('save-ready', canSave);
 }
 function setActiveTab(tab){
   const inputTab = document.getElementById('tabInput');
@@ -4939,6 +4950,7 @@ document.getElementById('archiveExcelFile').addEventListener('change', event => 
   if (file) importArchiveExcelFile(file);
 });
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
+updateSaveButtonState();
 updateHistoryButtons();
 initialLoadPromise = loadState();
 </script>
