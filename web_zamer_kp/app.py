@@ -2694,7 +2694,7 @@ HTML = """<!doctype html>
     .badge { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:13px; }
     .badge strong { font-weight:700; }
     #saveBtn { margin-left:auto; }
-    .tabs { display:flex; gap:8px; margin-top:12px; margin-bottom:-1px; }
+    .tabs { display:flex; gap:8px; margin-top:12px; margin-bottom:-1px; padding-left:12px; }
     .tab { background:#fff; border:1px solid #2f6fed; border-bottom-color:#2f6fed; padding:10px 14px; border-radius:10px 10px 0 0; font-weight:700; cursor:pointer; color:#1f57d6; }
     .tab.active { background:#2f6fed; color:#fff; border-color:#2f6fed; border-bottom-color:#2f6fed; }
     .panel { display:none; background:#fff; border:1px solid var(--line); border-top:none; border-radius:0 16px 16px 16px; padding:12px; }
