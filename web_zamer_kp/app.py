@@ -2929,7 +2929,7 @@ HTML = """<!doctype html>
     .norms-table th { font-size:13px; }
     .norms-table input, .norms-table select { width:100%; height:30px; padding:4px 6px; border-radius:6px; }
     .status { min-height:20px; margin-top:10px; font-size:13px; color:var(--muted); }
-    .input-meta { margin-top:8px; font-size:13px; color:var(--muted); }
+    .input-meta { display:none; }
     @media (max-width: 900px) {
       .top { display:block; }
       .actions, .filters { margin-top:10px; }
@@ -4467,10 +4467,7 @@ function updateArchiveSortButton(){
 function renderMeta(){
   const meta = document.getElementById('inputMeta');
   if (!meta) return;
-  const loco = getCurrentLoco() || state?.locomotive || '';
-  const wheelPairCount = currentWheelPairCount(loco);
-  const sectionCount = Math.max(1, currentSectionCount(loco) || defaultSectionCount(wheelPairCount));
-  meta.textContent = `Колесных пар: ${wheelPairCount} · Секций: ${sectionCount}`;
+  meta.textContent = '';
 }
 function renderArchiveTable(){
   const tbody = document.getElementById('archiveBody');
