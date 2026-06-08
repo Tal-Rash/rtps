@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.79"
+APP_VERSION = "web-zkp-1.80"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2864,16 +2864,32 @@ HTML = """<!doctype html>
     .table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:12px; overflow:hidden; display:flex; justify-content:center; margin-top:16px; }
     .archive-table-shell {
       margin-top:0;
-      padding-top:10px;
+      padding:10px 0 0;
       justify-content:flex-start;
-      max-height:calc(100vh - 280px);
+      display:block;
+      overflow:visible;
+      border:0;
+      background:transparent;
+    }
+    .archive-head-shell {
+      border-radius:18px 18px 0 0;
+      overflow:hidden;
+      border:1px solid #2f6fed;
+      border-bottom:0;
+      background:#fff;
+    }
+    .archive-body-shell {
+      max-height:calc(100vh - 340px);
       overflow-y:auto;
       overflow-x:hidden;
-      position:relative;
+      border:1px solid #2f6fed;
+      border-top:0;
+      border-radius:0 0 18px 18px;
+      background:#fff;
       scrollbar-width:none;
       -ms-overflow-style:none;
     }
-    .archive-table-shell::-webkit-scrollbar {
+    .archive-body-shell::-webkit-scrollbar {
       width:0;
       height:0;
     }
@@ -3233,76 +3249,99 @@ HTML = """<!doctype html>
       </div>
 
       <div class="table-shell archive-table-shell">
-        <table id="archiveTable" class="archive-table" aria-label="Архив замеров">
-          <colgroup>
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:80px">
-            <col style="width:60px"><col style="width:60px">
-            <col style="width:60px"><col style="width:60px">
-            <col style="width:60px"><col style="width:60px">
-            <col style="width:60px"><col style="width:60px">
-            <col style="width:60px"><col style="width:60px">
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">Дата<br>ремонт</span>
-                <span class="archive-head-expanded">Дата выполнения обмера<br>и вид ремонта</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">Секция</th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">Прокат</span>
-                <span class="archive-head-expanded">Наибольший прокат,<br>мм</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">Гребень</span>
-                <span class="archive-head-expanded">Наименьшая толщина<br>гребня, мм</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">Крутизна</span>
-                <span class="archive-head-expanded">Наибольший параметр<br>крутизны гребня, мм</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">Бандаж</span>
-                <span class="archive-head-expanded">Наименьшая толщ. бандажа<br>(за вычетом проката), мм</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">Диаметр</span>
-                <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">КП с бандажом</span>
-                <span class="archive-head-expanded">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">
-                <span class="archive-head-collapsed">КП с прокатом 6+</span>
-                <span class="archive-head-expanded">Число колесных пар с<br>прокатом 6 мм и более</span>
-              </th>
-              <th class="archive-vert-head archive-sticky-col" rowspan="2">Номер<br>КП</th>
-              <th colspan="2">Прокат</th>
-              <th colspan="2">Толщина<br>гребня</th>
-              <th colspan="2">Крутизна<br>гребня</th>
-              <th colspan="2">Толщина<br>бандажа</th>
-              <th colspan="2">Диаметр<br>бандажа</th>
-            </tr>
-            <tr>
-              <th>лев</th><th>прав</th>
-              <th>лев</th><th>прав</th>
-              <th>лев</th><th>прав</th>
-              <th>лев</th><th>прав</th>
-              <th>лев</th><th>прав</th>
-            </tr>
-          </thead>
-          <tbody id="archiveBody"></tbody>
-        </table>
+        <div class="archive-head-shell">
+          <table id="archiveHeadTable" class="archive-table" aria-hidden="true">
+            <colgroup>
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Дата<br>ремонт</span>
+                  <span class="archive-head-expanded">Дата выполнения обмера<br>и вид ремонта</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">Секция</th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Прокат</span>
+                  <span class="archive-head-expanded">Наибольший прокат,<br>мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Гребень</span>
+                  <span class="archive-head-expanded">Наименьшая толщина<br>гребня, мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Крутизна</span>
+                  <span class="archive-head-expanded">Наибольший параметр<br>крутизны гребня, мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Бандаж</span>
+                  <span class="archive-head-expanded">Наименьшая толщ. бандажа<br>(за вычетом проката), мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Диаметр</span>
+                  <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">КП с бандажом</span>
+                  <span class="archive-head-expanded">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">КП с прокатом 6+</span>
+                  <span class="archive-head-expanded">Число колесных пар с<br>прокатом 6 мм и более</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">Номер<br>КП</th>
+                <th colspan="2">Прокат</th>
+                <th colspan="2">Толщина<br>гребня</th>
+                <th colspan="2">Крутизна<br>гребня</th>
+                <th colspan="2">Толщина<br>бандажа</th>
+                <th colspan="2">Диаметр<br>бандажа</th>
+              </tr>
+              <tr>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div class="archive-body-shell">
+          <table id="archiveTable" class="archive-table archive-body-table" aria-label="Архив замеров">
+            <colgroup>
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+            </colgroup>
+            <tbody id="archiveBody"></tbody>
+          </table>
+        </div>
       </div>
       <div id="archiveStatus" class="status"></div>
     </div>
