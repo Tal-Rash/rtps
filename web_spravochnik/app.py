@@ -559,6 +559,7 @@ HTML = """<!doctype html>
     th{background:#eef4fb;font-weight:700}
     td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
     td input[type=checkbox]{width:auto;height:auto}
+    .table-shell tbody tr:focus-within{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
     .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
@@ -673,6 +674,7 @@ function renderAll(){
   }
   updateHistoryButtons();
   updateSaveButton();
+  syncInventoryActionButtons();
 }
 
 function renderTable(name, rows, editableRows){
@@ -685,9 +687,9 @@ function renderTable(name, rows, editableRows){
             const isDeleted = selectedRow ? Number(selectedRow[6] || 0) > 0 : false;
             return `<div class="rowbar">
               <button type="button" onclick="openAddLocomotiveModal()">Добавить локомотив</button>
-              <button type="button" onclick="softDeleteInventory(${selected.inventory})" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
-              <button type="button" onclick="restoreInventoryRow(${selected.inventory})" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
-              <button type="button" onclick="purgeSelectedInventory(${selected.inventory})" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
+              <button id="inventoryDeleteBtn" type="button" onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
+              <button id="inventoryRestoreBtn" type="button" onclick="restoreInventoryRow()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
+              <button id="inventoryPurgeBtn" type="button" onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
             </div>`;
           })()
         : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
@@ -711,16 +713,16 @@ function renderTable(name, rows, editableRows){
         html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
       } else if (name === 'inventory' && c === 2) {
         const cls = 'left';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 3) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 4) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else if (name === 'inventory' && c === 5) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       } else {
         const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 2) ? 'left' : '';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
       }
     });
     html += '</tr>';
@@ -734,8 +736,31 @@ let draggedRowIndex = -1;
 function selectRow(name, row){
   selected[name] = row;
   if (name === 'inventory') {
-    renderTable('inventory', state.inventory, true);
+    syncInventoryActionButtons();
+    updateInventorySelectionHighlight();
   }
+}
+function selectInventoryRow(row){
+  selected.inventory = row;
+  syncInventoryActionButtons();
+  updateInventorySelectionHighlight();
+}
+function syncInventoryActionButtons(){
+  const current = getSelectedInventoryRow();
+  const isDeleted = current ? Number(current[6] || 0) > 0 : false;
+  const deleteBtn = document.getElementById('inventoryDeleteBtn');
+  const restoreBtn = document.getElementById('inventoryRestoreBtn');
+  const purgeBtn = document.getElementById('inventoryPurgeBtn');
+  if (deleteBtn) deleteBtn.disabled = selected.inventory < 0 || isDeleted;
+  if (restoreBtn) restoreBtn.disabled = selected.inventory < 0 || !isDeleted;
+  if (purgeBtn) purgeBtn.disabled = selected.inventory < 0 || !isDeleted;
+}
+function updateInventorySelectionHighlight(){
+  const panel = document.getElementById('inventory');
+  if (!panel) return;
+  panel.querySelectorAll('tbody tr').forEach((tr, index) => {
+    tr.classList.toggle('selected-row', index === selected.inventory);
+  });
 }
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
 function addRow(name){
@@ -774,6 +799,7 @@ function softDeleteInventory(row){
   current[6] = Date.now();
   selected.inventory = targetRow;
   renderTable('inventory', state.inventory, true);
+  syncInventoryActionButtons();
   updateSaveButton();
 }
 function restoreInventoryRow(row){
@@ -784,6 +810,7 @@ function restoreInventoryRow(row){
   current[6] = 0;
   selected.inventory = targetRow;
   renderTable('inventory', state.inventory, true);
+  syncInventoryActionButtons();
   updateSaveButton();
 }
 async function purgeSelectedInventory(row){
