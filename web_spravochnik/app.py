@@ -347,14 +347,44 @@ def load_state(year: int) -> dict:
             (year,),
         ):
             employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["milk_note"])])
-        for row in cur.execute(
+        inventory_rows = cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number, rowid
             FROM inventory
             WHERE y=?
             ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid
             """,
             (year,),
+        ).fetchall()
+        best_inventory_rows: dict[str, sqlite3.Row] = {}
+        for row in inventory_rows:
+            ser = text(row["ser"]).strip()
+            num = text(row["num"]).strip()
+            if not (ser or num):
+                continue
+            key = f"{ser.upper()}|{num}"
+            current = best_inventory_rows.get(key)
+            if current is None or (
+                int(row["updated_at"] or 0),
+                int(row["deleted_at"] or 0),
+                int(row["sort_order"] or 0),
+                int(row["rowid"] or 0),
+            ) > (
+                int(current["updated_at"] or 0),
+                int(current["deleted_at"] or 0),
+                int(current["sort_order"] or 0),
+                int(current["rowid"] or 0),
+            ):
+                best_inventory_rows[key] = row
+        for row in sorted(
+            best_inventory_rows.values(),
+            key=lambda item: (
+                int(item["sort_order"] or 0),
+                -int(item["updated_at"] or 0),
+                -int(item["deleted_at"] or 0),
+                text(item["ser"]),
+                text(item["num"]),
+            ),
         ):
             inventory.append([
                 text(row["ser"]),
@@ -405,13 +435,35 @@ def save_state(payload: dict) -> None:
 
         existing_rows = cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, rowid
             FROM inventory
             WHERE y=?
             """,
             (year,),
         ).fetchall()
-        existing_map = {(text(row["ser"]).strip(), text(row["num"]).strip()): row for row in existing_rows}
+        existing_map: dict[tuple[str, str], sqlite3.Row] = {}
+        duplicate_rowids: list[int] = []
+        for row in sorted(
+            existing_rows,
+            key=lambda item: (
+                -int(item["updated_at"] or 0),
+                -int(item["deleted_at"] or 0),
+                int(item["sort_order"] or 0),
+                int(item["rowid"] or 0),
+            ),
+        ):
+            ser = text(row["ser"]).strip()
+            num = text(row["num"]).strip()
+            if not (ser or num):
+                continue
+            key = (ser.upper(), num)
+            if key in existing_map:
+                duplicate_rowids.append(int(row["rowid"]))
+                continue
+            existing_map[key] = row
+        if duplicate_rowids:
+            placeholders = ",".join("?" for _ in duplicate_rowids)
+            cur.execute(f"DELETE FROM inventory WHERE rowid IN ({placeholders})", duplicate_rowids)
         submitted_keys: set[tuple[str, str]] = set()
         now = int(dt.datetime.now().timestamp() * 1000)
         for order_index, row in enumerate(inventory, start=1):
@@ -433,9 +485,10 @@ def save_state(payload: dict) -> None:
                 deleted_at = 0
             if not (ser or num):
                 continue
-            submitted_keys.add((ser, num))
-            if (ser, num) in existing_map:
-                existing_inv = text(existing_map[(ser, num)]["inv"]).strip()
+            key = (ser.upper(), num)
+            submitted_keys.add(key)
+            if key in existing_map:
+                existing_inv = text(existing_map[key]["inv"]).strip()
                 inv_value = inv if inv else existing_inv
                 cur.execute(
                     """
@@ -452,7 +505,7 @@ def save_state(payload: dict) -> None:
                         now,
                         deleted_at,
                         year,
-                        ser,
+                        text(existing_map[key]["ser"]).strip(),
                         num,
                     ),
                 )
@@ -462,10 +515,10 @@ def save_state(payload: dict) -> None:
                     INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?)
                     """,
-                    (year, ser, num, inv, wheel_pair_count or None, section_count or None, eight_digit_number, order_index, now, deleted_at),
+                    (year, ser.upper(), num, inv, wheel_pair_count or None, section_count or None, eight_digit_number, order_index, now, deleted_at),
                 )
-        for (ser, num), row in existing_map.items():
-            if (ser, num) in submitted_keys:
+        for (ser_key, num_key), row in existing_map.items():
+            if (ser_key, num_key) in submitted_keys:
                 continue
             if int(row["deleted_at"] or 0) > 0:
                 continue
@@ -475,7 +528,7 @@ def save_state(payload: dict) -> None:
                 SET updated_at=?, deleted_at=?, sort_order=COALESCE(sort_order, ?)
                 WHERE y=? AND ser=? AND num=?
                 """,
-                (now, now, len(inventory) + 1, year, ser, num),
+                (now, now, len(inventory) + 1, year, text(row["ser"]).strip(), text(row["num"]).strip()),
             )
         conn.commit()
 

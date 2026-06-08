@@ -357,23 +357,56 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
     query += " ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid DESC"
     rows = cur.execute(query).fetchall()
 
-    seen: set[str] = set()
-    result: list[dict[str, str]] = []
+    best_rows: dict[str, sqlite3.Row] = {}
     for row in rows:
         number = text(row["num"]).strip()
-        if not number or number in seen:
+        if not number:
             continue
-        seen.add(number)
-        series = text(row["ser"]).strip()
+        series = normalize_text(row["ser"]).strip().upper()
+        key = f"{series}|{number}"
+        current = best_rows.get(key)
+        if current is None:
+            best_rows[key] = row
+            continue
+        current_rank = (
+            int(current["updated_at"] or 0),
+            int(current["deleted_at"] or 0),
+            int(current["sort_order"] or 0),
+            int(current["rowid"] or 0),
+        )
+        row_rank = (
+            int(row["updated_at"] or 0),
+            int(row["deleted_at"] or 0),
+            int(row["sort_order"] or 0),
+            int(row["rowid"] or 0),
+        )
+        if row_rank > current_rank:
+            best_rows[key] = row
+
+    result: list[dict[str, str]] = []
+    for row in sorted(
+        best_rows.values(),
+        key=lambda item: (
+            int(item["sort_order"] or 0),
+            -int(item["updated_at"] or 0),
+            -int(item["deleted_at"] or 0),
+            normalize_text(item["ser"]).strip().upper(),
+            text(item["num"]).strip(),
+        ),
+    ):
+        number = text(row["num"]).strip()
+        if not number:
+            continue
+        deleted_at = int(row["deleted_at"] or 0)
+        if deleted_at > 0 and not include_deleted:
+            continue
+        series = normalize_text(row["ser"]).strip().upper()
         inv = text(row["inv"]).strip()
         sort_order = int(row["sort_order"] or 0)
         updated_at = int(row["updated_at"] or 0)
-        deleted_at = int(row["deleted_at"] or 0)
         wheel_pair_count = int(row["wheel_pair_count"] or 0)
         section_count = int(row["section_count"] or 0)
         eight_digit_number = text(row["eight_digit_number"]).strip()
-        if deleted_at > 0 and not include_deleted:
-            continue
         label = f"{series} {number}".strip()
         if inv:
             label = f"{label} (инв. {inv})"
@@ -1237,7 +1270,7 @@ def upsert_inventory_locomotive(
     sort_order: int = 0,
     deleted_at: int = 0,
 ) -> None:
-    series = text(series).strip()
+    series = text(series).strip().upper()
     loco_number = text(loco_number).strip()
     if not loco_number:
         return
@@ -1245,13 +1278,13 @@ def upsert_inventory_locomotive(
     now_ms = int(dt.datetime.now().timestamp() * 1000)
     existing = cur.execute(
         "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
+        "FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, COALESCE(sort_order, 0) ASC, rowid DESC LIMIT 1",
         (loco_number,),
     ).fetchone()
     inv = text(existing["inv"]).strip() if existing else ""
     sort_order_value = int(sort_order or 0)
     if existing:
-        series = series or text(existing["ser"]).strip()
+        series = series or text(existing["ser"]).strip().upper()
         if sort_order_value <= 0:
             sort_order_value = int(existing["sort_order"] or 0)
     if sort_order_value <= 0:
@@ -1283,7 +1316,7 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
         return
     existing = cur.execute(
         "SELECT inv, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(sort_order, 0) AS sort_order, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE TRIM(COALESCE(num, ''))=? LIMIT 1",
+        "FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) LIMIT 1",
         (loco_number,),
     ).fetchone()
     if existing and int(existing["deleted_at"] or 0) > 0:
@@ -1291,7 +1324,7 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
     if existing:
         upsert_inventory_locomotive(
             cur,
-            series,
+            text(series).strip().upper(),
             loco_number,
             inv=text(existing["inv"]).strip(),
             wheel_pair_count=int(existing["wheel_pair_count"] or 0),
@@ -1303,7 +1336,7 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
         return
     upsert_inventory_locomotive(
         cur,
-        series,
+        text(series).strip().upper(),
         loco_number,
         wheel_pair_count=wheel_pair_count,
         section_count=default_section_count(wheel_pair_count),
@@ -1439,21 +1472,47 @@ def import_phone_reference_payload(payload: dict) -> dict:
     if not isinstance(locomotives, list) or not locomotives:
         return {"error": "В файле справочника нет локомотивов."}, HTTPStatus.BAD_REQUEST
 
+    grouped: dict[str, dict[str, object]] = {}
+    for loco in locomotives:
+        if not isinstance(loco, dict):
+            continue
+        series = text(loco.get("series")).strip().upper()
+        number = text(loco.get("number")).strip()
+        if not number:
+            continue
+        key = f"{series}|{number}"
+        candidate = {
+            "series": series,
+            "number": number,
+            "sortOrder": int(loco.get("sortOrder") or 0),
+            "updatedAt": int(loco.get("updatedAt") or 0),
+            "deletedAt": int(loco.get("deletedAt") or 0),
+            "wheelPairCount": int(loco.get("wheelPairCount") or 6),
+            "wheelPairs": loco.get("wheelPairs", []),
+        }
+        current = grouped.get(key)
+        if current is None or (
+            candidate["updatedAt"],
+            candidate["deletedAt"],
+            candidate["sortOrder"],
+        ) > (
+            current["updatedAt"],
+            current["deletedAt"],
+            current["sortOrder"],
+        ):
+            grouped[key] = candidate
+
     imported_count = 0
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         cur.execute("BEGIN")
-        for loco in locomotives:
-            if not isinstance(loco, dict):
-                continue
-            series = text(loco.get("series")).strip()
-            number = text(loco.get("number")).strip()
-            if not number:
-                continue
-            sort_order = int(loco.get("sortOrder") or 0)
-            updated_at = int(loco.get("updatedAt") or 0)
-            deleted_at = int(loco.get("deletedAt") or 0)
-            wheel_pair_count = int(loco.get("wheelPairCount") or 6)
+        for loco in grouped.values():
+            series = text(loco["series"]).strip().upper()
+            number = text(loco["number"]).strip()
+            sort_order = int(loco["sortOrder"] or 0)
+            updated_at = int(loco["updatedAt"] or 0)
+            deleted_at = int(loco["deletedAt"] or 0)
+            wheel_pair_count = int(loco["wheelPairCount"] or 6)
             upsert_inventory_locomotive(
                 cur,
                 series,
@@ -1845,7 +1904,7 @@ def upsert_inventory_locomotive(
     locomotive = text(locomotive).strip()
     if not locomotive:
         return
-    series = text(series).strip()
+    series = text(series).strip().upper()
     inv = text(inv).strip()
     eight_digit_number = text(eight_digit_number).strip()
     year = dt.date.today().year
@@ -1853,7 +1912,7 @@ def upsert_inventory_locomotive(
     updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
     if sort_order_value <= 0:
         existing = cur.execute(
-            "SELECT COALESCE(sort_order, 0) AS sort_order FROM inventory WHERE TRIM(COALESCE(num, ''))=? ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, y) DESC, y DESC, rowid DESC LIMIT 1",
+            "SELECT COALESCE(sort_order, 0) AS sort_order FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, COALESCE(sort_order, 0) ASC, rowid DESC LIMIT 1",
             (locomotive,),
         ).fetchone()
         if existing:
@@ -1865,8 +1924,8 @@ def upsert_inventory_locomotive(
         sort_order_value = int(max_row["max_sort_order"] or 0) + 1
     exact = cur.execute(
         "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=? "
-        "ORDER BY COALESCE(updated_at, 0) DESC, rowid DESC LIMIT 1",
+        "FROM inventory WHERE y=? AND UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? "
+        "ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, rowid DESC LIMIT 1",
         (year, series, locomotive),
     ).fetchone()
     if exact:
@@ -1889,7 +1948,7 @@ def upsert_inventory_locomotive(
             (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
         )
         cur.execute(
-            "DELETE FROM inventory WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
+            "DELETE FROM inventory WHERE y=? AND UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
             (year, series, locomotive, int(exact["rowid"])),
         )
         return
@@ -2111,23 +2170,50 @@ def import_phone_reference_payload(payload: dict) -> dict:
     if not isinstance(locomotives, list):
         return {"error": "Некорректный справочник локомотивов."}, HTTPStatus.BAD_REQUEST
 
+    grouped: dict[str, dict[str, object]] = {}
+    for item in locomotives:
+        if not isinstance(item, dict):
+            continue
+        series = text(item.get("series")).strip().upper()
+        number = text(item.get("number")).strip()
+        if not number:
+            continue
+        key = f"{series}|{number}"
+        candidate = {
+            "series": series,
+            "number": number,
+            "wheelPairCount": parse_excel_int(item.get("wheelPairCount")) or len(item.get("wheelPairs") or []) or locomotive_axis_count(series, number),
+            "sortOrder": parse_excel_int(item.get("sortOrder")) or 0,
+            "updatedAt": parse_excel_int(item.get("updatedAt")) or 0,
+            "deletedAt": parse_excel_int(item.get("deletedAt")) or 0,
+            "eightDigitNumber": text(item.get("eightDigitNumber")).strip(),
+            "wheelPairs": item.get("wheelPairs") if isinstance(item.get("wheelPairs"), list) else [],
+        }
+        current = grouped.get(key)
+        if current is None or (
+            candidate["updatedAt"],
+            candidate["deletedAt"],
+            candidate["sortOrder"],
+        ) > (
+            current["updatedAt"],
+            current["deletedAt"],
+            current["sortOrder"],
+        ):
+            grouped[key] = candidate
+
     imported_locomotives = 0
     imported_wheel_pairs = 0
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         cur.execute("BEGIN")
-        for item in locomotives:
-            if not isinstance(item, dict):
-                continue
-            series = text(item.get("series")).strip()
-            number = text(item.get("number")).strip()
-            if not number:
-                continue
-            wheel_pair_count = parse_excel_int(item.get("wheelPairCount")) or len(item.get("wheelPairs") or []) or locomotive_axis_count(series, number)
-            sort_order = parse_excel_int(item.get("sortOrder")) or 0
-            updated_at = parse_excel_int(item.get("updatedAt")) or 0
-            deleted_at = parse_excel_int(item.get("deletedAt")) or 0
-            eight_digit_number = text(item.get("eightDigitNumber")).strip()
+        for item in grouped.values():
+            series = text(item["series"]).strip().upper()
+            number = text(item["number"]).strip()
+            wheel_pair_count = int(item["wheelPairCount"] or 0)
+            sort_order = int(item["sortOrder"] or 0)
+            updated_at = int(item["updatedAt"] or 0)
+            deleted_at = int(item["deletedAt"] or 0)
+            eight_digit_number = text(item["eightDigitNumber"]).strip()
             upsert_inventory_locomotive(
                 cur,
                 series,
@@ -2299,7 +2385,7 @@ def ensure_import_locomotive(cur: sqlite3.Cursor, series: str, locomotive: str, 
     locomotive = text(locomotive).strip()
     if not locomotive:
         return
-    series = text(series).strip()
+    series = text(series).strip().upper()
     upsert_inventory_locomotive(cur, series, locomotive)
     for index in range(max(1, int(wheel_pair_count or 1))):
         cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (locomotive, index, str(index + 1)))
