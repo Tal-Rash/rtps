@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.49"
+APP_VERSION = "web-zkp-1.50"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -2886,21 +2886,12 @@ HTML = """<!doctype html>
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
-    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; height:16px; }
+    .archive-table th, .archive-table td { font-size:12px; text-align:center; vertical-align:middle; height:16px; padding:0; line-height:1.0; }
     .archive-table td { white-space:pre-line; }
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
     .archive-table td.section-merged { vertical-align:middle; font-weight:600; }
     .archive-table td.summary-merged { vertical-align:middle; }
-    .archive-table td.section-merged,
-    .archive-table td.summary-merged,
-    .archive-table td.axis-col,
-    .archive-table td.first-col { padding-top:0; padding-bottom:0; line-height:1.0; }
-    .archive-table td.section-merged,
-    .archive-table td.summary-merged,
-    .archive-table td.axis-col,
-    .archive-table td.first-col,
-    .archive-table td.archive-raw { padding-left:0; padding-right:0; }
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
