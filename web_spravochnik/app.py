@@ -551,7 +551,8 @@ HTML = """<!doctype html>
     .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:700;cursor:pointer;color:#1f57d6}
     .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
     .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
-    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:24px;padding:14px;overflow:auto}
+    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px;overflow:auto}
+    .table-shell{margin-top:12px;background:#fff;border:1px solid #2f6fed;border-radius:18px;overflow:hidden}
     .panel.active{display:block}
     table{border-collapse:collapse;width:100%;min-width:760px}
     th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center}
@@ -692,7 +693,7 @@ function renderTable(name, rows, editableRows){
         : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
     )
     : '';
-  let html = rowbar + '<table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  let html = rowbar + '<div class="table-shell"><table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[6] || 0) > 0;
     const draggable = name === 'inventory' && CAN_EDIT
@@ -724,7 +725,7 @@ function renderTable(name, rows, editableRows){
     });
     html += '</tr>';
   });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   panel.innerHTML = html;
 }
 

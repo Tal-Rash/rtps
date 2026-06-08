@@ -2719,7 +2719,7 @@ HTML = """<!doctype html>
     .archive-controls label { display:flex; align-items:center; gap:8px; }
     .archive-controls input { width:240px; }
     .input-locomotive-filter { display:flex; align-items:center; gap:8px; }
-    .table-shell { background:#fff; border:1px solid var(--line); border-radius:16px; padding:12px; overflow:auto; display:flex; justify-content:center; margin-top:16px; }
+    .table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:12px; overflow:hidden; display:flex; justify-content:center; margin-top:16px; }
     .archive-table-shell { margin-top:0; padding-top:10px; }
     .kp-shell { margin-top:12px; }
     .kp-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
