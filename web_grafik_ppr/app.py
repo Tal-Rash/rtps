@@ -2463,7 +2463,7 @@ function renderMonthTable(type, title, m, headers){
       ${controlsHtml}
     </div>
     <div class="table-wrap">
-      <table class="compact month-table" style="width:${45 + 100 + 60 + 80 + (m.days * 36) + 120}px">
+      <table class="compact month-table" style="width:${45 + 100 + 72 + 100 + (m.days * 36) + 120}px">
         <colgroup>${colHtml}</colgroup>
         <thead><tr>${headHtml}</tr></thead>
         <tbody>${tableRows}</tbody>
