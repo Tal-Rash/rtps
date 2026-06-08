@@ -2681,7 +2681,7 @@ HTML = """<!doctype html>
     * { box-sizing:border-box; }
     body { margin:0; font-family:Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
     .wrap { max-width: 1540px; margin:0 auto; padding:16px; }
-    .top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px 16px; }
+    .top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; background:#fff; border:1px solid #2f6fed; border-radius:16px; padding:14px 16px; }
     h1 { margin:0; font-size:24px; }
     .muted { color:var(--muted); font-size:13px; }
     .actions, .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
