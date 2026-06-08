@@ -2891,6 +2891,7 @@ HTML = """<!doctype html>
     .archive-table td.raw { width:60px; }
     .archive-table td.axis-col { width:80px; background:#f7fafc; font-weight:600; }
     .archive-table td.section-merged { vertical-align:middle; font-weight:600; background:#f7fafc; }
+    .archive-table td.summary-merged { vertical-align:middle; background:#f7fafc; }
     .archive-table td.archive-raw { width:60px; }
     .archive-table td.archive-raw input {
       width:100%;
@@ -4526,6 +4527,12 @@ function renderArchiveTable(){
         const span = sectionSpans.get(rowIndex);
         if (!span) return '';
         return `<td class="section-merged" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+      }
+      if (index >= 2 && index <= 8) {
+        const span = measurementSpans.get(rowIndex);
+        if (!span) return '';
+        const summaryClass = index === 7 || index === 8 ? 'summary-merged' : 'summary-merged';
+        return `<td class="${summaryClass}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 10) {
         return `
