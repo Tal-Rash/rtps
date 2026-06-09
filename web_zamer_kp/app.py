@@ -182,42 +182,10 @@ def ensure_db() -> None:
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
             DEFAULT_NORMS,
         )
-        _migrate_greben_prokat_order(conn)
         conn.commit()
 
 
-def _migrate_greben_prokat_order(conn: sqlite3.Connection) -> None:
-    cur = conn.cursor()
-    flag_row = cur.execute("SELECT v FROM app_meta WHERE k='greben_prokat_swap_v1'").fetchone()
-    if flag_row and text(flag_row[0]).strip() == "1":
-        return
 
-    swap_map = {2: 4, 3: 5, 4: 2, 5: 3}
-    input_rows = cur.execute("SELECT y, locomotive, r, c, v FROM input_data WHERE c IN (2, 3, 4, 5)").fetchall()
-    if input_rows:
-        cur.execute("DELETE FROM input_data WHERE c IN (2, 3, 4, 5)")
-        migrated_input = []
-        for y, locomotive, r, c, v in input_rows:
-            migrated_input.append((y, locomotive, r, swap_map.get(int(c), int(c)), v))
-        cur.executemany(
-            "INSERT INTO input_data (y, locomotive, r, c, v) VALUES (?, ?, ?, ?, ?)",
-            migrated_input,
-        )
-
-    archive_rows = cur.execute(
-        "SELECT y, measurement_date, locomotive, repair_type, r, c, v FROM archive_data WHERE c IN (2, 3, 4, 5)"
-    ).fetchall()
-    if archive_rows:
-        cur.execute("DELETE FROM archive_data WHERE c IN (2, 3, 4, 5)")
-        migrated_archive = []
-        for y, measurement_date, locomotive, repair_type, r, c, v in archive_rows:
-            migrated_archive.append((y, measurement_date, locomotive, repair_type, r, swap_map.get(int(c), int(c)), v))
-        cur.executemany(
-            "INSERT INTO archive_data (y, measurement_date, locomotive, repair_type, r, c, v) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            migrated_archive,
-        )
-
-    cur.execute("INSERT OR REPLACE INTO app_meta(k, v) VALUES('greben_prokat_swap_v1', '1')")
 
 
 def _ensure_inventory_sync_columns(conn: sqlite3.Connection) -> None:
@@ -2363,10 +2331,10 @@ def import_phone_measurement_payload(payload: dict) -> dict:
             values = {
                 0: section_value,
                 1: str(pair_number),
-                2: excel_num_text(left.get("flangeThickness")),
-                3: excel_num_text(right.get("flangeThickness")),
-                4: excel_num_text(left.get("flangeWear")),
-                5: excel_num_text(right.get("flangeWear")),
+                2: excel_num_text(left.get("flangeWear")),
+                3: excel_num_text(right.get("flangeWear")),
+                4: excel_num_text(left.get("flangeThickness")),
+                5: excel_num_text(right.get("flangeThickness")),
                 6: excel_num_text(left.get("flangeSteepness")),
                 7: excel_num_text(right.get("flangeSteepness")),
                 8: excel_num_text(left.get("bandageThickness")),
