@@ -2862,7 +2862,7 @@ HTML = """<!doctype html>
     .archive-controls input { width:240px; }
     .input-locomotive-filter { display:flex; align-items:center; gap:8px; }
     .table-shell { background:#fff; border:none; border-radius:18px; padding:12px; overflow:hidden; display:flex; justify-content:center; margin-top:16px; }
-    #inputTable { border: 1px solid #2f6fed; }
+    #inputTable { box-shadow: 0 0 0 1px #2f6fed; }
     .archive-table-shell {
       margin-top:0;
       padding:10px 0 0;
