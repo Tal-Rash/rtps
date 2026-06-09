@@ -2874,16 +2874,14 @@ HTML = """<!doctype html>
     .archive-head-shell {
       border-radius:0;
       overflow:hidden;
-      border:1px solid #2f6fed;
-      border-bottom:0;
+      border:0;
       background:#fff;
     }
     .archive-body-shell {
       max-height:calc(100vh - 340px);
       overflow-y:auto;
       overflow-x:hidden;
-      border:1px solid #2f6fed;
-      border-top:0;
+      border:0;
       border-radius:0;
       background:#fff;
       scrollbar-width:none;
