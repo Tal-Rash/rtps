@@ -2901,7 +2901,7 @@ HTML = """<!doctype html>
     .kp-legend-yellow { background:#fff0a6; }
     .kp-legend-empty { background:transparent; }
     .kp-status { min-height:20px; margin-top:8px; font-size:13px; color:var(--muted); }
-    .kp-table-shell { margin-top:0; padding-top:8px; }
+    .kp-table-shell { margin-top:0; padding:0; }
     .kp-table th, .kp-table td { font-size:12px; }
     .kp-table td { white-space:pre-line; }
     .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
