@@ -3084,6 +3084,7 @@ HTML = """<!doctype html>
     .archive-table td.summary { width:80px; }
     .archive-table td.first-col { width:80px; }
     .archive-table tr.measurement-start td { border-top:1px solid #2f6fed; }
+    .archive-table tr.measurement-start td[rowspan] { border-bottom:1px solid #2f6fed; border-top:1px solid #2f6fed; }
     .archive-table tr.measurement-start td:first-child { border-left:1px solid #2f6fed; }
     .archive-table tr.measurement-row td:last-child { border-right:1px solid #2f6fed; }
     .archive-table tr.measurement-end td { border-bottom:1px solid #2f6fed; }
@@ -3091,6 +3092,10 @@ HTML = """<!doctype html>
       background:#f7fbff;
     }
     .archive-table tr.selected-measurement-start td {
+      border-top:1px solid #2f6fed !important;
+    }
+    .archive-table tr.selected-measurement-start td[rowspan] {
+      border-bottom:1px solid #2f6fed !important;
       border-top:1px solid #2f6fed !important;
     }
     .archive-table tr.selected-measurement-end td {
