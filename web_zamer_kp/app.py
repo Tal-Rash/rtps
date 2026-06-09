@@ -2872,14 +2872,11 @@ HTML = """<!doctype html>
       background:transparent;
     }
     .archive-head-shell {
-      border-radius:18px 18px 0 0;
+      border-radius:0;
       overflow:hidden;
       border:1px solid #2f6fed;
       border-bottom:0;
       background:#fff;
-    }
-    #archiveHeadTable thead tr:first-child th:first-child {
-      border-top-left-radius:0 !important;
     }
     .archive-body-shell {
       max-height:calc(100vh - 340px);
@@ -2887,7 +2884,7 @@ HTML = """<!doctype html>
       overflow-x:hidden;
       border:1px solid #2f6fed;
       border-top:0;
-      border-radius:0 0 18px 18px;
+      border-radius:0;
       background:#fff;
       scrollbar-width:none;
       -ms-overflow-style:none;
@@ -2966,7 +2963,7 @@ HTML = """<!doctype html>
     .archive-table th, .archive-table td { font-size:12px !important; text-align:center; vertical-align:middle; height:12px !important; padding:0 !important; line-height:12px !important; }
     .archive-table td { white-space:pre-line; }
     .archive-table tr { height:12px !important; }
-    .archive-table { width:max-content; min-width:100%; table-layout:fixed; --archive-head-row1-height:28px; }
+    .archive-table { width:max-content; min-width:100%; table-layout:fixed; --archive-head-row1-height:28px; border-radius:0; }
     .archive-table thead:hover,
     .archive-table thead:focus-within { --archive-head-row1-height:145px; }
     .archive-sticky-col {
