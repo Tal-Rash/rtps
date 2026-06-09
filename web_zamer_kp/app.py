@@ -2861,12 +2861,7 @@ HTML = """<!doctype html>
     .archive-controls label { display:flex; align-items:center; gap:8px; }
     .archive-controls input { width:240px; }
     .input-locomotive-filter { display:flex; align-items:center; gap:8px; }
-    .table-shell { background:#fff; border:none; border-radius:18px; padding:12px; overflow:hidden; display:flex; justify-content:center; margin-top:16px; }
-    #inputTable { box-shadow: 0 0 0 1px #2f6fed; }
-    #inputTable th:first-child, #inputTable td:first-child { border-left: none !important; }
-    #inputTable th:last-child, #inputTable td:last-child { border-right: none !important; }
-    #inputTable thead tr:first-child th { border-top: none !important; }
-    #inputTable tbody tr:last-child td { border-bottom: none !important; }
+    .table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:0; overflow:hidden; width:max-content; margin:16px auto 0; }
     .archive-table-shell {
       margin-top:0;
       padding:10px 0 0;
