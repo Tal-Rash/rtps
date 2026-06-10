@@ -2874,7 +2874,8 @@ HTML = """<!doctype html>
     .kp-table td { white-space:pre-line; }
     .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; outline:none; }
     .kp-table td.readonly { background:#f7fafc; font-weight:600; }
-    .kp-table td.selected { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    .kp-table td.selected { background:#e8f0fe; }
+    .kp-table td.selected input { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
     .loco-picker { position:relative; width:220px; }
     .loco-picker input { width:100%; box-sizing:border-box; }
     .loco-dropdown {
@@ -2921,7 +2922,8 @@ HTML = """<!doctype html>
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
     td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; line-height:34px; display:block; box-sizing:border-box; outline:none; }
-    td.measure-cell.selected { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    td.measure-cell.selected { background:#e8f0fe; }
+    td.measure-cell.selected input { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; line-height:34px; display:block; box-sizing:border-box; outline:none; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
@@ -3040,7 +3042,8 @@ HTML = """<!doctype html>
       box-sizing:border-box;
       outline:none;
     }
-    .archive-table td.archive-raw.selected { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    .archive-table td.archive-raw.selected { background:#e8f0fe; }
+    .archive-table td.archive-raw.selected input { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
     .archive-table { margin-left:0; }
     .archive-body-table {
       border-radius:0 !important;
