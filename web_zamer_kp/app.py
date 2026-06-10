@@ -80,11 +80,7 @@ def load_web_secret() -> str:
     return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 WEB_SECRET = load_web_secret()
-try:
-    if LEGACY_WEB_SECRET_FILE.exists():
-        LEGACY_WEB_SECRET = LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-except Exception:
-    LEGACY_WEB_SECRET = ""
+LEGACY_WEB_SECRET = ""
 
 
 def connect() -> sqlite3.Connection:
