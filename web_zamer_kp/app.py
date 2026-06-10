@@ -64,33 +64,25 @@ ARCHIVE_EXCEL_HEADERS = [
 ]
 
 
-def load_web_secret() -> str:
-    secret = os.environ.get("WEB_SECRET", "").strip()
-    if secret:
-        return secret
-    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if WEB_SECRET_FILE.exists():
-        try:
-            secret = WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-            if secret:
-                return secret
-        except Exception:
-            pass
-    if LEGACY_WEB_SECRET_FILE.exists():
-        try:
-            secret = LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-            if secret:
-                WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
-                return secret
-        except Exception:
-            pass
-    secret = secrets.token_urlsafe(32)
-    WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
-    return secret
+def config(key: str, default: str = "") -> str:
+    val = os.environ.get(key)
+    if val is not None:
+        return val
+    try:
+        env_path = Path(__file__).parent.parent / ".env"
+        if env_path.exists():
+            for line in env_path.read_text("utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    if k.strip() == key:
+                        return v.strip()
+    except Exception:
+        pass
+    return default
 
-
-WEB_SECRET = load_web_secret()
-LEGACY_WEB_SECRET = ""
+WEB_SECRET = config("WEB_SECRET", default="opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024")
+LEGACY_WEB_SECRET = config("LEGACY_WEB_SECRET", default="")
 try:
     if LEGACY_WEB_SECRET_FILE.exists():
         LEGACY_WEB_SECRET = LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
