@@ -233,17 +233,31 @@ def current_session(handler) -> tuple[str, str, str, str] | None:
             return session
     return None
 
+def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
+    if not session: return None
+    role = session[1]
+    modules = session[2]
+    for part in modules.split(","):
+        part = part.strip()
+        if not part: continue
+        if ":" in part:
+            k, v = part.split(":", 1)
+            if k == mod_name: return v
+        else:
+            if part == mod_name: return role
+    if role == "admin": return "admin"
+    return None
+
 def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
     if not session:
         handler.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
         return None
-    user_id, role, modules, safe_name = session
-    mods = [m.strip() for m in modules.split(",")]
-    if "admin" not in mods and "zamer_kp" not in mods:
+    mod_role = get_mod_role(session, "zamer_kp")
+    if not mod_role:
         handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
-    if need_edit and role not in ("edit", "editor", "admin"):
+    if need_edit and mod_role not in ("edit", "editor", "admin"):
         handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     return session
@@ -5430,7 +5444,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = route_path(parsed.path)
         session = current_session(self)
-        role = session[1] if session else None
+        mod_role = get_mod_role(session, "zamer_kp")
 
         if route == "/login":
             if session:
@@ -5444,10 +5458,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if route == "/":
-            if not session:
+            if not session or not mod_role:
                 send_html(self, UNAUTH_HTML)
                 return
-            send_html(self, render_page(role or "view"))
+            send_html(self, render_page(mod_role))
             return
 
         if route == "/api/state":

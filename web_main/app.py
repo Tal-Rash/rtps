@@ -278,9 +278,9 @@ USERS_TEMPLATE = '''<!doctype html>
             <option value="admin">Администратор</option>
         </select>
         <div style="display:flex; gap:12px; align-items:center; flex:1; flex-wrap:wrap; border:1px solid #d9e2ef; padding:8px; border-radius:6px; background:#fff;">
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;"><input type="checkbox" name="module_grafik_ppr" value="1"> График ППР</label>
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;"><input type="checkbox" name="module_zamer_kp" value="1"> Замер КП</label>
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;"><input type="checkbox" name="module_spravochnik" value="1"> Справочник</label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">График ППР: <select name="module_grafik_ppr"><option value="none">Нет</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Замер КП: <select name="module_zamer_kp"><option value="none">Нет</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Справочник: <select name="module_spravochnik"><option value="none">Нет</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
         </div>
         <button type="submit" style="align-self:stretch;">Добавить</button>
       </div>
@@ -436,8 +436,11 @@ def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
     mods = [m.strip() for m in modules.split(",")]
     
     def link_for(mod_id: str, path: str) -> str:
-        if mod_id in mods or "admin" in mods:
+        if "admin" in mods:
             return f'<a href="{path}">Открыть</a>'
+        for m in mods:
+            if m == mod_id or m.startswith(mod_id + ":"):
+                return f'<a href="{path}">Открыть</a>'
         return '<a class="disabled" href="#" aria-disabled="true" tabindex="-1">Нет доступа</a>'
         
     users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>' if role == "admin" or "admin" in mods else ""
@@ -486,10 +489,28 @@ class Handler(BaseHTTPRequestHandler):
                         rows_html += f"<option value='editor' {'selected' if u[3]=='editor' else ''}>Редактор</option>"
                         rows_html += f"<option value='admin' {'selected' if u[3]=='admin' else ''}>Администратор</option>"
                         rows_html += f"</select></td>"
-                        rows_html += f"<td style='font-size:12px; white-space:nowrap;'>"
-                        rows_html += f"<label><input form='{fid}' type='checkbox' name='m_grafik' {'checked' if 'grafik_ppr' in mods else ''}> ППР</label><br>"
-                        rows_html += f"<label><input form='{fid}' type='checkbox' name='m_zamer' {'checked' if 'zamer_kp' in mods else ''}> Замер</label><br>"
-                        rows_html += f"<label><input form='{fid}' type='checkbox' name='m_sprav' {'checked' if 'spravochnik' in mods else ''}> Справ</label>"
+                        def get_mod_role(modules_str: str, mod_name: str) -> str:
+                            for part in modules_str.split(","):
+                                part = part.strip()
+                                if not part: continue
+                                if ":" in part:
+                                    k, v = part.split(":", 1)
+                                    if k == mod_name: return v
+                                else:
+                                    if part == mod_name: return "legacy"
+                            return "none"
+                        def rsel(rname: str, target: str) -> str: return "selected" if rname == target else ""
+                        g_r = get_mod_role(mods, "grafik_ppr")
+                        if g_r == "legacy": g_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
+                        z_r = get_mod_role(mods, "zamer_kp")
+                        if z_r == "legacy": z_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
+                        s_r = get_mod_role(mods, "spravochnik")
+                        if s_r == "legacy": s_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
+                        
+                        rows_html += f"<td style='font-size:12px; white-space:nowrap; display:flex; flex-direction:column; gap:4px;'>"
+                        rows_html += f"<label>ППР: <select form='{fid}' name='module_grafik_ppr'><option value='none' {rsel(g_r,'none')}>Нет</option><option value='view' {rsel(g_r,'view')}>Зритель</option><option value='edit' {rsel(g_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label>Замер: <select form='{fid}' name='module_zamer_kp'><option value='none' {rsel(z_r,'none')}>Нет</option><option value='view' {rsel(z_r,'view')}>Зритель</option><option value='edit' {rsel(z_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label>Справ: <select form='{fid}' name='module_spravochnik'><option value='none' {rsel(s_r,'none')}>Нет</option><option value='view' {rsel(s_r,'view')}>Зритель</option><option value='edit' {rsel(s_r,'edit')}>Редактор</option></select></label>"
                         rows_html += f"</td>"
                         rows_html += f"<td><div class='flex'>"
                         rows_html += f"<form id='{fid}' method='post' action='/users/update' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button type='submit'>Сохранить</button></form>"
@@ -516,9 +537,13 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/users/add":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             modules = []
-            if form.get("module_grafik_ppr"): modules.append("grafik_ppr")
-            if form.get("module_zamer_kp"): modules.append("zamer_kp")
-            if form.get("module_spravochnik"): modules.append("spravochnik")
+            g_r = form.get("module_grafik_ppr", ["none"])[0]
+            z_r = form.get("module_zamer_kp", ["none"])[0]
+            s_r = form.get("module_spravochnik", ["none"])[0]
+            
+            if g_r != "none": modules.append(f"grafik_ppr:{g_r}")
+            if z_r != "none": modules.append(f"zamer_kp:{z_r}")
+            if s_r != "none": modules.append(f"spravochnik:{s_r}")
             
             role = form.get("role", ["viewer"])[0]
             if role == "admin":
@@ -571,9 +596,13 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/users/add":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             modules = []
-            if form.get("module_grafik_ppr"): modules.append("grafik_ppr")
-            if form.get("module_zamer_kp"): modules.append("zamer_kp")
-            if form.get("module_spravochnik"): modules.append("spravochnik")
+            g_r = form.get("module_grafik_ppr", ["none"])[0]
+            z_r = form.get("module_zamer_kp", ["none"])[0]
+            s_r = form.get("module_spravochnik", ["none"])[0]
+            
+            if g_r != "none": modules.append(f"grafik_ppr:{g_r}")
+            if z_r != "none": modules.append(f"zamer_kp:{z_r}")
+            if s_r != "none": modules.append(f"spravochnik:{s_r}")
             
             role = form.get("role", ["viewer"])[0]
             if role == "admin":
@@ -609,9 +638,13 @@ class Handler(BaseHTTPRequestHandler):
             role = form.get("role", ["viewer"])[0]
             
             modules = []
-            if form.get("m_grafik"): modules.append("grafik_ppr")
-            if form.get("m_zamer"): modules.append("zamer_kp")
-            if form.get("m_sprav"): modules.append("spravochnik")
+            g_r = form.get("module_grafik_ppr", ["none"])[0]
+            z_r = form.get("module_zamer_kp", ["none"])[0]
+            s_r = form.get("module_spravochnik", ["none"])[0]
+            
+            if g_r != "none": modules.append(f"grafik_ppr:{g_r}")
+            if z_r != "none": modules.append(f"zamer_kp:{z_r}")
+            if s_r != "none": modules.append(f"spravochnik:{s_r}")
             if role == "admin": modules.append("admin")
             modules_str = ",".join(modules)
             

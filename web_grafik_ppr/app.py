@@ -1172,11 +1172,27 @@ def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str
     return None
 
 
+def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
+    if not session: return None
+    role = session[1]
+    modules = session[2]
+    for part in modules.split(","):
+        part = part.strip()
+        if not part: continue
+        if ":" in part:
+            k, v = part.split(":", 1)
+            if k == mod_name: return v
+        else:
+            if part == mod_name: return role
+    if role == "admin": return "admin"
+    return None
+
 def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
     if not AUTH_ENABLED:
         return True
     session = current_session(handler)
-    if session and (not need_edit or session[1] in ("edit", "editor", "admin")):
+    mod_role = get_mod_role(session, "grafik_ppr")
+    if mod_role and (not need_edit or mod_role in ("edit", "editor", "admin")):
         return True
     handler.send_response(HTTPStatus.UNAUTHORIZED)
     handler.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -3282,7 +3298,7 @@ class Handler(BaseHTTPRequestHandler):
         route = _route_path(parsed.path)
         session = current_session(self)
         user = session[0] if session else None
-        role = session[1] if session else None
+        mod_role = get_mod_role(session, "grafik_ppr")
         if route == "/":
             _redirect(self, APP_PREFIX)
             return
@@ -3301,7 +3317,16 @@ class Handler(BaseHTTPRequestHandler):
                     f.write(f"Access /grafik-ppr. Session: {session}. Cookie: {raw_cookie}\n")
             except Exception:
                 pass
-            _send_html(self, render_page(load_state(year), role in ("edit", "editor", "admin"), user))
+            
+            if AUTH_ENABLED and not mod_role:
+                self.send_response(HTTPStatus.UNAUTHORIZED)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
+                self.end_headers()
+                self.wfile.write("Требуется вход".encode("utf-8"))
+                return
+                
+            _send_html(self, render_page(load_state(year), mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True, user))
             return
         if route == "/login":
             if not AUTH_ENABLED:

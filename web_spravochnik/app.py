@@ -215,6 +215,21 @@ def current_session(handler) -> tuple[str, str, str, str] | None:
             return session
     return None
 
+def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
+    if not session: return None
+    role = session[1]
+    modules = session[2]
+    for part in modules.split(","):
+        part = part.strip()
+        if not part: continue
+        if ":" in part:
+            k, v = part.split(":", 1)
+            if k == mod_name: return v
+        else:
+            if part == mod_name: return role
+    if role == "admin": return "admin"
+    return None
+
 def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
     if not session:
@@ -226,20 +241,21 @@ def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] 
             pass
         handler.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
         return None
-    user_id, role, modules, safe_name = session
-    mods = [m.strip() for m in modules.split(",")]
-    if "admin" not in mods and "spravochnik" not in mods:
+        
+    mod_role = get_mod_role(session, "spravochnik")
+    if not mod_role:
         try:
             with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
-                f.write(f"Forbidden: admin/spravochnik not in mods {mods}\n")
+                f.write(f"Forbidden: spravochnik mod_role is none\n")
         except Exception:
             pass
         handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
-    if need_edit and role not in ("edit", "editor", "admin"):
+        
+    if need_edit and mod_role not in ("edit", "editor", "admin"):
         try:
             with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
-                f.write(f"Forbidden edit: role {role} not allowed\n")
+                f.write(f"Forbidden edit: role {mod_role} not allowed\n")
         except Exception:
             pass
         handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
@@ -1120,15 +1136,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(self.path)
         if path == "/":
-            if not user:
+            session = current_session(self)
+            mod_role = get_mod_role(session, "spravochnik") if session else None
+            
+            if not session or not mod_role:
                 redirect(self, APP_PREFIX + "/login")
                 return
-            auth_badge = "Редактирование" if role in ("edit", "editor", "admin") else "Просмотр"
+            auth_badge = "Редактирование" if mod_role in ("edit", "editor", "admin") else "Просмотр"
             send_html(
                 self,
                 HTML.replace("{{USER}}", WEB_USER)
                     .replace("{{AUTH_BADGE}}", auth_badge)
-                    .replace("{{CAN_EDIT}}", "true" if role in ("edit", "editor", "admin") else "false"),
+                    .replace("{{CAN_EDIT}}", "true" if mod_role in ("edit", "editor", "admin") else "false"),
             )
             return
         if path == "/api/state":
