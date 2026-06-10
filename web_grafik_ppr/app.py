@@ -1734,7 +1734,7 @@ HTML_TEMPLATE = """<!doctype html>
     .table-wrap > table th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
     .table-wrap > table tr > *:last-child { border-right:0; }
     .table-wrap > table tbody tr:last-child > * { border-bottom:0; }
-    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; outline:none; }
     .cell.center { text-align:center; }
     .cell.small { font-size:14px; padding:2px 2px; }
     .col-day { position:relative; padding:0; height:28px; }
@@ -1760,9 +1760,9 @@ HTML_TEMPLATE = """<!doctype html>
     .cell.day-cell.selected-cell,
     td.transfer-col .cell.day-cell.selected-cell,
     td.holiday-col .cell.day-cell.selected-cell {
-      background:rgba(39,110,241,.10) !important;
-      box-shadow:inset 0 0 0 1px rgba(39,110,241,.55) !important;
-      outline:0;
+      background:#e8f0fe !important;
+      box-shadow:inset 0 0 0 1.5px #276ef1 !important;
+      outline:none;
       position:relative;
       z-index:3;
     }
