@@ -4432,8 +4432,7 @@ function renderKpTable(){
       <tr data-row="${rowIndex}" data-search="${esc(search)}">
         <td class="readonly">${esc(values[0] ?? '')}</td>
         ${[1, 2, 3].map(colIndex => `
-          <td data-col="${colIndex}">
-            <input
+          <td data-col="${colIndex}"><input
               value="${esc(values[colIndex] ?? '')}"
               ${editable ? '' : 'readonly'}
               data-row="${rowIndex}"
@@ -4843,8 +4842,7 @@ function renderArchiveTable(){
       }
       if (index >= 10) {
         return `
-          <td class="measure-cell archive-raw" data-col="${index}">
-            <input
+          <td class="measure-cell archive-raw" data-col="${index}"><input
               value="${esc(value)}"
               data-row="${rowIndex}"
               data-col="${index}"
@@ -4888,8 +4886,7 @@ function renderTable(){
       const value = rows[r]?.[c] ?? '';
       const cls = measurementClass(c, value);
       html += `
-        <td class="measure-cell ${cls}" data-col="${c}">
-          <input
+        <td class="measure-cell ${cls}" data-col="${c}"><input
             value="${esc(value)}"
             ${CAN_EDIT ? '' : 'readonly'}
             data-row="${r}"
