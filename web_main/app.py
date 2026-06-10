@@ -159,6 +159,7 @@ HOME_TEMPLATE = """<!doctype html>
         <p class="sub">Стартовая страница для запуска веб-программ.</p>
       </div>
       <div class="top-right">
+        {{USERS_LINK}}
         <a class="badge" href="/logout">Выйти</a>
         <div class="badge">{{AUTH_BADGE}}</div>
       </div>
@@ -436,10 +437,13 @@ def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
             return f'<a href="{path}">Открыть</a>'
         return '<a class="disabled" href="#" aria-disabled="true" tabindex="-1">Нет доступа</a>'
         
+    users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>' if role == "admin" or "admin" in mods else ""
+        
     return (
         HOME_TEMPLATE
         .replace("{{STARTED_AT}}", started_at)
         .replace("{{AUTH_BADGE}}", f"Пользователь: {full_name} ({role_label})")
+        .replace("{{USERS_LINK}}", users_link)
         .replace("{{GRAFIK_PPR_LINK}}", link_for("grafik_ppr", "/grafik-ppr"))
         .replace("{{ZAMER_KP_LINK}}", link_for("zamer_kp", "/zamer-kp"))
         .replace("{{SPRAVOCHNIK_LINK}}", link_for("spravochnik", "/spravochnik"))
