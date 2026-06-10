@@ -1052,6 +1052,8 @@ class Handler(BaseHTTPRequestHandler):
             log_contents = ""
             try:
                 import sys
+                import sqlite3
+                
                 log_contents += f"Python sys.path: {sys.path}\n"
                 log_contents += f"__file__: {__file__}\n"
                 log_contents += f"ROOT: {ROOT}\n"
@@ -1066,11 +1068,42 @@ class Handler(BaseHTTPRequestHandler):
                 
                 log_contents += f"ROOT.parent files: {[p.name for p in ROOT.parent.iterdir()]}\n"
                 
+                base_dir = ROOT.parent / "base"
+                log_contents += f"base_dir files: {[p.name for p in base_dir.iterdir() if base_dir.exists()]}\n"
+                
+                db_path = base_dir / "web_users.db"
+                if db_path.exists():
+                    conn = sqlite3.connect(db_path)
+                    cur = conn.cursor()
+                    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = [r[0] for r in cur.fetchall()]
+                    log_contents += f"web_users.db tables: {tables}\n"
+                    if "users" in tables:
+                        cur.execute("SELECT id, full_name, password, role, allowed_modules FROM users")
+                        log_contents += f"web_users.db users: {cur.fetchall()}\n"
+                    conn.close()
+                else:
+                    log_contents += "web_users.db does not exist!\n"
+                    
+                db_path = base_dir / "common_database.db"
+                if db_path.exists():
+                    conn = sqlite3.connect(db_path)
+                    cur = conn.cursor()
+                    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = [r[0] for r in cur.fetchall()]
+                    log_contents += f"common_database.db tables: {tables}\n"
+                    if "users" in tables:
+                        cur.execute("SELECT id, full_name, password, role, allowed_modules FROM users")
+                        log_contents += f"common_database.db users: {cur.fetchall()}\n"
+                    conn.close()
+                else:
+                    log_contents += "common_database.db does not exist!\n"
+                
                 for p in log_dir.glob("*.log"):
                     log_contents += f"\n=== {p.name} ===\n"
                     log_contents += p.read_text("utf-8", errors="ignore") + "\n"
             except Exception as e:
-                log_contents = f"Error reading logs: {e}"
+                log_contents += f"\nError: {e}\n"
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
