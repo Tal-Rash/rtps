@@ -172,10 +172,10 @@ def text(value) -> str:
     return "" if value is None else str(value)
 
 
-def verify_cookie(value: str) -> tuple[str, str] | None:
+def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     try:
-        username, role, ts, sig = value.rsplit(":", 3)
-        payload = f"{username}:{role}:{ts}"
+        user_id, role, modules, safe_name, ts, sig = value.rsplit(":", 5)
+        payload = f"{user_id}:{role}:{modules}:{safe_name}:{ts}"
         secrets_to_try = [WEB_SECRET]
         if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
             secrets_to_try.append(LEGACY_WEB_SECRET)
@@ -218,10 +218,10 @@ def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return result
 
 
-def verify_cookie(value: str) -> tuple[str, str] | None:
+def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     try:
-        username, role, ts, sig = value.rsplit(":", 3)
-        payload = f"{username}:{role}:{ts}"
+        user_id, role, modules, safe_name, ts, sig = value.rsplit(":", 5)
+        payload = f"{user_id}:{role}:{modules}:{safe_name}:{ts}"
         secrets_to_try = [WEB_SECRET]
         if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
             secrets_to_try.append(LEGACY_WEB_SECRET)
@@ -260,7 +260,7 @@ def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return result
 
 
-def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
+def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
     cookies = parse_cookies(handler)
     token = cookies.get(SESSION_COOKIE)
     if not token:

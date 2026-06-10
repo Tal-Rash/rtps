@@ -82,7 +82,7 @@ def load_web_secret() -> str:
 
 
 WEB_SECRET = load_web_secret()
-SESSIONS: dict[str, tuple[str, str, float]] = {}
+SESSIONS: dict[str, tuple[str, str, str, str, float]] = {}
 
 
 def load_auth_config() -> tuple[str, str, str]:
@@ -1122,7 +1122,7 @@ def _cookie_value(username: str, role: str) -> str:
     return f"{payload}:{signature}"
 
 
-def _verify_cookie(value: str) -> tuple[str, str] | None:
+def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     try:
         username, role, ts, signature = value.rsplit(":", 3)
         payload = f"{username}:{role}:{ts}"
@@ -1131,9 +1131,7 @@ def _verify_cookie(value: str) -> tuple[str, str] | None:
             return None
         if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
             return None
-        if role not in {"view", "edit"}:
-            return None
-        return username, role
+        return user_id, role, modules, safe_name
     except Exception:
         return None
 
@@ -1149,15 +1147,15 @@ def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return cookies
 
 
-def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
+def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
     cookies = _parse_cookies(handler)
     token = cookies.get(SESSION_COOKIE)
     if not token:
         return None
     session = _verify_cookie(token)
     if session:
-        username, role = session
-        SESSIONS[token] = (username, role, dt.datetime.now().timestamp())
+        user_id, role, modules, safe_name = session
+        SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
     return session
 
 
@@ -1381,7 +1379,7 @@ def render_home(username: str | None, can_edit: bool) -> str:
 
 def _login_cookie(username: str, role: str) -> str:
     token = _cookie_value(username, role)
-    SESSIONS[token] = (username, role, dt.datetime.now().timestamp())
+    SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
     return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax"
 
 HTML_TEMPLATE = """<!doctype html>

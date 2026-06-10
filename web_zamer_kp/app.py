@@ -211,11 +211,11 @@ def parse_cookie_values(handler: BaseHTTPRequestHandler, name: str) -> list[str]
     return values
 
 
-def verify_cookie(value: str) -> tuple[str, str] | None:
+def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     for sep in (":", "|"):
         try:
-            username, role, expiry_text, sig = value.rsplit(sep, 3)
-            payload = f"{username}{sep}{role}{sep}{expiry_text}"
+            user_id, role, modules, safe_name, expiry_text, sig = value.rsplit(sep, 5)
+            payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
             secrets_to_try = [WEB_SECRET]
             if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
                 secrets_to_try.append(LEGACY_WEB_SECRET)
@@ -229,14 +229,13 @@ def verify_cookie(value: str) -> tuple[str, str] | None:
                 continue
             if float(expiry_text) < dt.datetime.now().timestamp():
                 return None
-            if role in {"view", "edit"}:
-                return username, role
+            return user_id, role, modules, safe_name
         except Exception:
             continue
     return None
 
 
-def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str] | None:
+def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
     for token in parse_cookie_values(handler, SESSION_COOKIE):
         session = verify_cookie(token)
         if session:
@@ -306,10 +305,17 @@ def redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None 
     handler.end_headers()
 
 
-def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> tuple[str, str] | None:
+def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
-    if session and (not need_edit or session[1] == "edit"):
-        return session
+    if not session:
+        return None
+    user_id, role, modules, safe_name = session
+    mods = [m.strip() for m in modules.split(",")]
+    if "admin" not in mods and "zamer_kp" not in mods:
+        return None
+    if need_edit and role != "edit" and role != "admin":
+        return None
+    return session
     send_json(handler, {"error": "Требуется вход с правом редактирования" if need_edit else "Требуется вход"}, HTTPStatus.UNAUTHORIZED)
     return None
 
@@ -692,7 +698,7 @@ def save_kp_data(payload: dict) -> dict:
     return load_kp_view(locomotive)
 
 
-def save_state(payload: dict) -> dict:
+def save_state(payload: dict, full_name: str = "") -> dict:
     locomotive = text(payload.get("locomotive")).strip()
     measurement_date = text(payload.get("measurement_date")).strip() or dt.date.today().isoformat()
     rows = payload.get("measurements") or []
@@ -5557,7 +5563,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 payload = json.loads(raw.decode("utf-8"))
-                send_json(self, save_state(payload))
+                send_json(self, save_state(payload, full_name=session[3] if session and len(session) > 3 else ""))
             except Exception as exc:
                 send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
