@@ -3472,6 +3472,7 @@ function selectionRect(){
 function renderSelectionHighlight(){
   document.querySelectorAll('#inputBody td.measure-cell.selected').forEach(td => {
     td.classList.remove('selected');
+    td.style.boxShadow = '';
     const input = td.querySelector('input');
     if (input) input.style.boxShadow = '';
   });
@@ -3482,16 +3483,13 @@ function renderSelectionHighlight(){
       const td = document.querySelector(`#inputBody tr[data-row="${r}"] td.measure-cell[data-col="${c}"]`);
       if (td) {
         td.classList.add('selected');
-        const input = td.querySelector('input');
-        if (input) {
-          const shadows = [];
-          if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
-          if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
-          if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
-          if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
-          if (shadows.length > 0) input.style.setProperty('box-shadow', shadows.join(', '), 'important');
-          else input.style.boxShadow = '';
-        }
+        const shadows = [];
+        if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
+        if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
+        if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
+        if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
+        if (shadows.length > 0) td.style.setProperty('box-shadow', shadows.join(', '), 'important');
+        else td.style.boxShadow = '';
       }
     }
   }
@@ -3925,6 +3923,7 @@ function archiveSelectionRect(){
 function renderArchiveSelectionHighlight(){
   document.querySelectorAll('#archiveBody td.selected').forEach(td => {
     td.classList.remove('selected');
+    td.style.boxShadow = '';
     const input = td.querySelector('input');
     if (input) input.style.boxShadow = '';
   });
@@ -3935,16 +3934,13 @@ function renderArchiveSelectionHighlight(){
       const td = document.querySelector(`#archiveBody tr[data-row="${r}"] td[data-col="${c}"]`);
       if (td) {
         td.classList.add('selected');
-        const input = td.querySelector('input');
-        if (input) {
-          const shadows = [];
-          if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
-          if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
-          if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
-          if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
-          if (shadows.length > 0) input.style.setProperty('box-shadow', shadows.join(', '), 'important');
-          else input.style.boxShadow = '';
-        }
+        const shadows = [];
+        if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
+        if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
+        if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
+        if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
+        if (shadows.length > 0) td.style.setProperty('box-shadow', shadows.join(', '), 'important');
+        else td.style.boxShadow = '';
       }
     }
   }
@@ -4482,6 +4478,7 @@ function kpSelectionRect(){
 function renderKpSelectionHighlight(){
   document.querySelectorAll('#kpBody td.selected').forEach(td => {
     td.classList.remove('selected');
+    td.style.boxShadow = '';
     const input = td.querySelector('input');
     if (input) input.style.boxShadow = '';
   });
@@ -4492,16 +4489,13 @@ function renderKpSelectionHighlight(){
       const td = document.querySelector(`#kpBody tr[data-row="${r}"] td[data-col="${c}"]`);
       if (td) {
         td.classList.add('selected');
-        const input = td.querySelector('input');
-        if (input) {
-          const shadows = [];
-          if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
-          if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
-          if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
-          if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
-          if (shadows.length > 0) input.style.setProperty('box-shadow', shadows.join(', '), 'important');
-          else input.style.boxShadow = '';
-        }
+        const shadows = [];
+        if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
+        if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
+        if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
+        if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
+        if (shadows.length > 0) td.style.setProperty('box-shadow', shadows.join(', '), 'important');
+        else td.style.boxShadow = '';
       }
     }
   }
