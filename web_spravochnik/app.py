@@ -1051,14 +1051,26 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/debug-logs":
             log_contents = ""
             try:
+                import sys
+                log_contents += f"Python sys.path: {sys.path}\n"
+                log_contents += f"__file__: {__file__}\n"
+                log_contents += f"ROOT: {ROOT}\n"
+                log_contents += f"ROOT.parent: {ROOT.parent}\n"
+                
                 log_dir = ROOT.parent / "data"
+                log_contents += f"log_dir path: {log_dir.resolve()}\n"
+                if log_dir.exists():
+                    log_contents += f"log_dir files: {[p.name for p in log_dir.iterdir()]}\n"
+                else:
+                    log_contents += f"log_dir does not exist!\n"
+                
+                log_contents += f"ROOT.parent files: {[p.name for p in ROOT.parent.iterdir()]}\n"
+                
                 for p in log_dir.glob("*.log"):
-                    log_contents += f"=== {p.name} ===\n"
-                    log_contents += p.read_text("utf-8", errors="ignore") + "\n\n"
+                    log_contents += f"\n=== {p.name} ===\n"
+                    log_contents += p.read_text("utf-8", errors="ignore") + "\n"
             except Exception as e:
                 log_contents = f"Error reading logs: {e}"
-            if not log_contents:
-                log_contents = "No logs found."
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
