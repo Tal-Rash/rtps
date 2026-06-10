@@ -252,12 +252,17 @@ USERS_TEMPLATE = '''<!doctype html>
     body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; padding:20px; }
     .card { max-width:800px; margin:0 auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
     table { width:100%; border-collapse:collapse; margin-top:20px; }
-    th, td { text-align:left; padding:10px; border-bottom:1px solid #d9e2ef; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #d9e2ef; vertical-align:middle; }
     input, select, button { padding:8px; border-radius:6px; border:1px solid #d9e2ef; font:inherit; }
     button { background:#276ef1; color:#fff; font-weight:700; cursor:pointer; border:0; }
     .btn-danger { background:#e11d48; }
     .flex { display:flex; gap:10px; align-items:center; }
     .muted { color:#607086; font-size:13px; }
+    
+    table input, table select { padding:6px 8px; font-size:13px; border-radius:6px; }
+    table button { padding:6px 14px; font-size:13px; }
+    .mod-label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; color:#102033; }
+    .mod-label select { padding:4px 6px; font-size:13px; }
   </style>
 </head>
 <body>
@@ -267,22 +272,25 @@ USERS_TEMPLATE = '''<!doctype html>
         <a href="/" style="color:#276ef1; text-decoration:none; font-weight:bold;">На главную</a>
     </div>
     
-    <form method="post" action="/users/add" style="background:#f8fafc; padding:16px; border-radius:12px; margin-bottom:20px;">
-      <h3 style="margin-top:0;">Добавить пользователя</h3>
-      <div class="flex" style="flex-wrap:wrap;">
-        <input name="full_name" placeholder="Фамилия И.О." required>
-        <input name="password" placeholder="Пароль (ПИН)" required>
-        <select name="role">
-            <option value="viewer">Зритель</option>
-            <option value="editor">Редактор</option>
-            <option value="admin">Администратор</option>
-        </select>
-        <div style="display:flex; gap:12px; align-items:center; flex:1; flex-wrap:wrap; border:1px solid #d9e2ef; padding:8px; border-radius:6px; background:#fff;">
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">График ППР: <select name="module_grafik_ppr"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Замер КП: <select name="module_zamer_kp"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Справочник: <select name="module_spravochnik"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+    <form method="post" action="/users/add" style="background:#f8fafc; padding:20px; border-radius:12px; margin-bottom:20px; border:1px solid #d9e2ef;">
+      <h3 style="margin-top:0; margin-bottom:16px;">Добавить пользователя</h3>
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <input name="full_name" placeholder="Фамилия И.О." required style="flex:2; min-width:180px;">
+          <input name="password" placeholder="Пароль (ПИН)" required style="flex:1; min-width:120px;">
+          <select name="role" style="flex:1; min-width:140px;">
+              <option value="viewer">Зритель</option>
+              <option value="editor">Редактор</option>
+              <option value="admin">Администратор</option>
+          </select>
         </div>
-        <button type="submit" style="align-self:stretch;">Добавить</button>
+        <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; border:1px solid #e2e8f0; padding:12px 16px; border-radius:8px; background:#fff;">
+          <div style="font-weight:600; font-size:14px; margin-right:8px; color:#475569;">Доступ:</div>
+          <label class="mod-label" style="cursor:pointer; margin:0;">ППР: <select name="module_grafik_ppr" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Замер: <select name="module_zamer_kp" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Справ: <select name="module_spravochnik" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+        </div>
+        <button type="submit" style="align-self:flex-start; padding:10px 24px;">Добавить пользователя</button>
       </div>
     </form>
 
@@ -507,11 +515,12 @@ class Handler(BaseHTTPRequestHandler):
                         s_r = get_mod_role(mods, "spravochnik")
                         if s_r == "legacy": s_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
                         
-                        rows_html += f"<td style='font-size:12px; white-space:nowrap; display:flex; flex-direction:column; gap:4px;'>"
-                        rows_html += f"<label>ППР: <select form='{fid}' name='module_grafik_ppr'><option value='none' {rsel(g_r,'none')}>Нет доступа</option><option value='view' {rsel(g_r,'view')}>Зритель</option><option value='edit' {rsel(g_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"<label>Замер: <select form='{fid}' name='module_zamer_kp'><option value='none' {rsel(z_r,'none')}>Нет доступа</option><option value='view' {rsel(z_r,'view')}>Зритель</option><option value='edit' {rsel(z_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"<label>Справ: <select form='{fid}' name='module_spravochnik'><option value='none' {rsel(s_r,'none')}>Нет доступа</option><option value='view' {rsel(s_r,'view')}>Зритель</option><option value='edit' {rsel(s_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"</td>"
+                        rows_html += f"<td style='vertical-align:top;'>"
+                        rows_html += f"<div style='display:flex; flex-direction:column; gap:6px;'>"
+                        rows_html += f"<label class='mod-label'>ППР: <select form='{fid}' name='module_grafik_ppr'><option value='none' {rsel(g_r,'none')}>Нет доступа</option><option value='view' {rsel(g_r,'view')}>Зритель</option><option value='edit' {rsel(g_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label class='mod-label'>Замер: <select form='{fid}' name='module_zamer_kp'><option value='none' {rsel(z_r,'none')}>Нет доступа</option><option value='view' {rsel(z_r,'view')}>Зритель</option><option value='edit' {rsel(z_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label class='mod-label'>Справ: <select form='{fid}' name='module_spravochnik'><option value='none' {rsel(s_r,'none')}>Нет доступа</option><option value='view' {rsel(s_r,'view')}>Зритель</option><option value='edit' {rsel(s_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"</div></td>"
                         rows_html += f"<td><div class='flex'>"
                         rows_html += f"<form id='{fid}' method='post' action='/users/update' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button type='submit'>Сохранить</button></form>"
                         rows_html += f"<form method='post' action='/users/delete' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button class='btn-danger' type='submit'>Удалить</button></form>"
