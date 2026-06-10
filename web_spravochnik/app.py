@@ -218,14 +218,30 @@ def current_session(handler) -> tuple[str, str, str, str] | None:
 def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
     if not session:
+        try:
+            raw_cookie = handler.headers.get("Cookie", "")
+            with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
+                f.write(f"No session. Cookie header: {raw_cookie}\n")
+        except Exception:
+            pass
         handler.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
         return None
     user_id, role, modules, safe_name = session
     mods = [m.strip() for m in modules.split(",")]
     if "admin" not in mods and "spravochnik" not in mods:
+        try:
+            with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
+                f.write(f"Forbidden: admin/spravochnik not in mods {mods}\n")
+        except Exception:
+            pass
         handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     if need_edit and role not in ("edit", "editor", "admin"):
+        try:
+            with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
+                f.write(f"Forbidden edit: role {role} not allowed\n")
+        except Exception:
+            pass
         handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     return session
@@ -235,6 +251,17 @@ def send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> 
     handler.send_response(status)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def send_json(handler: BaseHTTPRequestHandler, payload, status: int = 200) -> None:
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
     handler.wfile.write(data)

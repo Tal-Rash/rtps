@@ -1148,46 +1148,24 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             continue
     return None
 
-def current_session(handler) -> tuple[str, str, str, str] | None:
-    for token in parse_cookie_values(handler, SESSION_COOKIE):
-        session = _verify_cookie(token)
-        if session:
-            return session
-    return None
-
-def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
-    session = current_session(handler)
-    if not session:
-        return None
-    user_id, role, modules, safe_name = session
-    mods = [m.strip() for m in modules.split(",")]
-    if "admin" not in mods and "grafik_ppr" not in mods:
-        return None
-    if need_edit and role not in ("edit", "editor", "admin"):
-        return None
-    return session
-
-def _parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
+def parse_cookie_values(handler, name: str) -> list[str]:
     raw = handler.headers.get("Cookie", "")
-    cookies: dict[str, str] = {}
+    values = []
     for part in raw.split(";"):
-        if "=" not in part:
-            continue
-        key, value = part.split("=", 1)
-        cookies[key.strip()] = value.strip()
-    return cookies
+        if "=" not in part: continue
+        k, v = part.split("=", 1)
+        if k.strip() == name: values.append(v.strip())
+    return values
 
 
 def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
-    cookies = _parse_cookies(handler)
-    token = cookies.get(SESSION_COOKIE)
-    if not token:
-        return None
-    session = _verify_cookie(token)
-    if session:
-        user_id, role, modules, safe_name = session
-        SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
-    return session
+    for token in parse_cookie_values(handler, SESSION_COOKIE):
+        session = _verify_cookie(token)
+        if session:
+            user_id, role, modules, safe_name = session
+            SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
+            return session
+    return None
 
 
 def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
