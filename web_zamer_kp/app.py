@@ -2875,7 +2875,7 @@ HTML = """<!doctype html>
     .kp-table td input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; box-sizing:border-box; outline:none; }
     .kp-table td.readonly { background:#f7fafc; font-weight:600; }
     .kp-table td.selected { background:#e8f0fe; }
-    .kp-table td.selected input { background:#e8f0fe; }
+    .kp-table td.selected input { background:transparent; }
     .loco-picker { position:relative; width:220px; }
     .loco-picker input { width:100%; box-sizing:border-box; }
     .loco-dropdown {
@@ -2921,10 +2921,10 @@ HTML = """<!doctype html>
     th.section-col, td.section-col { width:80px; }
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
-    td.measure-cell input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; display:block; box-sizing:border-box; outline:none; }
+    td.measure-cell input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; line-height:34px; display:block; box-sizing:border-box; outline:none; }
     td.measure-cell.selected { background:#e8f0fe; }
-    td.measure-cell.selected input { background:#e8f0fe; }
-    td input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; display:block; box-sizing:border-box; outline:none; }
+    td.measure-cell.selected input { background:transparent; }
+    td input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; line-height:34px; display:block; box-sizing:border-box; outline:none; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
@@ -3044,7 +3044,7 @@ HTML = """<!doctype html>
       outline:none;
     }
     .archive-table td.archive-raw.selected { background:#e8f0fe; }
-    .archive-table td.archive-raw.selected input { background:#e8f0fe; }
+    .archive-table td.archive-raw.selected input { background:transparent; }
     .archive-table { margin-left:0; }
     .archive-body-table {
       border-radius:0 !important;
