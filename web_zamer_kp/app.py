@@ -2872,9 +2872,9 @@ HTML = """<!doctype html>
     .kp-table-shell { margin-top:0; padding:0; }
     .kp-table th, .kp-table td { font-size:12px; }
     .kp-table td { white-space:pre-line; }
-    .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; }
+    .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; outline:none; }
     .kp-table td.readonly { background:#f7fafc; font-weight:600; }
-    .kp-table td.selected { box-shadow: inset 0 0 0 2px #2f6fed; }
+    .kp-table td.selected { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
     .loco-picker { position:relative; width:220px; }
     .loco-picker input { width:100%; box-sizing:border-box; }
     .loco-dropdown {
@@ -2920,9 +2920,9 @@ HTML = """<!doctype html>
     th.section-col, td.section-col { width:80px; }
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
-    td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; line-height:34px; display:block; box-sizing:border-box; }
-    td.measure-cell.selected { box-shadow: inset 0 0 0 2px #2f6fed; }
-    td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; line-height:34px; display:block; box-sizing:border-box; }
+    td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; line-height:34px; display:block; box-sizing:border-box; outline:none; }
+    td.measure-cell.selected { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; line-height:34px; display:block; box-sizing:border-box; outline:none; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
@@ -3038,7 +3038,9 @@ HTML = """<!doctype html>
       line-height:12px !important;
       display:block;
       box-sizing:border-box;
+      outline:none;
     }
+    .archive-table td.archive-raw.selected { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
     .archive-table { margin-left:0; }
     .archive-body-table {
       border-radius:0 !important;
