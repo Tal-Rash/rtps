@@ -502,6 +502,11 @@ class Handler(BaseHTTPRequestHandler):
             if form.get("module_grafik_ppr"): modules.append("grafik_ppr")
             if form.get("module_zamer_kp"): modules.append("zamer_kp")
             if form.get("module_spravochnik"): modules.append("spravochnik")
+            
+            role = form.get("role", ["viewer"])[0]
+            if role == "admin":
+                modules.append("admin")
+                
             modules_str = ",".join(modules)
             try:
                 import sqlite3
@@ -552,6 +557,11 @@ class Handler(BaseHTTPRequestHandler):
             if form.get("module_grafik_ppr"): modules.append("grafik_ppr")
             if form.get("module_zamer_kp"): modules.append("zamer_kp")
             if form.get("module_spravochnik"): modules.append("spravochnik")
+            
+            role = form.get("role", ["viewer"])[0]
+            if role == "admin":
+                modules.append("admin")
+                
             modules_str = ",".join(modules)
             try:
                 import sqlite3
