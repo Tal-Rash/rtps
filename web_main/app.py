@@ -227,15 +227,32 @@ LOGIN_TEMPLATE = """<!doctype html>
     input,button { width:100%; padding:12px; border-radius:8px; border:1px solid #d9e2ef; font:inherit; }
     button { background:#276ef1; color:#fff; font-weight:700; cursor:pointer; border:0; }
     .muted { color:#607086; font-size:13px; }
+    .toggle-link { color:#276ef1; text-decoration:none; font-weight:600; cursor:pointer; font-size:14px; text-align:center; display:block; margin-top:16px; }
+    .toggle-link:hover { text-decoration:underline; }
+    #request-form { display:none; }
   </style>
 </head>
 <body>
-  <form class="card" method="post" action="/login">
-    <h1 style="margin-top:0;">Вход</h1>
-    <p class="muted">Введите пароль просмотра или редактирования.</p>
-    <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
-    <button type="submit">Войти</button>
-  </form>
+  <div class="card" id="login-form">
+    <form method="post" action="/login">
+      <h1 style="margin-top:0;">Вход</h1>
+      <p class="muted">Введите пароль просмотра или редактирования.</p>
+      <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;" required>
+      <button type="submit">Войти</button>
+    </form>
+    <a class="toggle-link" onclick="document.getElementById('login-form').style.display='none'; document.getElementById('request-form').style.display='block';">Запросить доступ / Восстановить пароль</a>
+  </div>
+
+  <div class="card" id="request-form">
+    <form method="post" action="/request_access">
+      <h1 style="margin-top:0;">Запрос доступа</h1>
+      <p class="muted">Введите ФИО и желаемый пароль. Если вы забыли пароль, введите новое значение — доступ будет временно приостановлен до одобрения администратором.</p>
+      <input name="full_name" type="text" placeholder="Фамилия И.О." style="margin-bottom:12px;" required>
+      <input name="password" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required>
+      <button type="submit">Запросить доступ</button>
+    </form>
+    <a class="toggle-link" onclick="document.getElementById('request-form').style.display='none'; document.getElementById('login-form').style.display='block';">Вернуться ко входу</a>
+  </div>
 </body>
 </html>
 """
@@ -279,7 +296,8 @@ USERS_TEMPLATE = '''<!doctype html>
           <input name="full_name" placeholder="Фамилия И.О." required style="flex:2; min-width:180px;">
           <input name="password" placeholder="Пароль (ПИН)" required style="flex:1; min-width:120px;">
           <select name="role" style="flex:1; min-width:140px;">
-              <option value="viewer">Зритель</option>
+              <option value="pending">Ожидает подтверждения</option>
+              <option value="viewer" selected>Зритель</option>
               <option value="editor">Редактор</option>
               <option value="admin">Администратор</option>
           </select>
@@ -452,9 +470,22 @@ def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
             if m == mod_id or m.startswith(mod_id + ":"):
                 return f'<a href="{path}">Открыть</a>'
         return '<a class="disabled" href="#" aria-disabled="true" tabindex="-1">Нет доступа</a>'
-        
-    users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>' if role == "admin" or "admin" in mods else ""
-        
+    users_link = ""
+    if role == "admin" or "admin" in mods:
+        pending_count = 0
+        try:
+            import sqlite3
+            with sqlite3.connect(DB_FILE) as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM users WHERE role='pending'")
+                pending_count = cur.fetchone()[0]
+        except Exception:
+            pass
+            
+        if pending_count > 0:
+            users_link = f'<a class="badge" href="/users" style="background:#e11d48; color:#fff; border-color:#e11d48; font-weight:bold;">Управление доступом ({pending_count})</a>'
+        else:
+            users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>'
     return (
         HOME_TEMPLATE
         .replace("{{STARTED_AT}}", started_at)
@@ -491,10 +522,12 @@ class Handler(BaseHTTPRequestHandler):
                     for u in cur.fetchall():
                         fid = f"form_{u[0]}"
                         mods = u[4] or ""
-                        rows_html += f"<tr><td>{u[0]}</td>"
+                        bg_color = "background:#fff3cd;" if u[3] == "pending" else ""
+                        rows_html += f"<tr style='{bg_color}'><td>{u[0]}</td>"
                         rows_html += f"<td><input form='{fid}' name='full_name' value='{u[1]}' required style='min-width:160px; max-width:200px;'></td>"
                         rows_html += f"<td><input form='{fid}' name='password' value='{u[2]}' required style='min-width:120px; max-width:160px;'></td>"
                         rows_html += f"<td><select form='{fid}' name='role'>"
+                        rows_html += f"<option value='pending' {'selected' if u[3]=='pending' else ''}>Ожидает</option>"
                         rows_html += f"<option value='viewer' {'selected' if u[3]=='viewer' else ''}>Зритель</option>"
                         rows_html += f"<option value='editor' {'selected' if u[3]=='editor' else ''}>Редактор</option>"
                         rows_html += f"<option value='admin' {'selected' if u[3]=='admin' else ''}>Администратор</option>"
@@ -669,6 +702,31 @@ class Handler(BaseHTTPRequestHandler):
             _redirect(self, "/users")
             return
 
+        if parsed.path == "/request_access":
+            form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            full_name = form.get("full_name", [""])[0].strip()
+            password = form.get("password", [""])[0].strip()
+            if full_name and password:
+                try:
+                    import sqlite3
+                    with sqlite3.connect(DB_FILE) as conn:
+                        cur = conn.cursor()
+                        cur.execute("SELECT id, role FROM users WHERE full_name=?", (full_name,))
+                        existing = cur.fetchone()
+                        if existing:
+                            conn.execute("UPDATE users SET password=?, role='pending', allowed_modules='' WHERE id=?", (password, existing[0]))
+                        else:
+                            conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, 'pending', '')",
+                                (full_name, password))
+                except Exception as e:
+                    print("Error requesting access:", e)
+            
+            html = """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Запрос отправлен</title>
+            <style>body{margin:0;font-family:Segoe UI, Arial, sans-serif;background:#f4f7fb;color:#102033;text-align:center;padding:50px;} .card{background:#fff;padding:40px;border-radius:18px;max-width:400px;margin:10vh auto;box-shadow:0 12px 32px rgba(16,32,51,.08);}</style>
+            </head><body><div class="card"><h2 style="margin-top:0;color:#0f172a;">Запрос отправлен</h2><p style="color:#64748b;margin-bottom:24px;">Ожидайте подтверждения администратором.</p><a href="/login" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">На главную</a></div></body></html>"""
+            _send_html(self, html)
+            return
+
         if parsed.path == "/login":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             password = form.get("password", [""])[0]
@@ -688,6 +746,15 @@ class Handler(BaseHTTPRequestHandler):
                 
             if user_record:
                 u_id, u_full_name, u_role, u_modules = user_record
+                if u_role == "pending":
+                    _send_html(
+                        self,
+                        LOGIN_TEMPLATE.replace("{{USER}}", "")
+                        + f"<p style='text-align:center;color:#b00020;'>Учетная запись ожидает подтверждения администратором.</p>",
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
+                    return
+                
                 u_modules = u_modules + ',spravochnik,zamer_kp'
                 if password == "12345":
                     u_modules = "zamer_kp,grafik_ppr,spravochnik,admin"
