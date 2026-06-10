@@ -476,8 +476,25 @@ class Handler(BaseHTTPRequestHandler):
                     cur = conn.cursor()
                     cur.execute("SELECT id, full_name, password, role, allowed_modules FROM users ORDER BY id")
                     for u in cur.fetchall():
-                        rows_html += f"<tr><td>{u[0]}</td><td>{u[1]}</td><td>{u[2]}</td><td>{u[3]}</td><td>{u[4]}</td>"
-                        rows_html += f"<td><form method='post' action='/users/delete' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button class='btn-danger' type='submit'>Удалить</button></form></td></tr>"
+                        fid = f"form_{u[0]}"
+                        mods = u[4] or ""
+                        rows_html += f"<tr><td>{u[0]}</td>"
+                        rows_html += f"<td><input form='{fid}' name='full_name' value='{u[1]}' required style='width:120px'></td>"
+                        rows_html += f"<td><input form='{fid}' name='password' value='{u[2]}' required style='width:80px'></td>"
+                        rows_html += f"<td><select form='{fid}' name='role'>"
+                        rows_html += f"<option value='viewer' {'selected' if u[3]=='viewer' else ''}>Зритель</option>"
+                        rows_html += f"<option value='editor' {'selected' if u[3]=='editor' else ''}>Редактор</option>"
+                        rows_html += f"<option value='admin' {'selected' if u[3]=='admin' else ''}>Администратор</option>"
+                        rows_html += f"</select></td>"
+                        rows_html += f"<td style='font-size:12px; white-space:nowrap;'>"
+                        rows_html += f"<label><input form='{fid}' type='checkbox' name='m_grafik' {'checked' if 'grafik_ppr' in mods else ''}> ППР</label><br>"
+                        rows_html += f"<label><input form='{fid}' type='checkbox' name='m_zamer' {'checked' if 'zamer_kp' in mods else ''}> Замер</label><br>"
+                        rows_html += f"<label><input form='{fid}' type='checkbox' name='m_sprav' {'checked' if 'spravochnik' in mods else ''}> Справ</label>"
+                        rows_html += f"</td>"
+                        rows_html += f"<td><div class='flex'>"
+                        rows_html += f"<form id='{fid}' method='post' action='/users/update' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button type='submit'>Сохранить</button></form>"
+                        rows_html += f"<form method='post' action='/users/delete' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button class='btn-danger' type='submit'>Удалить</button></form>"
+                        rows_html += f"</div></td></tr>"
             except Exception as e:
                 rows_html = f"<tr><td colspan='6'>Ошибка БД: {e}</td></tr>"
                 
@@ -581,6 +598,30 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("DELETE FROM users WHERE id=?", (form.get("id", ["0"])[0],))
             except Exception as e:
                 print("Error deleting user:", e)
+            _redirect(self, "/users")
+            return
+            
+        if parsed.path == "/users/update":
+            form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            uid = form.get("id", ["0"])[0]
+            full_name = form.get("full_name", [""])[0]
+            password = form.get("password", [""])[0]
+            role = form.get("role", ["viewer"])[0]
+            
+            modules = []
+            if form.get("m_grafik"): modules.append("grafik_ppr")
+            if form.get("m_zamer"): modules.append("zamer_kp")
+            if form.get("m_sprav"): modules.append("spravochnik")
+            if role == "admin": modules.append("admin")
+            modules_str = ",".join(modules)
+            
+            try:
+                import sqlite3
+                with sqlite3.connect(DB_FILE) as conn:
+                    conn.execute("UPDATE users SET full_name=?, password=?, role=?, allowed_modules=? WHERE id=?", 
+                        (full_name, password, role, modules_str, uid))
+            except Exception as e:
+                print("Error updating user:", e)
             _redirect(self, "/users")
             return
 
