@@ -57,6 +57,7 @@ jobs:
           }
 
           backup_path base/common_database.db
+          backup_path base/web_users.db
           backup_path data
           backup_path web_main/data
           backup_path web_spravochnik/data
@@ -65,6 +66,8 @@ jobs:
           git reset --hard origin/main
 
           restore_path base/common_database.db
+          restore_path base/web_users.db
+          backup_path base/web_users.db
           restore_path data
           restore_path web_main/data
           restore_path web_spravochnik/data
