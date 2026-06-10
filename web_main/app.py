@@ -250,7 +250,7 @@ USERS_TEMPLATE = '''<!doctype html>
   <title>Управление доступом</title>
   <style>
     body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; padding:20px; }
-    .card { max-width:800px; margin:0 auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
+    .card { max-width:1000px; margin:0 auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
     table { width:100%; border-collapse:collapse; margin-top:20px; }
     th, td { text-align:left; padding:10px; border-bottom:1px solid #d9e2ef; vertical-align:middle; }
     input, select, button { padding:8px; border-radius:6px; border:1px solid #d9e2ef; font:inherit; }
