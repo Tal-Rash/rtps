@@ -3047,12 +3047,10 @@ HTML = """<!doctype html>
     .archive-table td.summary { width:80px; }
     .archive-table td.first-col { width:80px; }
     .archive-table tr.measurement-start td { border-top:1px solid #2f6fed; }
-    .archive-table tr.measurement-start td[rowspan] { border-bottom:1px solid #2f6fed; border-top:1px solid #2f6fed; }
+    .archive-table tr.measurement-start td.measurement-span { border-bottom:1px solid #2f6fed; border-top:1px solid #2f6fed; }
     .archive-table tr.measurement-start td:first-child { border-left:1px solid #2f6fed; }
     .archive-table tr.measurement-row td:last-child { border-right:1px solid #2f6fed; }
     .archive-table tr.measurement-end td { border-bottom:1px solid #2f6fed; }
-    .archive-table tr.section-start:not(.measurement-start) td { border-top:1px solid rgba(47,111,237,0.35); }
-    .archive-table tr.section-start:not(.measurement-start) td[rowspan] { border-top:1px solid rgba(47,111,237,0.45); border-bottom:1px solid rgba(47,111,237,0.45); }
     .archive-table tr.selected-measurement td {
       background:#f7fbff;
     }
@@ -4766,7 +4764,7 @@ function renderArchiveTable(){
       if (index === 0) {
         const span = measurementSpans.get(rowIndex);
         if (!span) return '';
-        return `<td class="first-col archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        return `<td class="first-col archive-sticky-col measurement-span" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index === 1) {
         const span = sectionSpans.get(rowIndex);
