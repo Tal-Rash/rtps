@@ -277,10 +277,13 @@ USERS_TEMPLATE = '''<!doctype html>
             <option value="editor">Редактор</option>
             <option value="admin">Администратор</option>
         </select>
-        <input name="modules" placeholder="zamer_kp,grafik_ppr" value="zamer_kp,grafik_ppr" style="flex:1;">
-        <button type="submit">Добавить</button>
+        <div style="display:flex; gap:12px; align-items:center; flex:1; flex-wrap:wrap; border:1px solid #d9e2ef; padding:8px; border-radius:6px; background:#fff;">
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;"><input type="checkbox" name="module_grafik_ppr" value="1"> График ППР</label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;"><input type="checkbox" name="module_zamer_kp" value="1"> Замер КП</label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;"><input type="checkbox" name="module_spravochnik" value="1"> Справочник</label>
+        </div>
+        <button type="submit" style="align-self:stretch;">Добавить</button>
       </div>
-      <p class="muted" style="margin:5px 0 0;">Доступные модули через запятую: zamer_kp, grafik_ppr, spravochnik</p>
     </form>
 
     <table>
@@ -495,11 +498,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/users/add":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            modules = []
+            if form.get("module_grafik_ppr"): modules.append("grafik_ppr")
+            if form.get("module_zamer_kp"): modules.append("zamer_kp")
+            if form.get("module_spravochnik"): modules.append("spravochnik")
+            modules_str = ",".join(modules)
             try:
                 import sqlite3
                 with sqlite3.connect(DB_FILE) as conn:
                     conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                        (form.get("full_name", [""])[0], form.get("password", [""])[0], form.get("role", ["viewer"])[0], form.get("modules", [""])[0]))
+                        (form.get("full_name", [""])[0], form.get("password", [""])[0], form.get("role", ["viewer"])[0], modules_str))
             except Exception as e:
                 print("Error adding user:", e)
             _redirect(self, "/users")
@@ -540,11 +548,16 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         if parsed.path == "/users/add":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
+            modules = []
+            if form.get("module_grafik_ppr"): modules.append("grafik_ppr")
+            if form.get("module_zamer_kp"): modules.append("zamer_kp")
+            if form.get("module_spravochnik"): modules.append("spravochnik")
+            modules_str = ",".join(modules)
             try:
                 import sqlite3
                 with sqlite3.connect(DB_FILE) as conn:
                     conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                        (form.get("full_name", [""])[0], form.get("password", [""])[0], form.get("role", ["viewer"])[0], form.get("modules", [""])[0]))
+                        (form.get("full_name", [""])[0], form.get("password", [""])[0], form.get("role", ["viewer"])[0], modules_str))
             except Exception as e:
                 print("Error adding user:", e)
             _redirect(self, "/users")
