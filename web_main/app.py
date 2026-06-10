@@ -754,8 +754,7 @@ class Handler(BaseHTTPRequestHandler):
                         status=HTTPStatus.UNAUTHORIZED,
                     )
                     return
-                
-                u_modules = u_modules + ',spravochnik,zamer_kp'
+                u_modules = u_modules or ""
                 expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
                 _write_access_state(u_full_name, u_role, expiry)
                 _redirect(self, "/", _login_cookie(str(u_id), u_role, u_modules, u_full_name))
