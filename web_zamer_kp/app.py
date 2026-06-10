@@ -4767,7 +4767,7 @@ function renderArchiveTable(){
         return `<td class="section-merged archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 2 && index <= 8) {
-        const span = measurementSpans.get(rowIndex);
+        const span = sectionSpans.get(rowIndex);
         if (!span) return '';
         const summaryClass = index === 7 || index === 8 ? 'summary-merged' : 'summary-merged';
         return `<td class="${summaryClass} archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
