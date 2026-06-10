@@ -278,9 +278,9 @@ USERS_TEMPLATE = '''<!doctype html>
             <option value="admin">Администратор</option>
         </select>
         <div style="display:flex; gap:12px; align-items:center; flex:1; flex-wrap:wrap; border:1px solid #d9e2ef; padding:8px; border-radius:6px; background:#fff;">
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">График ППР: <select name="module_grafik_ppr"><option value="none">Нет</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Замер КП: <select name="module_zamer_kp"><option value="none">Нет</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Справочник: <select name="module_spravochnik"><option value="none">Нет</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">График ППР: <select name="module_grafik_ppr"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Замер КП: <select name="module_zamer_kp"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label style="display:flex; align-items:center; gap:4px; margin:0; cursor:pointer;">Справочник: <select name="module_spravochnik"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
         </div>
         <button type="submit" style="align-self:stretch;">Добавить</button>
       </div>
@@ -508,9 +508,9 @@ class Handler(BaseHTTPRequestHandler):
                         if s_r == "legacy": s_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
                         
                         rows_html += f"<td style='font-size:12px; white-space:nowrap; display:flex; flex-direction:column; gap:4px;'>"
-                        rows_html += f"<label>ППР: <select form='{fid}' name='module_grafik_ppr'><option value='none' {rsel(g_r,'none')}>Нет</option><option value='view' {rsel(g_r,'view')}>Зритель</option><option value='edit' {rsel(g_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"<label>Замер: <select form='{fid}' name='module_zamer_kp'><option value='none' {rsel(z_r,'none')}>Нет</option><option value='view' {rsel(z_r,'view')}>Зритель</option><option value='edit' {rsel(z_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"<label>Справ: <select form='{fid}' name='module_spravochnik'><option value='none' {rsel(s_r,'none')}>Нет</option><option value='view' {rsel(s_r,'view')}>Зритель</option><option value='edit' {rsel(s_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label>ППР: <select form='{fid}' name='module_grafik_ppr'><option value='none' {rsel(g_r,'none')}>Нет доступа</option><option value='view' {rsel(g_r,'view')}>Зритель</option><option value='edit' {rsel(g_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label>Замер: <select form='{fid}' name='module_zamer_kp'><option value='none' {rsel(z_r,'none')}>Нет доступа</option><option value='view' {rsel(z_r,'view')}>Зритель</option><option value='edit' {rsel(z_r,'edit')}>Редактор</option></select></label>"
+                        rows_html += f"<label>Справ: <select form='{fid}' name='module_spravochnik'><option value='none' {rsel(s_r,'none')}>Нет доступа</option><option value='view' {rsel(s_r,'view')}>Зритель</option><option value='edit' {rsel(s_r,'edit')}>Редактор</option></select></label>"
                         rows_html += f"</td>"
                         rows_html += f"<td><div class='flex'>"
                         rows_html += f"<form id='{fid}' method='post' action='/users/update' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button type='submit'>Сохранить</button></form>"
