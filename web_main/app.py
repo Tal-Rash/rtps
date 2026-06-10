@@ -294,7 +294,8 @@ USERS_TEMPLATE = '''<!doctype html>
       </div>
     </form>
 
-    <table>
+    <div style="overflow-x: auto;">
+      <table>
       <thead>
         <tr>
           <th>ID</th><th>ФИО</th><th>Пароль</th><th>Роль</th><th>Модули</th><th>Действие</th>
@@ -304,6 +305,7 @@ USERS_TEMPLATE = '''<!doctype html>
         {{USERS_ROWS}}
       </tbody>
     </table>
+    </div>
   </div>
 </body>
 </html>
