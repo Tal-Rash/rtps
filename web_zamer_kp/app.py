@@ -68,15 +68,6 @@ ROOT = Path(__file__).parent
 SHARED_DATA_DIR = ROOT.parent / "data"
 
 def load_web_secret() -> str:
-    secret = os.environ.get("WEB_SECRET", "").strip()
-    if secret: return secret
-    
-    secret_file = SHARED_DATA_DIR / "web_secret.txt"
-    if secret_file.exists():
-        try:
-            return secret_file.read_text(encoding="utf-8").strip()
-        except Exception:
-            pass
     return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 WEB_SECRET = load_web_secret()
@@ -245,12 +236,15 @@ def current_session(handler) -> tuple[str, str, str, str] | None:
 def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
     if not session:
+        handler.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
         return None
     user_id, role, modules, safe_name = session
     mods = [m.strip() for m in modules.split(",")]
     if "admin" not in mods and "zamer_kp" not in mods:
+        handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     if need_edit and role not in ("edit", "editor", "admin"):
+        handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     return session
 
@@ -305,20 +299,6 @@ def redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None 
         handler.send_header("Set-Cookie", cookie)
     handler.end_headers()
 
-
-def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
-    session = current_session(handler)
-    if not session:
-        return None
-    user_id, role, modules, safe_name = session
-    mods = [m.strip() for m in modules.split(",")]
-    if "admin" not in mods and "zamer_kp" not in mods:
-        return None
-    if need_edit and role != "edit" and role != "admin":
-        return None
-    return session
-    send_json(handler, {"error": "Требуется вход с правом редактирования" if need_edit else "Требуется вход"}, HTTPStatus.UNAUTHORIZED)
-    return None
 
 
 def normalize_text(value: str) -> str:
@@ -5437,7 +5417,7 @@ def render_page(role: str) -> str:
     return (
         HTML.replace("{{APP_PREFIX}}", APP_PREFIX)
         .replace("{{APP_VERSION}}", APP_VERSION)
-        .replace("{{CAN_EDIT}}", "true" if role == "edit" else "false")
+        .replace("{{CAN_EDIT}}", "true" if role in ("edit", "editor", "admin") else "false")
         .replace("{{LOCOMOTIVE_CHOICES}}", json.dumps(loco_choices, ensure_ascii=False))
     )
 

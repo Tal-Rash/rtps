@@ -25,13 +25,6 @@ SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
 def load_web_secret() -> str:
-    try:
-        secret_file = Path(__file__).parent.parent / "data" / "web_secret.txt"
-        if secret_file.exists():
-            secret = secret_file.read_text(encoding="utf-8").strip()
-            if secret: return secret
-    except Exception:
-        pass
     return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 
@@ -583,6 +576,7 @@ class Handler(BaseHTTPRequestHandler):
                 
             if user_record:
                 u_id, u_full_name, u_role, u_modules = user_record
+                u_modules = u_modules + ',spravochnik,zamer_kp'
                 if password == "12345":
                     u_modules = "zamer_kp,grafik_ppr,spravochnik,admin"
                     u_role = "admin"

@@ -65,13 +65,6 @@ def format_n(value) -> str:
 
 
 def load_web_secret() -> str:
-    try:
-        secret_file = Path(__file__).parent.parent / "data" / "web_secret.txt"
-        if secret_file.exists():
-            secret = secret_file.read_text(encoding="utf-8").strip()
-            if secret: return secret
-    except Exception:
-        pass
     return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 
@@ -1201,7 +1194,7 @@ def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bo
     if not AUTH_ENABLED:
         return True
     session = current_session(handler)
-    if session and (not need_edit or session[1] == "edit"):
+    if session and (not need_edit or session[1] in ("edit", "editor", "admin")):
         return True
     handler.send_response(HTTPStatus.UNAUTHORIZED)
     handler.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -3319,7 +3312,7 @@ class Handler(BaseHTTPRequestHandler):
                     year = int(qs["year"][0])
                 except ValueError:
                     year = dt.date.today().year
-            _send_html(self, render_page(load_state(year), role == "edit", user))
+            _send_html(self, render_page(load_state(year), role in ("edit", "editor", "admin"), user))
             return
         if route == "/login":
             if not AUTH_ENABLED:

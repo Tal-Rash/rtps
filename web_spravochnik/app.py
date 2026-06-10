@@ -33,13 +33,6 @@ MONTHS = [
 
 
 def load_web_secret() -> str:
-    try:
-        secret_file = Path(__file__).parent.parent / "data" / "web_secret.txt"
-        if secret_file.exists():
-            secret = secret_file.read_text(encoding="utf-8").strip()
-            if secret: return secret
-    except Exception:
-        pass
     return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 
@@ -225,12 +218,15 @@ def current_session(handler) -> tuple[str, str, str, str] | None:
 def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
     if not session:
+        handler.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
         return None
     user_id, role, modules, safe_name = session
     mods = [m.strip() for m in modules.split(",")]
     if "admin" not in mods and "spravochnik" not in mods:
+        handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     if need_edit and role not in ("edit", "editor", "admin"):
+        handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
         return None
     return session
 
@@ -1020,11 +1016,8 @@ class Handler(BaseHTTPRequestHandler):
         user = session[0] if session else None
         role = session[1] if session else None
         if path == "/login":
-            if user and role == "edit":
+            if user:
                 redirect(self, APP_PREFIX + "/")
-                return
-            if user and role != "edit":
-                redirect(self, APP_PREFIX + "/logout")
                 return
             send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER))
             return
@@ -1042,11 +1035,12 @@ class Handler(BaseHTTPRequestHandler):
             if not user:
                 redirect(self, APP_PREFIX + "/login")
                 return
+            auth_badge = "Редактирование" if role in ("edit", "editor", "admin") else "Просмотр"
             send_html(
                 self,
                 HTML.replace("{{USER}}", WEB_USER)
-                    .replace("{{AUTH_BADGE}}", "Редактирование")
-                    .replace("{{CAN_EDIT}}", "true"),
+                    .replace("{{AUTH_BADGE}}", auth_badge)
+                    .replace("{{CAN_EDIT}}", "true" if role in ("edit", "editor", "admin") else "false"),
             )
             return
         if path == "/api/state":
