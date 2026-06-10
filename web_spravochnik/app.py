@@ -1048,6 +1048,22 @@ class Handler(BaseHTTPRequestHandler):
                 return
             send_html(self, LOGIN_HTML.replace("{{USER}}", WEB_USER))
             return
+        if path == "/debug-logs":
+            log_contents = ""
+            try:
+                log_dir = ROOT.parent / "data"
+                for p in log_dir.glob("*.log"):
+                    log_contents += f"=== {p.name} ===\n"
+                    log_contents += p.read_text("utf-8", errors="ignore") + "\n\n"
+            except Exception as e:
+                log_contents = f"Error reading logs: {e}"
+            if not log_contents:
+                log_contents = "No logs found."
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(log_contents.encode("utf-8"))
+            return
         if path == "/logout":
             handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
             self.send_response(HTTPStatus.OK)
