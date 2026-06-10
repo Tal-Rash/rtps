@@ -509,7 +509,7 @@ class Handler(BaseHTTPRequestHandler):
         modules = session[2] if session else ""
         full_name = session[3] if session else ""
         if parsed.path == "/users":
-            if not user_id or "admin" not in modules:
+            if not user_id or (role != "admin" and "admin" not in modules):
                 _redirect(self, "/")
                 return
             
