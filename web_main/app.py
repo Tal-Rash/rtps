@@ -311,8 +311,9 @@ USERS_TEMPLATE = '''<!doctype html>
 '''
 
 def _cookie_value(user_id: str, role: str, modules: str, full_name: str) -> str:
+    import urllib.parse
     expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-    safe_name = full_name.replace(":", " ")
+    safe_name = urllib.parse.quote(full_name.replace(":", " "))
     payload = f"{user_id}:{role}:{modules}:{safe_name}:{expiry}"
     sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     token = f"{payload}:{sig}"
@@ -363,7 +364,8 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             return None
         if role not in {"view", "edit"}:
             return None
-        return user_id, role, modules, safe_name
+        import urllib.parse
+        return user_id, role, modules, urllib.parse.unquote(safe_name)
     except Exception:
         try:
             username, role, expiry_text, sig = value.split("|")
