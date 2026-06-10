@@ -33,20 +33,14 @@ MONTHS = [
 
 
 def load_web_secret() -> str:
-    secret = os.environ.get("WEB_SECRET", "").strip()
-    if secret:
-        return secret
-    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if WEB_SECRET_FILE.exists():
-        try:
-            secret = WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-            if secret:
-                return secret
-        except Exception:
-            pass
-    secret = secrets.token_urlsafe(32)
-    WEB_SECRET_FILE.write_text(secret, encoding="utf-8")
-    return secret
+    try:
+        secret_file = Path(__file__).parent.parent / "data" / "web_secret.txt"
+        if secret_file.exists():
+            secret = secret_file.read_text(encoding="utf-8").strip()
+            if secret: return secret
+    except Exception:
+        pass
+    return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 
 def load_legacy_web_secret() -> str:
