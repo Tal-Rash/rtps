@@ -333,9 +333,9 @@ def _cookie_value(user_id: str, role: str, modules: str, full_name: str) -> str:
     import urllib.parse
     expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
     safe_name = urllib.parse.quote(full_name.replace(":", " "))
-    payload = f"{user_id}:{role}:{modules}:{safe_name}:{expiry}"
+    payload = f"{user_id}|{role}|{modules}|{safe_name}|{expiry}"
     sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token = f"{payload}:{sig}"
+    token = f"{payload}|{sig}"
     SESSIONS[token] = (user_id, role, modules, full_name, float(expiry))
     return token
 
@@ -366,8 +366,8 @@ def _clear_access_state() -> None:
 
 def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     try:
-        user_id, role, modules, safe_name, ts, sig = value.rsplit(":", 5)
-        payload = f"{user_id}:{role}:{modules}:{safe_name}:{ts}"
+        user_id, role, modules, safe_name, ts, sig = value.split("|", 5)
+        payload = f"{user_id}|{role}|{modules}|{safe_name}|{ts}"
         secrets_to_try = [WEB_SECRET]
         if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
             secrets_to_try.append(LEGACY_WEB_SECRET)
