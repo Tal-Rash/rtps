@@ -1760,18 +1760,11 @@ HTML_TEMPLATE = """<!doctype html>
     .cell.day-cell.selected-cell,
     td.transfer-col .cell.day-cell.selected-cell,
     td.holiday-col .cell.day-cell.selected-cell {
-      background:transparent !important;
-      outline:none;
-      position:relative;
-      z-index:3;
-    }
-    .cell.selected-cell input,
-    .cell.day-cell.selected-cell input,
-    td.transfer-col .cell.day-cell.selected-cell input,
-    td.holiday-col .cell.day-cell.selected-cell input {
       background:#e8f0fe !important;
       box-shadow:inset 0 0 0 1.5px #276ef1 !important;
       outline:none;
+      position:relative;
+      z-index:3;
     }
     .cell.cat-toggle {
       display:block;
