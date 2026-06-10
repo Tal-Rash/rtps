@@ -3051,6 +3051,7 @@ HTML = """<!doctype html>
     .archive-table tr.measurement-start td:first-child { border-left:1px solid #2f6fed; }
     .archive-table tr.measurement-row td:last-child { border-right:1px solid #2f6fed; }
     .archive-table tr.measurement-end td { border-bottom:1px solid #2f6fed; }
+    .archive-table td.section-last { border-bottom:1px solid #2f6fed; }
     .archive-table tr.selected-measurement td {
       background:#f7fbff;
     }
@@ -4746,6 +4747,17 @@ function renderArchiveTable(){
     sectionSpans.set(start, end - start);
     start = end;
   }
+  // Определяем секции, которые являются последними в своём замере
+  // (нужно для нижней синей рамки rowspan-ячеек статистики)
+  const lastSectionStarts = new Set();
+  for (const [startIdx, sSpan] of sectionSpans.entries()) {
+    const lastRowOfSection = startIdx + sSpan - 1;
+    const rowKey = archiveMeasurementKey(archiveRows[startIdx]);
+    const nextIdx = lastRowOfSection + 1;
+    if (nextIdx >= archiveRows.length || archiveMeasurementKey(archiveRows[nextIdx]) !== rowKey) {
+      lastSectionStarts.add(startIdx);
+    }
+  }
   tbody.innerHTML = archiveRows.map((row, rowIndex) => {
     const values = row.values || [];
     const rowMeta = archiveRows[rowIndex];
@@ -4769,13 +4781,14 @@ function renderArchiveTable(){
       if (index === 1) {
         const span = sectionSpans.get(rowIndex);
         if (!span) return '';
-        return `<td class="section-merged archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        const isLast = lastSectionStarts.has(rowIndex);
+        return `<td class="section-merged archive-sticky-col${isLast ? ' section-last' : ''}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 2 && index <= 8) {
         const span = sectionSpans.get(rowIndex);
         if (!span) return '';
-        const summaryClass = index === 7 || index === 8 ? 'summary-merged' : 'summary-merged';
-        return `<td class="${summaryClass} archive-sticky-col" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        const isLast = lastSectionStarts.has(rowIndex);
+        return `<td class="summary-merged archive-sticky-col${isLast ? ' section-last' : ''}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 10) {
         return `
