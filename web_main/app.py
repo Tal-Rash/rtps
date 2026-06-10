@@ -362,8 +362,6 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             return None
         if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
             return None
-        if role not in {"view", "edit"}:
-            return None
         import urllib.parse
         return user_id, role, modules, urllib.parse.unquote(safe_name)
     except Exception:
