@@ -1124,8 +1124,6 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
                 continue
                 
             secrets_to_try = [WEB_SECRET]
-            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-                secrets_to_try.append(LEGACY_WEB_SECRET)
                 
             matched = False
             import hmac
@@ -1394,7 +1392,7 @@ def render_home(username: str | None, can_edit: bool) -> str:
 
 def _login_cookie(username: str, role: str) -> str:
     token = _cookie_value(username, role)
-    SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
+    SESSIONS[token] = (username, role, "", username, dt.datetime.now().timestamp())
     return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax"
 
 HTML_TEMPLATE = """<!doctype html>
