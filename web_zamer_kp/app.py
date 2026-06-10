@@ -3051,6 +3051,8 @@ HTML = """<!doctype html>
     .archive-table tr.measurement-start td:first-child { border-left:1px solid #2f6fed; }
     .archive-table tr.measurement-row td:last-child { border-right:1px solid #2f6fed; }
     .archive-table tr.measurement-end td { border-bottom:1px solid #2f6fed; }
+    .archive-table tr.section-start:not(.measurement-start) td { border-top:1px solid rgba(47,111,237,0.35); }
+    .archive-table tr.section-start:not(.measurement-start) td[rowspan] { border-top:1px solid rgba(47,111,237,0.45); border-bottom:1px solid rgba(47,111,237,0.45); }
     .archive-table tr.selected-measurement td {
       background:#f7fbff;
     }
@@ -4755,6 +4757,11 @@ function renderArchiveTable(){
     const rowClasses = ['measurement-row'];
     if (rowKey && rowKey !== prevKey) rowClasses.push('measurement-start');
     if (rowKey && rowKey !== nextKey) rowClasses.push('measurement-end');
+    const rowSection = String(row.section || row.values?.[0] || '1').trim() || '1';
+    const prevRow = rowIndex > 0 ? archiveRows[rowIndex - 1] : null;
+    const prevRowKey = prevRow ? archiveMeasurementKey(prevRow) : '';
+    const prevRowSection = prevRow ? (String(prevRow.section || prevRow.values?.[0] || '1').trim() || '1') : '';
+    if (rowKey !== prevRowKey || rowSection !== prevRowSection) rowClasses.push('section-start');
     const cells = values.map((value, index) => {
       if (index === 0) {
         const span = measurementSpans.get(rowIndex);
