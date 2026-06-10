@@ -105,6 +105,34 @@ WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 SESSIONS: dict[str, tuple[str, str, str, str, float]] = {}
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 
+def init_db() -> None:
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import sqlite3
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    password TEXT UNIQUE NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    allowed_modules TEXT NOT NULL
+                )
+            """)
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM users")
+            if cur.fetchone()[0] == 0:
+                conn.execute(
+                    "INSERT INTO users (password, full_name, role, allowed_modules) VALUES (?, ?, ?, ?)",
+                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,admin")
+                )
+                print("Создан администратор по умолчанию. Пароль: 12345")
+    except Exception as e:
+        print("Ошибка инициализации БД:", e)
+
+init_db()
+
+
 
 HOME_TEMPLATE = """<!doctype html>
 <html lang="ru">
@@ -547,13 +575,17 @@ class Handler(BaseHTTPRequestHandler):
             password = form.get("password", [""])[0]
             
             user_record = None
+            password = password.strip()
+            db_err = ""
             try:
+                import sqlite3
                 with sqlite3.connect(DB_FILE) as conn:
                     cur = conn.cursor()
                     cur.execute("SELECT id, full_name, role, allowed_modules FROM users WHERE password=?", (password,))
                     user_record = cur.fetchone()
             except Exception as e:
                 print(f"DB Error: {e}")
+                db_err = f"<p>DB Error: {e} | Path: {DB_FILE}</p>"
                 
             if user_record:
                 u_id, u_full_name, u_role, u_modules = user_record
@@ -565,7 +597,8 @@ class Handler(BaseHTTPRequestHandler):
             _send_html(
                 self,
                 LOGIN_TEMPLATE.replace("{{USER}}", "")
-                + "<p style='text-align:center;color:#b00020;'>Неверный пароль</p>",
+                + f"<p style='text-align:center;color:#b00020;'>Неверный пароль ({password})</p>"
+                + db_err,
                 status=HTTPStatus.UNAUTHORIZED,
             )
             return
