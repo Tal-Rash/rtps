@@ -106,8 +106,8 @@ SESSIONS: dict[str, tuple[str, str, str, str, float]] = {}
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 
 def init_db() -> None:
-    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
+        DB_FILE.parent.mkdir(parents=True, exist_ok=True)
         import sqlite3
         with sqlite3.connect(DB_FILE) as conn:
             conn.execute("""
