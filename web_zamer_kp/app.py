@@ -64,25 +64,22 @@ ARCHIVE_EXCEL_HEADERS = [
 ]
 
 
-def config(key: str, default: str = "") -> str:
-    val = os.environ.get(key)
-    if val is not None:
-        return val
-    try:
-        env_path = Path(__file__).parent.parent / ".env"
-        if env_path.exists():
-            for line in env_path.read_text("utf-8").splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    if k.strip() == key:
-                        return v.strip()
-    except Exception:
-        pass
-    return default
+ROOT = Path(__file__).parent
+SHARED_DATA_DIR = ROOT.parent / "data"
 
-WEB_SECRET = config("WEB_SECRET", default="opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024")
-LEGACY_WEB_SECRET = config("LEGACY_WEB_SECRET", default="")
+def load_web_secret() -> str:
+    secret = os.environ.get("WEB_SECRET", "").strip()
+    if secret: return secret
+    
+    secret_file = SHARED_DATA_DIR / "web_secret.txt"
+    if secret_file.exists():
+        try:
+            return secret_file.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+    return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
+
+WEB_SECRET = load_web_secret()
 try:
     if LEGACY_WEB_SECRET_FILE.exists():
         LEGACY_WEB_SECRET = LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()

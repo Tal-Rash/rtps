@@ -1,0 +1,12 @@
+[Unit]
+Description=RTPS Main web app
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/rtps/web_main
+ExecStart=/usr/bin/python3 /opt/rtps/web_main/app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
