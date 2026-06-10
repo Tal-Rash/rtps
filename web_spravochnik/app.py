@@ -173,130 +173,62 @@ def text(value) -> str:
 
 
 def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
-    try:
-        user_id, role, modules, safe_name, ts, sig = value.rsplit(":", 5)
-        payload = f"{user_id}:{role}:{modules}:{safe_name}:{ts}"
-        secrets_to_try = [WEB_SECRET]
-        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-            secrets_to_try.append(LEGACY_WEB_SECRET)
-        for secret in secrets_to_try:
-            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-            if hmac.compare_digest(expected, sig):
-                if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
-                    return None
-                if role in {"view", "edit"}:
-                    return username, role
+    for sep in (":", "|"):
+        try:
+            parts = value.rsplit(sep, 5)
+            if len(parts) == 6:
+                user_id, role, modules, safe_name, expiry_text, sig = parts
+                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
+            elif len(parts) == 4:
+                username, role, expiry_text, sig = parts
+                payload = f"{username}{sep}{role}{sep}{expiry_text}"
+                user_id, modules, safe_name = username, "", username
+            else:
+                continue
+                
+            secrets_to_try = [WEB_SECRET]
+            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
+                secrets_to_try.append(LEGACY_WEB_SECRET)
+                
+            matched = False
+            import hmac
+            import hashlib
+            for secret in secrets_to_try:
+                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(expected, sig):
+                    matched = True
+                    break
+                    
+            if not matched:
+                continue
+            import datetime as dt
+            if float(expiry_text) < dt.datetime.now().timestamp():
                 return None
-    except Exception:
-        pass
-    try:
-        username, role, expiry_text, sig = value.split("|")
-        payload = f"{username}|{role}|{expiry_text}"
-        secrets_to_try = [WEB_SECRET]
-        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-            secrets_to_try.append(LEGACY_WEB_SECRET)
-        for secret in secrets_to_try:
-            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-            if hmac.compare_digest(expected, sig):
-                if dt.datetime.now().timestamp() > float(expiry_text):
-                    return None
-                if role in {"view", "edit"}:
-                    return username, role
-                return None
-    except Exception:
-        pass
+                
+            import urllib.parse
+            return user_id, role, modules, urllib.parse.unquote(safe_name)
+        except Exception:
+            continue
     return None
 
+def current_session(handler) -> tuple[str, str, str, str] | None:
+    for token in parse_cookie_values(handler, SESSION_COOKIE):
+        session = verify_cookie(token)
+        if session:
+            return session
+    return None
 
-def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for part in handler.headers.get("Cookie", "").split(";"):
-        if "=" not in part:
-            continue
-        key, value = part.split("=", 1)
-        result[key.strip()] = value.strip()
-    return result
-
-
-def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
-    try:
-        user_id, role, modules, safe_name, ts, sig = value.rsplit(":", 5)
-        payload = f"{user_id}:{role}:{modules}:{safe_name}:{ts}"
-        secrets_to_try = [WEB_SECRET]
-        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-            secrets_to_try.append(LEGACY_WEB_SECRET)
-        for secret in secrets_to_try:
-            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-            if hmac.compare_digest(expected, sig):
-                if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
-                    return None
-                if role in {"view", "edit"}:
-                    return username, role
-                return None
-    except Exception:
-        pass
-    try:
-        username, role, expiry_text, sig = value.split("|")
-        payload = f"{username}|{role}|{expiry_text}"
-        expected = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, sig):
-            return None
-        if dt.datetime.now().timestamp() > float(expiry_text):
-            return None
-        if role not in {"view", "edit"}:
-            return None
-        return username, role
-    except Exception:
-        return None
-
-
-def parse_cookies(handler: BaseHTTPRequestHandler) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for part in handler.headers.get("Cookie", "").split(";"):
-        if "=" not in part:
-            continue
-        key, value = part.split("=", 1)
-        result[key.strip()] = value.strip()
-    return result
-
-
-def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
-    cookies = parse_cookies(handler)
-    token = cookies.get(SESSION_COOKIE)
-    if not token:
-        return None
-    return verify_cookie(token)
-
-
-def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = True) -> bool:
+def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
-    if session and (not need_edit or session[1] == "edit"):
-        return True
-    handler.send_response(HTTPStatus.UNAUTHORIZED)
-    handler.send_header("Content-Type", "text/plain; charset=utf-8")
-    handler.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
-    handler.end_headers()
-    handler.wfile.write("Требуется вход".encode("utf-8"))
-    return False
-
-
-def login_cookie(username: str, role: str) -> str:
-    expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-    payload = f"{username}|{role}|{expiry}"
-    sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token = f"{payload}|{sig}"
-    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
-
-
-def send_json(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Cache-Control", "no-store")
-    handler.send_header("Content-Length", str(len(data)))
-    handler.end_headers()
-    handler.wfile.write(data)
-
+    if not session:
+        return None
+    user_id, role, modules, safe_name = session
+    mods = [m.strip() for m in modules.split(",")]
+    if "admin" not in mods and "spravochnik" not in mods:
+        return None
+    if need_edit and role not in ("edit", "editor", "admin"):
+        return None
+    return session
 
 def send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
     data = body.encode("utf-8")
