@@ -1761,7 +1761,6 @@ HTML_TEMPLATE = """<!doctype html>
     td.transfer-col .cell.day-cell.selected-cell,
     td.holiday-col .cell.day-cell.selected-cell {
       background:#e8f0fe !important;
-      box-shadow:inset 0 0 0 1.5px #276ef1 !important;
       outline:none;
       position:relative;
       z-index:3;
@@ -2102,7 +2101,10 @@ function setMonthSelection(anchor, focus){
   applyMonthSelectionClasses();
 }
 function applyMonthSelectionClasses(){
-  document.querySelectorAll('input.selected-cell').forEach((el) => el.classList.remove('selected-cell'));
+  document.querySelectorAll('input.selected-cell').forEach((el) => {
+    el.classList.remove('selected-cell');
+    el.style.boxShadow = '';
+  });
   if (ui.section !== 'months' || !ui.monthSelection) return;
   const sel = ui.monthSelection;
   document.querySelectorAll(`input[data-month="${sel.monthIndex}"][data-table="${sel.table}"]`).forEach((el) => {
@@ -2110,6 +2112,16 @@ function applyMonthSelectionClasses(){
     const col = Number(el.dataset.col);
     if (row >= sel.startRow && row <= sel.endRow && col >= sel.startCol && col <= sel.endCol) {
       el.classList.add('selected-cell');
+      const shadows = [];
+      if (row === sel.startRow) shadows.push('inset 0 1.5px 0 0 #276ef1');
+      if (row === sel.endRow) shadows.push('inset 0 -1.5px 0 0 #276ef1');
+      if (col === sel.startCol) shadows.push('inset 1.5px 0 0 0 #276ef1');
+      if (col === sel.endCol) shadows.push('inset -1.5px 0 0 0 #276ef1');
+      if (shadows.length > 0) {
+        el.style.setProperty('box-shadow', shadows.join(', '), 'important');
+      } else {
+        el.style.boxShadow = '';
+      }
     }
   });
 }

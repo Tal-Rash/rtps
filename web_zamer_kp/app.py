@@ -2875,7 +2875,7 @@ HTML = """<!doctype html>
     .kp-table td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:2px 3px; font-size:12px; outline:none; }
     .kp-table td.readonly { background:#f7fafc; font-weight:600; }
     .kp-table td.selected { background:#e8f0fe; }
-    .kp-table td.selected input { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    .kp-table td.selected input { background:#e8f0fe; }
     .loco-picker { position:relative; width:220px; }
     .loco-picker input { width:100%; box-sizing:border-box; }
     .loco-dropdown {
@@ -2923,7 +2923,7 @@ HTML = """<!doctype html>
     td.fixed { background:#f7fafc; font-weight:600; }
     td.measure-cell input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; line-height:34px; display:block; box-sizing:border-box; outline:none; }
     td.measure-cell.selected { background:#e8f0fe; }
-    td.measure-cell.selected input { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    td.measure-cell.selected input { background:#e8f0fe; }
     td input { width:100%; height:34px; border:0; text-align:center; background:transparent; padding:0; line-height:34px; display:block; box-sizing:border-box; outline:none; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
@@ -3043,7 +3043,7 @@ HTML = """<!doctype html>
       outline:none;
     }
     .archive-table td.archive-raw.selected { background:#e8f0fe; }
-    .archive-table td.archive-raw.selected input { background:#e8f0fe; box-shadow:inset 0 0 0 1.5px #2f6fed; }
+    .archive-table td.archive-raw.selected input { background:#e8f0fe; }
     .archive-table { margin-left:0; }
     .archive-body-table {
       border-radius:0 !important;
@@ -3469,13 +3469,29 @@ function selectionRect(){
   return { top, bottom, left, right };
 }
 function renderSelectionHighlight(){
-  document.querySelectorAll('#inputBody td.measure-cell.selected').forEach(td => td.classList.remove('selected'));
+  document.querySelectorAll('#inputBody td.measure-cell.selected').forEach(td => {
+    td.classList.remove('selected');
+    const input = td.querySelector('input');
+    if (input) input.style.boxShadow = '';
+  });
   const rect = selectionRect();
   if (!rect) return;
   for (let r = rect.top; r <= rect.bottom; r += 1) {
     for (let c = rect.left; c <= rect.right; c += 1) {
       const td = document.querySelector(`#inputBody tr[data-row="${r}"] td.measure-cell[data-col="${c}"]`);
-      if (td) td.classList.add('selected');
+      if (td) {
+        td.classList.add('selected');
+        const input = td.querySelector('input');
+        if (input) {
+          const shadows = [];
+          if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
+          if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
+          if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
+          if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
+          if (shadows.length > 0) input.style.setProperty('box-shadow', shadows.join(', '), 'important');
+          else input.style.boxShadow = '';
+        }
+      }
     }
   }
 }
@@ -3906,13 +3922,29 @@ function archiveSelectionRect(){
   };
 }
 function renderArchiveSelectionHighlight(){
-  document.querySelectorAll('#archiveBody td.selected').forEach(td => td.classList.remove('selected'));
+  document.querySelectorAll('#archiveBody td.selected').forEach(td => {
+    td.classList.remove('selected');
+    const input = td.querySelector('input');
+    if (input) input.style.boxShadow = '';
+  });
   const rect = archiveSelectionRect();
   if (!rect) return;
   for (let r = rect.top; r <= rect.bottom; r += 1) {
     for (let c = rect.left; c <= rect.right; c += 1) {
       const td = document.querySelector(`#archiveBody tr[data-row="${r}"] td[data-col="${c}"]`);
-      if (td) td.classList.add('selected');
+      if (td) {
+        td.classList.add('selected');
+        const input = td.querySelector('input');
+        if (input) {
+          const shadows = [];
+          if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
+          if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
+          if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
+          if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
+          if (shadows.length > 0) input.style.setProperty('box-shadow', shadows.join(', '), 'important');
+          else input.style.boxShadow = '';
+        }
+      }
     }
   }
 }
@@ -4447,13 +4479,29 @@ function kpSelectionRect(){
   };
 }
 function renderKpSelectionHighlight(){
-  document.querySelectorAll('#kpBody td.selected').forEach(td => td.classList.remove('selected'));
+  document.querySelectorAll('#kpBody td.selected').forEach(td => {
+    td.classList.remove('selected');
+    const input = td.querySelector('input');
+    if (input) input.style.boxShadow = '';
+  });
   const rect = kpSelectionRect();
   if (!rect) return;
   for (let r = rect.top; r <= rect.bottom; r += 1) {
     for (let c = rect.left; c <= rect.right; c += 1) {
       const td = document.querySelector(`#kpBody tr[data-row="${r}"] td[data-col="${c}"]`);
-      if (td) td.classList.add('selected');
+      if (td) {
+        td.classList.add('selected');
+        const input = td.querySelector('input');
+        if (input) {
+          const shadows = [];
+          if (r === rect.top) shadows.push('inset 0 1.5px 0 0 #2f6fed');
+          if (r === rect.bottom) shadows.push('inset 0 -1.5px 0 0 #2f6fed');
+          if (c === rect.left) shadows.push('inset 1.5px 0 0 0 #2f6fed');
+          if (c === rect.right) shadows.push('inset -1.5px 0 0 0 #2f6fed');
+          if (shadows.length > 0) input.style.setProperty('box-shadow', shadows.join(', '), 'important');
+          else input.style.boxShadow = '';
+        }
+      }
     }
   }
 }
