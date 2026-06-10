@@ -1165,6 +1165,12 @@ def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str
             user_id, role, modules, safe_name = session
             SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
             return session
+        else:
+            try:
+                with open(ROOT.parent / "data" / "grafik_auth.log", "a", encoding="utf-8") as f:
+                    f.write(f"Token verification failed for token: {token}\n")
+            except Exception:
+                pass
     return None
 
 
@@ -3290,6 +3296,13 @@ class Handler(BaseHTTPRequestHandler):
                     year = int(qs["year"][0])
                 except ValueError:
                     year = dt.date.today().year
+            # Logging
+            try:
+                raw_cookie = self.headers.get("Cookie", "")
+                with open(ROOT.parent / "data" / "grafik_auth.log", "a", encoding="utf-8") as f:
+                    f.write(f"Access /grafik-ppr. Session: {session}. Cookie: {raw_cookie}\n")
+            except Exception:
+                pass
             _send_html(self, render_page(load_state(year), role in ("edit", "editor", "admin"), user))
             return
         if route == "/login":
