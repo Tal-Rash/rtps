@@ -172,6 +172,16 @@ def text(value) -> str:
     return "" if value is None else str(value)
 
 
+
+def parse_cookie_values(handler, name: str) -> list[str]:
+    raw = handler.headers.get("Cookie", "")
+    values = []
+    for part in raw.split(";"):
+        if "=" not in part: continue
+        k, v = part.split("=", 1)
+        if k.strip() == name: values.append(v.strip())
+    return values
+
 def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     for sep in (":", "|"):
         try:
