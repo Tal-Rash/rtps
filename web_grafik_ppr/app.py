@@ -1741,7 +1741,7 @@ HTML_TEMPLATE = """<!doctype html>
     .cell.day-cell {
       display:block;
       width:100%;
-      height:100%;
+      height:28px;
       padding:0;
       margin:0;
       box-sizing:border-box;
