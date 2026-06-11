@@ -489,7 +489,7 @@ def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
     return (
         HOME_TEMPLATE
         .replace("{{STARTED_AT}}", started_at)
-        .replace("{{AUTH_BADGE}}", f"{full_name}")
+        .replace("{{AUTH_BADGE}}", f"{full_name} ({role_label})")
         .replace("{{USERS_LINK}}", users_link)
         .replace("{{GRAFIK_PPR_LINK}}", link_for("grafik_ppr", "/grafik-ppr"))
         .replace("{{ZAMER_KP_LINK}}", link_for("zamer_kp", "/zamer-kp"))
