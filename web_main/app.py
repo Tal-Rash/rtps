@@ -247,7 +247,7 @@ LOGIN_TEMPLATE = """<!doctype html>
     <form method="post" action="/request_access">
       <h1 style="margin-top:0;">Запрос доступа</h1>
       <p class="muted">Введите ФИО и желаемый пароль. Если вы забыли пароль, введите новое значение — доступ будет временно приостановлен до одобрения администратором.</p>
-      <input name="full_name" type="text" placeholder="Фамилия И.О." style="margin-bottom:12px;" required>
+      <input name="full_name" type="text" placeholder="Фамилия И.О. (например: Иванов И. И.)" style="margin-bottom:12px;" required>
       <input name="password" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required>
       <button type="submit">Запросить доступ</button>
     </form>
