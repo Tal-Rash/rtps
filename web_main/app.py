@@ -166,9 +166,11 @@ HOME_TEMPLATE = """<!doctype html>
         <p class="sub">Стартовая страница для запуска веб-программ.</p>
       </div>
       <div class="top-right">
-        {{USERS_LINK}}
-        {{LOGS_LINK}}
-        <a class="badge" href="/logout">Выйти</a>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+          {{USERS_LINK}}
+          {{LOGS_LINK}}
+          <a class="badge" href="/logout">Выйти</a>
+        </div>
         <div class="badge">{{AUTH_BADGE}}</div>
       </div>
     </div>
