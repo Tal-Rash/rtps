@@ -295,11 +295,14 @@ def send_json(handler: BaseHTTPRequestHandler, payload, status: int = 200) -> No
 def send_file(handler: BaseHTTPRequestHandler, data: bytes, filename: str, content_type: str) -> None:
     safe_filename = filename.replace('"', "").replace("\r", "").replace("\n", "")
     encoded = "".join(f"%{byte:02X}" for byte in safe_filename.encode("utf-8"))
+    
+    ascii_filename = "".join(c if ord(c) < 128 else "_" for c in safe_filename)
+    
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
-    handler.send_header("Content-Disposition", f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded}')
+    handler.send_header("Content-Disposition", f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded}')
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
     handler.wfile.write(data)
