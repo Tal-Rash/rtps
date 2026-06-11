@@ -1694,20 +1694,6 @@ def build_archive_workbook():
     ws.auto_filter.ref = "A1:P1"
     ws.row_dimensions[1].height = 34
 
-    notes = wb.create_sheet("Памятка")
-    notes["A1"] = "Как заполнять шаблон"
-    notes["A1"].font = Font(bold=True, size=14)
-    notes["A3"] = "1. Каждая строка = одна колесная пара."
-    notes["A4"] = "2. Для 6 КП просто заполните 6 строк подряд с одинаковыми датой, локомотивом и видом ремонта."
-    notes["A5"] = "3. Для импорта важны дата замера, локомотив, вид ремонта, номер КП и значения по сторонам КП."
-    notes["A6"] = "4. Для чисел можно использовать запятую или точку."
-    notes["A7"] = "5. Пустые обязательные поля импорт не примет."
-    notes.column_dimensions["A"].width = 120
-
-    repair_dv = DataValidation(type="list", formula1='"ТО-1,ТО-2,ТО-3,ТР-1,ТР-2,ТР-3"', allow_blank=True)
-    ws.add_data_validation(repair_dv)
-    repair_dv.add("C2:C5000")
-
     return wb
 
 def archive_excel_template_bytes() -> bytes:
