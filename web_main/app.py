@@ -106,6 +106,13 @@ def init_db() -> None:
                     allowed_modules TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS login_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_name TEXT NOT NULL,
+                    login_time TEXT NOT NULL
+                )
+            """)
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM users")
             if cur.fetchone()[0] == 0:
@@ -160,6 +167,7 @@ HOME_TEMPLATE = """<!doctype html>
       </div>
       <div class="top-right">
         {{USERS_LINK}}
+        {{LOGS_LINK}}
         <a class="badge" href="/logout">Выйти</a>
         <div class="badge">{{AUTH_BADGE}}</div>
       </div>
@@ -247,7 +255,7 @@ LOGIN_TEMPLATE = """<!doctype html>
     <form method="post" action="/request_access">
       <h1 style="margin-top:0;">Запрос доступа</h1>
       <p class="muted">Введите ФИО и желаемый пароль. Если вы забыли пароль, введите новое значение — доступ будет временно приостановлен до одобрения администратором.</p>
-      <input name="full_name" type="text" placeholder="Фамилия И.О. (например: Иванов И. И.)" style="margin-bottom:12px;" required>
+      <input name="full_name" type="text" placeholder="Иванов И. И." style="margin-bottom:12px;" required>
       <input name="password" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required>
       <button type="submit">Запросить доступ</button>
     </form>
@@ -323,6 +331,41 @@ USERS_TEMPLATE = '''<!doctype html>
         {{USERS_ROWS}}
       </tbody>
     </table>
+    </div>
+  </div>
+</body>
+</html>
+'''
+
+LOGS_TEMPLATE = '''<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Журнал входов</title>
+  <style>
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; padding:20px; }
+    .card { max-width:800px; margin:0 auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
+    table { width:100%; border-collapse:collapse; margin-top:20px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #d9e2ef; }
+    .flex { display:flex; gap:10px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="flex" style="justify-content:space-between; margin-bottom:20px;">
+        <h1 style="margin:0;">Журнал входов</h1>
+        <a href="/" style="color:#276ef1; text-decoration:none; font-weight:bold;">На главную</a>
+    </div>
+    <div style="overflow-x: auto;">
+      <table>
+      <thead>
+        <tr><th>ID</th><th>ФИО</th><th>Время входа</th></tr>
+      </thead>
+      <tbody>
+        {{LOGS_ROWS}}
+      </tbody>
+      </table>
     </div>
   </div>
 </body>
@@ -471,6 +514,7 @@ def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
                 return f'<a href="{path}">Открыть</a>'
         return '<a class="disabled" href="#" aria-disabled="true" tabindex="-1">Нет доступа</a>'
     users_link = ""
+    logs_link = ""
     if role == "admin" or "admin" in mods:
         pending_count = 0
         try:
@@ -486,11 +530,13 @@ def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
             users_link = f'<a class="badge" href="/users" style="background:#e11d48; color:#fff; border-color:#e11d48; font-weight:bold;">Управление доступом ({pending_count})</a>'
         else:
             users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>'
+        logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
     return (
         HOME_TEMPLATE
         .replace("{{STARTED_AT}}", started_at)
         .replace("{{AUTH_BADGE}}", f"{full_name} ({role_label})")
         .replace("{{USERS_LINK}}", users_link)
+        .replace("{{LOGS_LINK}}", logs_link)
         .replace("{{GRAFIK_PPR_LINK}}", link_for("grafik_ppr", "/grafik-ppr"))
         .replace("{{ZAMER_KP_LINK}}", link_for("zamer_kp", "/zamer-kp"))
         .replace("{{SPRAVOCHNIK_LINK}}", link_for("spravochnik", "/spravochnik"))
@@ -564,6 +610,23 @@ class Handler(BaseHTTPRequestHandler):
                 rows_html = f"<tr><td colspan='6'>Ошибка БД: {e}</td></tr>"
                 
             _send_html(self, USERS_TEMPLATE.replace("{{USERS_ROWS}}", rows_html))
+            return
+
+        if parsed.path == "/logs":
+            if not user_id or (role != "admin" and "admin" not in modules):
+                _redirect(self, "/")
+                return
+            rows_html = ""
+            try:
+                import sqlite3
+                with sqlite3.connect(DB_FILE) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT id, user_name, login_time FROM login_logs ORDER BY id DESC LIMIT 100")
+                    for l in cur.fetchall():
+                        rows_html += f"<tr><td>{l[0]}</td><td>{l[1]}</td><td>{l[2]}</td></tr>"
+            except Exception as e:
+                rows_html = f"<tr><td colspan='3'>Ошибка БД: {e}</td></tr>"
+            _send_html(self, LOGS_TEMPLATE.replace("{{LOGS_ROWS}}", rows_html))
             return
 
         if parsed.path == "/":
@@ -755,6 +818,15 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     return
                 u_modules = u_modules or ""
+                try:
+                    import sqlite3
+                    from datetime import datetime
+                    with sqlite3.connect(DB_FILE) as lconn:
+                        lconn.execute("INSERT INTO login_logs (user_name, login_time) VALUES (?, ?)", 
+                            (u_full_name, datetime.now().strftime("%d.%m.%Y %H:%M:%S")))
+                except Exception as le:
+                    print("Log insert error:", le)
+                    
                 expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
                 _write_access_state(u_full_name, u_role, expiry)
                 _redirect(self, "/", _login_cookie(str(u_id), u_role, u_modules, u_full_name))
