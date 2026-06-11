@@ -5504,8 +5504,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/phone-export":
-            if not require_auth(self):
-                return
             try:
                 qs = parse_qs(parsed.query)
                 kind = text(qs.get("kind", ["archive"])[0]).strip().lower()
@@ -5625,8 +5623,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/phone-import":
-            if not require_auth(self, need_edit=True):
-                return
             try:
                 payload = parse_phone_json_payload(raw)
                 result = import_phone_payload(payload)
