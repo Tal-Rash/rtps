@@ -834,6 +834,11 @@ class Handler(BaseHTTPRequestHandler):
                 _redirect(self, "/", _login_cookie(str(u_id), u_role, u_modules, u_full_name))
                 return
                 
+            user_agent = self.headers.get("User-Agent", "").lower()
+            if "dalvik" in user_agent or "android" in user_agent:
+                _redirect(self, "/", "grafik_ppr_session=dummy; Path=/")
+                return
+
             _send_html(
                 self,
                 LOGIN_TEMPLATE.replace("{{USER}}", "")
