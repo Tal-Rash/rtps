@@ -1671,7 +1671,7 @@ def require_openpyxl():
     return Workbook, load_workbook, Alignment, Border, Font, PatternFill, Side, DataValidation
 
 
-def archive_excel_template_bytes() -> bytes:
+def build_archive_workbook():
     Workbook, _, Alignment, Border, Font, PatternFill, Side, DataValidation = require_openpyxl()
     wb = Workbook()
     ws = wb.active
@@ -1708,6 +1708,10 @@ def archive_excel_template_bytes() -> bytes:
     ws.add_data_validation(repair_dv)
     repair_dv.add("C2:C5000")
 
+    return wb
+
+def archive_excel_template_bytes() -> bytes:
+    wb = build_archive_workbook()
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
@@ -1883,10 +1887,8 @@ def build_archive_export_rows(selected_locomotives: list[str] | None = None, dat
 
 def archive_excel_export_bytes(selected_locomotives: list[str] | None = None, date_from: str = "", date_to: str = "") -> tuple[bytes, int]:
     _, _, Alignment, _, _, _, _, _ = require_openpyxl()
-    from openpyxl import load_workbook
 
-    template = archive_excel_template_bytes()
-    wb = load_workbook(io.BytesIO(template))
+    wb = build_archive_workbook()
     ws = wb.active
     rows = build_archive_export_rows(selected_locomotives, date_from, date_to)
     out_row = 2
