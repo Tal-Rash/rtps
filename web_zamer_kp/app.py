@@ -5542,6 +5542,12 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
 
+        if route == "/login":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Set-Cookie", "grafik_ppr_session=dummy; Path=/")
+            self.end_headers()
+            return
+
         if route == "/api/state":
             if not require_auth(self, need_edit=True):
                 return
