@@ -3017,12 +3017,25 @@ function renderTu28Staff(){
     </div>
   `;
 }
+async function saveTu28ExtraLocal() {
+  const m = appState.months[ui.tu28MonthIndex];
+  const rowObj = m.fact[ui.tu28RowIndex];
+  if (rowObj.tu28_locked) return;
+  const payload = {
+    year: appState.year,
+    month_name: m.name,
+    r: ui.tu28RowIndex,
+    extra: rowObj.tu28_extra || []
+  };
+  await fetch('{{APP_PREFIX}}/api/tu28_extra', { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(payload) });
+  if (CAN_EDIT) markDirty(true);
+}
 function addTu28Extra(){
   const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
   if (rowObj.tu28_locked) return;
   if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
   rowObj.tu28_extra.push("");
-  if (CAN_EDIT) saveState();
+  saveTu28ExtraLocal();
   render();
 }
 function updateTu28Extra(idx, val){
@@ -3030,7 +3043,7 @@ function updateTu28Extra(idx, val){
   const rowObj = m.fact[ui.tu28RowIndex];
   if (rowObj.tu28_locked) return;
   rowObj.tu28_extra[idx] = val;
-  if (CAN_EDIT) markDirty(true);
+  saveTu28ExtraLocal();
 }
 function toggleTu28Locked(checked) {
   if (!CAN_EDIT) return;
@@ -3045,7 +3058,7 @@ function removeTu28Extra(idx){
   if (rowObj.tu28_locked) return;
   if (rowObj.tu28_extra) {
     rowObj.tu28_extra.splice(idx, 1);
-    if (CAN_EDIT) saveState();
+    saveTu28ExtraLocal();
     render();
   }
 }
@@ -3643,6 +3656,23 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
             json_response(self, saved)
+            return
+        if route == "/api/tu28_extra":
+            year = payload.get("year")
+            month_name = payload.get("month_name")
+            r = payload.get("r")
+            extra = payload.get("extra", [])
+            with DB_LOCK, conn() as db:
+                cur = db.cursor()
+                with db:
+                    # check if locked first to prevent bypass
+                    row = cur.execute("SELECT v FROM tu28_data WHERE y=? AND m=? AND r=? AND k='tu28_locked'", (year, month_name, r)).fetchone()
+                    is_locked = False
+                    if row and row["v"]:
+                        is_locked = json.loads(row["v"])
+                    if not is_locked:
+                        cur.execute("INSERT OR REPLACE INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(extra)))
+            json_response(self, {"status": "ok"})
             return
         if route == "/api/tu28-export":
             if not require_auth(self):
