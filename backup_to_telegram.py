@@ -48,24 +48,19 @@ def backup_and_send():
         # Удаляем временную распакованную базу
         if temp_db_path.exists():
             os.remove(temp_db_path)
+            
+        print(f"[{timestamp}] Локальный бэкап успешно создан: {zip_path}")
 
-        # Отправляем в Telegram
-        if TELEGRAM_BOT_TOKEN == "ВАШ_ТОКЕН_БОТА" or TELEGRAM_CHAT_ID == "ВАШ_CHAT_ID":
-            print(f"[{timestamp}] ВНИМАНИЕ: Токен или Chat ID не настроены. Файл сохранен только локально: {zip_path}")
-            return
-
-        print(f"[{timestamp}] Отправка в Telegram...")
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-        
-        with open(zip_path, 'rb') as f:
-            files = {'document': f}
-            data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': f'Бэкап базы данных RTPS за {timestamp}'}
-            response = requests.post(url, files=files, data=data)
-
-        if response.status_code == 200:
-            print(f"[{timestamp}] Бэкап успешно отправлен в Telegram!")
-        else:
-            print(f"[{timestamp}] Ошибка отправки в Telegram: {response.text}")
+        # Удаляем старые бэкапы (старше 30 дней)
+        print(f"[{timestamp}] Очистка старых бэкапов...")
+        retention_days = 30
+        now = datetime.datetime.now()
+        for f in BACKUP_DIR.glob("*.zip"):
+            if f.is_file():
+                file_age = now - datetime.datetime.fromtimestamp(f.stat().st_mtime)
+                if file_age.days > retention_days:
+                    f.unlink()
+                    print(f"[{timestamp}] Удален старый архив: {f.name}")
 
     except Exception as e:
         print(f"[{timestamp}] ПРОИЗОШЛА ОШИБКА: {e}")
