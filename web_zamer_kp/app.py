@@ -2869,8 +2869,6 @@ def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str)
     return ""
 
 def require_auth_fastapi(request: Request, need_edit: bool = False):
-    if not AUTH_ENABLED:
-        return True, None
     session = get_current_session_fastapi(request)
     role = get_mod_role_fastapi(session, "zamer_kp")
     if not role:
