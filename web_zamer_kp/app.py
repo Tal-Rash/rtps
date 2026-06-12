@@ -2915,10 +2915,10 @@ HTML = """<!doctype html>
     th.section-col, td.section-col { width:80px; }
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
-    td.measure-cell input { width:100%; border:0; text-align:center; background:transparent; padding:8px 0; font-size:12px; display:block; box-sizing:border-box; outline:none; border-radius:0 !important; appearance:none; -webkit-appearance:none; margin:0; line-height:normal; height:auto; }
+    td.measure-cell input { width:100%; border:0; text-align:center; background:transparent; padding:0 !important; font-size:12px; display:block; box-sizing:border-box; outline:none; border-radius:0 !important; appearance:none; -webkit-appearance:none; margin:0; line-height:34px !important; height:34px !important; min-height:34px !important; }
     td.measure-cell.selected { background:#e8f0fe; }
     td.measure-cell.selected input { background:transparent; }
-    td input { width:100%; border:0; text-align:center; background:transparent; padding:8px 0; font-size:12px; display:block; box-sizing:border-box; outline:none; border-radius:0 !important; appearance:none; -webkit-appearance:none; margin:0; line-height:normal; height:auto; }
+    td input { width:100%; border:0; text-align:center; background:transparent; padding:0 !important; font-size:12px; display:block; box-sizing:border-box; outline:none; border-radius:0 !important; appearance:none; -webkit-appearance:none; margin:0; line-height:34px !important; height:34px !important; min-height:34px !important; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
