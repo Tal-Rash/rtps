@@ -2925,6 +2925,13 @@ function removeTu28Extra(idx){
   ui.tu28ExtraRepairs.splice(idx, 1);
   render();
 }
+function openTu28Modal(){
+  ui.tu28RowIndex = null;
+  ui.tu28Staff = [];
+  ui.tu28ExtraRepairs = [];
+  ui.modal = 'tu28';
+  render();
+}
 function renderOpenModals(){
   const normsModal = document.getElementById('normsModal');
   const normsBody = document.getElementById('normsModalBody');
@@ -3037,11 +3044,16 @@ function setTu28Month(index){
   ui.tu28MonthIndex = Number(index);
   ui.tu28RowIndex = null;
   ui.tu28Staff = [];
+  ui.tu28ExtraRepairs = [];
   render();
 }
 function selectTu28Row(rowIndex){
-  ui.tu28RowIndex = Number(rowIndex);
-  render();
+  if (ui.tu28RowIndex !== Number(rowIndex)) {
+    ui.tu28RowIndex = Number(rowIndex);
+    ui.tu28Staff = [];
+    ui.tu28ExtraRepairs = [];
+    render();
+  }
 }
 function downloadTu28(){
   const month = tu28Month();
