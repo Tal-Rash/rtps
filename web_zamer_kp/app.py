@@ -3128,7 +3128,7 @@ HTML = """<!doctype html>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Разделы">
-      <button id="tabInput" class="tab active" type="button" onclick="switchTab('input')">Ввод замера</button>
+      <button id="tabInput" class="tab active" type="button" ${CAN_EDIT ? '' : 'style="display:none"'} onclick="switchTab('input')">Ввод замера</button>
       <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
       <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
     </div>
@@ -5388,6 +5388,7 @@ document.getElementById('archiveExcelFile').addEventListener('change', event => 
 document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
 initialLoadPromise = loadState();
+if (!CAN_EDIT) switchTab('kp');
 </script>
 </body>
 </html>
