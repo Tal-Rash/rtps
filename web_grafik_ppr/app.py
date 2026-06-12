@@ -1045,6 +1045,7 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                 if dates_dict:
                     best_date = sorted(dates_dict.keys(), reverse=True)[0]
                     measurements = dates_dict[best_date]
+                    print(f"DEBUG: ZAMER KP: best_date={best_date} measurements dict: {measurements}", flush=True)
                     print(f"DEBUG: ZAMER KP: best_date={best_date} measurements size={len(measurements)}", flush=True)
         except Exception as e:
             print("Error reading Zamer KP archive db:", e, flush=True)
@@ -1074,6 +1075,8 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         for c_idx, prefix in col_to_tag_prefix.items():
             # In archive_data, r=2 corresponds to axle 1, r=3 to axle 2, etc.
             tags[f"[{prefix}_{axle}]"] = measurements.get(axle + 1, {}).get(c_idx, "")
+            
+    print(f"DEBUG: ZAMER KP TAGS: { {k: tags[k] for k in tags if 'ПР' in k or 'ТГ' in k} }", flush=True)
 
     components = [
         "ДИЗЕЛЬ",
@@ -1093,9 +1096,13 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     print(f"DEBUG: build_tu28_workbook received extra_repairs={extra_repairs}", flush=True)
     for i in range(1, 21):
         tags[f"[ДОП_РЕМОНТ_{i}]"] = ""
+        tags[f"[ДОП_НОМЕР_{i}]"] = ""
     for i, extra in enumerate(extra_repairs, start=1):
         if i <= 20:
-            tags[f"[ДОП_РЕМОНТ_{i}]"] = str(extra).strip()
+            val = str(extra).strip()
+            if val:
+                tags[f"[ДОП_РЕМОНТ_{i}]"] = val
+                tags[f"[ДОП_НОМЕР_{i}]"] = str(i)
     print(f"DEBUG: tags built: {[k for k in tags.keys() if 'ДОП' in k and tags[k]]}", flush=True)
 
     template_path = find_tu28_template_path()
