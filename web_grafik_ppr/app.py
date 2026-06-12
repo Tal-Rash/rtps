@@ -1036,7 +1036,12 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                 for d_str, r, c, v in db_rows:
                     if d_str not in dates_dict:
                         dates_dict[d_str] = {}
-                    dates_dict[d_str].setdefault(r, {})[c] = str(v).strip() if v else ""
+                    try:
+                        r_int = int(r)
+                        c_int = int(c)
+                    except Exception:
+                        continue
+                    dates_dict[d_str].setdefault(r_int, {})[c_int] = str(v).strip() if v else ""
                 if dates_dict:
                     best_date = sorted(dates_dict.keys(), reverse=True)[0]
                     measurements = dates_dict[best_date]
