@@ -90,6 +90,7 @@ def load_auth_config() -> tuple[str, str, str]:
 
 WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 SESSIONS: dict[str, tuple[str, str, str, str, float]] = {}
+FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 
 def init_db() -> None:
@@ -803,9 +804,28 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/login":
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             password = form.get("password", [""])[0]
+            password = password.strip()
+            
+            client_ip = self.headers.get("X-Real-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
+            if client_ip:
+                client_ip = client_ip.split(",")[0].strip()
+            
+            import time
+            now = time.time()
+            attempts = FAILED_ATTEMPTS.get(client_ip, [])
+            attempts = [t for t in attempts if now - t < 900] # 15 minutes lockout
+            FAILED_ATTEMPTS[client_ip] = attempts
+            
+            if len(attempts) >= 5:
+                _send_html(
+                    self,
+                    LOGIN_TEMPLATE.replace("{{USER}}", "")
+                    + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Пожалуйста, подождите 15 минут.</p>",
+                    status=HTTPStatus.TOO_MANY_REQUESTS,
+                )
+                return
             
             user_record = None
-            password = password.strip()
             db_err = ""
             try:
                 import sqlite3
@@ -818,6 +838,8 @@ class Handler(BaseHTTPRequestHandler):
                 db_err = f"<p>DB Error: {e} | Path: {DB_FILE}</p>"
                 
             if user_record:
+                if client_ip in FAILED_ATTEMPTS:
+                    del FAILED_ATTEMPTS[client_ip]
                 u_id, u_full_name, u_role, u_modules = user_record
                 if u_role == "pending":
                     _send_html(
@@ -847,10 +869,12 @@ class Handler(BaseHTTPRequestHandler):
                 _redirect(self, "/", "grafik_ppr_session=dummy; Path=/")
                 return
 
+            attempts.append(now)
+            FAILED_ATTEMPTS[client_ip] = attempts
             _send_html(
                 self,
                 LOGIN_TEMPLATE.replace("{{USER}}", "")
-                + f"<p style='text-align:center;color:#b00020;'>Неверный пароль ({password})</p>"
+                + f"<p style='text-align:center;color:#b00020;'>Неверный пароль</p>"
                 + db_err,
                 status=HTTPStatus.UNAUTHORIZED,
             )
