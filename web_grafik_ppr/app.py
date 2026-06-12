@@ -152,6 +152,7 @@ def ensure_database() -> None:
 
 def conn() -> sqlite3.Connection:
     c = sqlite3.connect(DB_FILE)
+    c.execute("CREATE TABLE IF NOT EXISTS tu28_data (y INT, m TEXT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,m,r,k))")
     c.row_factory = sqlite3.Row
     return c
 
@@ -338,6 +339,26 @@ def load_state(year: int) -> dict:
         notes = cur.execute("SELECT m, k, v FROM report_notes WHERE y=? ORDER BY m, k", (year,)).fetchall()
         for row in notes:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
+
+        tu28_data = cur.execute("SELECT m, r, k, v FROM tu28_data WHERE y=? ORDER BY m, r, k", (year,)).fetchall()
+        for row in tu28_data:
+            month_name = s(row["m"])
+            r = int(row["r"])
+            k = s(row["k"])
+            v = s(row["v"])
+            if month_name not in month_map:
+                continue
+            table = month_map[month_name]["fact"]
+            while r >= len(table):
+                table.append(_default_table_rows(year, month_index(month_name), "fact", 1)[0])
+            try:
+                parsed_v = json.loads(v) if v else []
+            except Exception:
+                parsed_v = []
+            if k == "tu28_extra":
+                table[r]["tu28_extra"] = parsed_v
+            elif k == "tu28_staff":
+                table[r]["tu28_staff"] = parsed_v
 
     return state
 
@@ -995,6 +1016,7 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
 
     db_path = Path(__file__).resolve().parent.parent / "base" / "common_database.db"
     measurements = {}
+    print(f"DEBUG: ZAMER KP: path_exists={db_path.exists()} number={number} start={start_date_str} end={end_date_str}", flush=True)
     if db_path.exists() and number and start_date_str and end_date_str:
         import sqlite3
         try:
@@ -1009,6 +1031,7 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                     """,
                     (number, start_date_str, end_date_str)
                 ).fetchall()
+                print(f"DEBUG: ZAMER KP: Fetched {len(db_rows)} rows from archive for {number} between {start_date_str} and {end_date_str}", flush=True)
                 dates_dict = {}
                 for d_str, r, c, v in db_rows:
                     if d_str not in dates_dict:
@@ -1017,8 +1040,9 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                 if dates_dict:
                     best_date = sorted(dates_dict.keys(), reverse=True)[0]
                     measurements = dates_dict[best_date]
+                    print(f"DEBUG: ZAMER KP: best_date={best_date} measurements size={len(measurements)}", flush=True)
         except Exception as e:
-            print("Error reading Zamer KP archive db:", e)
+            print("Error reading Zamer KP archive db:", e, flush=True)
     tags = {
         "[СЕРИЯ]": series,
         "[НОМЕР]": number,
@@ -1104,6 +1128,7 @@ def save_state(state: dict) -> dict:
             cur.execute("DELETE FROM norms WHERE y=?", (year,))
             cur.execute("DELETE FROM acts_state WHERE y=?", (year,))
             cur.execute("DELETE FROM report_notes WHERE y=?", (year,))
+            cur.execute("DELETE FROM tu28_data WHERE y=?", (year,))
             cur.execute("INSERT OR REPLACE INTO repair_settings VALUES ('last_year', ?)", (str(year),))
 
             for month in state.get("months", []):
@@ -1120,6 +1145,11 @@ def save_state(state: dict) -> dict:
                                     continue
                                 db_c = 999 if c == len(cells) - 1 else (c - 1 if c >= 4 else c)
                                 cur.execute("INSERT INTO repairs VALUES (?,?,?,?,?,?)", (year, month_name, table_type, r, db_c, value))
+                        if table_type == "fact":
+                            if "tu28_extra" in row:
+                                cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(row["tu28_extra"])))
+                            if "tu28_staff" in row:
+                                cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_staff", json.dumps(row["tu28_staff"])))
 
             for cat, rows in state.get("norms", {}).items():
                 for row in rows:
