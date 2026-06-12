@@ -2790,241 +2790,297 @@ def render_page(role: str) -> str:
     )
 
 
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):  # noqa: D401
-        return
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        route = route_path(parsed.path)
-        session = current_session(self)
-        mod_role = get_mod_role(session, "zamer_kp")
+from fastapi import FastAPI, Request, Response, Depends, Form, HTTPException, Cookie, status
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+import urllib.parse
+import traceback
 
-        if route.startswith("/static/"):
-            file_path = ROOT / route.lstrip("/")
-            if file_path.exists() and file_path.is_file():
-                ext = file_path.suffix.lower()
-                mime = "text/css" if ext == ".css" else "application/javascript" if ext == ".js" else "text/plain"
-                with open(file_path, "rb") as f:
-                    self.send_response(HTTPStatus.OK)
-                    self.send_header("Content-type", f"{mime}; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(f.read())
-                return
-            self.send_error(HTTPStatus.NOT_FOUND, "Not found")
-            return
+app = FastAPI(title="RTPS Zamer KP")
 
+@app.middleware("http")
+async def strip_prefix(request: Request, call_next):
+    if request.scope["path"].startswith(APP_PREFIX + "/"):
+        request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
+    return await call_next(request)
 
+app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
-        if route == "/logout":
-            redirect(self, "/logout")
-            return
+def _cookie_value_fastapi(username: str, role: str) -> str:
+    payload = f"{username}:{role}:{int(dt.datetime.now().timestamp())}"
+    signature = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}:{signature}"
 
-        if route == "/":
-            if not session or not mod_role:
-                with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
-                    send_html(self, f.read().replace("{{APP_PREFIX}}", APP_PREFIX))
-                return
-            send_html(self, render_page(mod_role))
-            return
+def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
+    for sep in (":", "|"):
+        try:
+            parts = value.rsplit(sep, 5)
+            if len(parts) == 6:
+                user_id, role, modules, safe_name, expiry_text, sig = parts
+                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
+            elif len(parts) == 5:
+                user_id, role, modules, safe_name, sig = parts
+                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
+                expiry_text = "2000000000"
+            elif len(parts) == 4:
+                username, role, expiry_text, sig = parts
+                payload = f"{username}{sep}{role}{sep}{expiry_text}"
+                user_id, modules, safe_name = username, "", username
+            else:
+                continue
+                
+            secrets_to_try = [WEB_SECRET]
+                
+            matched = False
+            for secret in secrets_to_try:
+                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(expected, sig):
+                    matched = True
+                    break
+                    
+            if not matched:
+                continue
+            if float(expiry_text) < dt.datetime.now().timestamp():
+                return None
+                
+            return user_id, role, modules, urllib.parse.unquote(safe_name)
+        except Exception:
+            continue
+    return None
 
-        if route == "/api/state":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            locomotive = text(qs.get("locomotive", [""])[0]).strip()
-            send_json(self, load_state(locomotive))
-            return
+def get_current_session_fastapi(request: Request):
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if cookie:
+        return _verify_cookie_fastapi(cookie)
+    return None
 
-        if route == "/api/archive":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            locomotive = text(qs.get("locomotive", [""])[0]).strip()
-            search = text(qs.get("search", [""])[0]).strip()
-            sort = text(qs.get("sort", ["desc"])[0]).strip().lower()
-            rows = load_archive_rows(locomotive, search, sort != "asc")
-            send_json(self, {"rows": rows})
-            return
+def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str) -> str:
+    if not session:
+        return ""
+    _, role, modules, _ = session
+    if role == "admin":
+        return "admin"
+    if role == "viewer":
+        return "viewer"
+    if module in modules.split(","):
+        return "edit" if role == "editor" else role
+    return ""
 
-        if route == "/api/kp-data":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            locomotive = text(qs.get("locomotive", [""])[0]).strip()
-            send_json(self, load_kp_view(locomotive))
-            return
+def require_auth_fastapi(request: Request, need_edit: bool = False):
+    if not AUTH_ENABLED:
+        return True, None
+    session = get_current_session_fastapi(request)
+    role = get_mod_role_fastapi(session, "zamer_kp")
+    if not role:
+        return False, None
+    if need_edit and role not in ("edit", "editor", "admin"):
+        return False, None
+    return True, session
 
-        if route == "/api/norms":
-            if not require_auth(self):
-                return
-            send_json(self, {"rows": load_norms_rows()})
-            return
+def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(content=data, status_code=status_code)
 
-        if route == "/api/archive-excel-template":
-            if not require_auth(self):
-                return
-            try:
-                data = archive_excel_template_bytes()
-                send_file(
-                    self,
-                    data,
-                    "Шаблон_импорта_архива.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.get("/zamer-kp", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
+async def home_route(request: Request):
+    session = get_current_session_fastapi(request)
+    mod_role = get_mod_role_fastapi(session, "zamer_kp")
+    
+    if not session or not mod_role:
+        with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
+            html = f.read().replace("{{APP_PREFIX}}", APP_PREFIX)
+        return HTMLResponse(content=html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
+        
+    html_content = render_page(mod_role)
+    response = HTMLResponse(content=html_content)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
-        if route == "/api/phone-export":
-            try:
-                qs = parse_qs(parsed.query)
-                kind = text(qs.get("kind", ["archive"])[0]).strip().lower()
-                selected_locomotives = [text(item).strip() for item in qs.get("locomotive", []) if text(item).strip()]
-                date_from = text(qs.get("date_from", [""])[0]).strip()
-                date_to = text(qs.get("date_to", [""])[0]).strip()
-                payload = phone_export_payload(kind, selected_locomotives, date_from, date_to)
-                send_json(self, payload)
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.get("/logout")
+async def logout_route():
+    return RedirectResponse("/", status_code=303)
 
-        if route == "/api/archive-excel-export":
-            if not require_auth(self):
-                return
-            try:
-                qs = parse_qs(parsed.query)
-                selected_locomotives = [text(item).strip() for item in qs.get("locomotive", []) if text(item).strip()]
-                date_from = text(qs.get("date_from", [""])[0]).strip()
-                date_to = text(qs.get("date_to", [""])[0]).strip()
-                data, row_count = archive_excel_export_bytes(selected_locomotives, date_from, date_to)
-                if row_count <= 0:
-                    send_json(self, {"error": "По выбранным фильтрам данных нет."}, HTTPStatus.BAD_REQUEST)
-                    return
-                filename = f"Экспорт_архива_{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
-                send_file(self, data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.get("/api/state")
+async def get_state(request: Request, locomotive: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    return json_response(load_state(locomotive.strip()))
 
-        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+@app.get("/api/archive")
+async def get_archive(request: Request, locomotive: str = "", search: str = "", sort: str = "desc"):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    rows = load_archive_rows(locomotive.strip(), search.strip(), sort.strip().lower() != "asc")
+    return json_response({"rows": rows})
 
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        route = route_path(parsed.path)
-        length = int(self.headers.get("Content-Length", "0") or 0)
-        raw = self.rfile.read(length) if length else b"{}"
+@app.get("/api/kp-data")
+async def get_kp_data(request: Request, locomotive: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    return json_response(load_kp_view(locomotive.strip()))
 
+@app.get("/api/norms")
+async def get_norms(request: Request):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    return json_response({"rows": load_norms_rows()})
 
+@app.get("/api/archive-excel-template")
+async def export_archive_template(request: Request):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    try:
+        data = archive_excel_template_bytes()
+        return Response(
+            content=data,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename*=UTF-8''%D0%A8%D0%B0%D0%B1%D0%BB%D0%BE%D0%BD_%D0%B8%D0%BC%D0%BF%D0%BE%D1%80%D1%82%D0%B0_%D0%B0%D1%80%D1%85%D0%B8%D0%B2%D0%B0.xlsx"}
+        )
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        if route == "/api/state":
-            if not require_auth(self, need_edit=True):
-                return
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-                send_json(self, save_state(payload, full_name=session[3] if session and len(session) > 3 else ""))
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.get("/api/phone-export")
+async def export_phone(request: Request, kind: str = "archive", date_from: str = "", date_to: str = ""):
+    try:
+        query_params = request.query_params
+        selected_locomotives = [item.strip() for item in query_params.getlist("locomotive") if item.strip()]
+        payload = phone_export_payload(kind.strip().lower(), selected_locomotives, date_from.strip(), date_to.strip())
+        return json_response(payload)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        if route == "/api/archive":
-            if not require_auth(self, need_edit=True):
-                return
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-                if payload.get("action") == "delete":
-                    result = delete_archive_measurement(payload)
-                elif payload.get("changes"):
-                    result = update_archive_cells(payload)
-                else:
-                    result = save_archive(payload)
-                if isinstance(result, tuple):
-                    body, status = result
-                    send_json(self, body, status)
-                else:
-                    send_json(self, result)
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.get("/api/archive-excel-export")
+async def export_archive_excel(request: Request, date_from: str = "", date_to: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    try:
+        query_params = request.query_params
+        selected_locomotives = [item.strip() for item in query_params.getlist("locomotive") if item.strip()]
+        data, row_count = archive_excel_export_bytes(selected_locomotives, date_from.strip(), date_to.strip())
+        if row_count <= 0:
+            return json_response({"error": "По выбранным фильтрам данных нет."}, status_code=400)
+        filename = f"Экспорт_архива_{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+        from urllib.parse import quote
+        safe_filename = quote(filename)
+        return Response(
+            content=data,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"}
+        )
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        if route == "/api/kp-data":
-            if not require_auth(self, need_edit=True):
-                return
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-                result = save_kp_data(payload)
-                if isinstance(result, tuple):
-                    body, status = result
-                    send_json(self, body, status)
-                else:
-                    send_json(self, result)
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.post("/api/state")
+async def post_state(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+        saved = save_state(payload, full_name=session[3] if session and len(session) > 3 else "")
+        return json_response(saved)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        if route == "/api/norms":
-            if not require_auth(self, need_edit=True):
-                return
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-                result = save_norms_rows(payload)
-                if isinstance(result, tuple):
-                    body, status = result
-                    send_json(self, body, status)
-                else:
-                    send_json(self, result)
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.post("/api/archive")
+async def post_archive(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+        if payload.get("action") == "delete":
+            result = delete_archive_measurement(payload)
+        elif payload.get("changes"):
+            result = update_archive_cells(payload)
+        else:
+            result = save_archive(payload)
+            
+        if isinstance(result, tuple):
+            return json_response(result[0], status_code=result[1])
+        return json_response(result)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        if route == "/api/archive-excel-import":
-            if not require_auth(self, need_edit=True):
-                return
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-                encoded = text(payload.get("data")).strip()
-                if not encoded:
-                    send_json(self, {"error": "Файл Excel не передан."}, HTTPStatus.BAD_REQUEST)
-                    return
-                data = base64.b64decode(encoded)
-                result = import_archive_excel_bytes(data)
-                if isinstance(result, tuple):
-                    body, status = result
-                    send_json(self, body, status)
-                else:
-                    send_json(self, result)
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.post("/api/kp-data")
+async def post_kp_data(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+        result = save_kp_data(payload)
+        if isinstance(result, tuple):
+            return json_response(result[0], status_code=result[1])
+        return json_response(result)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        if route == "/api/phone-import":
-            try:
-                payload = parse_phone_json_payload(raw)
-                result = import_phone_payload(payload)
-                if isinstance(result, tuple):
-                    body, status = result
-                    send_json(self, body, status)
-                else:
-                    send_json(self, result)
-            except Exception as exc:
-                send_json(self, {"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
+@app.post("/api/norms")
+async def post_norms(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+        result = save_norms_rows(payload)
+        if isinstance(result, tuple):
+            return json_response(result[0], status_code=result[1])
+        return json_response(result)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
-        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+@app.post("/api/archive-excel-import")
+async def post_archive_import(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+        encoded = text(payload.get("data")).strip()
+        if not encoded:
+            return json_response({"error": "Файл Excel не передан."}, status_code=400)
+        import base64
+        data = base64.b64decode(encoded)
+        result = import_archive_excel_bytes(data)
+        if isinstance(result, tuple):
+            return json_response(result[0], status_code=result[1])
+        return json_response(result)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
+@app.post("/api/phone-import")
+async def post_phone_import(request: Request):
+    try:
+        raw = await request.body()
+        payload = parse_phone_json_payload(raw)
+        result = import_phone_payload(payload)
+        if isinstance(result, tuple):
+            return json_response(result[0], status_code=result[1])
+        return json_response(result)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
 
 def main() -> None:
     ensure_db()
     host = os.environ.get("WEB_HOST", "127.0.0.1")
     port = int(os.environ.get("WEB_PORT", "8003"))
-    server = ThreadingHTTPServer((host, port), Handler)
-    server.daemon_threads = True
     url = f"http://{host}:{port}{APP_PREFIX}"
-    print(f"Замер КП ready: {url}")
+    print(f"Замер КП ready (FastAPI): {url}")
     if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
+        import threading, webbrowser
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    server.serve_forever()
-
+    uvicorn.run("app:app", host=host, port=port, reload=True)
 
 if __name__ == "__main__":
     main()
