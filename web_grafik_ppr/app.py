@@ -2927,26 +2927,46 @@ function renderTu28(){
     </div>
   `).join('');
   return `
-    <div style="display:flex; gap:16px;">
-      <div style="flex:1;">
-        <table class="grid">
-          <thead><tr><th>№</th><th>Серия</th><th>Номер</th><th>Дата</th><th>Вид</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+    <div class="section-head">
+      <div style="display:flex; justify-content:center; width:100%;">
+        <select id="tu28MonthSelect" onchange="setTu28Month(this.value)" style="border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit;">
+          ${appState.months.map((m, i) => `<option value="${i}" ${i === ui.tu28MonthIndex ? 'selected' : ''}>${m.name}</option>`).join('')}
+        </select>
       </div>
-      <div style="flex:1; display:flex; flex-direction:column;">
+    </div>
+    <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
+      <table class="acts-table" style="width:max-content; min-width:0; table-layout:auto;">
+        <colgroup>
+          <col style="width:70px;">
+          <col style="width:160px;">
+          <col style="width:120px;">
+          <col style="width:120px;">
+          <col style="width:130px;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>Серия</th>
+            <th>Номер</th>
+            <th>Дата</th>
+            <th>Ремонт</th>
+          </tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="5">В месяце нет ремонтов для ТУ-28</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:16px; padding:0 8px; text-align:left; max-width:600px; margin-left:auto; margin-right:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <strong style="color:var(--text); font-size:16px;">Дополнительные работы</strong>
+            <strong style="color:var(--text); font-size:16px;">Дополнительные работы:</strong>
             <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text); cursor:pointer;">
                 <input type="checkbox" ${locked ? 'checked' : ''} ${!CAN_EDIT ? 'disabled' : ''} onchange="toggleTu28Locked(this.checked)">
                 Блокировать редактирование
             </label>
         </div>
-        <button class="primary" style="margin-bottom:8px; align-self:flex-start;" ${disableExtra ? 'disabled' : ''} onclick="addTu28Extra()">+ Добавить пункт</button>
-        <div style="max-height:300px; overflow-y:auto; padding-right:8px;">
-          ${extraRows}
+        ${extraRows}
+        <div style="margin-top:12px;">
+            <button onclick="addTu28Extra()" style="background:#e2e8f0; color:#102033; font-weight:600; padding:6px 12px; border-radius:6px; font-size:13px;" ${disableExtra ? 'disabled' : ''}>+ Добавить Доп. ремонт</button>
         </div>
-      </div>
     </div>
   `;
 }
