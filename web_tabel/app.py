@@ -1,0 +1,229 @@
+from __future__ import annotations
+
+import datetime as dt
+import json
+import sqlite3
+import os
+import io
+from pathlib import Path
+from threading import Lock
+from urllib.parse import unquote
+
+from fastapi import FastAPI, Request, Response, Form, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+import hmac
+import hashlib
+
+ROOT = Path(__file__).resolve().parent
+SHARED_DATA_DIR = ROOT.parent / "data"
+WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
+DB_FILE = ROOT / "data" / "tabel.db"
+COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
+SESSION_COOKIE = "grafik_ppr_session"
+APP_PREFIX = "/tabel"
+APP_VERSION = "web-tabel-1.0"
+DB_LOCK = Lock()
+
+def load_web_secret() -> str:
+    if WEB_SECRET_FILE.exists():
+        return WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+    return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
+
+WEB_SECRET = load_web_secret()
+
+def connect() -> sqlite3.Connection:
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def connect_common() -> sqlite3.Connection | None:
+    if not COMMON_DB_FILE.exists():
+        return None
+    conn = sqlite3.connect(COMMON_DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def text(value) -> str:
+    return "" if value is None else str(value)
+
+def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
+    for sep in (":", "|"):
+        try:
+            parts = value.rsplit(sep, 5)
+            if len(parts) == 6:
+                user_id, role, modules, safe_name, expiry_text, sig = parts
+                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
+            elif len(parts) == 5:
+                user_id, role, modules, safe_name, sig = parts
+                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
+                expiry_text = "2000000000"
+            elif len(parts) == 4:
+                username, role, expiry_text, sig = parts
+                payload = f"{username}{sep}{role}{sep}{expiry_text}"
+                user_id, modules, safe_name = username, "", username
+            else:
+                continue
+                
+            secrets_to_try = [WEB_SECRET]
+                
+            matched = False
+            for secret in secrets_to_try:
+                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(expected, sig):
+                    matched = True
+                    break
+                    
+            if not matched:
+                continue
+            if float(expiry_text) < dt.datetime.now().timestamp():
+                return None
+                
+            return unquote(user_id), unquote(role), unquote(modules), unquote(safe_name)
+        except Exception:
+            continue
+    return None
+
+def get_current_session_fastapi(request: Request):
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if cookie:
+        return _verify_cookie_fastapi(cookie)
+    return None
+
+def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str) -> str:
+    if not session:
+        return ""
+    _, role, modules, _ = session
+    if role == "admin":
+        return "admin"
+    if role == "viewer":
+        return "viewer"
+    if module in modules.split(","):
+        return "edit" if role == "editor" else role
+    return ""
+
+app = FastAPI(title="RTPS Tabel")
+
+@app.middleware("http")
+async def strip_prefix(request: Request, call_next):
+    if request.scope["path"].startswith(APP_PREFIX + "/"):
+        request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
+    return await call_next(request)
+
+app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
+
+def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(content=data, status_code=status_code)
+
+@app.get("/tabel", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
+async def home_route(request: Request):
+    session = get_current_session_fastapi(request)
+    mod_role = get_mod_role_fastapi(session, "tabel")
+    
+    if not mod_role:
+        return HTMLResponse(content="<meta charset='utf-8'>Требуется вход. <a href='/'>Авторизоваться</a>", status_code=401)
+        
+    can_edit = mod_role in ("edit", "editor", "admin")
+    
+    with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+        
+    html = html.replace("{{CAN_EDIT}}", "true" if can_edit else "false")
+    html = html.replace("{{APP_PREFIX}}", APP_PREFIX)
+    html = html.replace("{{APP_VERSION}}", APP_VERSION)
+    
+    response = HTMLResponse(content=html)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+def load_state(year: int, month: int) -> dict:
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        
+        employees = []
+        try:
+            emp_rows = cur.execute(
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note FROM employees WHERE y=?", (year,)
+            ).fetchall()
+            for r in emp_rows:
+                employees.append({
+                    "pos": text(r["pos"]),
+                    "name": text(r["name"]),
+                    "tab_num": text(r["tab_num"]),
+                    "milk": int(r["milk"] or 0),
+                    "milk_issue": int(r["milk_issue"] or 0),
+                    "full_name": text(r["full_name"]),
+                    "milk_note": text(r["milk_note"])
+                })
+        except Exception:
+            pass
+
+        timesheet = {}
+        try:
+            ts_rows = cur.execute(
+                "SELECT r, c, v FROM timesheet WHERE y=? AND m=?", (year, str(month))
+            ).fetchall()
+            for r in ts_rows:
+                timesheet.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
+        except Exception:
+            pass
+            
+        vacations = {}
+        try:
+            vac_rows = cur.execute("SELECT r, c, v FROM vacations WHERE y=?", (year,)).fetchall()
+            for r in vac_rows:
+                vacations.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
+        except Exception:
+            pass
+
+    return {
+        "year": year,
+        "month": month,
+        "employees": employees,
+        "timesheet": timesheet,
+        "vacations": vacations,
+    }
+
+@app.get("/api/state")
+async def api_get_state(request: Request, year: int, month: int):
+    session = get_current_session_fastapi(request)
+    if not get_mod_role_fastapi(session, "tabel"):
+        return json_response({"error": "Unauthorized"}, 401)
+    return json_response(load_state(year, month))
+
+@app.post("/api/state")
+async def api_save_state(request: Request):
+    session = get_current_session_fastapi(request)
+    role = get_mod_role_fastapi(session, "tabel")
+    if role not in ("edit", "editor", "admin"):
+        return json_response({"error": "Forbidden"}, 403)
+        
+    payload = await request.json()
+    year = int(payload.get("year", dt.date.today().year))
+    month = int(payload.get("month", dt.date.today().month))
+    timesheet = payload.get("timesheet", [])
+    
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute("BEGIN")
+        cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, str(month)))
+        
+        insert_rows = []
+        for r, row_data in enumerate(timesheet):
+            if not row_data: continue
+            for c, v in row_data.items():
+                if v:
+                    insert_rows.append((year, str(month), r, int(c), str(v)))
+                    
+        cur.executemany("INSERT INTO timesheet(y, m, r, c, v) VALUES(?,?,?,?,?)", insert_rows)
+        conn.commit()
+        
+    return json_response({"status": "ok"})
+
+if __name__ == "__main__":
+    host = os.environ.get("WEB_HOST", "0.0.0.0")
+    port = int(os.environ.get("WEB_PORT", "8005"))
+    uvicorn.run("app:app", host=host, port=port, reload=True)
