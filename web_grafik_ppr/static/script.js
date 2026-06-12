@@ -740,6 +740,17 @@ function collectActRowsForMonth(monthIndex){
   const month = appState.months[monthIndex];
   if (!month) return [];
   const savedActs = (appState.acts && appState.acts[month.name]) || {};
+  
+  const getSaved = (cleanAct) => {
+    const prefixed = `Акт № ${cleanAct}`;
+    const s1 = savedActs[cleanAct] || {};
+    const s2 = savedActs[prefixed] || {};
+    return {
+      is_done: s1.is_done || s2.is_done || false,
+      sap_order_done: s1.sap_order_done || s2.sap_order_done || false
+    };
+  };
+
   const rows = [];
   const seen = new Set();
   (month.fact || []).forEach((row, rowIndex) => {
@@ -748,15 +759,17 @@ function collectActRowsForMonth(monthIndex){
     if (!key) return;
     const acts = collectActNumbersFromRow(row, monthIndex, 'fact', key);
     acts.forEach((act) => {
-      if (seen.has(act)) return;
-      seen.add(act);
-      rows.push({ act, saved: savedActs[act] || { is_done: false, sap_order_done: false }, rowIndex });
+      const clean = act.replace(/^Акт №\s*/i, '').trim();
+      if (seen.has(clean)) return;
+      seen.add(clean);
+      rows.push({ act: clean, saved: getSaved(clean), rowIndex });
     });
   });
-  Object.keys(savedActs).sort().forEach((act) => {
-    if (seen.has(act)) return;
-    seen.add(act);
-    rows.push({ act, saved: savedActs[act] || { is_done: false, sap_order_done: false }, rowIndex: null });
+  Object.keys(savedActs).sort().forEach((actKey) => {
+    const clean = actKey.replace(/^Акт №\s*/i, '').trim();
+    if (seen.has(clean)) return;
+    seen.add(clean);
+    rows.push({ act: clean, saved: getSaved(clean), rowIndex: null });
   });
   return rows.sort((a, b) => compareActsByDate(a.act, b.act));
 }

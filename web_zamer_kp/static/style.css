@@ -315,6 +315,11 @@
     }
     .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
     .modal-head h2 { margin:0; font-size:20px; }
+    .modal-head button[title="Закрыть"] {
+      display:flex; align-items:center; justify-content:center;
+      width:30px; height:30px; padding:0; line-height:1;
+      font-weight:700; font-size:18px;
+    }
     .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
     .norms-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
     .norms-table { width:100%; table-layout:fixed; }
