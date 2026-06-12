@@ -3066,7 +3066,7 @@ function downloadTu28(){
   const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
-  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff[row.rowIndex] || [], extra_repairs: ui.tu28ExtraRepairs[row.rowIndex] || [] };
+  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff[row.rowIndex] || [], extra_repairs: ui.tu28ExtraRepairs[row.rowIndex] || [], debugger_tu28ExtraRepairs: ui.tu28ExtraRepairs, debugger_tu28RowIndex: ui.tu28RowIndex, debugger_row_rowIndex: row.rowIndex };
   fetch(`{{APP_PREFIX}}/api/tu28-export`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -3470,6 +3470,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(staff_list, list):
                 staff_list = []
             extra_repairs = payload.get("extra_repairs") or []
+            print(f"DEBUG: raw extra_repairs={payload.get('extra_repairs')} | tu28ExtraRepairs={payload.get('debugger_tu28ExtraRepairs')} | ui.tu28RowIndex={payload.get('debugger_tu28RowIndex')} | row.rowIndex={payload.get('debugger_row_rowIndex')}", flush=True)
             if not isinstance(extra_repairs, list):
                 extra_repairs = []
             try:
