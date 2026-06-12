@@ -1927,13 +1927,15 @@ def upsert_inventory_locomotive(
         sort_order_value = int(max_row["max_sort_order"] or 0) + 1
     exact = cur.execute(
         "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE y=? AND UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? "
-        "ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, rowid DESC LIMIT 1",
-        (year, series, locomotive),
+        "FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? "
+        "ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, y DESC, rowid DESC LIMIT 1",
+        (series, locomotive),
     ).fetchone()
     if exact:
         if sort_order_value <= 0:
             sort_order_value = int(exact["sort_order"] or 0)
+        if not inv:
+            inv = text(exact["inv"]).strip()
         if not wheel_pair_count:
             wheel_pair_count = int(exact["wheel_pair_count"] or 0)
         if not section_count:
@@ -1951,8 +1953,8 @@ def upsert_inventory_locomotive(
             (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
         )
         cur.execute(
-            "DELETE FROM inventory WHERE y=? AND UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
-            (year, series, locomotive, int(exact["rowid"])),
+            "DELETE FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
+            (series, locomotive, int(exact["rowid"])),
         )
         return
     if deleted_at is None:
