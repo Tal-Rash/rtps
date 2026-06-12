@@ -37,8 +37,8 @@
       </div>
       <div class="top-right">
         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-          {{USERS_LINK}}
-          {{LOGS_LINK}}
+          {{ USERS_LINK | safe }}
+          {{ LOGS_LINK | safe }}
           <a class="badge" href="/logout">Выйти</a>
         </div>
         <div class="badge">{{AUTH_BADGE}}</div>
@@ -51,14 +51,14 @@
           <h2>График ППР</h2>
           <p>План, факт, нормы.</p>
         </div>
-        {{GRAFIK_PPR_LINK}}
+        {{ GRAFIK_PPR_LINK | safe }}
       </div>
       <div class="card">
         <div>
           <h2>Замер КП</h2>
           <p>Замеры и последующее заполнение по шагам.</p>
         </div>
-        {{ZAMER_KP_LINK}}
+        {{ ZAMER_KP_LINK | safe }}
       </div>
       <div class="card">
         <div>
@@ -86,7 +86,7 @@
           <h2>Справочник</h2>
           <p>Нормы времени, сотрудники и локомотивы.</p>
         </div>
-        {{SPRAVOCHNIK_LINK}}
+        {{ SPRAVOCHNIK_LINK | safe }}
       </div>
     </div>
     <div class="status">Сервер запущен: {{STARTED_AT}}</div>

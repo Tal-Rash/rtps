@@ -24,7 +24,11 @@
         <tr><th>ID</th><th>ФИО</th><th>Время входа</th></tr>
       </thead>
       <tbody>
-        {{LOGS_ROWS}}
+        {% for l in logs %}
+        <tr><td>{{ l.id }}</td><td>{{ l.user_name }}</td><td>{{ l.login_time }}</td></tr>
+        {% else %}
+        <tr><td colspan='3'>{{ error_message or 'Нет записей' }}</td></tr>
+        {% endfor %}
       </tbody>
       </table>
     </div>

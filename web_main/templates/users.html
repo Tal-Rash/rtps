@@ -59,7 +59,54 @@
         </tr>
       </thead>
       <tbody>
-        {{USERS_ROWS}}
+        {% for u in users %}
+        <tr {% if u.role == 'pending' %}style="background:#fff3cd;"{% endif %}>
+          <td>{{ u.id }}</td>
+          <td><input form="form_{{ u.id }}" name="full_name" value="{{ u.full_name }}" required style="min-width:160px; max-width:200px;"></td>
+          <td><input form="form_{{ u.id }}" name="password" value="{{ u.password }}" required style="min-width:120px; max-width:160px;"></td>
+          <td>
+            <select form="form_{{ u.id }}" name="role">
+              <option value="pending" {% if u.role == 'pending' %}selected{% endif %}>Ожидает</option>
+              <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>Зритель</option>
+              <option value="editor" {% if u.role == 'editor' %}selected{% endif %}>Редактор</option>
+              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Администратор</option>
+            </select>
+          </td>
+          <td style="vertical-align:top;">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label class="mod-label">ППР: <select form="form_{{ u.id }}" name="module_grafik_ppr">
+                <option value="none" {% if u.g_r == 'none' %}selected{% endif %}>Нет доступа</option>
+                <option value="view" {% if u.g_r == 'view' %}selected{% endif %}>Зритель</option>
+                <option value="edit" {% if u.g_r == 'edit' %}selected{% endif %}>Редактор</option>
+              </select></label>
+              <label class="mod-label">Замер: <select form="form_{{ u.id }}" name="module_zamer_kp">
+                <option value="none" {% if u.z_r == 'none' %}selected{% endif %}>Нет доступа</option>
+                <option value="view" {% if u.z_r == 'view' %}selected{% endif %}>Зритель</option>
+                <option value="edit" {% if u.z_r == 'edit' %}selected{% endif %}>Редактор</option>
+              </select></label>
+              <label class="mod-label">Справ: <select form="form_{{ u.id }}" name="module_spravochnik">
+                <option value="none" {% if u.s_r == 'none' %}selected{% endif %}>Нет доступа</option>
+                <option value="view" {% if u.s_r == 'view' %}selected{% endif %}>Зритель</option>
+                <option value="edit" {% if u.s_r == 'edit' %}selected{% endif %}>Редактор</option>
+              </select></label>
+            </div>
+          </td>
+          <td>
+            <div class="flex">
+              <form id="form_{{ u.id }}" method="post" action="/users/update" style="margin:0;">
+                <input type="hidden" name="id" value="{{ u.id }}">
+                <button type="submit">Сохранить</button>
+              </form>
+              <form method="post" action="/users/delete" style="margin:0;">
+                <input type="hidden" name="id" value="{{ u.id }}">
+                <button class="btn-danger" type="submit">Удалить</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">{{ error_message or 'Нет пользователей' }}</td></tr>
+        {% endfor %}
       </tbody>
     </table>
     </div>

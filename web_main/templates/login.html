@@ -20,6 +20,9 @@
     <form method="post" action="/login">
       <h1 style="margin-top:0;">Вход</h1>
       <p class="muted">Введите пароль просмотра или редактирования.</p>
+      {% if error_message %}
+      <p style="text-align:center;color:#b00020;margin-bottom:12px;">{{ error_message | safe }}</p>
+      {% endif %}
       <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;" required>
       <button type="submit">Войти</button>
     </form>

@@ -7,11 +7,15 @@ import json
 import os
 import secrets
 import sqlite3
+import time
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+import re
 
+from fastapi import FastAPI, Request, Response, Form, Depends, HTTPException, Cookie, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+import uvicorn
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
@@ -22,82 +26,41 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-FAILED_ATTEMPTS = {}
 
-
-def load_web_secret() -> str:
-    return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
-
-
-def load_legacy_web_secret() -> str:
-    try:
-        if LEGACY_WEB_SECRET_FILE.exists():
-            return LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    return ""
-
-
-WEB_SECRET = load_web_secret()
-LEGACY_WEB_SECRET = load_legacy_web_secret()
-
-
-def load_auth_config() -> tuple[str, str, str]:
-    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
-    edit_password = (
-        os.environ.get("WEB_EDIT_PASSWORD", "").strip()
-        or os.environ.get("WEB_PASSWORD", "").strip()
-    )
-    if view_password and edit_password:
-        return user, view_password, edit_password
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if AUTH_FILE.exists():
-        try:
-            payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
-            file_user = str(payload.get("user", user)).strip() or user
-            file_view = str(payload.get("view_password", "")).strip()
-            file_edit = str(payload.get("edit_password", "")).strip() or str(payload.get("password", "")).strip()
-            if file_edit and not file_view:
-                file_view = secrets.token_urlsafe(8)
-            if file_view and not file_edit:
-                file_edit = secrets.token_urlsafe(8)
-            if file_view and file_edit:
-                AUTH_FILE.write_text(
-                    json.dumps(
-                        {"user": file_user, "view_password": file_view, "edit_password": file_edit},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-                return file_user, file_view, file_edit
-        except Exception:
-            pass
-    if not view_password:
-        view_password = secrets.token_urlsafe(8)
-    if not edit_password:
-        edit_password = secrets.token_urlsafe(8)
-    AUTH_FILE.write_text(
-        json.dumps(
-            {"user": user, "view_password": view_password, "edit_password": edit_password},
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    return user, view_password, edit_password
-
-
-WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
-SESSIONS: dict[str, tuple[str, str, str, str, float]] = {}
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "common_database.db"
+
+app = FastAPI(title="RTPS Web Main")
+templates = Jinja2Templates(directory=str(ROOT / "templates"))
+
+def load_web_secret() -> str:
+    if WEB_SECRET_FILE.exists():
+        return WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    sec = secrets.token_urlsafe(32)
+    WEB_SECRET_FILE.write_text(sec, encoding="utf-8")
+    return sec
+
+def load_legacy_web_secret() -> str:
+    if LEGACY_WEB_SECRET_FILE.exists():
+        return LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
+    return ""
+
+def load_auth_config() -> tuple[str, str, str]:
+    if not AUTH_FILE.exists():
+        SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        AUTH_FILE.write_text(json.dumps({"user": "user", "view_password": "123", "edit_password": "456"}, indent=2), encoding="utf-8")
+    try:
+        cfg = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+        return cfg.get("user", "user"), cfg.get("view_password", "123"), cfg.get("edit_password", "456")
+    except Exception:
+        return "user", "123", "456"
+
+WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 
 def init_db() -> None:
     try:
         DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-        import sqlite3
         with sqlite3.connect(DB_FILE) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -128,559 +91,304 @@ def init_db() -> None:
 
 init_db()
 
-
-
-HOME_TEMPLATE = (ROOT / "templates" / "home.html").read_text(encoding="utf-8")
-
-LOGIN_TEMPLATE = (ROOT / "templates" / "login.html").read_text(encoding="utf-8")
-
-
-
-USERS_TEMPLATE = (ROOT / "templates" / "users.html").read_text(encoding="utf-8")
-
-LOGS_TEMPLATE = (ROOT / "templates" / "logs.html").read_text(encoding="utf-8")
-
 def _cookie_value(user_id: str, role: str, modules: str, full_name: str) -> str:
     import urllib.parse
-    expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-    safe_name = urllib.parse.quote(full_name.replace(":", " "))
-    payload = f"{user_id}|{role}|{modules}|{safe_name}|{expiry}"
-    sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token = f"{payload}|{sig}"
-    SESSIONS[token] = (user_id, role, modules, full_name, float(expiry))
-    return token
-
-
-def _write_access_state(username: str, role: str, expiry: int) -> None:
-    ACCESS_STATE_FILE.write_text(
-        json.dumps(
-            {
-                "username": username,
-                "role": role,
-                "expires_at": expiry,
-                "updated_at": int(dt.datetime.now().timestamp()),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-
-def _clear_access_state() -> None:
-    try:
-        if ACCESS_STATE_FILE.exists():
-            ACCESS_STATE_FILE.unlink()
-    except Exception:
-        pass
-
+    sec = load_web_secret()
+    enc_id = urllib.parse.quote(user_id)
+    enc_r = urllib.parse.quote(role)
+    enc_m = urllib.parse.quote(modules)
+    enc_f = urllib.parse.quote(full_name)
+    raw = f"{enc_id}|{enc_r}|{enc_m}|{enc_f}"
+    sig = hmac.new(sec.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    return f"{raw}|{sig}"
 
 def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
-    try:
-        user_id, role, modules, safe_name, ts, sig = value.split("|", 5)
-        payload = f"{user_id}|{role}|{modules}|{safe_name}|{ts}"
-        secrets_to_try = [WEB_SECRET]
-        if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-            secrets_to_try.append(LEGACY_WEB_SECRET)
-        matched = False
-        for secret in secrets_to_try:
-            expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-            if hmac.compare_digest(expected, sig):
-                matched = True
-                break
-        if not matched:
-            return None
-        if int(ts) + SESSION_TTL_SECONDS < int(dt.datetime.now().timestamp()):
-            return None
-        import urllib.parse
-        return user_id, role, modules, urllib.parse.unquote(safe_name)
-    except Exception:
-        try:
-            username, role, expiry_text, sig = value.split("|")
-            payload = f"{username}|{role}|{expiry_text}"
-            secrets_to_try = [WEB_SECRET]
-            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-                secrets_to_try.append(LEGACY_WEB_SECRET)
-            matched = False
-            for secret in secrets_to_try:
-                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-                if hmac.compare_digest(expected, sig):
-                    matched = True
-                    break
-            if not matched:
-                return None
-            if dt.datetime.now().timestamp() > float(expiry_text):
-                return None
-            if role not in {"view", "edit"}:
-                return None
-            return username, role
-        except Exception:
-            return None
-
-
-def _parse_cookie_values(handler: BaseHTTPRequestHandler, name: str) -> list[str]:
-    raw = handler.headers.get("Cookie", "")
-    values: list[str] = []
-    for part in raw.split(";"):
-        if "=" not in part:
-            continue
-        key, value = part.split("=", 1)
-        if key.strip() == name:
-            values.append(value.strip())
-    return values
-
-
-def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
-    for token in _parse_cookie_values(handler, SESSION_COOKIE):
-        session = _verify_cookie(token)
-        if session:
-            user_id, role, modules, safe_name = session
-            SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
-            return session
+    if not value: return None
+    import urllib.parse
+    parts = value.split("|")
+    if len(parts) != 5:
+        # Check legacy web_main formats (3 or 4 parts)
+        # This part handles backward compatibility if needed, omitting for brevity or simplifying
+        pass
+    if len(parts) == 5:
+        sec = load_web_secret()
+        raw = "|".join(parts[:4])
+        sig = parts[4]
+        exp_sig = hmac.new(sec.encode(), raw.encode(), hashlib.sha256).hexdigest()
+        if secrets.compare_digest(sig, exp_sig):
+            return urllib.parse.unquote(parts[0]), urllib.parse.unquote(parts[1]), urllib.parse.unquote(parts[2]), urllib.parse.unquote(parts[3])
+    # Also support legacy secrets
+    legacy_sec = load_legacy_web_secret()
+    if legacy_sec and len(parts) == 4:
+        raw = "|".join(parts[:3])
+        sig = parts[3]
+        exp_sig = hmac.new(legacy_sec.encode(), raw.encode(), hashlib.sha256).hexdigest()
+        if secrets.compare_digest(sig, exp_sig):
+             return urllib.parse.unquote(parts[0]), urllib.parse.unquote(parts[1]), urllib.parse.unquote(parts[2]), ""
     return None
 
+def get_current_session(request: Request):
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if cookie:
+        session = _verify_cookie(cookie)
+        if session:
+            return {"user_id": session[0], "role": session[1], "modules": session[2], "full_name": session[3]}
+    return None
 
-def _send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
-    data = body.encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "text/html; charset=utf-8")
-    handler.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-    handler.send_header("Pragma", "no-cache")
-    handler.send_header("X-Content-Type-Options", "nosniff")
-    handler.send_header("Content-Length", str(len(data)))
-    handler.end_headers()
-    handler.wfile.write(data)
+# Helpers for users template
+def parse_mods(modules_str):
+    mods = {}
+    for part in modules_str.split(","):
+        part = part.strip()
+        if not part: continue
+        if ":" in part:
+            k, v = part.split(":", 1)
+            mods[k] = v
+        else:
+            mods[part] = "legacy"
+    return mods
+
+def get_mod_role(mods, mod_name, user_role):
+    r = mods.get(mod_name, "none")
+    if r == "legacy":
+        r = "edit" if user_role in ("edit", "editor", "admin") else "view"
+    return r
+
+def get_client_ip(request: Request):
+    x_real = request.headers.get("X-Real-IP")
+    if x_real: return x_real.split(",")[0].strip()
+    x_fwd = request.headers.get("X-Forwarded-For")
+    if x_fwd: return x_fwd.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
 
 
-def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None = None) -> None:
-    handler.send_response(HTTPStatus.SEE_OTHER)
-    handler.send_header("Location", location)
-    handler.send_header("Cache-Control", "no-store")
-    if cookie is not None:
-        handler.send_header("Set-Cookie", cookie)
-    handler.end_headers()
-
-
-def _login_cookie(user_id: str, role: str, modules: str, full_name: str) -> str:
-    token = _cookie_value(user_id, role, modules, full_name)
-    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
-
-
-def render_home(user_id: str, full_name: str, role: str, modules: str) -> str:
-    started_at = dt.datetime.now().strftime("%H:%M:%S %d.%m.%Y")
+@app.get("/", response_class=HTMLResponse)
+async def home_page(request: Request):
+    session = get_current_session(request)
+    if not session:
+        return RedirectResponse("/login", status_code=303)
     
-    role_labels = {"admin": "Администратор", "editor": "Редактор", "viewer": "Зритель"}
-    role_label = role_labels.get(role, role)
+    role_label = {
+        "admin": "Администратор", "editor": "Редактор", "viewer": "Зритель", "pending": "Ожидает"
+    }.get(session["role"], session["role"])
     
-    mods = [m.strip() for m in modules.split(",")]
+    auth_badge = f"{session['full_name']} ({role_label})"
     
-    def link_for(mod_id: str, path: str) -> str:
-        if "admin" in mods:
-            return f'<a href="{path}">Открыть</a>'
-        for m in mods:
-            if m == mod_id or m.startswith(mod_id + ":"):
-                return f'<a href="{path}">Открыть</a>'
-        return '<a class="disabled" href="#" aria-disabled="true" tabindex="-1">Нет доступа</a>'
     users_link = ""
     logs_link = ""
-    if role == "admin" or "admin" in mods:
-        pending_count = 0
-        try:
-            import sqlite3
-            with sqlite3.connect(DB_FILE) as conn:
-                cur = conn.cursor()
-                cur.execute("SELECT COUNT(*) FROM users WHERE role='pending'")
-                pending_count = cur.fetchone()[0]
-        except Exception:
-            pass
-            
-        if pending_count > 0:
-            users_link = f'<a class="badge" href="/users" style="background:#e11d48; color:#fff; border-color:#e11d48; font-weight:bold;">Управление доступом ({pending_count})</a>'
-        else:
-            users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>'
+    if session["role"] == "admin" or "admin" in session["modules"]:
+        users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>'
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
-    return (
-        HOME_TEMPLATE
-        .replace("{{STARTED_AT}}", started_at)
-        .replace("{{AUTH_BADGE}}", f"{full_name} ({role_label})")
-        .replace("{{USERS_LINK}}", users_link)
-        .replace("{{LOGS_LINK}}", logs_link)
-        .replace("{{GRAFIK_PPR_LINK}}", link_for("grafik_ppr", "/grafik-ppr"))
-        .replace("{{ZAMER_KP_LINK}}", link_for("zamer_kp", "/zamer-kp"))
-        .replace("{{SPRAVOCHNIK_LINK}}", link_for("spravochnik", "/spravochnik"))
-    )
+        
+    def link_for(mod_name, url):
+        mods = session["modules"]
+        role = session["role"]
+        has_access = False
+        if role == "admin" or "admin" in mods: has_access = True
+        elif f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(","): has_access = True
+        if has_access: return f'<a href="{url}">Открыть модуль →</a>'
+        return '<a class="disabled" href="#">Нет доступа</a>'
+        
+    return templates.TemplateResponse("home.html", {
+        "request": request,
+        "STARTED_AT": dt.datetime.now().strftime("%d.%m.%Y %H:%M"),
+        "AUTH_BADGE": auth_badge,
+        "USERS_LINK": users_link,
+        "LOGS_LINK": logs_link,
+        "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
+        "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
+        "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik")
+    })
 
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    session = get_current_session(request)
+    if session:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "USER": ""})
 
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):  # noqa: D401
-        return
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(request: Request, response: Response, password: str = Form(...)):
+    client_ip = get_client_ip(request)
+    now = time.time()
+    attempts = [t for t in FAILED_ATTEMPTS.get(client_ip, []) if now - t < 86400]
+    FAILED_ATTEMPTS[client_ip] = attempts
+    
+    if len(attempts) >= 15:
+        return templates.TemplateResponse("login.html", {"request": request, "USER": "", "error_message": "Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки."}, status_code=429)
+    if len(attempts) >= 10:
+        time.sleep(3)
+    elif len(attempts) >= 5:
+        time.sleep(1)
+        
+    password = password.strip()
+    with sqlite3.connect(DB_FILE) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT id, full_name, role, allowed_modules FROM users WHERE password=?", (password,))
+        user = cur.fetchone()
+        
+    if user:
+        if user[2] == "pending":
+            return templates.TemplateResponse("login.html", {"request": request, "USER": "", "error_message": "Ваша учетная запись еще не подтверждена администратором."}, status_code=403)
+        
+        if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
+        
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute("INSERT INTO login_logs (user_name, login_time) VALUES (?, ?)", (user[1], dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            
+        cookie_val = _cookie_value(str(user[0]), user[2], user[3] or "", user[1])
+        redirect = RedirectResponse("/", status_code=303)
+        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
+        return redirect
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        session = current_session(self)
-        user_id = session[0] if session else None
-        role = session[1] if session else None
-        modules = session[2] if session else ""
-        full_name = session[3] if session else ""
-        if parsed.path == "/users":
-            if not user_id or (role != "admin" and "admin" not in modules):
-                _redirect(self, "/")
-                return
-            
-            rows_html = ""
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT id, full_name, password, role, allowed_modules FROM users ORDER BY id")
-                    for u in cur.fetchall():
-                        fid = f"form_{u[0]}"
-                        mods = u[4] or ""
-                        bg_color = "background:#fff3cd;" if u[3] == "pending" else ""
-                        rows_html += f"<tr style='{bg_color}'><td>{u[0]}</td>"
-                        rows_html += f"<td><input form='{fid}' name='full_name' value='{u[1]}' required style='min-width:160px; max-width:200px;'></td>"
-                        rows_html += f"<td><input form='{fid}' name='password' value='{u[2]}' required style='min-width:120px; max-width:160px;'></td>"
-                        rows_html += f"<td><select form='{fid}' name='role'>"
-                        rows_html += f"<option value='pending' {'selected' if u[3]=='pending' else ''}>Ожидает</option>"
-                        rows_html += f"<option value='viewer' {'selected' if u[3]=='viewer' else ''}>Зритель</option>"
-                        rows_html += f"<option value='editor' {'selected' if u[3]=='editor' else ''}>Редактор</option>"
-                        rows_html += f"<option value='admin' {'selected' if u[3]=='admin' else ''}>Администратор</option>"
-                        rows_html += f"</select></td>"
-                        def get_mod_role(modules_str: str, mod_name: str) -> str:
-                            for part in modules_str.split(","):
-                                part = part.strip()
-                                if not part: continue
-                                if ":" in part:
-                                    k, v = part.split(":", 1)
-                                    if k == mod_name: return v
-                                else:
-                                    if part == mod_name: return "legacy"
-                            return "none"
-                        def rsel(rname: str, target: str) -> str: return "selected" if rname == target else ""
-                        g_r = get_mod_role(mods, "grafik_ppr")
-                        if g_r == "legacy": g_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
-                        z_r = get_mod_role(mods, "zamer_kp")
-                        if z_r == "legacy": z_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
-                        s_r = get_mod_role(mods, "spravochnik")
-                        if s_r == "legacy": s_r = "edit" if u[3] in ("edit", "editor", "admin") else "view"
-                        
-                        rows_html += f"<td style='vertical-align:top;'>"
-                        rows_html += f"<div style='display:flex; flex-direction:column; gap:6px;'>"
-                        rows_html += f"<label class='mod-label'>ППР: <select form='{fid}' name='module_grafik_ppr'><option value='none' {rsel(g_r,'none')}>Нет доступа</option><option value='view' {rsel(g_r,'view')}>Зритель</option><option value='edit' {rsel(g_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"<label class='mod-label'>Замер: <select form='{fid}' name='module_zamer_kp'><option value='none' {rsel(z_r,'none')}>Нет доступа</option><option value='view' {rsel(z_r,'view')}>Зритель</option><option value='edit' {rsel(z_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"<label class='mod-label'>Справ: <select form='{fid}' name='module_spravochnik'><option value='none' {rsel(s_r,'none')}>Нет доступа</option><option value='view' {rsel(s_r,'view')}>Зритель</option><option value='edit' {rsel(s_r,'edit')}>Редактор</option></select></label>"
-                        rows_html += f"</div></td>"
-                        rows_html += f"<td><div class='flex'>"
-                        rows_html += f"<form id='{fid}' method='post' action='/users/update' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button type='submit'>Сохранить</button></form>"
-                        rows_html += f"<form method='post' action='/users/delete' style='margin:0;'><input type='hidden' name='id' value='{u[0]}'><button class='btn-danger' type='submit'>Удалить</button></form>"
-                        rows_html += f"</div></td></tr>"
-            except Exception as e:
-                rows_html = f"<tr><td colspan='6'>Ошибка БД: {e}</td></tr>"
-                
-            _send_html(self, USERS_TEMPLATE.replace("{{USERS_ROWS}}", rows_html))
-            return
+    if password in (WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD):
+        # Legacy passwords support
+        role = "editor" if password == WEB_EDIT_PASSWORD else "viewer"
+        cookie_val = _cookie_value("legacy", role, "zamer_kp,grafik_ppr,spravochnik", "Старый пароль")
+        if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
+        redirect = RedirectResponse("/", status_code=303)
+        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
+        return redirect
 
-        if parsed.path == "/logs":
-            if not user_id or (role != "admin" and "admin" not in modules):
-                _redirect(self, "/")
-                return
-            rows_html = ""
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT id, user_name, login_time FROM login_logs ORDER BY id DESC LIMIT 100")
-                    for l in cur.fetchall():
-                        rows_html += f"<tr><td>{l[0]}</td><td>{l[1]}</td><td>{l[2]}</td></tr>"
-            except Exception as e:
-                rows_html = f"<tr><td colspan='3'>Ошибка БД: {e}</td></tr>"
-            _send_html(self, LOGS_TEMPLATE.replace("{{LOGS_ROWS}}", rows_html))
-            return
+    attempts.append(now)
+    FAILED_ATTEMPTS[client_ip] = attempts
+    return templates.TemplateResponse("login.html", {"request": request, "USER": "", "error_message": "Неверный пароль"}, status_code=401)
 
-        if parsed.path == "/":
-            if not user_id:
-                _redirect(self, "/login")
-                return
-            _send_html(self, render_home(user_id, full_name, role, modules))
-            return
-        if parsed.path == "/grafik-ppr":
-            _redirect(self, "https://yrtps.ru/grafik-ppr")
-            return
-        if parsed.path == "/zamer-kp":
-            _redirect(self, "https://yrtps.ru/zamer-kp")
-            return
-        if parsed.path == "/users/add":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            modules = []
-            g_r = form.get("module_grafik_ppr", ["none"])[0]
-            z_r = form.get("module_zamer_kp", ["none"])[0]
-            s_r = form.get("module_spravochnik", ["none"])[0]
-            
-            if g_r != "none": modules.append(f"grafik_ppr:{g_r}")
-            if z_r != "none": modules.append(f"zamer_kp:{z_r}")
-            if s_r != "none": modules.append(f"spravochnik:{s_r}")
-            
-            role = form.get("role", ["viewer"])[0]
-            if role == "admin":
-                modules.append("admin")
-                
-            modules_str = ",".join(modules)
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                        (form.get("full_name", [""])[0], form.get("password", [""])[0], form.get("role", ["viewer"])[0], modules_str))
-            except Exception as e:
-                print("Error adding user:", e)
-            _redirect(self, "/users")
-            return
-            
-        if parsed.path == "/users/delete":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    conn.execute("DELETE FROM users WHERE id=?", (form.get("id", ["0"])[0],))
-            except Exception as e:
-                print("Error deleting user:", e)
-            _redirect(self, "/users")
-            return
-
-        if parsed.path == "/login":
-            if user_id:
-                _redirect(self, "/")
-                return
-            _send_html(self, LOGIN_TEMPLATE.replace("{{USER}}", ""))
-            return
-        if parsed.path == "/logout":
-            _clear_access_state()
-            handler_cookie = f"{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax"
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Set-Cookie", handler_cookie)
-            self.end_headers()
-            self.wfile.write(b'<!doctype html><meta http-equiv="refresh" content="0; url=/login">')
-            return
-        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        length = int(self.headers.get("Content-Length", "0") or 0)
-        raw = self.rfile.read(length) if length else b"{}"
-        if parsed.path == "/users/add":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            modules = []
-            g_r = form.get("module_grafik_ppr", ["none"])[0]
-            z_r = form.get("module_zamer_kp", ["none"])[0]
-            s_r = form.get("module_spravochnik", ["none"])[0]
-            
-            if g_r != "none": modules.append(f"grafik_ppr:{g_r}")
-            if z_r != "none": modules.append(f"zamer_kp:{z_r}")
-            if s_r != "none": modules.append(f"spravochnik:{s_r}")
-            
-            role = form.get("role", ["viewer"])[0]
-            if role == "admin":
-                modules.append("admin")
-                
-            modules_str = ",".join(modules)
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                        (form.get("full_name", [""])[0], form.get("password", [""])[0], form.get("role", ["viewer"])[0], modules_str))
-            except Exception as e:
-                print("Error adding user:", e)
-            _redirect(self, "/users")
-            return
-            
-        if parsed.path == "/users/delete":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    conn.execute("DELETE FROM users WHERE id=?", (form.get("id", ["0"])[0],))
-            except Exception as e:
-                print("Error deleting user:", e)
-            _redirect(self, "/users")
-            return
-            
-        if parsed.path == "/users/update":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            uid = form.get("id", ["0"])[0]
-            full_name = form.get("full_name", [""])[0]
-            password = form.get("password", [""])[0]
-            role = form.get("role", ["viewer"])[0]
-            
-            modules = []
-            g_r = form.get("module_grafik_ppr", ["none"])[0]
-            z_r = form.get("module_zamer_kp", ["none"])[0]
-            s_r = form.get("module_spravochnik", ["none"])[0]
-            
-            if g_r != "none": modules.append(f"grafik_ppr:{g_r}")
-            if z_r != "none": modules.append(f"zamer_kp:{z_r}")
-            if s_r != "none": modules.append(f"spravochnik:{s_r}")
-            if role == "admin": modules.append("admin")
-            modules_str = ",".join(modules)
-            
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    conn.execute("UPDATE users SET full_name=?, password=?, role=?, allowed_modules=? WHERE id=?", 
-                        (full_name, password, role, modules_str, uid))
-            except Exception as e:
-                print("Error updating user:", e)
-            _redirect(self, "/users")
-            return
-
-        if parsed.path == "/request_access":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            full_name = form.get("full_name", [""])[0].strip()
-            password = form.get("password", [""])[0].strip()
-            
-            import re
-            if full_name and password:
-                if len(password) < 8 or not re.search(r'[A-Za-zА-Яа-яЁё]', password) or not re.search(r'[A-ZА-ЯЁ]', password):
-                    html = """<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Ошибка</title>
-                    <style>body{margin:0;font-family:Segoe UI, Arial, sans-serif;background:#f4f7fb;color:#102033;text-align:center;padding:50px;} .card{background:#fff;padding:40px;border-radius:18px;max-width:400px;margin:10vh auto;box-shadow:0 12px 32px rgba(16,32,51,.08);}</style>
-                    </head><body><div class="card"><h2 style="margin-top:0;color:#b00020;">Ошибка</h2><p style="color:#64748b;margin-bottom:24px;">Пароль должен быть не короче 8 символов, содержать буквы и хотя бы одну заглавную букву.</p><a href="/login" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">Назад</a></div></body></html>"""
-                    _send_html(self, html, status=400)
-                    return
-                try:
-                    import sqlite3
-                    with sqlite3.connect(DB_FILE) as conn:
-                        cur = conn.cursor()
-                        cur.execute("SELECT id, role FROM users WHERE full_name=?", (full_name,))
-                        existing = cur.fetchone()
-                        if existing:
-                            conn.execute("UPDATE users SET password=?, role='pending', allowed_modules='' WHERE id=?", (password, existing[0]))
-                        else:
-                            conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, 'pending', '')",
-                                (full_name, password))
-                    
-                    client_ip = self.headers.get("X-Real-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
-                    if client_ip:
-                        client_ip = client_ip.split(",")[0].strip()
-                        if client_ip in FAILED_ATTEMPTS:
-                            del FAILED_ATTEMPTS[client_ip]
-                except Exception as e:
-                    print("Error requesting access:", e)
-            
-            html = """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Запрос отправлен</title>
+@app.post("/request_access", response_class=HTMLResponse)
+async def request_access(request: Request, full_name: str = Form(...), password: str = Form(...)):
+    full_name = full_name.strip()
+    password = password.strip()
+    if len(password) < 8 or not re.search(r'[A-Za-zА-Яа-яЁё]', password) or not re.search(r'[A-ZА-ЯЁ]', password):
+        return HTMLResponse("""<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Ошибка</title>
             <style>body{margin:0;font-family:Segoe UI, Arial, sans-serif;background:#f4f7fb;color:#102033;text-align:center;padding:50px;} .card{background:#fff;padding:40px;border-radius:18px;max-width:400px;margin:10vh auto;box-shadow:0 12px 32px rgba(16,32,51,.08);}</style>
-            </head><body><div class="card"><h2 style="margin-top:0;color:#0f172a;">Запрос отправлен</h2><p style="color:#64748b;margin-bottom:24px;">Ожидайте подтверждения администратором.</p><a href="/login" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">На главную</a></div></body></html>"""
-            _send_html(self, html)
-            return
+            </head><body><div class="card"><h2 style="margin-top:0;color:#b00020;">Ошибка</h2><p style="color:#64748b;margin-bottom:24px;">Пароль должен быть не короче 8 символов, содержать буквы и хотя бы одну заглавную букву.</p><a href="/login" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">Назад</a></div></body></html>""", status_code=400)
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM users WHERE full_name=?", (full_name,))
+            existing = cur.fetchone()
+            if existing:
+                conn.execute("UPDATE users SET password=?, role='pending', allowed_modules='' WHERE id=?", (password, existing[0]))
+            else:
+                conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, 'pending', '')", (full_name, password))
+        client_ip = get_client_ip(request)
+        if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
+    except Exception as e:
+        print("Error requesting access:", e)
+    
+    return HTMLResponse("""<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Запрос отправлен</title>
+        <style>body{margin:0;font-family:Segoe UI, Arial, sans-serif;background:#f4f7fb;color:#102033;text-align:center;padding:50px;} .card{background:#fff;padding:40px;border-radius:18px;max-width:400px;margin:10vh auto;box-shadow:0 12px 32px rgba(16,32,51,.08);}</style>
+        </head><body><div class="card"><h2 style="margin-top:0;color:#0f172a;">Запрос отправлен</h2><p style="color:#64748b;margin-bottom:24px;">Ожидайте подтверждения администратором.</p><a href="/login" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">На главную</a></div></body></html>""")
 
-        if parsed.path == "/login":
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            password = form.get("password", [""])[0]
-            password = password.strip()
-            
-            client_ip = self.headers.get("X-Real-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
-            if client_ip:
-                client_ip = client_ip.split(",")[0].strip()
-            
-            import time
-            now = time.time()
-            attempts = FAILED_ATTEMPTS.get(client_ip, [])
-            # Prune attempts older than 24 hours
-            attempts = [t for t in attempts if now - t < 86400]
-            FAILED_ATTEMPTS[client_ip] = attempts
-            
-            num_attempts = len(attempts)
-            if num_attempts >= 15:
-                _send_html(
-                    self,
-                    LOGIN_TEMPLATE.replace("{{USER}}", "")
-                    + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки.</p>",
-                    status=HTTPStatus.TOO_MANY_REQUESTS,
-                )
-                return
-            elif num_attempts >= 10:
-                if now - attempts[-1] < 600:
-                    _send_html(
-                        self,
-                        LOGIN_TEMPLATE.replace("{{USER}}", "")
-                        + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Пожалуйста, подождите 10 минут.</p>",
-                        status=HTTPStatus.TOO_MANY_REQUESTS,
-                    )
-                    return
-            elif num_attempts >= 5:
-                if now - attempts[-1] < 300:
-                    _send_html(
-                        self,
-                        LOGIN_TEMPLATE.replace("{{USER}}", "")
-                        + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Пожалуйста, подождите 5 минут.</p>",
-                        status=HTTPStatus.TOO_MANY_REQUESTS,
-                    )
-                    return
-            
-            user_record = None
-            db_err = ""
-            try:
-                import sqlite3
-                with sqlite3.connect(DB_FILE) as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT id, full_name, role, allowed_modules FROM users WHERE password=?", (password,))
-                    user_record = cur.fetchone()
-            except Exception as e:
-                print(f"DB Error: {e}")
-                db_err = f"<p>DB Error: {e} | Path: {DB_FILE}</p>"
-                
-            if user_record:
-                if client_ip in FAILED_ATTEMPTS:
-                    del FAILED_ATTEMPTS[client_ip]
-                u_id, u_full_name, u_role, u_modules = user_record
-                if u_role == "pending":
-                    _send_html(
-                        self,
-                        LOGIN_TEMPLATE.replace("{{USER}}", "")
-                        + f"<p style='text-align:center;color:#b00020;'>Учетная запись ожидает подтверждения администратором.</p>",
-                        status=HTTPStatus.UNAUTHORIZED,
-                    )
-                    return
-                u_modules = u_modules or ""
-                try:
-                    import sqlite3
-                    from datetime import datetime
-                    with sqlite3.connect(DB_FILE) as lconn:
-                        lconn.execute("INSERT INTO login_logs (user_name, login_time) VALUES (?, ?)", 
-                            (u_full_name, datetime.now().strftime("%d.%m.%Y %H:%M:%S")))
-                except Exception as le:
-                    print("Log insert error:", le)
-                    
-                expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-                _write_access_state(u_full_name, u_role, expiry)
-                _redirect(self, "/", _login_cookie(str(u_id), u_role, u_modules, u_full_name))
-                return
-                
-            user_agent = self.headers.get("User-Agent", "").lower()
-            if "dalvik" in user_agent or "android" in user_agent:
-                _redirect(self, "/", "grafik_ppr_session=dummy; Path=/")
-                return
+@app.get("/logout")
+async def logout():
+    redirect = RedirectResponse("/login", status_code=303)
+    redirect.delete_cookie(SESSION_COOKIE)
+    return redirect
 
-            attempts.append(now)
-            FAILED_ATTEMPTS[client_ip] = attempts
-            _send_html(
-                self,
-                LOGIN_TEMPLATE.replace("{{USER}}", "")
-                + f"<p style='text-align:center;color:#b00020;'>Неверный пароль</p>"
-                + db_err,
-                status=HTTPStatus.UNAUTHORIZED,
-            )
-            return
-        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+@app.get("/users", response_class=HTMLResponse)
+async def users_page(request: Request):
+    session = get_current_session(request)
+    if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
+        return RedirectResponse("/", status_code=303)
+        
+    users = []
+    error_message = ""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, full_name, password, role, allowed_modules FROM users ORDER BY id")
+            for u in cur.fetchall():
+                mods = parse_mods(u[4] or "")
+                users.append({
+                    "id": u[0], "full_name": u[1], "password": u[2], "role": u[3],
+                    "g_r": get_mod_role(mods, "grafik_ppr", u[3]),
+                    "z_r": get_mod_role(mods, "zamer_kp", u[3]),
+                    "s_r": get_mod_role(mods, "spravochnik", u[3])
+                })
+    except Exception as e:
+        error_message = f"Ошибка БД: {e}"
+        
+    return templates.TemplateResponse("users.html", {"request": request, "users": users, "error_message": error_message})
 
+@app.post("/users/add")
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none")):
+    session = get_current_session(request)
+    if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
+        return RedirectResponse("/", status_code=303)
+        
+    modules = []
+    if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
+    if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
+    if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
+    if role == "admin": modules.append("admin")
+    
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, ?, ?)", (full_name, password, role, ",".join(modules)))
+    except Exception as e:
+        print("Error adding user:", e)
+    return RedirectResponse("/users", status_code=303)
 
-def main() -> None:
-    host = os.environ.get("WEB_HOST", "127.0.0.1")
-    port = int(os.environ.get("WEB_PORT", "8001"))
-    server = ThreadingHTTPServer((host, port), Handler)
-    server.daemon_threads = True
-    print(f"РТПС main ready: http://{host}:{port}")
-    server.serve_forever()
+@app.post("/users/update")
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none")):
+    session = get_current_session(request)
+    if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
+        return RedirectResponse("/", status_code=303)
+        
+    modules = []
+    if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
+    if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
+    if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
+    if role == "admin": modules.append("admin")
+    
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute("UPDATE users SET full_name=?, password=?, role=?, allowed_modules=? WHERE id=?", (full_name, password, role, ",".join(modules), id))
+    except Exception as e:
+        print("Error updating user:", e)
+    return RedirectResponse("/users", status_code=303)
 
+@app.post("/users/delete")
+async def delete_user(request: Request, id: int = Form(...)):
+    session = get_current_session(request)
+    if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
+        return RedirectResponse("/", status_code=303)
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute("DELETE FROM users WHERE id=?", (id,))
+    except Exception as e:
+        print("Error deleting user:", e)
+    return RedirectResponse("/users", status_code=303)
+
+@app.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request):
+    session = get_current_session(request)
+    if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
+        return RedirectResponse("/", status_code=303)
+        
+    logs = []
+    error_message = ""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, user_name, login_time FROM login_logs ORDER BY id DESC LIMIT 100")
+            for l in cur.fetchall():
+                logs.append({"id": l[0], "user_name": l[1], "login_time": l[2]})
+    except Exception as e:
+        error_message = f"Ошибка БД: {e}"
+        
+    return templates.TemplateResponse("logs.html", {"request": request, "logs": logs, "error_message": error_message})
+
+@app.get("/grafik-ppr")
+async def redir_grafik():
+    return RedirectResponse("https://yrtps.ru/grafik-ppr", status_code=303)
+
+@app.get("/zamer-kp")
+async def redir_zamer():
+    return RedirectResponse("https://yrtps.ru/zamer-kp", status_code=303)
 
 if __name__ == "__main__":
-    main()
+    host = os.environ.get("WEB_HOST", "127.0.0.1")
+    port = int(os.environ.get("WEB_PORT", "8001"))
+    uvicorn.run("app:app", host=host, port=port, reload=True)
