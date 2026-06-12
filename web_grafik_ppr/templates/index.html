@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>График ППР web {{APP_VERSION}}</title>
+  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
+  <script>
+    window.APP_CONFIG = {
+      APP_VERSION: "{{APP_VERSION}}",
+      STATE_JSON: {{STATE_JSON}},
+      EMPLOYEE_NAMES: {{EMPLOYEE_NAMES}},
+      CAN_EDIT: {{CAN_EDIT}},
+      TEM_NORM_ROWS: {{TEM_NORM_ROWS}},
+      AGR_NORM_ROWS: {{AGR_NORM_ROWS}},
+      APP_PREFIX: "{{APP_PREFIX}}"
+    };
+  </script>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="titlebox">
+        <h1>График ППР</h1>
+        <div class="sub">Версия {{APP_VERSION}}</div>
+      </div>
+      <div class="controls">
+      <a class="home-link" href="/" onclick="return requestHomeClick(event)">На главную</a>
+      <div class="nav" id="sectionNav"></div>
+      {{TOOLBAR}}
+      </div>
+    </div>
+  <div class="panel">
+      <div id="content"></div>
+    </div>
+  </div>
+  <div id="leaveModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-window leave-window" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Сохранить изменения?</div>
+      </div>
+      <div id="leaveMessage" class="leave-body">Есть несохранённые изменения.</div>
+      <div class="section-modal-actions">
+        <button onclick="resolveLeaveChoice(true)">Да</button>
+        <button class="primary" onclick="resolveLeaveChoice(false)">Нет</button>
+      </div>
+    </div>
+  </div>
+  <div id="reportModal" class="modal-overlay" aria-hidden="true" onclick="closeReportModal()">
+    <div class="modal-window" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div id="reportTitle">Отчет</div>
+        <button class="modal-close" onclick="closeReportModal()">×</button>
+      </div>
+      <div id="reportBody" class="modal-body">
+        <div class="report-loading">Подготовка отчета...</div>
+      </div>
+      <div class="modal-actions">
+        <button onclick="downloadReportExcel()">Отчет в Excel</button>
+        <button class="primary" onclick="saveReportAndClose()">Сохранить примечания и Закрыть</button>
+      </div>
+    </div>
+  </div>
+  <div id="normsModal" class="modal-overlay" aria-hidden="true" onclick="closeNormsModal()">
+    <div class="modal-window" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Нормы / парк</div>
+        <button class="modal-close" onclick="closeNormsModal()">×</button>
+      </div>
+      <div id="normsModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button class="primary" onclick="closeNormsModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+  <div id="actsModal" class="modal-overlay" aria-hidden="true" onclick="closeActsModal()">
+    <div class="modal-window wide" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Акты</div>
+        <button class="modal-close" onclick="closeActsModal()">×</button>
+      </div>
+      <div id="actsModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="saveActsAndClose()">Сохранить и Закрыть</button>
+        <button class="primary" onclick="closeActsModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+  <div id="tu28Modal" class="modal-overlay" aria-hidden="true" onclick="closeTu28Modal()">
+    <div class="modal-window wide" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">ТУ-28</div>
+        <button class="modal-close" onclick="closeTu28Modal()">×</button>
+      </div>
+      <div id="tu28ModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeTu28Modal()">Закрыть</button>
+        <button id="btnTu28Staff" class="primary" onclick="openTu28StaffModal()">Персонал</button>
+      </div>
+    </div>
+  </div>
+  <div id="tu28StaffModal" class="modal-overlay" aria-hidden="true" onclick="closeTu28StaffModal()">
+    <div class="modal-window wide" style="width:fit-content; max-width:calc(100vw - 36px);" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Ответственные за ремонт</div>
+        <button class="modal-close" onclick="closeTu28StaffModal()">×</button>
+      </div>
+      <div id="tu28StaffModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeTu28StaffModal()">Отмена</button>
+        <button class="primary" onclick="confirmTu28Staff()">OK</button>
+      </div>
+    </div>
+  </div>
+  <div id="errorModal" class="modal-overlay" aria-hidden="true" onclick="closeErrorModal()">
+    <div class="modal-window" style="width:min(900px, calc(100vw - 36px));" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Ошибка</div>
+        <button class="modal-close" onclick="closeErrorModal()">×</button>
+      </div>
+      <div id="errorModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeErrorModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+<script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход - График ППР</title>
+  <style>
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; }
+    .card { max-width:420px; margin:10vh auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
+    input,button { width:100%; padding:12px; border-radius:8px; border:1px solid #d9e2ef; font:inherit; }
+    button { background:transparent; color:#1d4ed8; font-weight:700; cursor:pointer; border-color:#2f6fed; }
+    .muted { color:#607086; font-size:13px; }
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="{{APP_PREFIX}}/login">
+    <h1 style="margin-top:0;">Вход</h1>
+    <p class="muted">Введите пароль для входа.</p>
+    <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
+    <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
+    <button type="submit">Войти</button>
+  </form>
+</body>
+</html>
