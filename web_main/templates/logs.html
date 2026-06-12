@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Журнал входов</title>
+  <style>
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#f4f7fb; color:#102033; padding:20px; }
+    .card { max-width:800px; margin:0 auto; background:#fff; border:1px solid #d9e2ef; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(16,32,51,.08); }
+    table { width:100%; border-collapse:collapse; margin-top:20px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #d9e2ef; }
+    .flex { display:flex; gap:10px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="flex" style="justify-content:space-between; margin-bottom:20px;">
+        <h1 style="margin:0;">Журнал входов</h1>
+        <a href="/" style="color:#276ef1; text-decoration:none; font-weight:bold;">На главную</a>
+    </div>
+    <div style="overflow-x: auto;">
+      <table>
+      <thead>
+        <tr><th>ID</th><th>ФИО</th><th>Время входа</th></tr>
+      </thead>
+      <tbody>
+        {{LOGS_ROWS}}
+      </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
