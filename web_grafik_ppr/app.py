@@ -1947,7 +1947,6 @@ HTML_TEMPLATE = """<!doctype html>
       <div id="tu28ModalBody" class="section-modal-body"></div>
       <div class="section-modal-actions">
         <button onclick="closeTu28Modal()">Закрыть</button>
-        <button class="primary" onclick="downloadTu28()">Скачать</button>
         <button id="btnTu28Staff" class="primary" onclick="openTu28StaffModal()">Персонал</button>
       </div>
     </div>
