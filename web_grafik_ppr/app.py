@@ -1216,6 +1216,7 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             elif len(parts) == 5:
                 user_id, role, modules, safe_name, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
+                expiry_text = "2000000000"
             elif len(parts) == 4:
                 username, role, expiry_text, sig = parts
                 payload = f"{username}{sep}{role}{sep}{expiry_text}"
