@@ -9,7 +9,51 @@
   --sick: #ffe5ff;
 }
 body { margin:0; padding:0; font-family:Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
-.header { display:flex; align-items:center; justify-content:space-between; padding:12px 24px; background:#fff; border-bottom:1px solid var(--border); }
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 15px;
+  background: #f0f0f0;
+  border-bottom: 1px solid #d0d0d0;
+}
+
+.nav-tabs {
+  display: flex;
+  background: #e5e5e5;
+  border-bottom: 1px solid #d0d0d0;
+}
+
+.nav-tab {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border: 1px solid #d0d0d0;
+  border-bottom: none;
+  margin-right: 2px;
+  margin-top: 4px;
+  margin-left: 4px;
+  cursor: pointer;
+  font-family: Segoe UI, Arial, sans-serif;
+  font-size: 13px;
+}
+
+.nav-tab.active {
+  background: #ffffff;
+  font-weight: bold;
+  border-top: 2px solid #0078d7;
+  padding-bottom: 9px;
+  margin-bottom: -1px;
+}
+
+.tab-content {
+  display: none;
+  flex-grow: 1;
+  overflow: auto;
+}
+
+.tab-content.active {
+  display: flex;
+}
 .header-title { font-size:20px; font-weight:600; }
 .version { font-size:12px; color:#66758a; margin-left:8px; font-weight:normal; }
 .toolbar { display:flex; gap:16px; align-items:center; }

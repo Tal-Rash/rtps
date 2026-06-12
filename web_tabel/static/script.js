@@ -11,6 +11,14 @@ document.addEventListener("DOMContentLoaded", () => {
   loadState();
 });
 
+function switchTab(tabId) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  
+  event.currentTarget.classList.add('active');
+  document.getElementById('tab-' + tabId).classList.add('active');
+}
+
 function markDirty(dirty) {
   isDirty = dirty;
   const btn = document.getElementById("saveBtn");
@@ -65,7 +73,7 @@ function renderTable() {
   hHTML += `<th>Итого</th>`;
   thead.innerHTML = hHTML;
   
-  // Render Body
+  // Render Body for Tabel
   const tbody = document.getElementById("tabelBody");
   let bHTML = "";
   
@@ -73,7 +81,7 @@ function renderTable() {
     bHTML += `<tr>`;
     bHTML += `<td>${rIndex + 1}</td>`;
     bHTML += `<td>${escapeHtml(emp.pos)}</td>`;
-    bHTML += `<td>${escapeHtml(emp.full_name)}</td>`;
+    bHTML += `<td style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</td>`;
     bHTML += `<td>${escapeHtml(emp.tab_num)}</td>`;
     
     let total = 0;
@@ -85,7 +93,7 @@ function renderTable() {
       let classes = [];
       if (isWeekend) classes.push("cell-weekend");
       if (val === "В") classes.push("cell-weekend");
-      if (val === "ОТ") classes.push("cell-vacation");
+      if (val === "ОТ" || val === "О" || val === "ОВ" || val === "А" || val === "У") classes.push("cell-vacation");
       if (val === "Б") classes.push("cell-sick");
       if (val.match(/^[0-9]+$/)) total += parseInt(val);
       
@@ -98,6 +106,56 @@ function renderTable() {
   });
   
   tbody.innerHTML = bHTML;
+
+  // Render Data (Norms)
+  const dbody = document.getElementById("dataBody");
+  let dHTML = "";
+  const monthsNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  for (let r = 0; r < 12; r++) {
+    dHTML += `<tr><td style="text-align: left;">${monthsNames[r]}</td>`;
+    for (let c = 1; c < 8; c++) {
+      const val = (appState.ts_norms_data && appState.ts_norms_data[r] && appState.ts_norms_data[r][c]) || "";
+      dHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="dataEdited(${r}, ${c}, this)">${escapeHtml(val)}</td>`;
+    }
+    dHTML += `</tr>`;
+  }
+  dbody.innerHTML = dHTML;
+
+  // Render Employees
+  const ebody = document.getElementById("employeesBody");
+  let eHTML = "";
+  // 11 rows
+  for (let r = 0; r < 11; r++) {
+    const emp = appState.employees[r] || {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
+    eHTML += `<tr>`;
+    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'pos', this)">${escapeHtml(emp.pos)}</td>`;
+    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'name', this)">${escapeHtml(emp.name)}</td>`;
+    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'full_name', this)">${escapeHtml(emp.full_name)}</td>`;
+    eHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'tab_num', this)">${escapeHtml(emp.tab_num)}</td>`;
+    eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk', this)" ${emp.milk ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
+    eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk_issue', this)" ${emp.milk_issue ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
+    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'milk_note', this)">${escapeHtml(emp.milk_note)}</td>`;
+    eHTML += `</tr>`;
+  }
+  ebody.innerHTML = eHTML;
+
+  // Render Vacations
+  const vbody = document.getElementById("vacationsBody");
+  let vHTML = "";
+  // 11 rows
+  for (let r = 0; r < 11; r++) {
+    vHTML += `<tr>`;
+    for (let c = 0; c < 13; c++) {
+      if (c === 5 || c === 9) {
+        vHTML += `<td style="background:#f0f0f0;"></td>`; // separator
+      } else {
+        const val = (appState.vacations && appState.vacations[r] && appState.vacations[r][c]) || "";
+        vHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited(${r}, ${c}, this)">${escapeHtml(val)}</td>`;
+      }
+    }
+    vHTML += `</tr>`;
+  }
+  vbody.innerHTML = vHTML;
 }
 
 function cellEdited(r, c, el) {
@@ -105,7 +163,6 @@ function cellEdited(r, c, el) {
   appState.timesheet[r][c] = el.innerText.trim();
   markDirty(true);
   
-  // Recalculate total for row
   let total = 0;
   const days = daysInMonth(appState.year, appState.month);
   for (let d = 1; d <= days; d++) {
@@ -115,6 +172,30 @@ function cellEdited(r, c, el) {
   document.getElementById(`total_${r}`).innerHTML = `<strong>${total}</strong>`;
 }
 
+function dataEdited(r, c, el) {
+  if (!appState.ts_norms_data) appState.ts_norms_data = {};
+  if (!appState.ts_norms_data[r]) appState.ts_norms_data[r] = {};
+  appState.ts_norms_data[r][c] = el.innerText.trim();
+  markDirty(true);
+}
+
+function empEdited(r, field, el) {
+  if (!appState.employees[r]) appState.employees[r] = {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
+  if (field === 'milk' || field === 'milk_issue') {
+    appState.employees[r][field] = el.checked ? 1 : 0;
+  } else {
+    appState.employees[r][field] = el.innerText.trim();
+  }
+  markDirty(true);
+}
+
+function vacEdited(r, c, el) {
+  if (!appState.vacations) appState.vacations = {};
+  if (!appState.vacations[r]) appState.vacations[r] = {};
+  appState.vacations[r][c] = el.innerText.trim();
+  markDirty(true);
+}
+
 async function saveState() {
   if (!CAN_EDIT) return;
   const btn = document.getElementById("saveBtn");
@@ -122,16 +203,35 @@ async function saveState() {
   btn.textContent = "Сохранение...";
   
   try {
-    // Transform timesheet back to array for sending
     const arrTimesheet = [];
     appState.employees.forEach((_, r) => {
       arrTimesheet[r] = appState.timesheet[r] || {};
     });
     
+    // Convert objects to arrays for vacations and norms
+    const arrVac = [];
+    for (let r=0; r<11; r++) { arrVac[r] = (appState.vacations && appState.vacations[r]) || {}; }
+    const arrNorms = [];
+    for (let r=0; r<12; r++) { arrNorms[r] = (appState.ts_norms_data && appState.ts_norms_data[r]) || {}; }
+
+    // Clean empty employees from array end to avoid inflating DB
+    let cleanEmployees = [...appState.employees];
+    while(cleanEmployees.length > 0) {
+      let last = cleanEmployees[cleanEmployees.length - 1];
+      if (!last || (!last.name && !last.full_name && !last.tab_num && !last.pos)) {
+        cleanEmployees.pop();
+      } else {
+        break;
+      }
+    }
+
     const payload = {
       year: appState.year,
       month: appState.month,
-      timesheet: arrTimesheet
+      timesheet: arrTimesheet,
+      employees: cleanEmployees,
+      vacations: arrVac,
+      ts_norms_data: arrNorms
     };
     
     const res = await fetch(`${APP_PREFIX}/api/state`, {

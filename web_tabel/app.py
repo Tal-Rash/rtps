@@ -179,12 +179,21 @@ def load_state(year: int, month: int) -> dict:
         except Exception:
             pass
 
+        ts_norms_data = {}
+        try:
+            norms_rows = cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)).fetchall()
+            for r in norms_rows:
+                ts_norms_data.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
+        except Exception:
+            pass
+
     return {
         "year": year,
         "month": month,
         "employees": employees,
         "timesheet": timesheet,
         "vacations": vacations,
+        "ts_norms_data": ts_norms_data,
     }
 
 @app.get("/api/state")
@@ -204,21 +213,50 @@ async def api_save_state(request: Request):
     payload = await request.json()
     year = int(payload.get("year", dt.date.today().year))
     month = int(payload.get("month", dt.date.today().month))
-    timesheet = payload.get("timesheet", [])
+    timesheet = payload.get("timesheet")
+    employees = payload.get("employees")
+    vacations = payload.get("vacations")
+    ts_norms_data = payload.get("ts_norms_data")
     
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         cur.execute("BEGIN")
-        cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, str(month)))
         
-        insert_rows = []
-        for r, row_data in enumerate(timesheet):
-            if not row_data: continue
-            for c, v in row_data.items():
-                if v:
-                    insert_rows.append((year, str(month), r, int(c), str(v)))
-                    
-        cur.executemany("INSERT INTO timesheet(y, m, r, c, v) VALUES(?,?,?,?,?)", insert_rows)
+        if timesheet is not None:
+            cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, str(month)))
+            insert_ts = []
+            for r, row_data in enumerate(timesheet):
+                if not row_data: continue
+                for c, v in row_data.items():
+                    if v: insert_ts.append((year, str(month), r, int(c), str(v)))
+            cur.executemany("INSERT INTO timesheet(y, m, r, c, v) VALUES(?,?,?,?,?)", insert_ts)
+
+        if employees is not None:
+            cur.execute("DELETE FROM employees WHERE y=?", (year,))
+            insert_emp = []
+            for r, emp in enumerate(employees):
+                insert_emp.append((year, emp.get("pos",""), emp.get("name",""), emp.get("tab_num",""), 
+                                   emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note","")))
+            cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note) VALUES(?,?,?,?,?,?,?,?)", insert_emp)
+
+        if vacations is not None:
+            cur.execute("DELETE FROM vacations WHERE y=?", (year,))
+            insert_vac = []
+            for r, row_data in enumerate(vacations):
+                if not row_data: continue
+                for c, v in row_data.items():
+                    if v: insert_vac.append((year, r, int(c), str(v)))
+            cur.executemany("INSERT INTO vacations(y, r, c, v) VALUES(?,?,?,?)", insert_vac)
+
+        if ts_norms_data is not None:
+            cur.execute("DELETE FROM ts_norms_data WHERE y=?", (year,))
+            insert_norms = []
+            for r, row_data in enumerate(ts_norms_data):
+                if not row_data: continue
+                for c, v in row_data.items():
+                    if v: insert_norms.append((year, r, int(c), str(v)))
+            cur.executemany("INSERT INTO ts_norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
+
         conn.commit()
         
     return json_response({"status": "ok"})
