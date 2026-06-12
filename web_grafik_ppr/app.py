@@ -2919,7 +2919,7 @@ function renderTu28(){
   const rowObj = m && ui.tu28RowIndex != null ? m.fact[ui.tu28RowIndex] : null;
   const extraList = rowObj && rowObj.tu28_extra ? rowObj.tu28_extra : [];
   const locked = rowObj && rowObj.tu28_locked ? true : false;
-  const disableExtra = locked || !CAN_EDIT;
+  const disableExtra = locked;
   const extraRows = extraList.map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
       <input type="text" class="input" style="flex:1;" value="${esc(txt)}" ${disableExtra ? 'disabled' : ''} onchange="updateTu28Extra(${idx}, this.value)">
@@ -3022,16 +3022,15 @@ function addTu28Extra(){
   if (rowObj.tu28_locked) return;
   if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
   rowObj.tu28_extra.push("");
-  saveState();
+  if (CAN_EDIT) saveState();
   render();
 }
 function updateTu28Extra(idx, val){
-  if (!CAN_EDIT) return;
   const m = appState.months[ui.tu28MonthIndex];
   const rowObj = m.fact[ui.tu28RowIndex];
   if (rowObj.tu28_locked) return;
   rowObj.tu28_extra[idx] = val;
-  markDirty(true);
+  if (CAN_EDIT) markDirty(true);
 }
 function toggleTu28Locked(checked) {
   if (!CAN_EDIT) return;
@@ -3046,7 +3045,7 @@ function removeTu28Extra(idx){
   if (rowObj.tu28_locked) return;
   if (rowObj.tu28_extra) {
     rowObj.tu28_extra.splice(idx, 1);
-    saveState();
+    if (CAN_EDIT) saveState();
     render();
   }
 }
