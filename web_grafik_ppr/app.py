@@ -3447,44 +3447,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if route == "/api/tu28-export":
-            if not require_auth(self):
-                return
-            payload = {}
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-            except Exception:
-                payload = {}
-            year = int(payload.get("year") or dt.date.today().year)
-            month = s(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
-            row_raw = payload.get("row", None)
-            if row_raw in (None, ""):
-                json_response(self, {"error": "В месяце нет ремонтов для ТУ-28"}, status=HTTPStatus.BAD_REQUEST)
-                return
-            try:
-                row_idx = int(row_raw)
-            except Exception:
-                json_response(self, {"error": "Не удалось определить строку ремонта"}, status=HTTPStatus.BAD_REQUEST)
-                return
-            staff_list = payload.get("staff") or []
-            if not isinstance(staff_list, list):
-                staff_list = []
-            extra_repairs = payload.get("extra_repairs") or []
-            print(f"DEBUG: raw extra_repairs={payload.get('extra_repairs')} | tu28ExtraRepairs={payload.get('debugger_tu28ExtraRepairs')} | ui.tu28RowIndex={payload.get('debugger_tu28RowIndex')} | row.rowIndex={payload.get('debugger_row_rowIndex')}", flush=True)
-            if not isinstance(extra_repairs, list):
-                extra_repairs = []
-            try:
-                body, filename = build_tu28_workbook(year, month, row_idx, staff_list, extra_repairs=extra_repairs)
-            except Exception as exc:
-                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            self.send_header("Content-Disposition", content_disposition_attachment(filename))
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
+
         if route == "/api/report-export":
             if not require_auth(self):
                 return
@@ -3580,8 +3543,12 @@ class Handler(BaseHTTPRequestHandler):
             staff_list = payload.get("staff") or []
             if not isinstance(staff_list, list):
                 staff_list = []
+            extra_repairs = payload.get("extra_repairs") or []
+            print(f"DEBUG: raw extra_repairs={payload.get('extra_repairs')} | tu28ExtraRepairs={payload.get('debugger_tu28ExtraRepairs')} | ui.tu28RowIndex={payload.get('debugger_tu28RowIndex')} | row.rowIndex={payload.get('debugger_row_rowIndex')}", flush=True)
+            if not isinstance(extra_repairs, list):
+                extra_repairs = []
             try:
-                body, filename = build_tu28_workbook(year, month, row_idx, staff_list)
+                body, filename = build_tu28_workbook(year, month, row_idx, staff_list, extra_repairs=extra_repairs)
             except Exception as exc:
                 json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
