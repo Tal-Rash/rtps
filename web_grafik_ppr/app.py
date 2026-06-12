@@ -2825,6 +2825,13 @@ function renderTu28(){
       <td>${esc(c.code)}</td>
     </tr>
   `).join('');
+  const extraRows = ui.tu28ExtraRepairs.map((txt, idx) => `
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
+      <button style="padding:4px 12px; color:#b00020; font-weight:bold; background:#ffebee; border-radius:4px;" onclick="removeTu28Extra(${idx})">×</button>
+    </div>
+  `).join('');
+
   return `
     <div class="section-head">
       <div style="display:flex; justify-content:center; width:100%;">
@@ -2854,6 +2861,13 @@ function renderTu28(){
         <tbody>${rows || '<tr><td colspan="5">В месяце нет ремонтов для ТУ-28</td></tr>'}</tbody>
       </table>
     </div>
+    <div style="margin-top:16px; padding:0 8px; text-align:left; max-width:600px; margin-left:auto; margin-right:auto;">
+      <div style="font-weight:600; margin-bottom:8px; color:#334155;">Дополнительные ремонты:</div>
+      ${extraRows}
+      <div style="margin-top:12px;">
+        <button onclick="addTu28Extra()" style="background:#e2e8f0; color:#102033; font-weight:600; padding:6px 12px; border-radius:6px; font-size:13px;">+ Добавить Доп. ремонт</button>
+      </div>
+    </div>
   `;
 }
 function renderTu28Staff(){
@@ -2879,17 +2893,6 @@ function renderTu28Staff(){
       </tr>
     `;
   }).join('');
-  const extraRows = ui.tu28ExtraRepairs.map((txt, idx) => `
-      <tr style="background:#fcfcfd;">
-        <td>Доп. ${idx + 1}</td>
-        <td>
-          <input type="text" style="width:100%; border:1px solid var(--line); border-radius:4px; padding:4px 8px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)">
-        </td>
-        <td style="text-align:center;">
-          <button style="padding:2px 8px; color:#b00020; font-weight:bold; background:none;" onclick="removeTu28Extra(${idx})">×</button>
-        </td>
-      </tr>
-  `).join('');
   return `
     <div style="margin-bottom:10px; font-weight:700;">Выберите ФИО исполнителей из списка:</div>
     <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
@@ -2903,14 +2906,11 @@ function renderTu28Staff(){
           <tr>
             <th>#</th>
             <th>Вид работ (узел)</th>
-            <th>ФИО / Описание</th>
+            <th>ФИО</th>
           </tr>
         </thead>
-        <tbody>${tableRows}${extraRows}</tbody>
+        <tbody>${tableRows}</tbody>
       </table>
-    </div>
-    <div style="margin-top:12px; display:flex; justify-content:center;">
-      <button onclick="addTu28Extra()" style="background:#e2e8f0; color:#102033; font-weight:600; padding:6px 12px;">+ Добавить Доп. ремонт</button>
     </div>
   `;
 }
