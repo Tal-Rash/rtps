@@ -1980,7 +1980,7 @@ HTML_TEMPLATE = """<!doctype html>
 const BOOT_VERSION = "{{APP_VERSION}}";
 let appState = {{STATE_JSON}};
 const EMPLOYEE_NAMES = {{EMPLOYEE_NAMES}};
-let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: [], tu28ExtraRepairs: [] };
+let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: {}, tu28ExtraRepairs: {} };
 let dirty = false;
 let savedAppState = null;
 let savedMonthsState = null;
@@ -2825,13 +2825,12 @@ function renderTu28(){
       <td>${esc(c.code)}</td>
     </tr>
   `).join('');
-  const extraRows = ui.tu28ExtraRepairs.map((txt, idx) => `
+  const extraRows = (ui.tu28ExtraRepairs[ui.tu28RowIndex] || []).map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
       <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
       <button style="padding:4px 12px; color:#b00020; font-weight:bold; background:#ffebee; border-radius:4px;" onclick="removeTu28Extra(${idx})">×</button>
     </div>
   `).join('');
-
   return `
     <div class="section-head">
       <div style="display:flex; justify-content:center; width:100%;">
@@ -2882,13 +2881,16 @@ function renderTu28Staff(){
   ];
   const options = ['<option value=""></option>'].concat(EMPLOYEE_NAMES.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`)).join('');
   const tableRows = rows.map((label, idx) => {
-    const current = ui.tu28Staff[idx] || '';
+    const currentStaff = ui.tu28Staff[ui.tu28RowIndex] || [];
+    const current = currentStaff[idx] || '';
     return `
       <tr>
         <td>${idx + 1}</td>
         <td>${esc(label)}</td>
         <td>
-          <select data-index="${idx}" class="tu28-staff-select">${options}</select>
+          <select data-index="${idx}" class="tu28-staff-select">
+            ${options.replace(`value="${esc(current)}"`, `value="${esc(current)}" selected`)}
+          </select>
         </td>
       </tr>
     `;
@@ -2915,20 +2917,22 @@ function renderTu28Staff(){
   `;
 }
 function addTu28Extra(){
-  ui.tu28ExtraRepairs.push("");
+  if (!ui.tu28ExtraRepairs[ui.tu28RowIndex]) ui.tu28ExtraRepairs[ui.tu28RowIndex] = [];
+  ui.tu28ExtraRepairs[ui.tu28RowIndex].push("");
   render();
 }
 function updateTu28Extra(idx, val){
-  ui.tu28ExtraRepairs[idx] = val;
+  if (!ui.tu28ExtraRepairs[ui.tu28RowIndex]) ui.tu28ExtraRepairs[ui.tu28RowIndex] = [];
+  ui.tu28ExtraRepairs[ui.tu28RowIndex][idx] = val;
 }
 function removeTu28Extra(idx){
-  ui.tu28ExtraRepairs.splice(idx, 1);
-  render();
+  if (ui.tu28ExtraRepairs[ui.tu28RowIndex]) {
+    ui.tu28ExtraRepairs[ui.tu28RowIndex].splice(idx, 1);
+    render();
+  }
 }
 function openTu28Modal(){
   ui.tu28RowIndex = null;
-  ui.tu28Staff = [];
-  ui.tu28ExtraRepairs = [];
   ui.modal = 'tu28';
   render();
 }
@@ -3043,15 +3047,11 @@ function closeTu28StaffModal(){
 function setTu28Month(index){
   ui.tu28MonthIndex = Number(index);
   ui.tu28RowIndex = null;
-  ui.tu28Staff = [];
-  ui.tu28ExtraRepairs = [];
   render();
 }
 function selectTu28Row(rowIndex){
   if (ui.tu28RowIndex !== Number(rowIndex)) {
     ui.tu28RowIndex = Number(rowIndex);
-    ui.tu28Staff = [];
-    ui.tu28ExtraRepairs = [];
     render();
   }
 }
@@ -3061,7 +3061,7 @@ function downloadTu28(){
   const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
-  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff || [], extra_repairs: ui.tu28ExtraRepairs || [] };
+  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff[row.rowIndex] || [], extra_repairs: ui.tu28ExtraRepairs[row.rowIndex] || [] };
   fetch(`{{APP_PREFIX}}/api/tu28-export`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json; charset=utf-8'},
