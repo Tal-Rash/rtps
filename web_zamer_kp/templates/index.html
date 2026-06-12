@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Замер КП</title>
+  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Замер КП</h1>
+        <div class="muted">Версия {{APP_VERSION}}</div>
+      </div>
+      <div class="actions">
+        <a href="/">На главную</a>
+        <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
+        <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+        <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Разделы">
+      <button id="tabInput" class="tab active" type="button" ${CAN_EDIT ? '' : 'style="display:none"'} onclick="switchTab('input')">Ввод замера</button>
+      <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
+      <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
+    </div>
+
+    <div id="panelInput" class="panel active">
+      <div class="filters" style="margin-top:0;">
+        <label class="input-locomotive-filter">Локомотив
+          <div class="loco-picker">
+            <input id="locomotive" type="text" autocomplete="off" aria-autocomplete="list" style="width:220px">
+            <div id="locomotiveDropdown" class="loco-dropdown" role="listbox" aria-label="Список локомотивов"></div>
+          </div>
+        </label>
+        <label>Дата замера
+          <input id="measurementDate" type="date" style="width:150px">
+        </label>
+        <label>Вид ремонта
+          <select id="repairType" style="width:150px"></select>
+        </label>
+      <button id="saveBtn" class="primary" onclick="saveToArchive()">Сохранить в архив</button>
+      </div>
+      <div id="inputMeta" class="input-meta"></div>
+      <div class="table-shell">
+        <table id="inputTable" aria-label="Ввод замера КП">
+          <colgroup>
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+            <col style="width:60px"><col style="width:60px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="small section-col" rowspan="2">Секция<br>(вагон)</th>
+              <th class="small number-col" rowspan="2">Номер<br>КП</th>
+              <th class="measure-head" colspan="2">Прокат</th>
+              <th class="measure-head" colspan="2">Толщина гребня</th>
+              <th class="measure-head" colspan="2">Параметр крутизны гребня</th>
+              <th class="measure-head" colspan="2">Толщина бандажа</th>
+              <th class="measure-head" colspan="2">Диаметр бандажа</th>
+            </tr>
+            <tr>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+              <th class="small measure-head">лев</th>
+              <th class="small measure-head">прав</th>
+            </tr>
+          </thead>
+          <tbody id="inputBody"></tbody>
+        </table>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <div id="panelKp" class="panel">
+      <div class="kp-controls" style="margin-top:0;">
+        <label>Локомотив
+          <select id="kpLocomotive" style="width:220px"></select>
+        </label>
+        <label>Поиск
+          <input id="kpSearch" type="text" placeholder="№ КП, ось, диаметр" style="width:260px">
+        </label>
+      </div>
+      <div class="kp-note">Памятка: редактирование диаметров колесных центров доступно только при выборе конкретного локомотива.</div>
+      <div class="kp-legend">
+        <div class="kp-legend-item"><span class="kp-legend-swatch kp-legend-yellow"></span><span>жёлтый - данные диаметров заполнены не полностью</span></div>
+        <div class="kp-legend-item"><span class="kp-legend-swatch kp-legend-green"></span><span>зелёный - все данные диаметров внесены</span></div>
+        <div class="kp-legend-item"><span class="kp-legend-swatch kp-legend-empty"></span><span>без цвета - данных по диаметрам нет</span></div>
+      </div>
+      <div class="table-shell kp-table-shell">
+        <table id="kpTable" class="kp-table" aria-label="КП данные">
+          <colgroup id="kpColgroup">
+            <col style="width:160px">
+            <col style="width:160px">
+            <col style="width:160px">
+            <col style="width:160px">
+          </colgroup>
+          <thead id="kpHead"></thead>
+          <tbody id="kpBody"></tbody>
+        </table>
+      </div>
+      <div id="kpStatus" class="kp-status"></div>
+    </div>
+
+    <div id="panelArchive" class="panel">
+      <div class="archive-controls">
+        <label>Локомотив
+          <select id="archiveLocomotive" style="width:220px"></select>
+        </label>
+        <label>Поиск
+          <input id="archiveSearch" type="text" placeholder="Дата, локомотив, вид ремонта" />
+        </label>
+        <button id="archiveSortBtn" type="button" onclick="toggleArchiveSort()">⬇ НОВЫЕ → СТАРЫЕ</button>
+        <button id="archiveDeleteBtn" type="button" onclick="deleteSelectedArchiveMeasurement()">Удалить из архива</button>
+        <div class="archive-actions-menu" id="archiveActionsMenu">
+          <button id="archiveActionsBtn" type="button" onclick="toggleArchiveActionsMenu(event)">Импорт / экспорт ▾</button>
+          <div class="menu-panel" role="menu" aria-label="Импорт и экспорт архива">
+            <button type="button" onclick="chooseArchiveExcelFile(); closeArchiveActionsMenu()">Импорт из Excel</button>
+            <button type="button" onclick="openArchiveExportDialog(); closeArchiveActionsMenu()">Экспорт в Excel</button>
+            <button type="button" onclick="downloadArchiveTemplate(); closeArchiveActionsMenu()">Шаблон Excel</button>
+          </div>
+          <input id="archiveExcelFile" type="file" accept=".xlsx,.xlsm" style="display:none">
+        </div>
+      </div>
+
+      <div class="table-shell archive-table-shell">
+        <div class="archive-head-shell">
+          <table id="archiveHeadTable" class="archive-table" aria-hidden="true">
+            <colgroup>
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Дата<br>ремонт</span>
+                  <span class="archive-head-expanded">Дата выполнения обмера<br>и вид ремонта</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">Секция</th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Прокат</span>
+                  <span class="archive-head-expanded">Наибольший прокат,<br>мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Гребень</span>
+                  <span class="archive-head-expanded">Наименьшая толщина<br>гребня, мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Крутизна</span>
+                  <span class="archive-head-expanded">Наибольший параметр<br>крутизны гребня, мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Бандаж</span>
+                  <span class="archive-head-expanded">Наименьшая толщ. бандажа<br>(за вычетом проката), мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">Диаметр</span>
+                  <span class="archive-head-expanded">Наибольшая разница<br>диаметров бандажей в комплекте, мм</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">КП с бандажом</span>
+                  <span class="archive-head-expanded">Число КП с бандажами,<br>обточенными посл. раз<br>перед сменой бандажей</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">
+                  <span class="archive-head-collapsed">КП с прокатом 6+</span>
+                  <span class="archive-head-expanded">Число колесных пар с<br>прокатом 6 мм и более</span>
+                </th>
+                <th class="archive-vert-head archive-sticky-col" rowspan="2">Номер<br>КП</th>
+                <th colspan="2">Прокат</th>
+                <th colspan="2">Толщина<br>гребня</th>
+                <th colspan="2">Крутизна<br>гребня</th>
+                <th colspan="2">Толщина<br>бандажа</th>
+                <th colspan="2">Диаметр<br>бандажа</th>
+              </tr>
+              <tr>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+                <th>лев</th><th>прав</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div class="archive-body-shell">
+          <table id="archiveTable" class="archive-table archive-body-table" aria-label="Архив замеров">
+            <colgroup>
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:80px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+              <col style="width:60px"><col style="width:60px">
+            </colgroup>
+            <tbody id="archiveBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="archiveStatus" class="status"></div>
+    </div>
+  </div>
+
+  <div id="normsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="normsTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="normsTitle">Нормы колесных пар</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closeNormsDialog()">×</button>
+      </div>
+      <div class="norms-toolbar">
+        <button id="addNormBtn" type="button" onclick="addNormRow()">Добавить показатель</button>
+      </div>
+      <table class="norms-table" aria-label="Нормы колесных пар">
+        <colgroup>
+          <col style="width:300px">
+          <col style="width:170px">
+          <col style="width:130px">
+          <col style="width:130px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Показатель (название)</th>
+            <th>Условие</th>
+            <th>Желтый порог</th>
+            <th>Красный порог</th>
+          </tr>
+        </thead>
+        <tbody id="normsBody"></tbody>
+      </table>
+      <div id="normsStatus" class="status"></div>
+      <div class="modal-actions">
+        <button type="button" onclick="closeNormsDialog()">Отмена</button>
+        <button id="saveNormsBtn" class="primary" type="button" onclick="saveNormsDialog()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="archiveExportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="archiveExportTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="archiveExportTitle">Экспорт архива в Excel</h2>
+        <button type="button" title="Закрыть" aria-label="Закрыть" onclick="closeArchiveExportDialog()">×</button>
+      </div>
+      <div class="filters" style="align-items:flex-start;">
+        <label>Локомотивы
+          <select id="archiveExportLocomotives" multiple size="8" style="width:260px"></select>
+        </label>
+        <label>Дата с
+          <input id="archiveExportDateFrom" type="date" style="width:160px">
+        </label>
+        <label>Дата по
+          <input id="archiveExportDateTo" type="date" style="width:160px">
+        </label>
+      </div>
+      <div id="archiveExportStatus" class="status">Если локомотивы не выбраны, экспортируются все.</div>
+      <div class="modal-actions">
+        <button type="button" onclick="closeArchiveExportDialog()">Отмена</button>
+        <button class="primary" type="button" onclick="downloadArchiveExport()">Экспорт</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const CAN_EDIT = {{CAN_EDIT}};
+  const APP_PREFIX = '{{APP_PREFIX}}';
+  const APP_VERSION = '{{APP_VERSION}}';
+  const API = '{{APP_PREFIX}}';
+  const LOCOMOTIVE_CHOICES = {{LOCOMOTIVE_CHOICES}};
+</script>
+<script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
+</body>
+</html>
