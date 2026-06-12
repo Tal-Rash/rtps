@@ -1017,11 +1017,13 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         tags[f"[{components[idx]}]"] = format_fio_initials(name)
 
     extra_repairs = extra_repairs or []
+    print(f"DEBUG: build_tu28_workbook received extra_repairs={extra_repairs}", flush=True)
     for i in range(1, 21):
         tags[f"[ДОП_РЕМОНТ_{i}]"] = ""
     for i, extra in enumerate(extra_repairs, start=1):
         if i <= 20:
             tags[f"[ДОП_РЕМОНТ_{i}]"] = str(extra).strip()
+    print(f"DEBUG: tags built: {[k for k in tags.keys() if 'ДОП' in k and tags[k]]}", flush=True)
 
     template_path = find_tu28_template_path()
     if template_path:
@@ -2827,7 +2829,7 @@ function renderTu28(){
   `).join('');
   const extraRows = (ui.tu28ExtraRepairs[ui.tu28RowIndex] || []).map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
-      <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
+      <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" oninput="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
       <button style="padding:4px 12px; color:#b00020; font-weight:bold; background:#ffebee; border-radius:4px;" onclick="removeTu28Extra(${idx})">×</button>
     </div>
   `).join('');
@@ -3034,7 +3036,9 @@ function openTu28StaffModal(){
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
   ui.tu28RowIndex = row.rowIndex;
-  ui.tu28Staff = ui.tu28Staff.length ? ui.tu28Staff : ["", "", "", "", "", "", ""];
+  if (!ui.tu28Staff[row.rowIndex]) {
+    ui.tu28Staff[row.rowIndex] = ["", "", "", "", "", "", ""];
+  }
   ui.modal = 'tu28staff';
   render();
 }
