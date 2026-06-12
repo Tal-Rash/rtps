@@ -1947,7 +1947,8 @@ HTML_TEMPLATE = """<!doctype html>
       <div id="tu28ModalBody" class="section-modal-body"></div>
       <div class="section-modal-actions">
         <button onclick="closeTu28Modal()">Закрыть</button>
-        <button class="primary" onclick="openTu28StaffModal()">Персонал</button>
+        <button class="primary" onclick="downloadTu28()">Скачать</button>
+        <button id="btnTu28Staff" class="primary" onclick="openTu28StaffModal()">Персонал</button>
       </div>
     </div>
   </div>
@@ -2963,6 +2964,10 @@ function renderOpenModals(){
       tu28Modal.classList.add('visible');
       tu28Modal.setAttribute('aria-hidden', 'false');
       tu28Body.innerHTML = renderTu28();
+      const btnTu28Staff = document.getElementById('btnTu28Staff');
+      if (btnTu28Staff) {
+        btnTu28Staff.style.display = appState.can_edit ? '' : 'none';
+      }
     } else {
       tu28Modal.classList.remove('visible');
       tu28Modal.setAttribute('aria-hidden', 'true');
