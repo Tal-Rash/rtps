@@ -792,6 +792,12 @@ class Handler(BaseHTTPRequestHandler):
                         else:
                             conn.execute("INSERT INTO users (full_name, password, role, allowed_modules) VALUES (?, ?, 'pending', '')",
                                 (full_name, password))
+                    
+                    client_ip = self.headers.get("X-Real-IP") or self.headers.get("X-Forwarded-For") or self.client_address[0]
+                    if client_ip:
+                        client_ip = client_ip.split(",")[0].strip()
+                        if client_ip in FAILED_ATTEMPTS:
+                            del FAILED_ATTEMPTS[client_ip]
                 except Exception as e:
                     print("Error requesting access:", e)
             
@@ -813,17 +819,37 @@ class Handler(BaseHTTPRequestHandler):
             import time
             now = time.time()
             attempts = FAILED_ATTEMPTS.get(client_ip, [])
-            attempts = [t for t in attempts if now - t < 900] # 15 minutes lockout
+            # Prune attempts older than 24 hours
+            attempts = [t for t in attempts if now - t < 86400]
             FAILED_ATTEMPTS[client_ip] = attempts
             
-            if len(attempts) >= 5:
+            num_attempts = len(attempts)
+            if num_attempts >= 15:
                 _send_html(
                     self,
                     LOGIN_TEMPLATE.replace("{{USER}}", "")
-                    + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Пожалуйста, подождите 15 минут.</p>",
+                    + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки.</p>",
                     status=HTTPStatus.TOO_MANY_REQUESTS,
                 )
                 return
+            elif num_attempts >= 10:
+                if now - attempts[-1] < 600:
+                    _send_html(
+                        self,
+                        LOGIN_TEMPLATE.replace("{{USER}}", "")
+                        + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Пожалуйста, подождите 10 минут.</p>",
+                        status=HTTPStatus.TOO_MANY_REQUESTS,
+                    )
+                    return
+            elif num_attempts >= 5:
+                if now - attempts[-1] < 300:
+                    _send_html(
+                        self,
+                        LOGIN_TEMPLATE.replace("{{USER}}", "")
+                        + f"<p style='text-align:center;color:#b00020;'>Слишком много неудачных попыток. Пожалуйста, подождите 5 минут.</p>",
+                        status=HTTPStatus.TOO_MANY_REQUESTS,
+                    )
+                    return
             
             user_record = None
             db_err = ""
