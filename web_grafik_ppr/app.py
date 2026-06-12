@@ -1364,291 +1364,241 @@ READONLY_TOOLBAR = """
 
 
 
-def _send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
-    data = body.encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "text/html; charset=utf-8")
-    handler.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-    handler.send_header("Pragma", "no-cache")
-    handler.send_header("X-Content-Type-Options", "nosniff")
-    handler.send_header("Content-Length", str(len(data)))
-    handler.end_headers()
-    handler.wfile.write(data)
 
+from fastapi import FastAPI, Request, Response, Depends, Form, HTTPException, Cookie, status
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+import uvicorn
 
-def _redirect(handler: BaseHTTPRequestHandler, location: str, cookie: str | None = None) -> None:
-    handler.send_response(HTTPStatus.SEE_OTHER)
-    handler.send_header("Location", location)
-    handler.send_header("Cache-Control", "no-store")
-    if cookie is not None:
-        handler.send_header("Set-Cookie", cookie)
-    handler.end_headers()
+app = FastAPI(title="RTPS Grafik PPR")
 
+@app.middleware("http")
+async def strip_prefix(request: Request, call_next):
+    if request.scope["path"].startswith(APP_PREFIX + "/"):
+        request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
+    return await call_next(request)
 
-def render_home(username: str | None, can_edit: bool) -> str:
-    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
-    with open(ROOT / "templates" / "home.html", "r", encoding="utf-8") as f:
-        home_template = f.read()
-    return (
-        home_template.replace("{{STARTED_AT}}", started_at)
-    )
-
+app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
 def _login_cookie(username: str, role: str) -> str:
     token = _cookie_value(username, role)
     SESSIONS[token] = (username, role, "", username, dt.datetime.now().timestamp())
     return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax"
 
+def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(content=data, status_code=status_code)
 
+def get_current_session(request: Request):
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if cookie:
+        return _verify_cookie(cookie)
+    return None
 
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):  # noqa: D401
-        return
+def require_auth_fastapi(request: Request, need_edit: bool = False):
+    if not AUTH_ENABLED:
+        return True, None
+    session = get_current_session(request)
+    role = get_mod_role(session, "grafik_ppr")
+    if not role:
+        return False, None
+    if need_edit and role not in ("edit", "editor", "admin"):
+        return False, None
+    return True, session
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        route = _route_path(parsed.path)
-        session = current_session(self)
-        user = session[0] if session else None
-        mod_role = get_mod_role(session, "grafik_ppr")
-        if route == "/":
-            _redirect(self, APP_PREFIX)
-            return
+@app.get("/grafik-ppr", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
+async def home_route(request: Request, year: int = None):
+    if year is None:
+        year = dt.date.today().year
+    session = get_current_session(request)
+    user = session[0] if session else None
+    mod_role = get_mod_role(session, "grafik_ppr")
+    
+    try:
+        raw_cookie = request.cookies.get(SESSION_COOKIE, "")
+        with open(ROOT.parent / "data" / "grafik_auth.log", "a", encoding="utf-8") as f:
+            f.write(f"Access /grafik-ppr. Session: {session}. Cookie: {raw_cookie}\n")
+    except Exception:
+        pass
+        
+    if AUTH_ENABLED and not mod_role:
+        return Response(content="Требуется вход", status_code=401, headers={"WWW-Authenticate": 'Form realm="Grafik PPR"'})
+        
+    can_edit = mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True
+    
+    # We will reuse the original render_page logic, but it returned a string. We return HTMLResponse.
+    html_content = render_page(load_state(year), can_edit, user)
+    response = HTMLResponse(content=html_content)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
-        if route.startswith("/static/"):
-            file_path = ROOT / route.lstrip("/")
-            if file_path.exists() and file_path.is_file():
-                content_type = "text/css" if route.endswith(".css") else "application/javascript" if route.endswith(".js") else "text/plain"
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", f"{content_type}; charset=utf-8")
-                self.end_headers()
-                with open(file_path, "rb") as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
-            return
+@app.get("/login", response_class=HTMLResponse)
+async def login_get(request: Request):
+    if not AUTH_ENABLED:
+        return RedirectResponse(APP_PREFIX, status_code=303)
+    session = get_current_session(request)
+    if session and session[0]:
+        return RedirectResponse(APP_PREFIX, status_code=303)
+    return HTMLResponse(render_login())
 
-        if route == "/grafik-ppr":
-            year = dt.date.today().year
-            qs = parse_qs(parsed.query)
-            if "year" in qs:
-                try:
-                    year = int(qs["year"][0])
-                except ValueError:
-                    year = dt.date.today().year
-            # Logging
-            try:
-                raw_cookie = self.headers.get("Cookie", "")
-                with open(ROOT.parent / "data" / "grafik_auth.log", "a", encoding="utf-8") as f:
-                    f.write(f"Access /grafik-ppr. Session: {session}. Cookie: {raw_cookie}\n")
-            except Exception:
-                pass
-            
-            if AUTH_ENABLED and not mod_role:
-                self.send_response(HTTPStatus.UNAUTHORIZED)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
-                self.end_headers()
-                self.wfile.write("Требуется вход".encode("utf-8"))
-                return
-                
-            _send_html(self, render_page(load_state(year), mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True, user))
-            return
-        if route == "/login":
-            if not AUTH_ENABLED:
-                _redirect(self, APP_PREFIX)
-                return
-            if user:
-                _redirect(self, APP_PREFIX)
-                return
-            _send_html(self, render_login())
-            return
-        if route == "/logout":
-            _redirect(self, "/")
-            return
-        if route == "/api/state":
-            qs = parse_qs(parsed.query)
-            year = dt.date.today().year
-            if "year" in qs:
-                try:
-                    year = int(qs["year"][0])
-                except ValueError:
-                    year = dt.date.today().year
-            json_response(self, load_state(year))
-            return
-        if route == "/api/export":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            year = dt.date.today().year
-            if "year" in qs:
-                try:
-                    year = int(qs["year"][0])
-                except ValueError:
-                    year = dt.date.today().year
-            body = json.dumps(load_state(year), ensure_ascii=False, indent=2).encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Disposition", f'attachment; filename="grafik_ppr_{year}.json"')
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        if route == "/api/act-export":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            year = dt.date.today().year
-            if "year" in qs:
-                try:
-                    year = int(qs["year"][0])
-                except ValueError:
-                    year = dt.date.today().year
-            month = s(qs.get("month", [""])[0]).strip()
-            act = s(qs.get("act", [""])[0]).strip()
-            try:
-                body, filename = build_act_workbook(year, act)
-            except Exception as exc:
-                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            self.send_header("Content-Disposition", content_disposition_attachment(filename))
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(request: Request, user: str = Form(""), password: str = Form("")):
+    if not AUTH_ENABLED:
+        return RedirectResponse(APP_PREFIX, status_code=303)
+    username = user.strip()
+    if username == WEB_USER and password == WEB_VIEW_PASSWORD:
+        resp = RedirectResponse(APP_PREFIX, status_code=303)
+        resp.headers["Set-Cookie"] = _login_cookie(username, "view")
+        return resp
+    if username == WEB_USER and password == WEB_EDIT_PASSWORD:
+        resp = RedirectResponse(APP_PREFIX, status_code=303)
+        resp.headers["Set-Cookie"] = _login_cookie(username, "edit")
+        return resp
+    return HTMLResponse(render_login("<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>"), status_code=401)
 
-        if route == "/api/report-export":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            year = dt.date.today().year
-            if "year" in qs:
-                try:
-                    year = int(qs["year"][0])
-                except ValueError:
-                    year = dt.date.today().year
-            month = s(qs.get("month", [""])[0]).strip() or MONTHS_RU[dt.date.today().month - 1]
-            try:
-                body, filename = build_report_workbook(year, month)
-            except Exception as exc:
-                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            self.send_header("Content-Disposition", content_disposition_attachment(filename))
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        if route == "/api/report-preview":
-            if not require_auth(self):
-                return
-            qs = parse_qs(parsed.query)
-            year = dt.date.today().year
-            if "year" in qs:
-                try:
-                    year = int(qs["year"][0])
-                except ValueError:
-                    year = dt.date.today().year
-            month = s(qs.get("month", [""])[0]).strip() or MONTHS_RU[dt.date.today().month - 1]
-            try:
-                state = load_state(year)
-                data = calculate_report_data_from_state(state, month)
-                saved_notes = state.get("notes", {}).get(month, {}) or {}
-                json_response(self, build_report_preview(month, data, saved_notes))
-            except Exception as exc:
-                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-            return
-        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+@app.get("/logout")
+async def logout_route():
+    return RedirectResponse("/", status_code=303)
 
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        route = _route_path(parsed.path)
-        length = int(self.headers.get("Content-Length", "0") or 0)
-        raw = self.rfile.read(length) if length else b"{}"
-        if route == "/login":
-            if not AUTH_ENABLED:
-                _redirect(self, APP_PREFIX)
-                return
-            form = parse_qs(raw.decode("utf-8", errors="ignore"))
-            username = form.get("user", [""])[0].strip()
-            password = form.get("password", [""])[0]
-            if username == WEB_USER and password == WEB_VIEW_PASSWORD:
-                _redirect(self, APP_PREFIX, _login_cookie(username, "view"))
-                return
-            if username == WEB_USER and password == WEB_EDIT_PASSWORD:
-                _redirect(self, APP_PREFIX, _login_cookie(username, "edit"))
-                return
-            _send_html(self, render_login("<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>"), status=HTTPStatus.UNAUTHORIZED)
-            return
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except Exception:
-            payload = {}
-        if route in {"/api/state", "/api/import"}:
-            if not require_auth(self, need_edit=True):
-                return
-            try:
-                saved = save_state(payload)
-            except Exception as exc:
-                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            json_response(self, saved)
-            return
-        if route == "/api/tu28_extra":
-            year = payload.get("year")
-            month_name = payload.get("month_name")
-            r = payload.get("r")
-            extra = payload.get("extra", [])
-            with DB_LOCK, conn() as db:
-                cur = db.cursor()
-                with db:
-                    # check if locked first to prevent bypass
-                    row = cur.execute("SELECT v FROM tu28_data WHERE y=? AND m=? AND r=? AND k='tu28_locked'", (year, month_name, r)).fetchone()
-                    is_locked = False
-                    if row and row["v"]:
-                        is_locked = json.loads(row["v"])
-                    if not is_locked:
-                        cur.execute("INSERT OR REPLACE INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(extra)))
-            json_response(self, {"status": "ok"})
-            return
-        if route == "/api/tu28-export":
-            if not require_auth(self):
-                return
-            year = int(payload.get("year") or dt.date.today().year)
-            month = s(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
-            row_raw = payload.get("row", None)
-            if row_raw in (None, ""):
-                json_response(self, {"error": "В месяце нет ремонтов для ТУ-28"}, status=HTTPStatus.BAD_REQUEST)
-                return
-            try:
-                row_idx = int(row_raw)
-            except Exception:
-                json_response(self, {"error": "Не удалось определить строку ремонта"}, status=HTTPStatus.BAD_REQUEST)
-                return
-            staff_list = payload.get("staff") or []
-            if not isinstance(staff_list, list):
-                staff_list = []
-            extra_repairs = payload.get("extra_repairs") or []
-            print(f"DEBUG: raw extra_repairs={payload.get('extra_repairs')} | tu28ExtraRepairs={payload.get('debugger_tu28ExtraRepairs')} | ui.tu28RowIndex={payload.get('debugger_tu28RowIndex')} | row.rowIndex={payload.get('debugger_row_rowIndex')}", flush=True)
-            if not isinstance(extra_repairs, list):
-                extra_repairs = []
-            try:
-                body, filename = build_tu28_workbook(year, month, row_idx, staff_list, extra_repairs=extra_repairs)
-            except Exception as exc:
-                json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            self.send_header("Content-Disposition", content_disposition_attachment(filename))
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+@app.get("/api/state")
+async def get_state(year: int = None):
+    if year is None: year = dt.date.today().year
+    return json_response(load_state(year))
 
+@app.post("/api/state")
+@app.post("/api/import")
+async def post_state(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    try:
+        saved = save_state(payload)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
+    return json_response(saved)
+
+@app.get("/api/export")
+async def export_state(request: Request, year: int = None):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    if year is None: year = dt.date.today().year
+    body = json.dumps(load_state(year), ensure_ascii=False, indent=2).encode("utf-8")
+    return Response(
+        content=body, 
+        media_type="application/json", 
+        headers={"Content-Disposition": f'attachment; filename="grafik_ppr_{year}.json"'}
+    )
+
+@app.get("/api/act-export")
+async def export_act(request: Request, year: int = None, month: str = "", act: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    if year is None: year = dt.date.today().year
+    try:
+        body, filename = build_act_workbook(year, act.strip())
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
+    return Response(
+        content=body,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": content_disposition_attachment(filename)}
+    )
+
+@app.get("/api/report-export")
+async def export_report(request: Request, year: int = None, month: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    if year is None: year = dt.date.today().year
+    if not month.strip(): month = MONTHS_RU[dt.date.today().month - 1]
+    try:
+        body, filename = build_report_workbook(year, month.strip())
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
+    return Response(
+        content=body,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": content_disposition_attachment(filename)}
+    )
+
+@app.get("/api/report-preview")
+async def preview_report(request: Request, year: int = None, month: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    if year is None: year = dt.date.today().year
+    if not month.strip(): month = MONTHS_RU[dt.date.today().month - 1]
+    try:
+        state = load_state(year)
+        data = calculate_report_data_from_state(state, month.strip())
+        saved_notes = state.get("notes", {}).get(month.strip(), {}) or {}
+        return json_response(build_report_preview(month.strip(), data, saved_notes))
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
+
+@app.post("/api/tu28_extra")
+async def post_tu28_extra(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    year = payload.get("year")
+    month_name = payload.get("month_name")
+    r = payload.get("r")
+    extra = payload.get("extra", [])
+    with DB_LOCK, conn() as db:
+        cur = db.cursor()
+        with db:
+            row = cur.execute("SELECT v FROM tu28_data WHERE y=? AND m=? AND r=? AND k='tu28_locked'", (year, month_name, r)).fetchone()
+            is_locked = False
+            if row and row["v"]:
+                is_locked = json.loads(row["v"])
+            if not is_locked:
+                cur.execute("INSERT OR REPLACE INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(extra)))
+    return json_response({"status": "ok"})
+
+@app.post("/api/tu28-export")
+async def export_tu28(request: Request):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    year = int(payload.get("year") or dt.date.today().year)
+    month = str(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
+    row_raw = payload.get("row", None)
+    if row_raw in (None, ""):
+        return json_response({"error": "В месяце нет ремонтов для ТУ-28"}, status_code=400)
+    try:
+        row_idx = int(row_raw)
+    except Exception:
+        return json_response({"error": "Не удалось определить строку ремонта"}, status_code=400)
+    
+    staff_list = payload.get("staff") or []
+    if not isinstance(staff_list, list): staff_list = []
+    extra_repairs = payload.get("extra_repairs") or []
+    if not isinstance(extra_repairs, list): extra_repairs = []
+    
+    try:
+        body, filename = build_tu28_workbook(year, month, row_idx, staff_list, extra_repairs=extra_repairs)
+    except Exception as exc:
+        return json_response({"error": str(exc)}, status_code=400)
+        
+    return Response(
+        content=body,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": content_disposition_attachment(filename)}
+    )
 
 def main() -> None:
     global SERVER_STARTED_AT
@@ -1656,14 +1606,12 @@ def main() -> None:
     ensure_database()
     host = os.environ.get("WEB_HOST", "127.0.0.1")
     port = int(os.environ.get("WEB_PORT", "8000"))
-    server = ThreadingHTTPServer((host, port), Handler)
-    server.daemon_threads = True
-    url = f"http://{host}:{port}"
-    print(f"График ППР web ready: {url} | started at {SERVER_STARTED_AT:%H:%M:%S %d.%m.%Y}")
+    url = f"http://{host}:{port}/grafik-ppr"
+    print(f"График ППР web ready (FastAPI): {url} | started at {SERVER_STARTED_AT:%H:%M:%S %d.%m.%Y}")
     if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
+        import threading, webbrowser
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    server.serve_forever()
-
+    uvicorn.run("app:app", host=host, port=port, reload=True)
 
 if __name__ == "__main__":
     main()
