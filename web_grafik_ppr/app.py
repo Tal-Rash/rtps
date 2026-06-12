@@ -1422,7 +1422,7 @@ async def home_route(request: Request, year: int = None):
         pass
         
     if AUTH_ENABLED and not mod_role:
-        return Response(content="Требуется вход", status_code=401, headers={"WWW-Authenticate": 'Form realm="Grafik PPR"'})
+        return HTMLResponse(content="<meta charset='utf-8'>Требуется вход. <a href='/'>Авторизоваться</a>", status_code=401, headers={"WWW-Authenticate": 'Form realm="Grafik PPR"'})
         
     can_edit = mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True
     
