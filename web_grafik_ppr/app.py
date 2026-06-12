@@ -1242,7 +1242,7 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
                 return None
                 
             import urllib.parse
-            return user_id, role, modules, urllib.parse.unquote(safe_name)
+            return urllib.parse.unquote(user_id), urllib.parse.unquote(role), urllib.parse.unquote(modules), urllib.parse.unquote(safe_name)
         except Exception:
             continue
     return None

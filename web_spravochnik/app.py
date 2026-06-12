@@ -203,7 +203,7 @@ def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
                 return None
                 
             import urllib.parse
-            return user_id, role, modules, urllib.parse.unquote(safe_name)
+            return urllib.parse.unquote(user_id), urllib.parse.unquote(role), urllib.parse.unquote(modules), urllib.parse.unquote(safe_name)
         except Exception:
             continue
     return None
@@ -1104,7 +1104,7 @@ def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
             if float(expiry_text) < dt.datetime.now().timestamp():
                 return None
                 
-            return user_id, role, modules, urllib.parse.unquote(safe_name)
+            return urllib.parse.unquote(user_id), urllib.parse.unquote(role), urllib.parse.unquote(modules), urllib.parse.unquote(safe_name)
         except Exception:
             continue
     return None
