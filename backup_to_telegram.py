@@ -5,6 +5,13 @@ import os
 import zipfile
 import sys
 from pathlib import Path
+import socket
+import urllib3.util.connection as urllib3_cn
+
+def allowed_gai_family():
+    return socket.AF_INET
+
+urllib3_cn.allowed_gai_family = allowed_gai_family
 
 # ==========================================
 # НАСТРОЙКИ (Вставьте свои данные сюда)
