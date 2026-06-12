@@ -1163,6 +1163,8 @@ def save_state(state: dict) -> dict:
                                 cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(row["tu28_extra"])))
                             if "tu28_staff" in row:
                                 cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_staff", json.dumps(row["tu28_staff"])))
+                            if "tu28_locked" in row:
+                                cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_locked", json.dumps(row["tu28_locked"])))
 
             for cat, rows in state.get("norms", {}).items():
                 for row in rows:
@@ -2916,46 +2918,34 @@ function renderTu28(){
   const m = appState.months[ui.tu28MonthIndex];
   const rowObj = m && ui.tu28RowIndex != null ? m.fact[ui.tu28RowIndex] : null;
   const extraList = rowObj && rowObj.tu28_extra ? rowObj.tu28_extra : [];
+  const locked = rowObj && rowObj.tu28_locked ? true : false;
+  const disableExtra = locked || !CAN_EDIT;
   const extraRows = extraList.map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
-      <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
-      <button style="padding:4px 12px; color:#b00020; font-weight:bold; background:#ffebee; border-radius:4px;" onclick="removeTu28Extra(${idx})">×</button>
+      <input type="text" class="input" style="flex:1;" value="${esc(txt)}" ${disableExtra ? 'disabled' : ''} onchange="updateTu28Extra(${idx}, this.value)">
+      <button class="danger" style="width:40px;" ${disableExtra ? 'disabled' : ''} onclick="removeTu28Extra(${idx})">🗑</button>
     </div>
   `).join('');
   return `
-    <div class="section-head">
-      <div style="display:flex; justify-content:center; width:100%;">
-        <select id="tu28MonthSelect" onchange="setTu28Month(this.value)" style="border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit;">
-          ${appState.months.map((m, i) => `<option value="${i}" ${i === ui.tu28MonthIndex ? 'selected' : ''}>${m.name}</option>`).join('')}
-        </select>
+    <div style="display:flex; gap:16px;">
+      <div style="flex:1;">
+        <table class="grid">
+          <thead><tr><th>№</th><th>Серия</th><th>Номер</th><th>Дата</th><th>Вид</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
-    </div>
-    <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
-      <table class="acts-table" style="width:max-content; min-width:0; table-layout:auto;">
-        <colgroup>
-          <col style="width:70px;">
-          <col style="width:160px;">
-          <col style="width:120px;">
-          <col style="width:120px;">
-          <col style="width:130px;">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>№</th>
-            <th>Серия</th>
-            <th>Номер</th>
-            <th>Дата</th>
-            <th>Ремонт</th>
-          </tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="5">В месяце нет ремонтов для ТУ-28</td></tr>'}</tbody>
-      </table>
-    </div>
-    <div style="margin-top:16px; padding:0 8px; text-align:left; max-width:600px; margin-left:auto; margin-right:auto;">
-      <div style="font-weight:600; margin-bottom:8px; color:#334155;">Дополнительные ремонты:</div>
-      ${extraRows}
-      <div style="margin-top:12px;">
-        <button onclick="addTu28Extra()" style="background:#e2e8f0; color:#102033; font-weight:600; padding:6px 12px; border-radius:6px; font-size:13px;">+ Добавить Доп. ремонт</button>
+      <div style="flex:1; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong style="color:var(--text); font-size:16px;">Дополнительные работы</strong>
+            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text); cursor:pointer;">
+                <input type="checkbox" ${locked ? 'checked' : ''} ${!CAN_EDIT ? 'disabled' : ''} onchange="toggleTu28Locked(this.checked)">
+                Блокировать редактирование
+            </label>
+        </div>
+        <button class="primary" style="margin-bottom:8px; align-self:flex-start;" ${disableExtra ? 'disabled' : ''} onclick="addTu28Extra()">+ Добавить пункт</button>
+        <div style="max-height:300px; overflow-y:auto; padding-right:8px;">
+          ${extraRows}
+        </div>
       </div>
     </div>
   `;
@@ -3009,19 +2999,31 @@ function renderTu28Staff(){
 }
 function addTu28Extra(){
   const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
+  if (rowObj.tu28_locked) return;
   if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
   rowObj.tu28_extra.push("");
   saveState();
   render();
 }
 function updateTu28Extra(idx, val){
-  const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
-  if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
+  if (!CAN_EDIT) return;
+  const m = appState.months[ui.tu28MonthIndex];
+  const rowObj = m.fact[ui.tu28RowIndex];
+  if (rowObj.tu28_locked) return;
   rowObj.tu28_extra[idx] = val;
-  saveState();
+  markDirty(true);
+}
+function toggleTu28Locked(checked) {
+  if (!CAN_EDIT) return;
+  const m = appState.months[ui.tu28MonthIndex];
+  const rowObj = m.fact[ui.tu28RowIndex];
+  rowObj.tu28_locked = checked;
+  markDirty(true);
+  document.getElementById('tu28ModalBody').innerHTML = renderTu28();
 }
 function removeTu28Extra(idx){
   const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
+  if (rowObj.tu28_locked) return;
   if (rowObj.tu28_extra) {
     rowObj.tu28_extra.splice(idx, 1);
     saveState();
