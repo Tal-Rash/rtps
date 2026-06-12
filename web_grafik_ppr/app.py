@@ -2836,8 +2836,8 @@ function renderActs(){
     return `<tr>
       <td>${esc(act)}</td>
       <td style="text-align:center; font-size:16px;"><button class="act-start" style="width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center;" ${CAN_EDIT ? '' : 'disabled'} onclick="startAct('${month}', '${act}')">Пуск</button></td>
-      <td class="center"><input type="checkbox" ${x.is_done ? 'checked' : ''} onchange="setActInfoFlag('${month}', '${act}', 'is_done', this.checked)"></td>
-      <td class="center"><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} onchange="setActInfoFlag('${month}', '${act}', 'sap_order_done', this.checked)"></td>
+      <td class="center"><input type="checkbox" ${x.is_done ? 'checked' : ''} ${!CAN_EDIT ? 'disabled' : ''} onchange="setActInfoFlag('${month}', '${act}', 'is_done', this.checked)"></td>
+      <td class="center"><input type="checkbox" ${x.sap_order_done ? 'checked' : ''} ${!CAN_EDIT ? 'disabled' : ''} onchange="setActInfoFlag('${month}', '${act}', 'sap_order_done', this.checked)"></td>
     </tr>`;
   }).join('');
   return `
