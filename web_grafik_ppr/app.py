@@ -2827,9 +2827,12 @@ function renderTu28(){
       <td>${esc(c.code)}</td>
     </tr>
   `).join('');
-  const extraRows = (ui.tu28ExtraRepairs[ui.tu28RowIndex] || []).map((txt, idx) => `
+  const m = appState.months[ui.tu28MonthIndex];
+  const rowObj = m && ui.tu28RowIndex != null ? m.rows[ui.tu28RowIndex] : null;
+  const extraList = rowObj && rowObj.tu28_extra ? rowObj.tu28_extra : [];
+  const extraRows = extraList.map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
-      <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" oninput="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
+      <input type="text" style="flex:1; border:1px solid var(--line); border-radius:4px; padding:6px 10px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)" placeholder="Описание доп. ремонта">
       <button style="padding:4px 12px; color:#b00020; font-weight:bold; background:#ffebee; border-radius:4px;" onclick="removeTu28Extra(${idx})">×</button>
     </div>
   `).join('');
@@ -2919,17 +2922,23 @@ function renderTu28Staff(){
   `;
 }
 function addTu28Extra(){
-  if (!ui.tu28ExtraRepairs[ui.tu28RowIndex]) ui.tu28ExtraRepairs[ui.tu28RowIndex] = [];
-  ui.tu28ExtraRepairs[ui.tu28RowIndex].push("");
+  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
+  rowObj.tu28_extra.push("");
+  saveState();
   render();
 }
 function updateTu28Extra(idx, val){
-  if (!ui.tu28ExtraRepairs[ui.tu28RowIndex]) ui.tu28ExtraRepairs[ui.tu28RowIndex] = [];
-  ui.tu28ExtraRepairs[ui.tu28RowIndex][idx] = val;
+  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
+  rowObj.tu28_extra[idx] = val;
+  saveState();
 }
 function removeTu28Extra(idx){
-  if (ui.tu28ExtraRepairs[ui.tu28RowIndex]) {
-    ui.tu28ExtraRepairs[ui.tu28RowIndex].splice(idx, 1);
+  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  if (rowObj.tu28_extra) {
+    rowObj.tu28_extra.splice(idx, 1);
+    saveState();
     render();
   }
 }
@@ -3037,8 +3046,9 @@ function openTu28StaffModal(){
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
   ui.tu28RowIndex = row.rowIndex;
-  if (!ui.tu28Staff[row.rowIndex]) {
-    ui.tu28Staff[row.rowIndex] = ["", "", "", "", "", "", ""];
+  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  if (!rowObj.tu28_staff) {
+    rowObj.tu28_staff = ["", "", "", "", "", "", ""];
   }
   ui.modal = 'tu28staff';
   render();
