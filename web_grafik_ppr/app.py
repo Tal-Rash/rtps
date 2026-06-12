@@ -2871,7 +2871,7 @@ function renderTu28(){
     </tr>
   `).join('');
   const m = appState.months[ui.tu28MonthIndex];
-  const rowObj = m && ui.tu28RowIndex != null ? m.rows[ui.tu28RowIndex] : null;
+  const rowObj = m && ui.tu28RowIndex != null ? m.fact[ui.tu28RowIndex] : null;
   const extraList = rowObj && rowObj.tu28_extra ? rowObj.tu28_extra : [];
   const extraRows = extraList.map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
@@ -2965,20 +2965,20 @@ function renderTu28Staff(){
   `;
 }
 function addTu28Extra(){
-  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
   if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
   rowObj.tu28_extra.push("");
   saveState();
   render();
 }
 function updateTu28Extra(idx, val){
-  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
   if (!rowObj.tu28_extra) rowObj.tu28_extra = [];
   rowObj.tu28_extra[idx] = val;
   saveState();
 }
 function removeTu28Extra(idx){
-  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
   if (rowObj.tu28_extra) {
     rowObj.tu28_extra.splice(idx, 1);
     saveState();
@@ -3089,7 +3089,7 @@ function openTu28StaffModal(){
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
   ui.tu28RowIndex = row.rowIndex;
-  const rowObj = appState.months[ui.tu28MonthIndex].rows[ui.tu28RowIndex];
+  const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
   if (!rowObj.tu28_staff) {
     rowObj.tu28_staff = ["", "", "", "", "", "", ""];
   }
