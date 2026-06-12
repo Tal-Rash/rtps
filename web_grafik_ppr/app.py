@@ -966,14 +966,14 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         raise ValueError("Не удалось определить номер")
 
     repair_code = ""
-    repair_day = None
+    repair_days = []
     for col in range(4, 4 + int(month.get("days") or 0)):
         value = normalize_repair_code(s(cells[col]) if col < len(cells) else "")
         if value in TU28_REPAIR_CODES:
-            repair_code = s(cells[col]).strip().upper()
-            repair_day = col - 3
-            break
-    if not repair_day:
+            if not repair_code:
+                repair_code = s(cells[col]).strip().upper()
+            repair_days.append(col - 3)
+    if not repair_days:
         raise ValueError("В выбранной строке не найден ремонт для ТУ-28")
 
     if "ПЭ" in series.upper():
@@ -987,7 +987,38 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         month_num = int(month.get("month") or 0)
     except Exception:
         month_num = 0
+    repair_day = repair_days[0]
     date_str = f"{repair_day:02d}.{month_num:02d}.{year}"
+
+    start_date_str = f"{year}-{month_num:02d}-{repair_days[0]:02d}"
+    end_date_str = f"{year}-{month_num:02d}-{repair_days[-1]:02d}"
+
+    db_path = Path(__file__).resolve().parent.parent / "base" / "common_database.db"
+    measurements = {}
+    if db_path.exists() and number and start_date_str and end_date_str:
+        import sqlite3
+        try:
+            with sqlite3.connect(db_path) as conn:
+                cur = conn.cursor()
+                db_rows = cur.execute(
+                    """
+                    SELECT measurement_date, r, c, v 
+                    FROM archive_data 
+                    WHERE locomotive=? AND measurement_date >= ? AND measurement_date <= ?
+                    ORDER BY measurement_date DESC, r, c
+                    """,
+                    (number, start_date_str, end_date_str)
+                ).fetchall()
+                dates_dict = {}
+                for d_str, r, c, v in db_rows:
+                    if d_str not in dates_dict:
+                        dates_dict[d_str] = {}
+                    dates_dict[d_str].setdefault(r, {})[c] = str(v).strip() if v else ""
+                if dates_dict:
+                    best_date = sorted(dates_dict.keys(), reverse=True)[0]
+                    measurements = dates_dict[best_date]
+        except Exception as e:
+            print("Error reading Zamer KP archive db:", e)
     tags = {
         "[СЕРИЯ]": series,
         "[НОМЕР]": number,
@@ -1002,6 +1033,18 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         "[ЭЛАП]": "",
         "[ТОРМОЗ]": "",
     }
+
+    col_to_tag_prefix = {
+        0: "ПРОКАТ_ЛЕВ", 1: "ПРОКАТ_ПРАВ",
+        2: "ТОЛЩИНА_ГРЕБНЯ_ЛЕВ", 3: "ТОЛЩИНА_ГРЕБНЯ_ПРАВ",
+        4: "КРУТИЗНА_ЛЕВ", 5: "КРУТИЗНА_ПРАВ",
+        6: "ТОЛЩИНА_БАНДАЖА_ЛЕВ", 7: "ТОЛЩИНА_БАНДАЖА_ПРАВ",
+        8: "ДИАМЕТР_БАНДАЖА_ЛЕВ", 9: "ДИАМЕТР_БАНДАЖА_ПРАВ"
+    }
+    for axle in range(1, 13):
+        for c_idx, prefix in col_to_tag_prefix.items():
+            tags[f"[{prefix}_{axle}]"] = measurements.get(axle - 1, {}).get(c_idx, "")
+
     components = [
         "ДИЗЕЛЬ",
         "ЭКИПАЖ 1",
