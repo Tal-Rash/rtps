@@ -2972,7 +2972,7 @@ function renderOpenModals(){
       tu28Body.innerHTML = renderTu28();
       const btnTu28Staff = document.getElementById('btnTu28Staff');
       if (btnTu28Staff) {
-        btnTu28Staff.style.display = appState.can_edit ? '' : 'none';
+        btnTu28Staff.style.display = CAN_EDIT ? '' : 'none';
       }
     } else {
       tu28Modal.classList.remove('visible');
