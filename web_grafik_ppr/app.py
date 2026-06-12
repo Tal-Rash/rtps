@@ -944,7 +944,7 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
     return out.getvalue(), f"Акт_{clean_act_num}.xlsx"
 
 
-def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: list[str] | None = None, state: dict | None = None) -> tuple[bytes, str]:
+def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: list[str] | None = None, state: dict | None = None, extra_repairs: list[str] | None = None) -> tuple[bytes, str]:
     try:
         from openpyxl import Workbook, load_workbook
         from openpyxl.styles import Alignment, Font
@@ -1015,6 +1015,13 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         if idx >= len(components):
             break
         tags[f"[{components[idx]}]"] = format_fio_initials(name)
+
+    extra_repairs = extra_repairs or []
+    for i in range(1, 21):
+        tags[f"[ДОП_РЕМОНТ_{i}]"] = ""
+    for i, extra in enumerate(extra_repairs, start=1):
+        if i <= 20:
+            tags[f"[ДОП_РЕМОНТ_{i}]"] = str(extra).strip()
 
     template_path = find_tu28_template_path()
     if template_path:
@@ -1973,7 +1980,7 @@ HTML_TEMPLATE = """<!doctype html>
 const BOOT_VERSION = "{{APP_VERSION}}";
 let appState = {{STATE_JSON}};
 const EMPLOYEE_NAMES = {{EMPLOYEE_NAMES}};
-let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: [] };
+let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: [], tu28ExtraRepairs: [] };
 let dirty = false;
 let savedAppState = null;
 let savedMonthsState = null;
@@ -2872,6 +2879,17 @@ function renderTu28Staff(){
       </tr>
     `;
   }).join('');
+  const extraRows = ui.tu28ExtraRepairs.map((txt, idx) => `
+      <tr style="background:#fcfcfd;">
+        <td>Доп. ${idx + 1}</td>
+        <td>
+          <input type="text" style="width:100%; border:1px solid var(--line); border-radius:4px; padding:4px 8px;" value="${esc(txt)}" onchange="updateTu28Extra(${idx}, this.value)">
+        </td>
+        <td style="text-align:center;">
+          <button style="padding:2px 8px; color:#b00020; font-weight:bold; background:none;" onclick="removeTu28Extra(${idx})">×</button>
+        </td>
+      </tr>
+  `).join('');
   return `
     <div style="margin-bottom:10px; font-weight:700;">Выберите ФИО исполнителей из списка:</div>
     <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
@@ -2885,13 +2903,27 @@ function renderTu28Staff(){
           <tr>
             <th>#</th>
             <th>Вид работ (узел)</th>
-            <th>ФИО</th>
+            <th>ФИО / Описание</th>
           </tr>
         </thead>
-        <tbody>${tableRows}</tbody>
+        <tbody>${tableRows}${extraRows}</tbody>
       </table>
     </div>
+    <div style="margin-top:12px; display:flex; justify-content:center;">
+      <button onclick="addTu28Extra()" style="background:#e2e8f0; color:#102033; font-weight:600; padding:6px 12px;">+ Добавить Доп. ремонт</button>
+    </div>
   `;
+}
+function addTu28Extra(){
+  ui.tu28ExtraRepairs.push("");
+  render();
+}
+function updateTu28Extra(idx, val){
+  ui.tu28ExtraRepairs[idx] = val;
+}
+function removeTu28Extra(idx){
+  ui.tu28ExtraRepairs.splice(idx, 1);
+  render();
 }
 function renderOpenModals(){
   const normsModal = document.getElementById('normsModal');
@@ -2944,11 +2976,13 @@ function renderOpenModals(){
       tu28StaffModal.classList.add('visible');
       tu28StaffModal.setAttribute('aria-hidden', 'false');
       tu28StaffBody.innerHTML = renderTu28Staff();
-      tu28StaffBody.querySelectorAll('select.tu28-staff-select').forEach((sel) => {
-        const idx = Number(sel.dataset.index);
-        sel.value = ui.tu28Staff[idx] || '';
-        sel.addEventListener('change', () => {
-          ui.tu28Staff[idx] = sel.value;
+      requestAnimationFrame(() => {
+        const selects = document.querySelectorAll('.tu28-staff-select');
+        selects.forEach((sel) => {
+          sel.onchange = (e) => {
+            const idx = Number(e.target.dataset.index);
+            ui.tu28Staff[idx] = e.target.value;
+          };
         });
       });
     } else {
@@ -3011,7 +3045,7 @@ function downloadTu28(){
   const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
-  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff || [] };
+  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff || [], extra_repairs: ui.tu28ExtraRepairs || [] };
   fetch(`{{APP_PREFIX}}/api/tu28-export`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -3414,8 +3448,11 @@ class Handler(BaseHTTPRequestHandler):
             staff_list = payload.get("staff") or []
             if not isinstance(staff_list, list):
                 staff_list = []
+            extra_repairs = payload.get("extra_repairs") or []
+            if not isinstance(extra_repairs, list):
+                extra_repairs = []
             try:
-                body, filename = build_tu28_workbook(year, month, row_idx, staff_list)
+                body, filename = build_tu28_workbook(year, month, row_idx, staff_list, extra_repairs=extra_repairs)
             except Exception as exc:
                 json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
