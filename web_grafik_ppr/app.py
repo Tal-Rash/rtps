@@ -3258,6 +3258,7 @@ function closeReportModal(){
   reportDialogState = null;
 }
 function setReportNote(key, value){
+  if (!CAN_EDIT) return;
   if (!reportDialogState) return;
   const month = reportDialogState.month;
   if (!appState.notes[month]) appState.notes[month] = {};
@@ -3306,7 +3307,7 @@ function renderReportBody(){
         <td class="col-report-name">${esc(row.label)}</td>
         <td class="num-cell col-report-num">${esc(row.plan)}</td>
         <td class="num-cell col-report-num">${esc(row.fact)}</td>
-        <td class="col-report-note"><textarea rows="1" class="report-note" oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
+        <td class="col-report-note"><textarea rows="1" class="report-note" ${CAN_EDIT ? '' : 'readonly'} oninput="setReportNote('${row.key}', this.value)">${esc(row.note || '')}</textarea></td>
       </tr>
     `;
   }).join('');
