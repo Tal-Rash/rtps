@@ -258,7 +258,7 @@ LOGIN_TEMPLATE = """<!doctype html>
       <h1 style="margin-top:0;">Запрос доступа</h1>
       <p class="muted">Введите ФИО и желаемый пароль. Если вы забыли пароль, введите новое значение — доступ будет временно приостановлен до одобрения администратором.</p>
       <input name="full_name" type="text" placeholder="Иванов И. И." style="margin-bottom:12px;" required>
-      <input name="password" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required>
+      <input name="password" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required pattern="(?=.*[a-zA-Zа-яА-ЯёЁ])(?=.*[A-ZА-ЯЁ]).{8,}" title="Пароль должен быть не короче 8 символов, содержать буквы и хотя бы одну заглавную букву.">
       <button type="submit">Запросить доступ</button>
     </form>
     <a class="toggle-link" onclick="document.getElementById('request-form').style.display='none'; document.getElementById('login-form').style.display='block';">Вернуться ко входу</a>
@@ -771,7 +771,15 @@ class Handler(BaseHTTPRequestHandler):
             form = parse_qs(raw.decode("utf-8", errors="ignore"))
             full_name = form.get("full_name", [""])[0].strip()
             password = form.get("password", [""])[0].strip()
+            
+            import re
             if full_name and password:
+                if len(password) < 8 or not re.search(r'[A-Za-zА-Яа-яЁё]', password) or not re.search(r'[A-ZА-ЯЁ]', password):
+                    html = """<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Ошибка</title>
+                    <style>body{margin:0;font-family:Segoe UI, Arial, sans-serif;background:#f4f7fb;color:#102033;text-align:center;padding:50px;} .card{background:#fff;padding:40px;border-radius:18px;max-width:400px;margin:10vh auto;box-shadow:0 12px 32px rgba(16,32,51,.08);}</style>
+                    </head><body><div class="card"><h2 style="margin-top:0;color:#b00020;">Ошибка</h2><p style="color:#64748b;margin-bottom:24px;">Пароль должен быть не короче 8 символов, содержать буквы и хотя бы одну заглавную букву.</p><a href="/login" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">Назад</a></div></body></html>"""
+                    _send_html(self, html, status=400)
+                    return
                 try:
                     import sqlite3
                     with sqlite3.connect(DB_FILE) as conn:
