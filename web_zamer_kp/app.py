@@ -2915,10 +2915,10 @@ HTML = """<!doctype html>
     th.section-col, td.section-col { width:80px; }
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
-    td.measure-cell input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; display:block; box-sizing:border-box; outline:none; line-height:normal; border-radius:0 !important; appearance:none; -webkit-appearance:none; }
+    td.measure-cell input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; display:block; box-sizing:border-box; outline:none; line-height:34px; border-radius:0 !important; appearance:none; -webkit-appearance:none; }
     td.measure-cell.selected { background:#e8f0fe; }
     td.measure-cell.selected input { background:transparent; }
-    td input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; display:block; box-sizing:border-box; outline:none; line-height:normal; border-radius:0 !important; appearance:none; -webkit-appearance:none; }
+    td input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; display:block; box-sizing:border-box; outline:none; line-height:34px; border-radius:0 !important; appearance:none; -webkit-appearance:none; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
