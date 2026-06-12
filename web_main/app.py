@@ -189,7 +189,7 @@ async def home_page(request: Request):
         if has_access: return f'<a href="{url}">Открыть модуль →</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
-    return templates.TemplateResponse("home.html", {
+    return templates.TemplateResponse(request=request, name="home.html", context={
         "request": request,
         "STARTED_AT": dt.datetime.now().strftime("%d.%m.%Y %H:%M"),
         "AUTH_BADGE": auth_badge,
@@ -205,7 +205,7 @@ async def login_page(request: Request):
     session = get_current_session(request)
     if session:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "USER": ""})
+    return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": ""})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, response: Response, password: str = Form(...)):
@@ -215,7 +215,7 @@ async def login_post(request: Request, response: Response, password: str = Form(
     FAILED_ATTEMPTS[client_ip] = attempts
     
     if len(attempts) >= 15:
-        return templates.TemplateResponse("login.html", {"request": request, "USER": "", "error_message": "Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки."}, status_code=429)
+        return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "error_message": "Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки."}, status_code=429)
     if len(attempts) >= 10:
         time.sleep(3)
     elif len(attempts) >= 5:
@@ -229,7 +229,7 @@ async def login_post(request: Request, response: Response, password: str = Form(
         
     if user:
         if user[2] == "pending":
-            return templates.TemplateResponse("login.html", {"request": request, "USER": "", "error_message": "Ваша учетная запись еще не подтверждена администратором."}, status_code=403)
+            return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "error_message": "Ваша учетная запись еще не подтверждена администратором."}, status_code=403)
         
         if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
         
@@ -252,7 +252,7 @@ async def login_post(request: Request, response: Response, password: str = Form(
 
     attempts.append(now)
     FAILED_ATTEMPTS[client_ip] = attempts
-    return templates.TemplateResponse("login.html", {"request": request, "USER": "", "error_message": "Неверный пароль"}, status_code=401)
+    return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "error_message": "Неверный пароль"}, status_code=401)
 
 @app.post("/request_access", response_class=HTMLResponse)
 async def request_access(request: Request, full_name: str = Form(...), password: str = Form(...)):
@@ -309,7 +309,7 @@ async def users_page(request: Request):
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
         
-    return templates.TemplateResponse("users.html", {"request": request, "users": users, "error_message": error_message})
+    return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
 async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none")):
@@ -378,7 +378,7 @@ async def logs_page(request: Request):
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
         
-    return templates.TemplateResponse("logs.html", {"request": request, "logs": logs, "error_message": error_message})
+    return templates.TemplateResponse(request=request, name="logs.html", context={"request": request, "logs": logs, "error_message": error_message})
 
 @app.get("/grafik-ppr")
 async def redir_grafik():
