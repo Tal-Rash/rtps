@@ -2915,10 +2915,10 @@ HTML = """<!doctype html>
     th.section-col, td.section-col { width:80px; }
     th.number-col, td.number-col { width:80px; }
     td.fixed { background:#f7fafc; font-weight:600; }
-    td.measure-cell input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; font-size:12px; display:block; box-sizing:border-box; outline:none; line-height:34px; border-radius:0 !important; appearance:none; -webkit-appearance:none; }
+    td.measure-cell input { width:100%; border:0; text-align:center; background:transparent; padding:8px 0; font-size:12px; display:block; box-sizing:border-box; outline:none; border-radius:0 !important; appearance:none; -webkit-appearance:none; margin:0; line-height:normal; height:auto; }
     td.measure-cell.selected { background:#e8f0fe; }
     td.measure-cell.selected input { background:transparent; }
-    td input { width:100%; height:100%; min-height:34px; border:0; text-align:center; background:transparent; padding:0; display:block; box-sizing:border-box; outline:none; line-height:34px; border-radius:0 !important; appearance:none; -webkit-appearance:none; }
+    td input { width:100%; border:0; text-align:center; background:transparent; padding:8px 0; font-size:12px; display:block; box-sizing:border-box; outline:none; border-radius:0 !important; appearance:none; -webkit-appearance:none; margin:0; line-height:normal; height:auto; }
     td input.left { text-align:left; }
     td.warn { background:var(--warn); }
     td.bad { background:var(--bad); }
@@ -3437,9 +3437,19 @@ let normsRows = [];
 function esc(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 }
-function n(value){
+function fmt(value){
+  if (value === null || value === undefined || value === '') return '';
+  let s = String(value).trim();
+  if (/^-?\d+\.\d+$/.test(s) || /^-?\d+$/.test(s)) return s.replace('.', ',');
+  return s;
+}
+function parse_float(value){
+  if (value === null || value === undefined || value === '') return null;
   const x = parseFloat(String(value ?? '').replace(',', '.'));
   return Number.isFinite(x) ? x : null;
+}
+function n(value){
+  return parse_float(value);
 }
 function clampCell(row, col){
   return {
@@ -3558,8 +3568,8 @@ function renderNormsTable(){
           <option value="больше или равно" ${row.condition === 'больше или равно' ? 'selected' : ''}>больше или равно</option>
         </select>
       </td>
-      <td><input value="${esc(row.yellow_value)}" data-field="yellow_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
-      <td><input value="${esc(row.red_value)}" data-field="red_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
+      <td><input value="${esc(fmt(row.yellow_value))}" data-field="yellow_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
+      <td><input value="${esc(fmt(row.red_value))}" data-field="red_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
     </tr>
   `).join('');
 }
@@ -3817,7 +3827,7 @@ function applyPastedBlock(text, startRow, startCol){
       const tr = startRow + i;
       const tc = startCol + j;
       if (tr >= axisCount || tc >= 10) continue;
-      const value = cells[j].trim();
+      const value = String(cells[j] ?? '').trim().replace('.', ',');
       setCellValue(tr, tc, value);
       touched = true;
     }
@@ -4021,7 +4031,7 @@ async function applyArchivePastedBlock(text, startRow, startCol){
       if (!archiveCellInBounds(tr, tc)) continue;
       const input = archiveCellElement(tr, tc);
       if (!input) continue;
-      const value = cells[j].trim();
+      const value = String(cells[j] ?? '').trim().replace('.', ',');
       input.value = value;
       input.dataset.original = value;
       const payload = archiveCellChangePayload(tr, tc, value);
@@ -4078,7 +4088,8 @@ async function handleArchiveCellChange(row, col, value, input){
   const meta = archiveRowMeta(row);
   if (!meta) return;
   const current = String(input?.dataset?.original ?? '');
-  const next = String(value ?? '').trim();
+  const next = String(value ?? '').trim().replace('.', ',');
+  if (input) input.value = next;
   if (current === next) return;
   const ok = confirm('Вы уверены, что хотите изменить данные в архиве?');
   if (!ok) {
@@ -4427,7 +4438,7 @@ function renderKpTable(){
         <td class="readonly">${esc(values[0] ?? '')}</td>
         ${[1, 2, 3].map(colIndex => `
           <td data-col="${colIndex}"><input
-              value="${esc(values[colIndex] ?? '')}"
+              value="${esc(fmt(values[colIndex]))}"
               ${editable ? '' : 'readonly'}
               data-row="${rowIndex}"
               data-col="${colIndex}"
@@ -4522,7 +4533,7 @@ function kpCellValue(row, col){
 }
 function setKpCellValue(row, col, value){
   if (!kpRows[row] || !kpCellInBounds(row, col)) return false;
-  const next = String(value ?? '').trim();
+  const next = String(value ?? '').trim().replace('.', ',');
   kpRows[row].values[col] = next;
   const input = kpCellElement(row, col);
   if (input && input.value !== next) input.value = next;
@@ -4613,7 +4624,7 @@ function handleKpCellMouseDown(event, row, col){
 }
 function handleKpCellChange(row, col, value, input){
   if (!CAN_EDIT || kpAllMode || kpLoading) return;
-  const next = String(value ?? '').trim();
+  const next = String(value ?? '').trim().replace('.', ',');
   if (!kpRows[row]) return;
   kpRows[row].values[col] = next;
   if (input) input.value = next;
@@ -4837,7 +4848,7 @@ function renderArchiveTable(){
       if (index >= 10) {
         return `
           <td class="measure-cell archive-raw" data-col="${index}"><input
-              value="${esc(value)}"
+              value="${esc(fmt(value))}"
               data-row="${rowIndex}"
               data-col="${index}"
               data-original="${esc(value)}"
@@ -4881,13 +4892,13 @@ function renderTable(){
       const cls = measurementClass(c, value);
       html += `
         <td class="measure-cell ${cls}" data-col="${c}"><input
-            value="${esc(value)}"
+            value="${esc(fmt(value))}"
             ${CAN_EDIT ? '' : 'readonly'}
             data-row="${r}"
             data-col="${c}"
             onmousedown="return handleCellMouseDown(event, ${r}, ${c})"
             onfocus="handleCellFocus(${r}, ${c})"
-            oninput="handleCellInput(${r}, ${c}, this.value)"
+            oninput="handleCellInput(${r}, ${c}, this.value, this)"
             onkeydown="handleKeydown(event, ${r}, ${c})"
           >
         </td>`;
@@ -4990,9 +5001,15 @@ function recalcDiameters(){
     refreshRowClasses(r);
   }
 }
-function handleCellInput(row, col, value){
+function handleCellInput(row, col, value, inputEl){
   if (!CAN_EDIT) return;
-  state.measurements[row][col] = value;
+  const next = value.replace('.', ',');
+  if (value !== next && inputEl) {
+    let start = inputEl.selectionStart;
+    inputEl.value = next;
+    inputEl.selectionStart = inputEl.selectionEnd = start;
+  }
+  state.measurements[row][col] = next;
   setDirty(true);
   refreshRowClasses(row);
   if (col === 6 || col === 7) {
