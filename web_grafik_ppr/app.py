@@ -2998,7 +2998,8 @@ function renderOpenModals(){
         selects.forEach((sel) => {
           sel.onchange = (e) => {
             const idx = Number(e.target.dataset.index);
-            ui.tu28Staff[idx] = e.target.value;
+            if (!ui.tu28Staff[ui.tu28RowIndex]) ui.tu28Staff[ui.tu28RowIndex] = [];
+            ui.tu28Staff[ui.tu28RowIndex][idx] = e.target.value;
           };
         });
       });
