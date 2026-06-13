@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.33"
+APP_VERSION = "web-tabel-1.35"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -290,7 +290,7 @@ def load_state(year: int, month: int) -> dict:
                     "milk_issue": int(r["milk_issue"] or 0),
                     "full_name": text(r["full_name"]),
                     "milk_note": text(r["milk_note"]),
-                    "is_excluded": int(r.get("is_excluded", 0) or 0)
+                    "is_excluded": int(dict(r).get("is_excluded", 0) or 0)
                 })
         except Exception:
             pass
