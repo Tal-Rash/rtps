@@ -180,10 +180,14 @@ def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str)
     _, role, modules, _ = session
     if role == "admin":
         return "admin"
-    if role == "viewer":
-        return "viewer"
-    if module in modules.split(","):
-        return "edit" if role == "editor" else role
+    for part in modules.split(","):
+        part = part.strip()
+        if not part: continue
+        if ":" in part:
+            k, v = part.split(":", 1)
+            if k == module: return v
+        else:
+            if part == module: return role
     return ""
 
 app = FastAPI(title="RTPS Tabel")
