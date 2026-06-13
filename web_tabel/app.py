@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.45"
+APP_VERSION = "web-tabel-1.46"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
@@ -478,8 +478,8 @@ async def export_milk(year: int, month: int, type: str):
         work_days_norm = str(norm_row["v"]) if norm_row else "0"
             
     def is_workday(y, m, d):
-        dt = calendar.datetime.date(y, m, d)
-        is_we = dt.weekday() >= 5
+        dt_obj = dt.date(y, m, d)
+        is_we = dt_obj.weekday() >= 5
         is_hol = (m, d) in holiday_dates
         is_tr = (m, d) in transfer_dates
         if is_tr: return True
@@ -508,12 +508,17 @@ async def export_milk(year: int, month: int, type: str):
                 if "М" in val:
                     count += 1
             else:
-                try:
-                    float(val.replace(',', '.'))
+                # For issue_plan and issue_fact, if "М" is explicitly marked, count it!
+                # Even if they put "8М", we should count it as a shift.
+                if "М" in val:
                     count += 1
-                except ValueError:
-                    if not val and is_workday(year, month, d): 
+                else:
+                    try:
+                        float(val.replace(',', '.'))
                         count += 1
+                    except ValueError:
+                        if not val and is_workday(year, month, d): 
+                            count += 1
                         
         final_list.append({
             "fio": name,
