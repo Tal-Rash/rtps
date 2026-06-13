@@ -7,42 +7,49 @@
   <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css">
 </head>
 <body>
-  <div class="header">
-    <div class="header-title">Табель учета <span class="version">{{APP_VERSION}}</span></div>
-    <div class="toolbar">
-      <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100"></label>
-      <label>Месяц: 
-        <select id="monthInput" onchange="loadState()">
-          <option value="1">Январь</option><option value="2">Февраль</option>
-          <option value="3">Март</option><option value="4">Апрель</option>
-          <option value="5">Май</option><option value="6">Июнь</option>
-          <option value="7">Июль</option><option value="8">Август</option>
-          <option value="9">Сентябрь</option><option value="10">Октябрь</option>
-          <option value="11">Ноябрь</option><option value="12">Декабрь</option>
-        </select>
-      </label>
-      <button onclick="saveState()" id="saveBtn" class="btn-primary" style="display:none;">Сохранить</button>
-      <div class="dropdown">
-        <button class="btn-secondary dropdown-toggle">Отчеты ▼</button>
-        <div class="dropdown-menu">
-          <button onclick="exportMilk('комп')">Молоко (комп)</button>
-          <button onclick="exportMilk('план')">Молоко (план)</button>
-          <button onclick="exportMilk('факт')">Молоко (факт)</button>
+  <div class="shell">
+    <div class="topbar">
+      <div class="titlebox">
+        <h1>Табель учета</h1>
+        <div class="sub">Версия web-tabel-{{APP_VERSION}}</div>
+      </div>
+      <div class="controls">
+        <a class="home-link" href="/">На портал</a>
+        <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100" style="width:70px;"></label>
+        <label>Месяц: 
+          <select id="monthInput" onchange="loadState()">
+            <option value="1">Январь</option><option value="2">Февраль</option>
+            <option value="3">Март</option><option value="4">Апрель</option>
+            <option value="5">Май</option><option value="6">Июнь</option>
+            <option value="7">Июль</option><option value="8">Август</option>
+            <option value="9">Сентябрь</option><option value="10">Октябрь</option>
+            <option value="11">Ноябрь</option><option value="12">Декабрь</option>
+          </select>
+        </label>
+        <div class="dropdown" style="display: inline-block; position: relative;">
+          <button class="btn-secondary dropdown-toggle" onclick="this.nextElementSibling.classList.toggle('open')" style="cursor: pointer;">Отчеты ▼</button>
+          <div class="dropdown-menu" style="display: none; position: absolute; background: #fff; border: 1px solid #276ef1; border-radius: 8px; z-index: 40; flex-direction: column; right: 0;">
+            <button onclick="exportMilk('комп')" style="border:none; width:100%; text-align:left;">Молоко (комп)</button>
+            <button onclick="exportMilk('план')" style="border:none; width:100%; text-align:left;">Молоко (план)</button>
+            <button onclick="exportMilk('факт')" style="border:none; width:100%; text-align:left;">Молоко (факт)</button>
+          </div>
+        </div>
+        <button onclick="saveState()" id="saveBtn" style="display:none;" class="save-ready">Сохранить</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="months-row">
+        <div class="month-strip nav-tabs">
+          <button class="nav-tab active" onclick="switchTab('months')">📅 МЕСЯЦЫ</button>
+          <button class="nav-tab" onclick="switchTab('data')">📊 ДАННЫЕ</button>
+          <button class="nav-tab" onclick="switchTab('employees')">👥 СОТРУДНИКИ</button>
+          <button class="nav-tab" onclick="switchTab('vacations')">🌴 ОТПУСКА</button>
         </div>
       </div>
-      <a class="btn-secondary" href="/">На портал</a>
-    </div>
-  </div>
 
-  <div class="nav-tabs">
-    <button class="nav-tab active" onclick="switchTab('months')">📅 МЕСЯЦЫ</button>
-    <button class="nav-tab" onclick="switchTab('data')">📊 ДАННЫЕ</button>
-    <button class="nav-tab" onclick="switchTab('employees')">👥 СОТРУДНИКИ</button>
-    <button class="nav-tab" onclick="switchTab('vacations')">🌴 ОТПУСКА</button>
-  </div>
-
-  <div class="tab-content active" id="tab-months">
-    <div class="table-container">
+      <div class="tab-content active" id="tab-months">
+        <div class="table-wrap month-table-wrap">
       <table id="tabelGrid">
         <thead>
           <tr id="tabelHeader">
@@ -57,7 +64,7 @@
   </div>
 
   <div class="tab-content" id="tab-data">
-    <div class="table-container">
+    <div class="table-wrap month-table-wrap">
       <table id="dataGrid">
         <thead>
           <tr>
@@ -71,7 +78,7 @@
   </div>
 
   <div class="tab-content" id="tab-employees">
-    <div class="table-container">
+    <div class="table-wrap month-table-wrap">
       <table id="employeesGrid">
         <thead>
           <tr>
@@ -85,7 +92,7 @@
   </div>
 
   <div class="tab-content" id="tab-vacations">
-    <div class="table-container">
+    <div class="table-wrap month-table-wrap">
       <table id="vacationsGrid">
         <thead>
           <tr>
@@ -96,9 +103,20 @@
         </tbody>
       </table>
     </div>
+      </div>
+    </div>
   </div>
-
   <script>
+    document.addEventListener("click", function(e) {
+      if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown-menu').forEach(m => {
+          m.style.display = 'none';
+        });
+      } else if (e.target.classList.contains('dropdown-toggle')) {
+        const menu = e.target.nextElementSibling;
+        menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+      }
+    });
     window.APP_CONFIG = {
       APP_PREFIX: "{{APP_PREFIX}}",
       CAN_EDIT: {{CAN_EDIT}}
