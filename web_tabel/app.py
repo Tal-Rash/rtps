@@ -349,10 +349,9 @@ def load_state(year: int, month: int) -> dict:
 
         month_hint = ""
         try:
-            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
-            hint_row = cur.execute("SELECT hint FROM month_hints WHERE y=? AND m=?", (year, m_str)).fetchone()
+            hint_row = cur.execute("SELECT v FROM ts_settings WHERE k='month_hint'").fetchone()
             if hint_row:
-                month_hint = str(hint_row["hint"])
+                month_hint = str(hint_row["v"])
         except Exception:
             pass
 
@@ -751,8 +750,7 @@ async def api_save_state(request: Request):
 
 
             if month_hint is not None:
-                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
-                cur.execute("INSERT OR REPLACE INTO month_hints (y, m, hint) VALUES (?, ?, ?)", (year, m_str, str(month_hint)))
+                cur.execute("INSERT OR REPLACE INTO ts_settings (k, v) VALUES ('month_hint', ?)", (str(month_hint),))
 
             conn.commit()
             

@@ -366,10 +366,17 @@ function rowDrop(event, rIndex) {
   renderTable();
 }
 
+function closeReportModal() {
+  document.getElementById("reportModal").style.display = "none";
+  document.getElementById("reportIframe").src = "";
+}
+
 function exportSummary(type) {
   const year = document.getElementById("yearInput").value;
   const month = document.getElementById("monthInput").value;
-  window.open(`${APP_PREFIX}/api/export-summary?year=${year}&month=${month}&type=${encodeURIComponent(type)}`, "ReportWindow", "width=1100,height=800,scrollbars=yes,resizable=yes");
+  const url = `${APP_PREFIX}/api/export-summary?year=${year}&month=${month}&type=${encodeURIComponent(type)}`;
+  document.getElementById("reportIframe").src = url;
+  document.getElementById("reportModal").style.display = "block";
 }
 
 function openSickModal() {
