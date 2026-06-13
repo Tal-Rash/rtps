@@ -19,8 +19,7 @@ import hashlib
 ROOT = Path(__file__).resolve().parent
 SHARED_DATA_DIR = ROOT.parent / "data"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
-DB_FILE = ROOT / "data" / "tabel.db"
-COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
+DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
 APP_VERSION = "web-tabel-1.3"
@@ -43,63 +42,54 @@ def init_db():
         cur.execute("PRAGMA table_info('timesheet')")
         cols = [c["name"] for c in cur.fetchall()]
         if "tab_num" not in cols and "r" in cols:
-            print("Auto-migrating timesheet and vacations to tab_num...")
+            print("Auto-migrating timesheet and vacations using true tab_num from legacy data...")
             years = cur.execute("SELECT DISTINCT y FROM employees").fetchall()
             for y_row in years:
                 year = y_row["y"]
-                emps = cur.execute("SELECT rowid, tab_num FROM employees WHERE y=? ORDER BY rowid", (year,)).fetchall()
-                r_to_tab = {str(idx): emp["tab_num"] for idx, emp in enumerate(emps)}
                 
-                # Migrate timesheet
+                # 1. Timesheet migration
                 ts_rows = cur.execute("SELECT m, r, c, v FROM timesheet WHERE y=?", (year,)).fetchall()
+                # Find true tab_num mapping for timesheet (stored in c=3)
+                ts_r_to_tab = {}
+                for row in ts_rows:
+                    if row["c"] == 3 and len(str(row["v"])) > 3:
+                        ts_r_to_tab[(row["m"], row["r"])] = str(row["v"])
+                
                 cur.execute("CREATE TABLE IF NOT EXISTS timesheet_new (y INT, m TEXT, tab_num TEXT, c INT, v TEXT, PRIMARY KEY(y,m,tab_num,c))")
                 for row in ts_rows:
-                    if str(row["r"]) in r_to_tab:
-                        cur.execute("INSERT OR REPLACE INTO timesheet_new (y, m, tab_num, c, v) VALUES (?, ?, ?, ?, ?)", 
-                                    (year, row["m"], r_to_tab[str(row["r"])], row["c"], row["v"]))
+                    m = row["m"]
+                    r = row["r"]
+                    c = row["c"]
+                    v = row["v"]
+                    if c >= 4:  # Only migrate actual days, skipping legacy employee metadata
+                        tab_num = ts_r_to_tab.get((m, r))
+                        if tab_num:
+                            cur.execute("INSERT OR REPLACE INTO timesheet_new (y, m, tab_num, c, v) VALUES (?, ?, ?, ?, ?)", 
+                                        (year, m, tab_num, c - 3, v))
                 
-                # Migrate vacations
+                # 2. Vacations migration
                 vac_rows = cur.execute("SELECT r, c, v FROM vacations WHERE y=?", (year,)).fetchall()
+                # Find true tab_num mapping for vacations (stored in c=0)
+                vac_r_to_tab = {}
+                for row in vac_rows:
+                    if row["c"] == 0 and len(str(row["v"])) > 3:
+                        vac_r_to_tab[row["r"]] = str(row["v"])
+                        
                 cur.execute("CREATE TABLE IF NOT EXISTS vacations_new (y INT, tab_num TEXT, c INT, v TEXT, PRIMARY KEY(y,tab_num,c))")
                 for row in vac_rows:
-                    if str(row["r"]) in r_to_tab:
-                        cur.execute("INSERT OR REPLACE INTO vacations_new (y, tab_num, c, v) VALUES (?, ?, ?, ?)", 
-                                    (year, r_to_tab[str(row["r"])], row["c"], row["v"]))
-                                    
+                    r = row["r"]
+                    c = row["c"]
+                    v = row["v"]
+                    if c >= 1:  # Skip tab_num column
+                        tab_num = vac_r_to_tab.get(r)
+                        if tab_num:
+                            cur.execute("INSERT OR REPLACE INTO vacations_new (y, tab_num, c, v) VALUES (?, ?, ?, ?)", 
+                                        (year, tab_num, c - 1, v))
+                                        
             cur.execute("DROP TABLE IF EXISTS timesheet")
             cur.execute("ALTER TABLE timesheet_new RENAME TO timesheet")
             cur.execute("DROP TABLE IF EXISTS vacations")
             cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
-        # Fix shifted timesheet data (c=1,2,3 has junk employee info, actual days start at c=4)
-        shifted_ts = cur.execute("SELECT DISTINCT y, m, tab_num FROM timesheet WHERE c=3 AND length(v) > 3 AND (v LIKE '40%' OR v LIKE '46%')").fetchall()
-        if shifted_ts:
-            print(f"Fixing {len(shifted_ts)} shifted timesheet rows...")
-            for s in shifted_ts:
-                y, m, tab_num = s["y"], s["m"], s["tab_num"]
-                cur.execute("DELETE FROM timesheet WHERE y=? AND m=? AND tab_num=? AND c IN (1,2,3)", (y, m, tab_num))
-                ts_rows = cur.execute("SELECT c, v FROM timesheet WHERE y=? AND m=? AND tab_num=? AND c >= 4", (y, m, tab_num)).fetchall()
-                cur.execute("DELETE FROM timesheet WHERE y=? AND m=? AND tab_num=? AND c >= 4", (y, m, tab_num))
-                insert_ts = []
-                for r in ts_rows:
-                    if r["c"] - 3 >= 1:
-                        insert_ts.append((y, m, tab_num, r["c"] - 3, r["v"]))
-                cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
-            conn.commit()
-
-        # Fix shifted vacations data (c=0 is tab_num, actual data starts at c=1)
-        shifted_vac = cur.execute("SELECT DISTINCT y, tab_num FROM vacations WHERE c=0 AND length(v) > 3 AND (v LIKE '40%' OR v LIKE '46%')").fetchall()
-        if shifted_vac:
-            print(f"Fixing {len(shifted_vac)} shifted vacations rows...")
-            for s in shifted_vac:
-                y, tab_num = s["y"], s["tab_num"]
-                cur.execute("DELETE FROM vacations WHERE y=? AND tab_num=? AND c=0", (y, tab_num))
-                vac_rows = cur.execute("SELECT c, v FROM vacations WHERE y=? AND tab_num=? AND c >= 1", (y, tab_num)).fetchall()
-                cur.execute("DELETE FROM vacations WHERE y=? AND tab_num=? AND c >= 1", (y, tab_num))
-                insert_vac = []
-                for r in vac_rows:
-                    if r["c"] - 1 >= 0:
-                        insert_vac.append((y, tab_num, r["c"] - 1, r["v"]))
-                cur.executemany("INSERT INTO vacations(y, tab_num, c, v) VALUES(?,?,?,?)", insert_vac)
             conn.commit()
 
 init_db()
