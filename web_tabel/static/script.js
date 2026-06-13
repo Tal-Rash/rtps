@@ -547,7 +547,10 @@ document.addEventListener('mouseup', function(e) {
 });
 
 function clearSelection() {
-  currentSelectedCells.forEach(c => c.classList.remove('multi-selected'));
+  currentSelectedCells.forEach(c => {
+    c.classList.remove('multi-selected');
+    c.style.boxShadow = '';
+  });
   currentSelectedCells.clear();
 }
 
@@ -585,6 +588,18 @@ function selectRange(start, end) {
       if (cell) {
         cell.classList.add('multi-selected');
         currentSelectedCells.add(cell);
+        
+        const shadows = [];
+        if (r === minRow) shadows.push('inset 0 1.5px 0 0 #276ef1');
+        if (r === maxRow) shadows.push('inset 0 -1.5px 0 0 #276ef1');
+        if (c === minCol) shadows.push('inset 1.5px 0 0 0 #276ef1');
+        if (c === maxCol) shadows.push('inset -1.5px 0 0 0 #276ef1');
+        
+        if (shadows.length > 0) {
+          cell.style.setProperty('box-shadow', shadows.join(', '), 'important');
+        } else {
+          cell.style.boxShadow = '';
+        }
       }
     }
   }

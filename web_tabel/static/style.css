@@ -1271,7 +1271,5 @@ td.bg-milk .cell.day-cell::selection {
 
 /* Выделенные ячейки при мультиселекте */
 .cell.multi-selected {
-  background-color: rgba(39, 110, 241, 0.25) !important;
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  background-color: rgba(39, 110, 241, 0.15) !important;
 }
