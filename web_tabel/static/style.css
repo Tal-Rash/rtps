@@ -426,11 +426,12 @@
     td.transfer-col .cell.day-cell::selection,
     td.holiday-col .cell.day-cell::selection { background:rgba(16,32,51,.15); }
     .col-idx { width:36px; }
-    .col-pos { width:150px; }
-    .col-fio { width:200px; }
-    .col-tab { width:70px; }
-    .col-total { width:60px; text-align:center; }
-    .col-day { width:24px; text-align:center; }
+    .col-pos { width:150px; min-width:150px; }
+    .col-fio { width:200px; min-width:200px; }
+    .col-tab { width:70px; min-width:70px; }
+    .col-total { width:60px; min-width:60px; text-align:center; }
+    .col-day { width:24px; min-width:24px; max-width:24px; text-align:center; }
+    th.col-day { padding: 14px 2px !important; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
     .month-table.compact th,
     .month-table.compact td,
