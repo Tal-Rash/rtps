@@ -235,8 +235,23 @@ def current_session(handler) -> tuple[str, str, str, str] | None:
 
 def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
     if not session: return None
+    username = session[0]
     role = session[1]
     modules = session[2]
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE username=?", (username,)).fetchone()
+        conn.close()
+        if not user_row:
+            return None
+        role = user_row["role"]
+        modules = user_row["allowed_modules"] or ""
+    except Exception:
+        pass
+
     for part in modules.split(","):
         part = part.strip()
         if not part: continue
@@ -2859,13 +2874,33 @@ def get_current_session_fastapi(request: Request):
 def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str) -> str:
     if not session:
         return ""
-    _, role, modules, _ = session
+    username = session[0]
+    role = session[1]
+    modules = session[2]
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE username=?", (username,)).fetchone()
+        conn.close()
+        if not user_row:
+            return ""
+        role = user_row["role"]
+        modules = user_row["allowed_modules"] or ""
+    except Exception:
+        pass
+
     if role == "admin":
         return "admin"
-    if role == "viewer":
-        return "viewer"
-    if module in modules.split(","):
-        return "edit" if role == "editor" else role
+    for part in modules.split(","):
+        part = part.strip()
+        if not part: continue
+        if ":" in part:
+            k, v = part.split(":", 1)
+            if k == module: return v
+        else:
+            if part == module: return role
     return ""
 
 def require_auth_fastapi(request: Request, need_edit: bool = False):
