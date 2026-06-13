@@ -70,6 +70,36 @@ def init_db():
             cur.execute("ALTER TABLE timesheet_new RENAME TO timesheet")
             cur.execute("DROP TABLE IF EXISTS vacations")
             cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
+        # Fix shifted timesheet data (c=1,2,3 has junk employee info, actual days start at c=4)
+        shifted_ts = cur.execute("SELECT DISTINCT y, m, tab_num FROM timesheet WHERE c=3 AND length(v) > 3 AND (v LIKE '40%' OR v LIKE '46%')").fetchall()
+        if shifted_ts:
+            print(f"Fixing {len(shifted_ts)} shifted timesheet rows...")
+            for s in shifted_ts:
+                y, m, tab_num = s["y"], s["m"], s["tab_num"]
+                cur.execute("DELETE FROM timesheet WHERE y=? AND m=? AND tab_num=? AND c IN (1,2,3)", (y, m, tab_num))
+                ts_rows = cur.execute("SELECT c, v FROM timesheet WHERE y=? AND m=? AND tab_num=? AND c >= 4", (y, m, tab_num)).fetchall()
+                cur.execute("DELETE FROM timesheet WHERE y=? AND m=? AND tab_num=? AND c >= 4", (y, m, tab_num))
+                insert_ts = []
+                for r in ts_rows:
+                    if r["c"] - 3 >= 1:
+                        insert_ts.append((y, m, tab_num, r["c"] - 3, r["v"]))
+                cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
+            conn.commit()
+
+        # Fix shifted vacations data (c=0 is tab_num, actual data starts at c=1)
+        shifted_vac = cur.execute("SELECT DISTINCT y, tab_num FROM vacations WHERE c=0 AND length(v) > 3 AND (v LIKE '40%' OR v LIKE '46%')").fetchall()
+        if shifted_vac:
+            print(f"Fixing {len(shifted_vac)} shifted vacations rows...")
+            for s in shifted_vac:
+                y, tab_num = s["y"], s["tab_num"]
+                cur.execute("DELETE FROM vacations WHERE y=? AND tab_num=? AND c=0", (y, tab_num))
+                vac_rows = cur.execute("SELECT c, v FROM vacations WHERE y=? AND tab_num=? AND c >= 1", (y, tab_num)).fetchall()
+                cur.execute("DELETE FROM vacations WHERE y=? AND tab_num=? AND c >= 1", (y, tab_num))
+                insert_vac = []
+                for r in vac_rows:
+                    if r["c"] - 1 >= 0:
+                        insert_vac.append((y, tab_num, r["c"] - 1, r["v"]))
+                cur.executemany("INSERT INTO vacations(y, tab_num, c, v) VALUES(?,?,?,?)", insert_vac)
             conn.commit()
 
 init_db()
