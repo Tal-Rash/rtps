@@ -146,11 +146,7 @@ def ensure_db() -> None:
             )
             """
         )
-        cur.execute("DROP TABLE IF EXISTS users")
-        cur.execute(
-            "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, role TEXT, allowed_modules TEXT, password_hash TEXT)"
-        )
-        cur.execute("INSERT OR IGNORE INTO users (id, role, allowed_modules) VALUES ('admin', 'admin', 'zamer_kp:admin,spravochnik:admin')")
+
         conn.commit()
 
 
