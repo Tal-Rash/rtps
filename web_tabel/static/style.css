@@ -932,6 +932,7 @@ textarea {
   -webkit-box-shadow: none !important;
   text-align: center;
   line-height: 35px;
+  font-size: 15px;
 }
 
 .cell.selected-cell,
