@@ -37,6 +37,10 @@ function switchTab(tabId) {
   
   event.currentTarget.classList.add('active');
   document.getElementById('tab-' + tabId).classList.add('active');
+  
+  if (tabId === 'months') {
+    applyVacations();
+  }
 }
 
 function markDirty(dirty) {
@@ -96,7 +100,6 @@ function renderTable() {
   for (let d = 1; d <= days; d++) {
     hHTML += `<th class="col-day">${String(d).padStart(2, '0')}</th>`;
   }
-  hHTML += `<th class="col-total">Итого</th>`;
   thead.innerHTML = hHTML;
   
   // Render Body for Tabel
@@ -142,7 +145,6 @@ function renderTable() {
       bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
     }
     
-    bHTML += `<td class="col-total" id="total_${tabNum}"><div class="cell center"><strong>${total}</strong></div></td>`;
     bHTML += `</tr>`;
   });
   
@@ -214,13 +216,7 @@ function cellEdited(tabNum, c, el) {
   appState.timesheet[tabNum][c] = el.innerText.trim();
   markDirty(true);
   
-  let total = 0;
-  const days = daysInMonth(appState.year, appState.month);
-  for (let d = 1; d <= days; d++) {
-    const v = appState.timesheet[tabNum][d] || "";
-    if (v.match(/^[0-9]+$/)) total += parseInt(v);
-  }
-  document.getElementById(`total_${tabNum}`).innerHTML = `<div class="cell center"><strong>${total}</strong></div>`;
+
 }
 
 function dataEdited(r, c, el) {
@@ -405,4 +401,80 @@ function generateSickEmail() {
   
   window.open(`${APP_PREFIX}/api/export-sick-email?emp=${emp}&type=${type}&start=${start}&end=${end}&email=${email}`, "_blank");
   closeSickModal();
+}
+
+
+function parseVacationDate(str, defaultYear) {
+  if (!str) return null;
+  const parts = str.trim().split('.');
+  if (parts.length < 2) return null;
+  const d = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  let y = defaultYear;
+  if (parts.length >= 3) {
+    if (parts[2].length === 2) y = 2000 + parseInt(parts[2], 10);
+    else y = parseInt(parts[2], 10);
+  }
+  if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+  return new Date(y, m - 1, d);
+}
+
+function applyVacations() {
+  if (!appState || !appState.vacations || !appState.employees) return;
+  const year = parseInt(appState.year);
+  const month = parseInt(appState.month);
+  const days = daysInMonth(year, month);
+  
+  let changed = false;
+
+  appState.employees.forEach((emp, r) => {
+    const tabNum = emp.tab_num || `empty_${r}`;
+    const vacData = appState.vacations[tabNum];
+    if (!vacData) return;
+    
+    const vacDays = new Set();
+    const cols = [[1,2,3], [5,6,7], [9,10,11]];
+    cols.forEach(pair => {
+      const sDateStr = vacData[pair[0]];
+      const eDateStr = vacData[pair[1]];
+      
+      const sDate = parseVacationDate(sDateStr, year);
+      const eDate = parseVacationDate(eDateStr, year);
+      
+      if (sDate && eDate && eDate >= sDate) {
+        let curr = new Date(sDate);
+        while (curr <= eDate) {
+          if (curr.getFullYear() === year) {
+            const m = curr.getMonth() + 1;
+            const d = curr.getDate();
+            const isH = appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d);
+            if (!isH) {
+              vacDays.add(`${m}-${d}`);
+            }
+          }
+          curr.setDate(curr.getDate() + 1);
+        }
+      }
+    });
+    
+    if (!appState.timesheet[tabNum]) appState.timesheet[tabNum] = {};
+    for (let d = 1; d <= days; d++) {
+      const isVac = vacDays.has(`${month}-${d}`);
+      const currVal = appState.timesheet[tabNum][d] || "";
+      if (isVac) {
+        if (currVal !== "О" && currVal !== "ДО") {
+          appState.timesheet[tabNum][d] = "О";
+          changed = true;
+        }
+      } else if (currVal === "О") {
+        appState.timesheet[tabNum][d] = "";
+        changed = true;
+      }
+    }
+  });
+  
+  if (changed) {
+    markDirty(true);
+    renderTable();
+  }
 }
