@@ -398,15 +398,6 @@ async def redir_grafik():
 async def redir_zamer():
     return RedirectResponse("https://yrtps.ru/zamer-kp", status_code=303)
 
-@app.get("/debug_nginx")
-def debug_nginx():
-    import subprocess
-    try:
-        res = subprocess.run(["ls", "-la", "/etc/nginx/sites-enabled/"], capture_output=True, text=True)
-        return Response(content=res.stdout + "\nSTDERR:\n" + res.stderr, media_type="text/plain")
-    except Exception as e:
-        return Response(content=str(e), media_type="text/plain")
-
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")
     port = int(os.environ.get("WEB_PORT", "8001"))
