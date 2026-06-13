@@ -137,7 +137,7 @@ function renderTable() {
     dHTML += `<tr><td style="text-align: left;">${monthsNames[r]}</td>`;
     for (let c = 1; c < 8; c++) {
       const val = (appState.ts_norms_data && appState.ts_norms_data[r] && appState.ts_norms_data[r][c]) || "";
-      dHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="dataEdited(${r}, ${c}, this)">${escapeHtml(val)}</td>`;
+      dHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="dataEdited(${r}, ${c}, this)">${escapeHtml(val)}</div></td>`;
     }
     dHTML += `</tr>`;
   }
@@ -150,13 +150,13 @@ function renderTable() {
   for (let r = 0; r < 11; r++) {
     const emp = appState.employees[r] || {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
     eHTML += `<tr>`;
-    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'pos', this)">${escapeHtml(emp.pos)}</td>`;
-    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'name', this)">${escapeHtml(emp.name)}</td>`;
-    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'full_name', this)">${escapeHtml(emp.full_name)}</td>`;
-    eHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'tab_num', this)">${escapeHtml(emp.tab_num)}</td>`;
+    eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'pos', this)">${escapeHtml(emp.pos)}</div></td>`;
+    eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'name', this)">${escapeHtml(emp.name)}</div></td>`;
+    eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'full_name', this)">${escapeHtml(emp.full_name)}</div></td>`;
+    eHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'tab_num', this)">${escapeHtml(emp.tab_num)}</div></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk', this)" ${emp.milk ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk_issue', this)" ${emp.milk_issue ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
-    eHTML += `<td class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'milk_note', this)">${escapeHtml(emp.milk_note)}</td>`;
+    eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'milk_note', this)">${escapeHtml(emp.milk_note)}</div></td>`;
     eHTML += `</tr>`;
   }
   ebody.innerHTML = eHTML;
@@ -177,7 +177,7 @@ function renderTable() {
         vHTML += `<td style="background:#f0f0f0;"></td>`; // separator
       } else {
         const val = (appState.vacations && appState.vacations[tabNum] && appState.vacations[tabNum][c]) || "";
-        vHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited('${tabNum}', ${c}, this)">${escapeHtml(val)}</td>`;
+        vHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited('${tabNum}', ${c}, this)">${escapeHtml(val)}</div></td>`;
       }
     });
     vHTML += `</tr>`;
