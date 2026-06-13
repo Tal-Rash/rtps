@@ -162,6 +162,16 @@ def get_client_ip(request: Request):
     return request.client.host if request.client else "127.0.0.1"
 
 
+@app.get("/debug_logs")
+def debug_logs():
+    import subprocess
+    try:
+        res = subprocess.run(["journalctl", "-u", "tabel.service", "-n", "100", "--no-pager"], capture_output=True, text=True)
+        return Response(content=res.stdout + "\nSTDERR:\n" + res.stderr, media_type="text/plain")
+    except Exception as e:
+        return Response(content=str(e), media_type="text/plain")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home_page(request: Request):
     session = get_current_session(request)
