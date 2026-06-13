@@ -215,7 +215,7 @@ async def home_page(request: Request):
         if has_access: return f'<a href="{url}">Открыть модуль →</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
-    return templates.TemplateResponse(request=request, name="home.html", context={
+    context = {
         "request": request,
         "STARTED_AT": dt.datetime.now().strftime("%d.%m.%Y %H:%M"),
         "AUTH_BADGE": auth_badge,
@@ -225,7 +225,11 @@ async def home_page(request: Request):
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik"),
         "TABEL_LINK": link_for("tabel", "/tabel")
-    })
+    }
+    try:
+        return templates.TemplateResponse(request=request, name="home.html", context=context)
+    except TypeError:
+        return templates.TemplateResponse("home.html", context)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
