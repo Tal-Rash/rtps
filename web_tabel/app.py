@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.42"
+APP_VERSION = "web-tabel-1.43"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
@@ -497,14 +497,10 @@ async def export_milk(year: int, month: int, type: str):
         count = 0
         emp_ts = ts_data.get(tab_num, {})
         for d in range(1, days_cnt + 1):
-            val = emp_ts.get(d, "")
+            val = emp_ts.get(d, "").strip().upper()
             if type == "компенсация":
-                try:
-                    float(val.replace(',', '.'))
+                if "М" in val:
                     count += 1
-                except ValueError:
-                    if val in ["В", "РВ", "ДО", "О", "У", "Б"]: 
-                        if val in ["РВ"]: count += 1 # is_milk_cell equivalent
             else:
                 try:
                     float(val.replace(',', '.'))
