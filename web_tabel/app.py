@@ -177,7 +177,23 @@ def get_current_session_fastapi(request: Request):
 def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str) -> str:
     if not session:
         return ""
-    _, role, modules, _ = session
+    username = session[0]
+    role = session[1]
+    modules = session[2]
+    
+    try:
+        conn = connect_common()
+        if conn:
+            cur = conn.cursor()
+            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE username=?", (username,)).fetchone()
+            conn.close()
+            if not user_row:
+                return "" # Пользователь удален или заблокирован
+            role = user_row["role"]
+            modules = user_row["allowed_modules"] or ""
+    except Exception:
+        pass # Fallback на куки при ошибке БД
+
     if role == "admin":
         return "admin"
     for part in modules.split(","):

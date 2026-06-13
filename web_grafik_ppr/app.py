@@ -1275,8 +1275,23 @@ def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str
 
 def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
     if not session: return None
+    username = session[0]
     role = session[1]
     modules = session[2]
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE username=?", (username,)).fetchone()
+        conn.close()
+        if not user_row:
+            return None
+        role = user_row["role"]
+        modules = user_row["allowed_modules"] or ""
+    except Exception:
+        pass
+
     for part in modules.split(","):
         part = part.strip()
         if not part: continue
