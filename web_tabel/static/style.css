@@ -1122,8 +1122,8 @@ td.holiday-col .cell.day-cell::selection {
 }
 
 .col-fio {
-  width: auto;
-  min-width: 220px;
+  width: max-content;
+  min-width: 150px;
 }
 
 .col-tab {
@@ -1164,7 +1164,6 @@ th.col-day {
 .month-table {
   table-layout: fixed;
   width: max-content;
-  min-width: 1300px;
 }
 
 .month-table tbody tr {
