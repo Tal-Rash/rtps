@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.26"
+APP_VERSION = "web-tabel-1.27"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -206,6 +206,58 @@ async def home_route(request: Request):
     return response
 MONTH_NAMES = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
+
+FIXED_HOLIDAYS = {
+    (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
+    (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
+}
+
+def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
+    transfer_dates: set[tuple[int, int]] = set()
+    holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
+    db_path = ROOT.parent / "base" / "common_database.db"
+    if not db_path.exists():
+        return {
+        "system_dates": load_system_dates(year),
+            "transfer": sorted(transfer_dates),
+            "holiday": sorted(holiday_dates),
+        }
+
+    try:
+        import sqlite3
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.cursor()
+            rows = cur.execute(
+                "SELECT c, v FROM ts_norms_data WHERE y=? AND c IN (6, 7)",
+                (year,),
+            ).fetchall()
+        for col_idx, raw_text in rows:
+            if not raw_text:
+                continue
+            text = str(raw_text).replace(";", "\n").replace(",", "\n")
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(".")
+                if len(parts) == 2:
+                    try:
+                        d, m = int(parts[0]), int(parts[1])
+                        if col_idx == 6:
+                            transfer_dates.add((m, d))
+                        elif col_idx == 7:
+                            holiday_dates.add((m, d))
+                    except ValueError:
+                        pass
+    except Exception:
+        pass
+
+    return {
+        "system_dates": load_system_dates(year),
+        "transfer": sorted(transfer_dates),
+        "holiday": sorted(holiday_dates),
+    }
+
 def load_state(year: int, month: int) -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
@@ -256,6 +308,7 @@ def load_state(year: int, month: int) -> dict:
             pass
 
     return {
+        "system_dates": load_system_dates(year),
         "year": year,
         "month": month,
         "employees": employees,
@@ -268,8 +321,10 @@ def load_state(year: int, month: int) -> dict:
 async def debug_startup(request: Request):
     error_file = ROOT / "startup_error.log"
     if error_file.exists():
-        return {"error": error_file.read_text(encoding="utf-8")}
-    return {"error": "No startup error found."}
+        return {
+        "system_dates": load_system_dates(year),"error": error_file.read_text(encoding="utf-8")}
+    return {
+        "system_dates": load_system_dates(year),"error": "No startup error found."}
 
 @app.get("/api/state")
 async def api_get_state(request: Request, year: int, month: int):

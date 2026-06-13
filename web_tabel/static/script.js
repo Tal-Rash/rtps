@@ -113,14 +113,22 @@ function renderTable() {
       const val = rowData[d] || "";
       const isWeekend = [0, 6].includes(new Date(year, month - 1, d).getDay());
       let tdClass = "col-day";
-        if (isWeekend || val === "В") {
-          tdClass += " bg-weekend";
-        } else if (val === "О" || val === "ДО") {
+        let isH = false, isT = false;
+        if (appState.system_dates) {
+          isT = appState.system_dates.transfer.some(date => date[0] === month && date[1] === d);
+          isH = appState.system_dates.holiday.some(date => date[0] === month && date[1] === d);
+        }
+        
+        if (val === "О" || val === "ДО") {
           tdClass += " bg-vacation";
-        } else if (val === "К") {
+        } else if (val === "К" || val === "У") {
           tdClass += " bg-trip";
-        } else if (val === "Б" || val === "У" || val === "РВ") {
+        } else if (val === "Б" || val === "РВ") {
           tdClass += " bg-ill";
+        } else if (isH) {
+          tdClass += " bg-holiday";
+        } else if (isWeekend || isT || val === "В") {
+          tdClass += " bg-weekend";
         }
         if (val.match(/^[0-9]+$/)) total += parseInt(val);
       
