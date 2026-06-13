@@ -6,9 +6,11 @@
   <title>Табель учета web-tabel-{{APP_VERSION}}</title>
   <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
   <script>
+    var _prefix = "{{APP_PREFIX}}";
+    var _canEdit = "{{CAN_EDIT}}";
     window.APP_CONFIG = {
-      APP_PREFIX: "{{APP_PREFIX}}",
-      CAN_EDIT: "{{CAN_EDIT}}" === "true"
+      APP_PREFIX: _prefix,
+      CAN_EDIT: _canEdit === "true"
     };
   </script>
 <style>
