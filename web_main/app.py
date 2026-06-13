@@ -402,7 +402,7 @@ async def redir_zamer():
 def debug_nginx():
     import subprocess
     try:
-        res = subprocess.run(["cat", "/etc/nginx/sites-enabled/default"], capture_output=True, text=True)
+        res = subprocess.run(["ls", "-la", "/etc/nginx/sites-enabled/"], capture_output=True, text=True)
         return Response(content=res.stdout + "\nSTDERR:\n" + res.stderr, media_type="text/plain")
     except Exception as e:
         return Response(content=str(e), media_type="text/plain")
