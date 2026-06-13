@@ -102,10 +102,6 @@ def init_db():
             cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
             
 
-            if month_hint is not None:
-                # Save it globally
-                cur.execute("INSERT OR REPLACE INTO ts_settings (k, v) VALUES ('month_hint', ?)", (str(month_hint),))
-
             conn.commit()
 
 try:
