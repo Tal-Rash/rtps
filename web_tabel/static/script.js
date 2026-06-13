@@ -113,11 +113,16 @@ function renderTable() {
       const val = rowData[d] || "";
       const isWeekend = [0, 6].includes(new Date(year, month - 1, d).getDay());
       let tdClass = "col-day";
-      if (isWeekend) tdClass += " holiday-col";
-      if (val === "В") tdClass += " holiday-col";
-      if (val === "ОТ" || val === "О" || val === "ОВ" || val === "А" || val === "У") tdClass += " transfer-col";
-      if (val === "Б") tdClass += " holiday-col";
-      if (val.match(/^[0-9]+$/)) total += parseInt(val);
+        if (isWeekend || val === "В") {
+          tdClass += " bg-weekend";
+        } else if (val === "О" || val === "ДО") {
+          tdClass += " bg-vacation";
+        } else if (val === "К") {
+          tdClass += " bg-trip";
+        } else if (val === "Б" || val === "У" || val === "РВ") {
+          tdClass += " bg-ill";
+        }
+        if (val.match(/^[0-9]+$/)) total += parseInt(val);
       
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : '';
       bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
