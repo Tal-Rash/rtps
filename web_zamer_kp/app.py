@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import io
 import json
+import zlib
 import os
 import secrets
 import sqlite3
@@ -1297,50 +1298,82 @@ def build_phone_export_payload(kind: str, selected_locomotives: list[str] | None
 def upsert_inventory_locomotive(
     cur: sqlite3.Cursor,
     series: str,
-    loco_number: str,
-    wheel_pair_count: int,
-    *,
+    locomotive: str,
+    inv: str = "",
+    wheel_pair_count: int = 0,
+    section_count: int = 0,
+    eight_digit_number: str = "",
     sort_order: int = 0,
-    deleted_at: int = 0,
+    updated_at: int | None = None,
+    deleted_at: int | None = None,
 ) -> None:
-    series = text(series).strip().upper()
-    loco_number = text(loco_number).strip()
-    if not loco_number:
+    locomotive = text(locomotive).strip()
+    if not locomotive:
         return
+    series = text(series).strip().upper()
+    inv = text(inv).strip()
+    eight_digit_number = text(eight_digit_number).strip()
     year = dt.date.today().year
-    now_ms = int(dt.datetime.now().timestamp() * 1000)
-    existing = cur.execute(
-        "SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, COALESCE(sort_order, 0) ASC, rowid DESC LIMIT 1",
-        (loco_number,),
-    ).fetchone()
-    inv = text(existing["inv"]).strip() if existing else ""
     sort_order_value = int(sort_order or 0)
-    if existing:
-        series = series or text(existing["ser"]).strip().upper()
-        if sort_order_value <= 0:
+    updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
+    if sort_order_value <= 0:
+        existing = cur.execute(
+            "SELECT COALESCE(sort_order, 0) AS sort_order FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, COALESCE(sort_order, 0) ASC, rowid DESC LIMIT 1",
+            (locomotive,),
+        ).fetchone()
+        if existing:
             sort_order_value = int(existing["sort_order"] or 0)
     if sort_order_value <= 0:
         max_row = cur.execute(
             "SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM inventory"
         ).fetchone()
         sort_order_value = int(max_row["max_sort_order"] or 0) + 1
+    exact = cur.execute(
+        "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(deleted_at, 0) AS deleted_at "
+        "FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? "
+        "ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, y DESC, rowid DESC LIMIT 1",
+        (series, locomotive),
+    ).fetchone()
+    if exact:
+        if sort_order_value <= 0:
+            sort_order_value = int(exact["sort_order"] or 0)
+        if not inv:
+            inv = text(exact["inv"]).strip()
+        if not wheel_pair_count:
+            wheel_pair_count = int(exact["wheel_pair_count"] or 0)
+        if not section_count:
+            section_count = int(exact["section_count"] or 0)
+        if not eight_digit_number:
+            eight_digit_number = text(exact["eight_digit_number"]).strip()
+        if deleted_at is None:
+            deleted_at = int(exact["deleted_at"] or 0)
+        cur.execute(
+            """
+            UPDATE inventory
+            SET ser=?, num=?, inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, sort_order=?, updated_at=?, deleted_at=?
+            WHERE rowid=?
+            """,
+            (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
+        )
+        cur.execute(
+            "DELETE FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
+            (series, locomotive, int(exact["rowid"])),
+        )
+        return
+    if deleted_at is None:
+        deleted_at = 0
     cur.execute(
-        "INSERT OR REPLACE INTO inventory (y, ser, num, inv, sort_order, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (
-            year,
-            series,
-            loco_number,
-            inv,
-            sort_order_value,
-            now_ms,
-            int(deleted_at or 0),
-        ),
+        """
+        INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0)),
     )
+
     if int(deleted_at or 0) <= 0:
         for index in range(max(1, int(wheel_pair_count or 1))):
-            cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (loco_number, index, str(index + 1)))
-            cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (loco_number, index, str(index + 1)))
+            cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 0, ?)", (locomotive, index, str(index + 1)))
+            cur.execute("INSERT OR IGNORE INTO kp_data (locomotive, r, c, v) VALUES (?, ?, 1, ?)", (locomotive, index, str(index + 1)))
 
 
 def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, wheel_pair_count: int) -> None:
@@ -1910,80 +1943,6 @@ def archive_excel_export_bytes(selected_locomotives: list[str] | None = None, da
     return output.getvalue(), len(rows)
 
 
-def upsert_inventory_locomotive(
-    cur: sqlite3.Cursor,
-    series: str,
-    locomotive: str,
-    inv: str = "",
-    wheel_pair_count: int = 0,
-    section_count: int = 0,
-    eight_digit_number: str = "",
-    sort_order: int = 0,
-    updated_at: int | None = None,
-    deleted_at: int | None = None,
-) -> None:
-    locomotive = text(locomotive).strip()
-    if not locomotive:
-        return
-    series = text(series).strip().upper()
-    inv = text(inv).strip()
-    eight_digit_number = text(eight_digit_number).strip()
-    year = dt.date.today().year
-    sort_order_value = int(sort_order or 0)
-    updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
-    if sort_order_value <= 0:
-        existing = cur.execute(
-            "SELECT COALESCE(sort_order, 0) AS sort_order FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, COALESCE(sort_order, 0) ASC, rowid DESC LIMIT 1",
-            (locomotive,),
-        ).fetchone()
-        if existing:
-            sort_order_value = int(existing["sort_order"] or 0)
-    if sort_order_value <= 0:
-        max_row = cur.execute(
-            "SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM inventory"
-        ).fetchone()
-        sort_order_value = int(max_row["max_sort_order"] or 0) + 1
-    exact = cur.execute(
-        "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(deleted_at, 0) AS deleted_at "
-        "FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? "
-        "ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, y DESC, rowid DESC LIMIT 1",
-        (series, locomotive),
-    ).fetchone()
-    if exact:
-        if sort_order_value <= 0:
-            sort_order_value = int(exact["sort_order"] or 0)
-        if not inv:
-            inv = text(exact["inv"]).strip()
-        if not wheel_pair_count:
-            wheel_pair_count = int(exact["wheel_pair_count"] or 0)
-        if not section_count:
-            section_count = int(exact["section_count"] or 0)
-        if not eight_digit_number:
-            eight_digit_number = text(exact["eight_digit_number"]).strip()
-        if deleted_at is None:
-            deleted_at = int(exact["deleted_at"] or 0)
-        cur.execute(
-            """
-            UPDATE inventory
-            SET ser=?, num=?, inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, sort_order=?, updated_at=?, deleted_at=?
-            WHERE rowid=?
-            """,
-            (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
-        )
-        cur.execute(
-            "DELETE FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
-            (series, locomotive, int(exact["rowid"])),
-        )
-        return
-    if deleted_at is None:
-        deleted_at = 0
-    cur.execute(
-        """
-        INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, sort_order, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, sort_order_value, updated_at, int(deleted_at or 0)),
-    )
 
 
 def phone_reference_export_payload() -> dict:
