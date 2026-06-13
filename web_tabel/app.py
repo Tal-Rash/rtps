@@ -187,7 +187,7 @@ def load_state(year: int, month: int) -> dict:
         employees = []
         try:
             emp_rows = cur.execute(
-                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note FROM employees WHERE y=?", (year,)
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note FROM employees WHERE y=? ORDER BY rowid", (year,)
             ).fetchall()
             for r in emp_rows:
                 employees.append({
