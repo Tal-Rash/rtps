@@ -83,7 +83,7 @@ jobs:
 
           systemctl daemon-reload
 
-          mapfile -t services < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' deploy/services.txt)
+          mapfile -t services < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' deploy/services.txt | tr -d '\r')
           if [ "${#services[@]}" -eq 0 ]; then
             echo "deploy/services.txt is empty" >&2
             exit 1
