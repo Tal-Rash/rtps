@@ -92,7 +92,13 @@ def init_db():
             cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
             conn.commit()
 
-init_db()
+try:
+    init_db()
+except Exception as e:
+    import traceback
+    with open(ROOT / "startup_error.log", "w", encoding="utf-8") as f:
+        f.write(traceback.format_exc())
+    print("STARTUP ERROR:", traceback.format_exc())
 
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_FILE)
@@ -257,6 +263,13 @@ def load_state(year: int, month: int) -> dict:
         "vacations": vacations,
         "ts_norms_data": ts_norms_data,
     }
+
+@app.get("/api/debug_startup")
+async def debug_startup(request: Request):
+    error_file = ROOT / "startup_error.log"
+    if error_file.exists():
+        return {"error": error_file.read_text(encoding="utf-8")}
+    return {"error": "No startup error found."}
 
 @app.get("/api/state")
 async def api_get_state(request: Request, year: int, month: int):
