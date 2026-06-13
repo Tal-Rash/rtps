@@ -46,6 +46,7 @@
           <label class="mod-label" style="cursor:pointer; margin:0;">ППР: <select name="module_grafik_ppr" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">Замер: <select name="module_zamer_kp" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">Справ: <select name="module_spravochnik" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Табель: <select name="module_tabel" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
         </div>
         <button type="submit" style="align-self:flex-start; padding:10px 24px;">Добавить пользователя</button>
       </div>
@@ -88,6 +89,11 @@
                 <option value="none" {% if u.s_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.s_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.s_r == 'edit' %}selected{% endif %}>Редактор</option>
+              </select></label>
+              <label class="mod-label">Табель: <select form="form_{{ u.id }}" name="module_tabel">
+                <option value="none" {% if u.t_r == 'none' %}selected{% endif %}>Нет доступа</option>
+                <option value="view" {% if u.t_r == 'view' %}selected{% endif %}>Зритель</option>
+                <option value="edit" {% if u.t_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select></label>
             </div>
           </td>

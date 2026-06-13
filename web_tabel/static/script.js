@@ -71,6 +71,7 @@ async function loadState() {
       throw new Error("Failed to load");
     }
     appState = await res.json();
+    applyVacations(); // Re-apply vacations to fix old DB state
     renderMonthButtons();
     renderTable();
     markDirty(false);
@@ -478,3 +479,203 @@ function applyVacations() {
     renderTable();
   }
 }
+
+// --- Выделение нескольких ячеек ---
+let isSelecting = false;
+let startCell = null;
+let currentSelectedCells = new Set();
+
+document.addEventListener('mousedown', function(e) {
+  const cell = e.target.closest('.day-cell');
+  if (!cell || !CAN_EDIT) {
+    if (!e.target.closest('.json-menu')) {
+       clearSelection();
+    }
+    return;
+  }
+  if (e.button !== 0) return; 
+  
+  isSelecting = true;
+  startCell = cell;
+  selectRange(startCell, startCell);
+});
+
+document.addEventListener('mouseover', function(e) {
+  if (!isSelecting || !startCell) return;
+  const cell = e.target.closest('.day-cell');
+  if (!cell || !CAN_EDIT) return;
+  
+  selectRange(startCell, cell);
+  window.getSelection().removeAllRanges(); 
+});
+
+document.addEventListener('mouseup', function(e) {
+  isSelecting = false;
+});
+
+function clearSelection() {
+  currentSelectedCells.forEach(c => c.classList.remove('multi-selected'));
+  currentSelectedCells.clear();
+}
+
+function selectRange(start, end) {
+  clearSelection();
+  if (!start || !end) return;
+  
+  const tbody = start.closest('tbody');
+  if (!tbody) return;
+  const allRows = Array.from(tbody.querySelectorAll('tr'));
+  
+  const startTr = start.closest('tr');
+  const startTd = start.closest('td');
+  const endTr = end.closest('tr');
+  const endTd = end.closest('td');
+  
+  const startRowIdx = allRows.indexOf(startTr);
+  const endRowIdx = allRows.indexOf(endTr);
+  
+  const startTds = Array.from(startTr.querySelectorAll('td'));
+  const endTds = Array.from(endTr.querySelectorAll('td'));
+  
+  const startColIdx = startTds.indexOf(startTd);
+  const endColIdx = endTds.indexOf(endTd);
+  
+  const minRow = Math.min(startRowIdx, endRowIdx);
+  const maxRow = Math.max(startRowIdx, endRowIdx);
+  const minCol = Math.min(startColIdx, endColIdx);
+  const maxCol = Math.max(startColIdx, endColIdx);
+  
+  for (let r = minRow; r <= maxRow; r++) {
+    const rowTds = Array.from(allRows[r].querySelectorAll('td'));
+    for (let c = minCol; c <= maxCol; c++) {
+      const cell = rowTds[c]?.querySelector('.day-cell');
+      if (cell) {
+        cell.classList.add('multi-selected');
+        currentSelectedCells.add(cell);
+      }
+    }
+  }
+}
+
+// Навигация по ячейкам как в Excel и копипаст
+document.addEventListener('keydown', function(e) {
+  const cell = e.target.closest('.cell');
+  if (!cell || !CAN_EDIT) return;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (currentSelectedCells.size > 1) {
+      e.preventDefault();
+      currentSelectedCells.forEach(c => {
+        c.innerText = "";
+        c.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      return;
+    }
+  }
+
+  const td = cell.closest('td');
+  const tr = cell.closest('tr');
+  if (!td || !tr) return;
+
+  const tbody = tr.closest('tbody');
+  const allRows = Array.from(tbody.querySelectorAll('tr'));
+  const rowIndex = allRows.indexOf(tr);
+  const allCellsInRow = Array.from(tr.querySelectorAll('td'));
+  const colIndex = allCellsInRow.indexOf(td);
+
+  let targetCell = null;
+
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const targetRow = allRows[rowIndex - 1];
+    if (targetRow) targetCell = targetRow.querySelectorAll('td')[colIndex]?.querySelector('.cell');
+  } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+    e.preventDefault();
+    const targetRow = allRows[rowIndex + 1];
+    if (targetRow) targetCell = targetRow.querySelectorAll('td')[colIndex]?.querySelector('.cell');
+  } else if (e.key === 'ArrowRight') {
+    const sel = window.getSelection();
+    if (sel.focusOffset === cell.innerText.length || cell.innerText.length === 0) {
+      e.preventDefault();
+      targetCell = allCellsInRow[colIndex + 1]?.querySelector('.cell');
+    }
+  } else if (e.key === 'ArrowLeft') {
+    const sel = window.getSelection();
+    if (sel.focusOffset === 0 || cell.innerText.length === 0) {
+      e.preventDefault();
+      targetCell = allCellsInRow[colIndex - 1]?.querySelector('.cell');
+    }
+  }
+
+  if (targetCell) {
+    clearSelection();
+    targetCell.focus();
+    const range = document.createRange();
+    range.selectNodeContents(targetCell);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    if (currentSelectedCells.size > 1) clearSelection();
+  }
+});
+
+document.addEventListener('paste', function(e) {
+  const cell = e.target.closest('.cell');
+  if (!cell || !CAN_EDIT) return;
+
+  e.preventDefault();
+  const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+  
+  const rows = pasteData.split(/\r?\n/);
+  // Удаляем последнюю пустую строку, которую часто добавляет Excel
+  if (rows.length > 0 && rows[rows.length - 1] === "") {
+    rows.pop();
+  }
+  
+  if (rows.length === 0) return;
+
+  if (rows.length === 1 && rows[0].split('\t').length === 1) {
+    const text = rows[0];
+    if (currentSelectedCells.size > 1) {
+      currentSelectedCells.forEach(c => {
+        c.innerText = text;
+        c.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    } else {
+      document.execCommand('insertText', false, text);
+    }
+    return;
+  }
+
+  // Если это несколько ячеек (сетка)
+  const td = cell.closest('td');
+  const tr = cell.closest('tr');
+  if (!td || !tr) return;
+  
+  const tbody = tr.closest('tbody');
+  const allRows = Array.from(tbody.querySelectorAll('tr'));
+  const startRowIndex = allRows.indexOf(tr);
+  const allCellsInRow = Array.from(tr.querySelectorAll('td'));
+  const startColIndex = allCellsInRow.indexOf(td);
+
+  for (let i = 0; i < rows.length; i++) {
+    const rowData = rows[i].split('\t');
+    const targetRow = allRows[startRowIndex + i];
+    if (!targetRow) break;
+    
+    const rowTds = Array.from(targetRow.querySelectorAll('td'));
+    
+    for (let j = 0; j < rowData.length; j++) {
+      const targetTd = rowTds[startColIndex + j];
+      if (!targetTd) break;
+      
+      const targetCell = targetTd.querySelector('.cell[contenteditable="true"]');
+      if (targetCell) {
+        targetCell.innerText = rowData[j].trim();
+        targetCell.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  }
+});
+

@@ -83,7 +83,7 @@ def init_db() -> None:
             if cur.fetchone()[0] == 0:
                 conn.execute(
                     "INSERT INTO users (password, full_name, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,admin")
+                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,admin")
                 )
                 print("Создан администратор по умолчанию. Пароль: 12345")
     except Exception as e:
@@ -207,7 +207,8 @@ async def home_page(request: Request):
         "LOGS_LINK": logs_link,
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
-        "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik")
+        "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik"),
+        "TABEL_LINK": link_for("tabel", "/tabel")
     })
 
 @app.get("/login", response_class=HTMLResponse)
@@ -254,7 +255,7 @@ async def login_post(request: Request, response: Response, password: str = Form(
     if password in (WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD):
         # Legacy passwords support
         role = "editor" if password == WEB_EDIT_PASSWORD else "viewer"
-        cookie_val = _cookie_value("legacy", role, "zamer_kp,grafik_ppr,spravochnik", "Старый пароль")
+        cookie_val = _cookie_value("legacy", role, "zamer_kp,grafik_ppr,spravochnik,tabel", "Старый пароль")
         if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
         redirect = RedirectResponse("/", status_code=303)
         redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
@@ -314,7 +315,8 @@ async def users_page(request: Request):
                     "id": u[0], "full_name": u[1], "password": u[2], "role": u[3],
                     "g_r": get_mod_role(mods, "grafik_ppr", u[3]),
                     "z_r": get_mod_role(mods, "zamer_kp", u[3]),
-                    "s_r": get_mod_role(mods, "spravochnik", u[3])
+                    "s_r": get_mod_role(mods, "spravochnik", u[3]),
+                    "t_r": get_mod_role(mods, "tabel", u[3])
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -322,7 +324,7 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -331,6 +333,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
     if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
     if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
+    if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if role == "admin": modules.append("admin")
     
     try:
@@ -341,7 +344,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -350,6 +353,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
     if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
     if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
+    if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if role == "admin": modules.append("admin")
     
     try:

@@ -1261,3 +1261,17 @@ td.bg-ill .cell.day-cell::selection,
 td.bg-milk .cell.day-cell::selection {
   background: rgba(16, 32, 51, .15);
 }
+
+/* Стиль выделения ячейки как в Excel */
+.cell:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+/* Выделенные ячейки при мультиселекте */
+.cell.multi-selected {
+  background-color: rgba(39, 110, 241, 0.25) !important;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}

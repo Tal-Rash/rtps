@@ -233,9 +233,7 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
     holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
     db_path = ROOT.parent / "base" / "common_database.db"
     if not db_path.exists():
-        pass
-    
-    return {
+        return {
             "transfer": sorted(transfer_dates),
             "holiday": sorted(holiday_dates),
         }
