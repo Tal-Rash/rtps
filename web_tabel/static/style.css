@@ -1068,7 +1068,7 @@ td {
 }
 
 .table-wrap>table td.holiday-col {
-  background: #ffdede !important;
+  background: #dcf8dc !important;
 }
 
 .table-wrap>table thead th.transfer-col {
@@ -1076,7 +1076,7 @@ td {
 }
 
 .table-wrap>table thead th.holiday-col {
-  background: #ffdede !important;
+  background: #dcf8dc !important;
 }
 
 .table-wrap>table thead th.transfer-col,
@@ -1113,7 +1113,7 @@ td.transfer-col .cell.day-cell {
 }
 
 td.holiday-col .cell.day-cell {
-  background: #ffdede !important;
+  background: #dcf8dc !important;
   color: #102033 !important;
 }
 
