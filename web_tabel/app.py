@@ -22,8 +22,9 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.39"
+APP_VERSION = "web-tabel-1.41"
 DB_LOCK = Lock()
+COMMON_DB_FILE = DB_FILE
 
 def load_web_secret() -> str:
     if WEB_SECRET_FILE.exists():
@@ -37,6 +38,13 @@ def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+        # Add is_excluded column if not exists
+        cur.execute("PRAGMA table_info('employees')")
+        emp_cols = [c["name"] for c in cur.fetchall()]
+        if "is_excluded" not in emp_cols:
+            cur.execute("ALTER TABLE employees ADD COLUMN is_excluded INT DEFAULT 0")
+            conn.commit()
+
         
         # Check if we need to migrate timesheet/vacations from r -> tab_num
         cur.execute("PRAGMA table_info('timesheet')")
