@@ -1242,6 +1242,16 @@ async def post_purge_row(request: Request):
     except Exception as exc:
         return json_response({"ok": False, "error": str(exc)}, status_code=400)
 
+@app.get("/spravochnik/debug_nginx")
+def debug_nginx():
+    import subprocess
+    from fastapi import Response
+    try:
+        res = subprocess.run(["cat", "/etc/nginx/sites-enabled/default"], capture_output=True, text=True)
+        return Response(content=res.stdout + "\nSTDERR:\n" + res.stderr, media_type="text/plain")
+    except Exception as e:
+        return Response(content=str(e), media_type="text/plain")
+
 def main() -> None:
     ensure_db()
     host = os.environ.get("WEB_HOST", "127.0.0.1")
