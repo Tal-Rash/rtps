@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.27"
+APP_VERSION = "web-tabel-1.28"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -218,7 +218,6 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
     db_path = ROOT.parent / "base" / "common_database.db"
     if not db_path.exists():
         return {
-        "system_dates": load_system_dates(year),
             "transfer": sorted(transfer_dates),
             "holiday": sorted(holiday_dates),
         }
@@ -234,7 +233,9 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
         for col_idx, raw_text in rows:
             if not raw_text:
                 continue
-            text = str(raw_text).replace(";", "\n").replace(",", "\n")
+            text = str(raw_text).replace(";", "
+").replace(",", "
+")
             for line in text.splitlines():
                 line = line.strip()
                 if not line:
@@ -253,7 +254,6 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
         pass
 
     return {
-        "system_dates": load_system_dates(year),
         "transfer": sorted(transfer_dates),
         "holiday": sorted(holiday_dates),
     }
@@ -321,10 +321,8 @@ def load_state(year: int, month: int) -> dict:
 async def debug_startup(request: Request):
     error_file = ROOT / "startup_error.log"
     if error_file.exists():
-        return {
-        "system_dates": load_system_dates(year),"error": error_file.read_text(encoding="utf-8")}
-    return {
-        "system_dates": load_system_dates(year),"error": "No startup error found."}
+        return {"error": error_file.read_text(encoding="utf-8")}
+    return {"error": "No startup error found."}
 
 @app.get("/api/state")
 async def api_get_state(request: Request, year: int, month: int):
