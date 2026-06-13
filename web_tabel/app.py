@@ -223,10 +223,12 @@ def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
 @app.get("/", response_class=HTMLResponse)
 async def home_route(request: Request):
     session = get_current_session_fastapi(request)
+    if not session:
+        return HTMLResponse(content="<meta charset='utf-8'>Требуется вход. <a href='/login'>Авторизоваться</a>", status_code=401)
+        
     mod_role = get_mod_role_fastapi(session, "tabel")
-    
     if not mod_role:
-        return HTMLResponse(content="<meta charset='utf-8'>Требуется вход. <a href='/'>Авторизоваться</a>", status_code=401)
+        return HTMLResponse(content="<meta charset='utf-8'>У вас нет прав для доступа к этому модулю. Обратитесь к администратору. <a href='/'>Вернуться в главное меню</a>", status_code=403)
         
     can_edit = mod_role in ("edit", "editor", "admin")
     
