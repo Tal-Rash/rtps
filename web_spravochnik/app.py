@@ -1242,7 +1242,7 @@ async def post_purge_row(request: Request):
     except Exception as exc:
         return json_response({"ok": False, "error": str(exc)}, status_code=400)
 
-@app.get("/spravochnik/debug_nginx")
+@app.get("/debug_nginx")
 def debug_nginx():
     import subprocess
     from fastapi import Response
