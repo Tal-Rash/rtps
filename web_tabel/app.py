@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.46"
+APP_VERSION = "web-tabel-1.47"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
@@ -103,8 +103,8 @@ def init_db():
             
 
             if month_hint is not None:
-                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
-                cur.execute("INSERT OR REPLACE INTO month_hints (y, m, hint) VALUES (?, ?, ?)", (year, m_str, str(month_hint)))
+                # Save it globally
+                cur.execute("INSERT OR REPLACE INTO ts_settings (k, v) VALUES ('month_hint', ?)", (str(month_hint),))
 
             conn.commit()
 
@@ -730,8 +730,8 @@ async def api_save_state(request: Request):
 
 
             if month_hint is not None:
-                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
-                cur.execute("INSERT OR REPLACE INTO month_hints (y, m, hint) VALUES (?, ?, ?)", (year, m_str, str(month_hint)))
+                # Save it globally
+                cur.execute("INSERT OR REPLACE INTO ts_settings (k, v) VALUES ('month_hint', ?)", (str(month_hint),))
 
             conn.commit()
             
