@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.35"
+APP_VERSION = "web-tabel-1.36"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -223,16 +223,8 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
     holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
     db_path = ROOT.parent / "base" / "common_database.db"
     if not db_path.exists():
+        pass
     
-        month_hint = ""
-        try:
-            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
-            hint_row = cur.execute("SELECT hint FROM month_hints WHERE y=? AND m=?", (year, m_str)).fetchone()
-            if hint_row:
-                month_hint = str(hint_row["hint"])
-        except Exception:
-            pass
-
     return {
             "transfer": sorted(transfer_dates),
             "holiday": sorted(holiday_dates),
@@ -319,6 +311,15 @@ def load_state(year: int, month: int) -> dict:
             norms_rows = cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)).fetchall()
             for r in norms_rows:
                 ts_norms_data.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
+        except Exception:
+            pass
+
+        month_hint = ""
+        try:
+            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+            hint_row = cur.execute("SELECT hint FROM month_hints WHERE y=? AND m=?", (year, m_str)).fetchone()
+            if hint_row:
+                month_hint = str(hint_row["hint"])
         except Exception:
             pass
 
