@@ -85,6 +85,10 @@ def ensure_db() -> None:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         cur.execute(
+            "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, role TEXT, allowed_modules TEXT, password_hash TEXT)"
+        )
+        cur.execute("INSERT OR IGNORE INTO users (id, role, allowed_modules) VALUES ('admin', 'admin', 'zamer_kp:admin,spravochnik:admin')")
+        cur.execute(
             "CREATE TABLE IF NOT EXISTS input_meta (y INT, locomotive TEXT, measurement_date TEXT, wheel_pair_count INT, section_count INT, PRIMARY KEY(y, locomotive))"
         )
         cur.execute(
@@ -153,6 +157,16 @@ def ensure_db() -> None:
             cur.execute("ALTER TABLE inventory ADD COLUMN section_count INT")
         if "eight_digit_number" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN eight_digit_number TEXT")
+        # Добавляем таблицу users, если её ещё нет
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                role TEXT,
+                allowed_modules TEXT,
+                password_hash TEXT
+            )
+        """)
+        cur.execute("INSERT OR IGNORE INTO users (id, role, allowed_modules) VALUES ('admin', 'admin', 'zamer_kp:admin,spravochnik:admin')")
         cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.executemany(
             "INSERT OR IGNORE INTO kp_norms_data(metric_key, label, condition, yellow_value, red_value) VALUES(?,?,?,?,?)",
