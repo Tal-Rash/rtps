@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.36"
+APP_VERSION = "web-tabel-1.38"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -205,7 +205,7 @@ async def home_route(request: Request):
         
     html = html.replace("{{CAN_EDIT}}", "true" if can_edit else "false")
     html = html.replace("{{APP_PREFIX}}", APP_PREFIX)
-    html = html.replace("{{APP_VERSION}}", APP_VERSION)
+    html = html.replace("{{APP_VERSION}}", APP_VERSION.replace("web-tabel-", ""))
     
     response = HTMLResponse(content=html)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -421,7 +421,7 @@ async def export_milk(year: int, month: int, type: str):
     type = urllib.parse.unquote(type)
     
     templates = {
-        "компенсация": "Молоко_компенсация_шаблон.xlsx",
+        "компенсация": "Молоко_комп_шаблон.xlsx",
         "план": "Молоко_план_шаблон.xlsx",
         "факт": "Молоко_факт_шаблон.xlsx"
     }
