@@ -1122,8 +1122,13 @@ td.holiday-col .cell.day-cell::selection {
 }
 
 .col-fio {
-  width: max-content;
-  min-width: 150px;
+  white-space: nowrap;
+}
+
+.col-fio .cell {
+  width: auto;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .col-tab {
@@ -1162,7 +1167,6 @@ th.col-day {
 }
 
 .month-table {
-  table-layout: fixed;
   width: max-content;
 }
 
