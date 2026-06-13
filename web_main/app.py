@@ -132,7 +132,22 @@ def get_current_session(request: Request):
     if cookie:
         session = _verify_cookie(cookie)
         if session:
-            return {"user_id": session[0], "role": session[1], "modules": session[2], "full_name": session[3]}
+            user_id = session[0]
+            role = session[1]
+            modules = session[2]
+            try:
+                conn = sqlite3.connect(DB_FILE)
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE username=?", (user_id,)).fetchone()
+                conn.close()
+                if user_row:
+                    role = user_row["role"]
+                    modules = user_row["allowed_modules"] or ""
+            except Exception as e:
+                import traceback
+                print("DB check error:", traceback.format_exc())
+            return {"user_id": user_id, "role": role, "modules": modules, "full_name": session[3]}
     return None
 
 # Helpers for users template
