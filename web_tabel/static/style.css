@@ -886,7 +886,7 @@ textarea {
   margin: 0;
   padding: 3px 4px;
   height: 100%;
-  min-height: 56px;
+  min-height: 46px;
   line-height: 1;
   font: inherit;
   font-size: 16px;
@@ -910,13 +910,14 @@ textarea {
 .col-day {
   position: relative;
   padding: 0;
-  height: 56px;
+  height: 46px;
 }
 
 .cell.day-cell {
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 46px;
   padding: 0;
   margin: 0;
   box-sizing: border-box;
@@ -929,7 +930,7 @@ textarea {
   box-shadow: none !important;
   -webkit-box-shadow: none !important;
   text-align: center;
-  line-height: 56px;
+  line-height: 46px;
 }
 
 .cell.selected-cell,
@@ -956,7 +957,7 @@ td.holiday-col .cell.day-cell.selected-cell {
   align-items: center;
   justify-content: center;
   padding: 2px 6px;
-  min-height: 56px;
+  min-height: 46px;
   font-size: 16px;
 }
 
@@ -1086,15 +1087,15 @@ td.col-day {
 td.transfer-col .cell,
 td.holiday-col .cell {
   padding: 0;
-  height: 56px;
-  line-height: 56px;
+  height: 46px;
+  line-height: 46px;
 }
 
 td.transfer-col .cell.small,
 td.holiday-col .cell.small {
   padding: 0;
-  height: 56px;
-  line-height: 56px;
+  height: 46px;
+  line-height: 46px;
 }
 
 td.transfer-col .cell.day-cell {
@@ -1175,7 +1176,7 @@ th.col-day {
 }
 
 .month-table tbody tr {
-  height: 56px;
+  height: 46px;
 }
 
 .group-row td {
