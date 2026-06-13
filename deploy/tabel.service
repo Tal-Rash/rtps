@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/rtps
+WorkingDirectory=/opt/rtps/web_tabel
 Environment=WEB_HOST=0.0.0.0
 Environment=WEB_PORT=8005
 ExecStart=/usr/bin/python3 /opt/rtps/web_tabel/app.py
