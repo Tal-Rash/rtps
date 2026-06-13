@@ -1127,8 +1127,8 @@ td.holiday-col .cell.day-cell::selection {
 }
 
 .col-pos {
-  width: 250px;
-  min-width: 250px;
+  width: 220px;
+  min-width: 220px;
 }
 
 .col-pos .cell {
