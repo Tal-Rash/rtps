@@ -1016,6 +1016,14 @@ function escapeHtml(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 }
 fillYears();
+const params = new URLSearchParams(window.location.search);
+const activeTab = params.get('tab');
+if (activeTab) {
+  const btn = document.querySelector(`.tab[onclick="showTab('${activeTab}', this)"]`);
+  if (btn) {
+    showTab(activeTab, btn);
+  }
+}
 loadState();
 </script>
 </body>
