@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.28"
+APP_VERSION = "web-tabel-1.29"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -233,9 +233,7 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
         for col_idx, raw_text in rows:
             if not raw_text:
                 continue
-            text = str(raw_text).replace(";", "
-").replace(",", "
-")
+            text = str(raw_text).replace(";", "\n").replace(",", "\n")
             for line in text.splitlines():
                 line = line.strip()
                 if not line:
