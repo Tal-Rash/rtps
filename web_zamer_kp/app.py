@@ -239,18 +239,19 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
     role = session[1]
     modules = session[2]
     
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE full_name=?", (username,)).fetchone()
-        conn.close()
-        if not user_row:
-            return None
-        role = user_row["role"]
-        modules = user_row["allowed_modules"] or ""
-    except Exception:
-        pass
+    if username != "legacy":
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
+            conn.close()
+            if not user_row:
+                return None
+            role = user_row["role"]
+            modules = user_row["allowed_modules"] or ""
+        except Exception:
+            pass
 
     for part in modules.split(","):
         part = part.strip()

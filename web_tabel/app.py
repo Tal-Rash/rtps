@@ -181,19 +181,20 @@ def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str)
     role = session[1]
     modules = session[2]
     
-    try:
-        conn = connect_common()
-        if conn:
-            cur = conn.cursor()
-            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE full_name=?", (username,)).fetchone()
-            conn.close()
-            if not user_row:
-                return "" # Пользователь удален или заблокирован
-            role = user_row["role"]
-            modules = user_row["allowed_modules"] or ""
-    except Exception:
-        pass # Fallback на куки при ошибке БД
-
+    if username != "legacy":
+        try:
+            conn = connect_common()
+            if conn:
+                cur = conn.cursor()
+                user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
+                conn.close()
+                if not user_row:
+                    return "" # Пользователь удален или заблокирован
+                role = user_row["role"]
+                modules = user_row["allowed_modules"] or ""
+        except Exception as e:
+            import traceback
+            print("Ошибка проверки прав в БД:", traceback.format_exc())
     if role == "admin":
         return "admin"
     for part in modules.split(","):
