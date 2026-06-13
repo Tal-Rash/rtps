@@ -369,7 +369,7 @@ function rowDrop(event, rIndex) {
 function exportSummary(type) {
   const year = document.getElementById("yearInput").value;
   const month = document.getElementById("monthInput").value;
-  window.open(`${APP_PREFIX}/api/export-summary?year=${year}&month=${month}&type=${encodeURIComponent(type)}`, "_blank");
+  window.open(`${APP_PREFIX}/api/export-summary?year=${year}&month=${month}&type=${encodeURIComponent(type)}`, "ReportWindow", "width=1100,height=800,scrollbars=yes,resizable=yes");
 }
 
 function openSickModal() {
