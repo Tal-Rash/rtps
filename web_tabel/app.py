@@ -212,7 +212,15 @@ async def api_save_state(request: Request):
     if role not in ("edit", "editor", "admin"):
         return json_response({"error": "Forbidden"}, 403)
         
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except Exception as e:
+        with open("C:/Users/shvar/.gemini/antigravity-ide/brain/a751878b-a641-4535-8a04-c7a005ca3a31/req.log", "a", encoding="utf-8") as f:
+            f.write(f"JSON Error: {e}\n")
+        return json_response({"error": "Invalid JSON"}, 400)
+        
+    with open("C:/Users/shvar/.gemini/antigravity-ide/brain/a751878b-a641-4535-8a04-c7a005ca3a31/req.log", "a", encoding="utf-8") as f:
+        f.write(f"Incoming save request for month {payload.get('month')}\n")
     year = int(payload.get("year", dt.date.today().year))
     month = int(payload.get("month", dt.date.today().month))
     timesheet = payload.get("timesheet")
@@ -220,50 +228,56 @@ async def api_save_state(request: Request):
     vacations = payload.get("vacations")
     ts_norms_data = payload.get("ts_norms_data")
     
-    with DB_LOCK, connect() as conn:
-        cur = conn.cursor()
-        cur.execute("BEGIN")
-        
-        if timesheet is not None:
-            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
-            cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, m_str))
-            insert_ts = []
-            if isinstance(timesheet, dict):
-                for tab_num, row_data in timesheet.items():
-                    if not row_data: continue
-                    for c, v in row_data.items():
-                        if v: insert_ts.append((year, m_str, str(tab_num), int(c), str(v)))
-            cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
+    try:
+        with DB_LOCK, connect() as conn:
+            cur = conn.cursor()
+            cur.execute("BEGIN")
+            
+            if timesheet is not None:
+                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+                cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, m_str))
+                insert_ts = []
+                if isinstance(timesheet, dict):
+                    for tab_num, row_data in timesheet.items():
+                        if not row_data: continue
+                        for c, v in row_data.items():
+                            if v: insert_ts.append((year, m_str, str(tab_num), int(c), str(v)))
+                cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
 
-        if employees is not None:
-            cur.execute("DELETE FROM employees WHERE y=?", (year,))
-            insert_emp = []
-            for r, emp in enumerate(employees):
-                insert_emp.append((year, emp.get("pos",""), emp.get("name",""), emp.get("tab_num",""), 
-                                   emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note","")))
-            cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note) VALUES(?,?,?,?,?,?,?,?)", insert_emp)
+            if employees is not None:
+                cur.execute("DELETE FROM employees WHERE y=?", (year,))
+                insert_emp = []
+                for r, emp in enumerate(employees):
+                    insert_emp.append((year, emp.get("pos",""), emp.get("name",""), emp.get("tab_num",""), 
+                                       emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note","")))
+                cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note) VALUES(?,?,?,?,?,?,?,?)", insert_emp)
 
-        if vacations is not None:
-            cur.execute("DELETE FROM vacations WHERE y=?", (year,))
-            insert_vac = []
-            if isinstance(vacations, dict):
-                for tab_num, row_data in vacations.items():
-                    if not row_data: continue
-                    for c, v in row_data.items():
-                        if v: insert_vac.append((year, str(tab_num), int(c), str(v)))
-            cur.executemany("INSERT INTO vacations(y, tab_num, c, v) VALUES(?,?,?,?)", insert_vac)
+            if vacations is not None:
+                cur.execute("DELETE FROM vacations WHERE y=?", (year,))
+                insert_vac = []
+                if isinstance(vacations, dict):
+                    for tab_num, row_data in vacations.items():
+                        if not row_data: continue
+                        for c, v in row_data.items():
+                            if v: insert_vac.append((year, str(tab_num), int(c), str(v)))
+                cur.executemany("INSERT INTO vacations(y, tab_num, c, v) VALUES(?,?,?,?)", insert_vac)
 
-        if ts_norms_data is not None:
-            cur.execute("DELETE FROM norms_data WHERE y=?", (year,))
-            insert_norms = []
-            if isinstance(ts_norms_data, dict) or isinstance(ts_norms_data, list):
-                for r_idx, row_data in (ts_norms_data.items() if isinstance(ts_norms_data, dict) else enumerate(ts_norms_data)):
-                    if not row_data: continue
-                    for c, v in row_data.items():
-                        if v: insert_norms.append((year, int(r_idx), int(c), str(v)))
-            cur.executemany("INSERT INTO norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
+            if ts_norms_data is not None:
+                cur.execute("DELETE FROM norms_data WHERE y=?", (year,))
+                insert_norms = []
+                if isinstance(ts_norms_data, dict) or isinstance(ts_norms_data, list):
+                    for r_idx, row_data in (ts_norms_data.items() if isinstance(ts_norms_data, dict) else enumerate(ts_norms_data)):
+                        if not row_data: continue
+                        for c, v in row_data.items():
+                            if v: insert_norms.append((year, int(r_idx), int(c), str(v)))
+                cur.executemany("INSERT INTO norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
 
-        conn.commit()
+            conn.commit()
+    except Exception as e:
+        import traceback
+        with open("C:/Users/shvar/.gemini/antigravity-ide/brain/a751878b-a641-4535-8a04-c7a005ca3a31/error.log", "w", encoding="utf-8") as f:
+            f.write(traceback.format_exc())
+        return json_response({"error": str(e)}, 500)
         
     return json_response({"status": "ok"})
 

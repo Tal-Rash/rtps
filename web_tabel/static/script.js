@@ -271,7 +271,7 @@ async function saveState() {
     markDirty(false);
   } catch (err) {
     console.error(err);
-    alert("Ошибка сохранения");
+    alert("Ошибка сохранения: " + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
