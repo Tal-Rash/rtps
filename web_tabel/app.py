@@ -207,28 +207,24 @@ async def api_get_state(request: Request, year: int, month: int):
 
 @app.post("/api/state")
 async def api_save_state(request: Request):
-    session = get_current_session_fastapi(request)
-    role = get_mod_role_fastapi(session, "tabel")
-    if role not in ("edit", "editor", "admin"):
-        return json_response({"error": "Forbidden"}, 403)
-        
     try:
-        payload = await request.json()
-    except Exception as e:
-        with open("C:/Users/shvar/.gemini/antigravity-ide/brain/a751878b-a641-4535-8a04-c7a005ca3a31/req.log", "a", encoding="utf-8") as f:
-            f.write(f"JSON Error: {e}\n")
-        return json_response({"error": "Invalid JSON"}, 400)
+        session = get_current_session_fastapi(request)
+        role = get_mod_role_fastapi(session, "tabel")
+        if role not in ("edit", "editor", "admin"):
+            return json_response({"error": "Forbidden"}, 403)
+            
+        try:
+            payload = await request.json()
+        except Exception as e:
+            return json_response({"error": "Invalid JSON"}, 400)
+            
+        year = int(payload.get("year", dt.date.today().year))
+        month = int(payload.get("month", dt.date.today().month))
+        timesheet = payload.get("timesheet")
+        employees = payload.get("employees")
+        vacations = payload.get("vacations")
+        ts_norms_data = payload.get("ts_norms_data")
         
-    with open("C:/Users/shvar/.gemini/antigravity-ide/brain/a751878b-a641-4535-8a04-c7a005ca3a31/req.log", "a", encoding="utf-8") as f:
-        f.write(f"Incoming save request for month {payload.get('month')}\n")
-    year = int(payload.get("year", dt.date.today().year))
-    month = int(payload.get("month", dt.date.today().month))
-    timesheet = payload.get("timesheet")
-    employees = payload.get("employees")
-    vacations = payload.get("vacations")
-    ts_norms_data = payload.get("ts_norms_data")
-    
-    try:
         with DB_LOCK, connect() as conn:
             cur = conn.cursor()
             cur.execute("BEGIN")
@@ -273,13 +269,11 @@ async def api_save_state(request: Request):
                 cur.executemany("INSERT INTO norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
 
             conn.commit()
+            
+        return json_response({"status": "ok"})
     except Exception as e:
         import traceback
-        with open("C:/Users/shvar/.gemini/antigravity-ide/brain/a751878b-a641-4535-8a04-c7a005ca3a31/error.log", "w", encoding="utf-8") as f:
-            f.write(traceback.format_exc())
-        return json_response({"error": str(e)}, 500)
-        
-    return json_response({"status": "ok"})
+        return json_response({"error": "Global error: " + str(e) + " - " + traceback.format_exc()}, 500)
 
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "0.0.0.0")
