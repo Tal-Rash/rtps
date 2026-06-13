@@ -426,14 +426,11 @@
     td.transfer-col .cell.day-cell::selection,
     td.holiday-col .cell.day-cell::selection { background:rgba(16,32,51,.15); }
     .col-idx { width:36px; }
-    .col-series { width:var(--series-col-width); min-width:var(--series-col-width); }
-    .col-number { width:var(--number-col-width); }
-    .col-number .cell { padding-left:0; padding-right:0; text-align:center; }
-    .col-cat { width:var(--cat-col-width); }
-    .month-table th:nth-child(3),
-    .month-table th:nth-child(4) { white-space:normal; line-height:1.05; }
-    .col-day { width:30px; }
-    .col-note { width:120px; }
+    .col-pos { width:150px; }
+    .col-fio { width:200px; }
+    .col-tab { width:70px; }
+    .col-total { width:60px; text-align:center; }
+    .col-day { width:24px; text-align:center; }
     .grid2 { display:grid; gap:14px; grid-template-columns:1fr; }
     .month-table.compact th,
     .month-table.compact td,
@@ -451,9 +448,3 @@
 .tab-content { display: none; width: 100%; }
 .tab-content.active { display: block; }
 
-/* Tabel Column Widths */
-.col-pos { width: 150px; }
-.col-fio { width: 200px; }
-.col-tab { width: 70px; }
-.col-total { width: 60px; text-align: center; }
-.col-day { width: 24px; text-align: center; }
