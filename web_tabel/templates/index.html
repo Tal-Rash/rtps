@@ -11,6 +11,10 @@
       CAN_EDIT: {{CAN_EDIT}}
     };
   </script>
+<style>
+    .excluded { color: #a0a0a0; background-color: #e8e8e8 !important; }
+    .excluded input { opacity: 0.5; }
+  </style>
 </head>
 <body>
   <div class="shell">
@@ -31,13 +35,24 @@
           <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100" style="width:80px; padding: 6px;"></label>
           <input type="hidden" id="monthInput" value="6">
           <div class="json-menu">
-            <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Отчеты ▼</button>
+            <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Молоко  </button>
             <div class="json-menu-panel">
-              <button onclick="exportMilk('комп')">Молоко (комп)</button>
-              <button onclick="exportMilk('план')">Молоко (план)</button>
-              <button onclick="exportMilk('факт')">Молоко (факт)</button>
+              <button onclick="exportMilk('компенсация')">Компенсация (План)</button>
+              <button onclick="exportMilk('план')">Выдача (План)</button>
+              <button onclick="exportMilk('факт')">Выдача (Факт)</button>
             </div>
           </div>
+          <div class="json-menu">
+            <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Выгрузка  </button>
+            <div class="json-menu-panel">
+              <button onclick="exportSummary('Отпуска')">Отпуска</button>
+              <button onclick="exportSummary('Отпуска внеплановые')">Отпуска внеплановые</button>
+              <button onclick="exportSummary('Отпуск б/с')">Отпуск б/с</button>
+              <button onclick="exportSummary('Учебный отпуск')">Учебный отпуск</button>
+              <button onclick="exportSummary('Больничный')">Больничный</button>
+            </div>
+          </div>
+          <button onclick="openSickModal()" style="margin-right: 5px;">Письмо: Больничный</button>
           <button onclick="saveState()" id="saveBtn" style="display:none;" class="save-ready">Сохранить</button>
         </div>
       </div>
@@ -102,5 +117,42 @@
     });
   </script>
   <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
+
+  <!-- Modal for Sick Leave Email -->
+  <div id="sickModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">Письмо: Больничный</div>
+      <div class="modal-body" style="padding: 15px;">
+        <label>1. Выберите сотрудника:</label><br>
+        <select id="sickEmp" style="width: 100%; margin-bottom: 10px; padding: 5px;"></select>
+        
+        <label>2. Тип операции:</label><br>
+        <select id="sickType" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+          <option value="Открытие">Открытие</option>
+          <option value="Закрытие">Закрытие</option>
+        </select>
+        
+        <label>3. Дата начала:</label><br>
+        <input type="date" id="sickStart" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+        
+        <label>4. Дата окончания:</label><br>
+        <input type="date" id="sickEnd" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+        
+        <label>5. Email получателя:</label><br>
+        <input type="text" id="sickEmail" value="nn-kgmk-ps@nornik.ru" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+      </div>
+      <div class="modal-footer" style="text-align: right; padding: 10px;">
+        <button onclick="closeSickModal()">Отмена</button>
+        <button onclick="generateSickEmail()" style="background-color: #c8e6c9; font-weight: bold; margin-left: 5px;">Сформировать письмо</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+  .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 400px; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .modal-header { background: #e8e8e8; padding: 10px; font-weight: bold; border-bottom: 1px solid #ccc; }
+  </style>
+
 </body>
 </html>

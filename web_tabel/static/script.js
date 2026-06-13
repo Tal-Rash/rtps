@@ -105,7 +105,8 @@ function renderTable() {
   
   appState.employees.forEach((emp, rIndex) => {
     const tabNum = emp.tab_num || `empty_${rIndex}`;
-    bHTML += `<tr draggable="true" ondragstart="rowDragStart(event, ${rIndex})" ondragover="rowDragOver(event, ${rIndex})" ondrop="rowDrop(event, ${rIndex})">`;
+    const trClass = emp.is_excluded ? "excluded" : "";
+    bHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${rIndex})" ondragover="rowDragOver(event, ${rIndex})" ondrop="rowDrop(event, ${rIndex})">`;
     bHTML += `<td class="col-idx"><div class="rownum"><span>${rIndex + 1}</span></div></td>`;
     bHTML += `<td class="col-pos"><div class="cell" style="text-align: left;">${escapeHtml(emp.pos)}</div></td>`;
     bHTML += `<td class="col-fio"><div class="cell" style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</div></td>`;
@@ -167,7 +168,8 @@ function renderTable() {
   // 11 rows
   for (let r = 0; r < 11; r++) {
     const emp = appState.employees[r] || {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
-    eHTML += `<tr draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
+    const trClass = emp.is_excluded ? "excluded" : "";
+    eHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     eHTML += `<td class="col-idx" style="cursor: grab;"><div class="rownum"><span>${r + 1}</span></div></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'pos', this)">${escapeHtml(emp.pos)}</div></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'name', this)">${escapeHtml(emp.name)}</div></td>`;
@@ -175,6 +177,7 @@ function renderTable() {
     eHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'tab_num', this)">${escapeHtml(emp.tab_num)}</div></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk', this)" ${emp.milk ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk_issue', this)" ${emp.milk_issue ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
+    eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'is_excluded', this)" ${emp.is_excluded ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'milk_note', this)">${escapeHtml(emp.milk_note)}</div></td>`;
     eHTML += `</tr>`;
   }
@@ -186,7 +189,8 @@ function renderTable() {
   for (let r = 0; r < 11; r++) {
     const emp = appState.employees[r] || {};
     const tabNum = emp.tab_num || `empty_${r}`;
-    vHTML += `<tr draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
+    const trClass = emp.is_excluded ? "excluded" : "";
+    vHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     vHTML += `<td class="col-idx" style="cursor: grab;"><div class="rownum"><span>${r + 1}</span></div></td>`;
     vHTML += `<td style="text-align: left;">${escapeHtml(emp.tab_num || '')}</td>`;
     vHTML += `<td style="text-align: left;">${escapeHtml(emp.name || '')}</td>`;
@@ -228,7 +232,7 @@ function dataEdited(r, c, el) {
 
 function empEdited(r, field, el) {
   if (!appState.employees[r]) appState.employees[r] = {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
-  if (field === 'milk' || field === 'milk_issue') {
+  if (field === 'milk' || field === 'milk_issue' || field === 'is_excluded') {
     appState.employees[r][field] = el.checked ? 1 : 0;
   } else {
     appState.employees[r][field] = el.innerText.trim();
@@ -363,4 +367,42 @@ function rowDrop(event, rIndex) {
   draggedRowIndex = -1;
   markDirty(true);
   renderTable();
+}
+
+function exportSummary(type) {
+  const year = document.getElementById("yearInput").value;
+  const month = document.getElementById("monthInput").value;
+  window.open(`${APP_PREFIX}/api/export-summary?year=${year}&month=${month}&type=${encodeURIComponent(type)}`, "_blank");
+}
+
+function openSickModal() {
+  const sel = document.getElementById("sickEmp");
+  sel.innerHTML = "";
+  appState.employees.forEach(emp => {
+    if (emp && emp.name) {
+      const opt = document.createElement("option");
+      opt.value = emp.name;
+      opt.textContent = emp.name;
+      sel.appendChild(opt);
+    }
+  });
+  const d = new Date();
+  document.getElementById("sickStart").valueAsDate = d;
+  document.getElementById("sickEnd").valueAsDate = d;
+  document.getElementById("sickModal").style.display = "block";
+}
+
+function closeSickModal() {
+  document.getElementById("sickModal").style.display = "none";
+}
+
+function generateSickEmail() {
+  const emp = encodeURIComponent(document.getElementById("sickEmp").value);
+  const type = encodeURIComponent(document.getElementById("sickType").value);
+  const start = document.getElementById("sickStart").value;
+  const end = document.getElementById("sickEnd").value;
+  const email = encodeURIComponent(document.getElementById("sickEmail").value);
+  
+  window.open(`${APP_PREFIX}/api/export-sick-email?emp=${emp}&type=${type}&start=${start}&end=${end}&email=${email}`, "_blank");
+  closeSickModal();
 }
