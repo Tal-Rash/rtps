@@ -149,7 +149,7 @@ function renderTable() {
   // 11 rows
   for (let r = 0; r < 11; r++) {
     const emp = appState.employees[r] || {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
-    eHTML += `<tr>`;
+    eHTML += `<tr draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'pos', this)">${escapeHtml(emp.pos)}</div></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'name', this)">${escapeHtml(emp.name)}</div></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'full_name', this)">${escapeHtml(emp.full_name)}</div></td>`;
@@ -167,7 +167,7 @@ function renderTable() {
   for (let r = 0; r < 11; r++) {
     const emp = appState.employees[r] || {};
     const tabNum = emp.tab_num || `empty_${r}`;
-    vHTML += `<tr>`;
+    vHTML += `<tr draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     vHTML += `<td style="text-align: left;">${escapeHtml(emp.tab_num || '')}</td>`;
     vHTML += `<td style="text-align: left;">${escapeHtml(emp.name || '')}</td>`;
     
