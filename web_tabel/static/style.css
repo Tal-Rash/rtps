@@ -1117,8 +1117,16 @@ td.holiday-col .cell.day-cell::selection {
 }
 
 .col-pos {
-  width: 150px;
-  min-width: 150px;
+  width: 200px;
+  min-width: 200px;
+}
+
+.col-pos .cell {
+  white-space: normal;
+  text-transform: none;
+  overflow: visible;
+  line-height: 1.2;
+  word-wrap: break-word;
 }
 
 .col-fio {
