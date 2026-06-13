@@ -267,7 +267,21 @@ async function saveState() {
       body: JSON.stringify(payload)
     });
     
-    if (!res.ok) throw new Error("Save failed");
+    if (!res.ok) {
+      let errMsg = `Save failed (HTTP ${res.status})`;
+      try {
+        const text = await res.text();
+        try {
+          const errData = JSON.parse(text);
+          if (errData.error) errMsg = `Backend Error: ${errData.error}`;
+          else if (errData.detail) errMsg = `FastAPI Error: ${errData.detail}`;
+          else errMsg = `HTTP ${res.status}: ${text.substring(0, 100)}`;
+        } catch (e) {
+          errMsg = `HTTP ${res.status} HTML: ${text.substring(0, 100)}`;
+        }
+      } catch (e) {}
+      throw new Error(errMsg);
+    }
     markDirty(false);
   } catch (err) {
     console.error(err);
