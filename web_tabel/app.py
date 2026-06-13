@@ -243,7 +243,7 @@ def load_state(year: int, month: int) -> dict:
 
         ts_norms_data = {}
         try:
-            norms_rows = cur.execute("SELECT r, c, v FROM norms_data WHERE y=?", (year,)).fetchall()
+            norms_rows = cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)).fetchall()
             for r in norms_rows:
                 ts_norms_data.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
         except Exception:
@@ -319,14 +319,14 @@ async def api_save_state(request: Request):
                 cur.executemany("INSERT INTO vacations(y, tab_num, c, v) VALUES(?,?,?,?)", insert_vac)
 
             if ts_norms_data is not None:
-                cur.execute("DELETE FROM norms_data WHERE y=?", (year,))
+                cur.execute("DELETE FROM ts_norms_data WHERE y=?", (year,))
                 insert_norms = []
                 if isinstance(ts_norms_data, dict) or isinstance(ts_norms_data, list):
                     for r_idx, row_data in (ts_norms_data.items() if isinstance(ts_norms_data, dict) else enumerate(ts_norms_data)):
                         if not row_data: continue
                         for c, v in row_data.items():
                             if v: insert_norms.append((year, int(r_idx), int(c), str(v)))
-                cur.executemany("INSERT INTO norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
+                cur.executemany("INSERT INTO ts_norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
 
             conn.commit()
             
