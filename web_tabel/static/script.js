@@ -11,6 +11,26 @@ document.addEventListener("DOMContentLoaded", () => {
   loadState();
 });
 
+function setMonth(val) {
+  document.getElementById("monthInput").value = val;
+  loadState();
+}
+
+function renderMonthButtons() {
+  const months = [
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+  ];
+  const currentMonth = parseInt(document.getElementById("monthInput").value, 10);
+  const html = months.map((m, i) => {
+    const val = i + 1;
+    const active = val === currentMonth ? 'class="active"' : '';
+    return `<button ${active} onclick="setMonth(${val})">${m}</button>`;
+  }).join('');
+  const strip = document.getElementById("monthStrip");
+  if (strip) strip.innerHTML = html;
+}
+
 function switchTab(tabId) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -47,6 +67,7 @@ async function loadState() {
       throw new Error("Failed to load");
     }
     appState = await res.json();
+    renderMonthButtons();
     renderTable();
     markDirty(false);
   } catch (err) {

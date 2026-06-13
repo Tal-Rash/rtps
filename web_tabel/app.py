@@ -23,7 +23,7 @@ DB_FILE = ROOT / "data" / "tabel.db"
 COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.1"
+APP_VERSION = "web-tabel-1.2"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:

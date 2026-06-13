@@ -29,16 +29,7 @@
         </div>
         <div class="toolbar">
           <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100" style="width:80px; padding: 6px;"></label>
-          <label>Месяц: 
-            <select id="monthInput" onchange="loadState()" style="padding: 6px;">
-              <option value="1">Январь</option><option value="2">Февраль</option>
-              <option value="3">Март</option><option value="4">Апрель</option>
-              <option value="5">Май</option><option value="6">Июнь</option>
-              <option value="7">Июль</option><option value="8">Август</option>
-              <option value="9">Сентябрь</option><option value="10">Октябрь</option>
-              <option value="11">Ноябрь</option><option value="12">Декабрь</option>
-            </select>
-          </label>
+          <input type="hidden" id="monthInput" value="6">
           <div class="json-menu">
             <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Отчеты ▼</button>
             <div class="json-menu-panel">
@@ -54,6 +45,9 @@
 
     <div class="panel">
       <div class="tab-content active" id="tab-months">
+        <div class="months-row">
+          <div class="month-strip" id="monthStrip"></div>
+        </div>
         <div class="table-wrap month-table-wrap">
           <table id="tabelGrid" class="month-table compact">
             <thead><tr id="tabelHeader"></tr></thead>
