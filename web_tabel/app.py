@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.38"
+APP_VERSION = "web-tabel-1.39"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -416,6 +416,7 @@ async def export_summary(year: int, month: int, type: str):
 async def export_milk(year: int, month: int, type: str):
     import urllib.parse
     import tempfile
+    import copy
     import os
     import openpyxl
     type = urllib.parse.unquote(type)
@@ -442,8 +443,9 @@ async def export_milk(year: int, month: int, type: str):
     days_cnt = calendar.monthrange(year, month)[1]
     
     with DB_LOCK, connect() as conn:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        emp_rows = cur.execute("SELECT name, tab_num, milk, milk_issue FROM employees WHERE y=? AND name != '' ORDER BY rowid", (year,)).fetchall()
+        emp_rows = cur.execute("SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note FROM employees WHERE y=? AND name != '' ORDER BY rowid", (year,)).fetchall()
         
         m_comp_set = set()
         m_issue_set = set()
@@ -453,38 +455,14 @@ async def export_milk(year: int, month: int, type: str):
             if r["milk"]: m_comp_set.add(name)
             if r["milk_issue"]: m_issue_set.add(name)
             
-        # Get ts_norms_data for workday issue logic (row=month-1, col=2 is workdays norm, but we can just use the DB for timesheet data)
-        # Actually, python code: 
-        # is_workday_for_issue: not a weekend, not a holiday, or is transfer. 
-        # But we also have exact timesheet data in DB.
-        
         ts_rows = cur.execute("SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, m_str)).fetchall()
         ts_data = {}
         for r in ts_rows:
             ts_data.setdefault(str(r["tab_num"]), {})[int(r["c"])] = str(r["v"]).upper()
             
-    # Load workbook
-    wb = openpyxl.load_workbook(template_path)
-    ws = wb.active
-    
-    # We write starting from row 10 (or we just find the first empty row, but usually templates have fixed positions)
-    # The python code doesn't specify row insertion, it says `table = self.tables[month_name]`. 
-    # Wait, the Python code uses `openpyxl` and fills cells dynamically.
-    # Let's write the names and counts.
-    # Python code:
-    # ws.cell(row=start_r, column=2).value = fio
-    # ws.cell(row=start_r, column=4).value = count
-    
-    # Find starting row - usually it's the first row where column 2 is empty after row 5.
-    start_r = 8
-    for r in range(1, 50):
-        if ws.cell(row=r, column=1).value == "№ п/п":
-            start_r = r + 1
-            break
+        norm_row = cur.execute("SELECT v FROM ts_norms_data WHERE y=? AND r=? AND c=2", (year, month - 1)).fetchone()
+        work_days_norm = str(norm_row["v"]) if norm_row else "0"
             
-    current_row = start_r
-    idx = 1
-    
     def is_workday(y, m, d):
         dt = calendar.datetime.date(y, m, d)
         is_we = dt.weekday() >= 5
@@ -493,11 +471,17 @@ async def export_milk(year: int, month: int, type: str):
         if is_tr: return True
         if is_hol: return False
         return not is_we
-        
+
+    final_list = []
+    grand_total = 0
+
     for emp in emp_rows:
         name = str(emp["name"])
         name_up = name.upper()
         tab_num = str(emp["tab_num"])
+        pos = str(emp["pos"])
+        full_name = str(emp["full_name"])
+        milk_note = str(emp["milk_note"])
         
         if type == "компенсация" and name_up not in m_comp_set: continue
         if type in ["план", "факт"] and name_up not in m_issue_set: continue
@@ -507,14 +491,12 @@ async def export_milk(year: int, month: int, type: str):
         for d in range(1, days_cnt + 1):
             val = emp_ts.get(d, "")
             if type == "компенсация":
-                if val in ["В", "РВ", "ДО", "О", "У", "Б"]: # is_milk_cell equivalent or similar
-                    # Wait, in python `is_milk_cell(val)` is usually returning True if val is a number!
-                    try:
-                        float(val.replace(',', '.'))
-                        count += 1
-                    except ValueError:
-                        if val in ["РВ"]: count += 1 # just a guess
-                        pass
+                try:
+                    float(val.replace(',', '.'))
+                    count += 1
+                except ValueError:
+                    if val in ["В", "РВ", "ДО", "О", "У", "Б"]: 
+                        if val in ["РВ"]: count += 1 # is_milk_cell equivalent
             else:
                 try:
                     float(val.replace(',', '.'))
@@ -523,18 +505,63 @@ async def export_milk(year: int, month: int, type: str):
                     if not val and is_workday(year, month, d): 
                         count += 1
                         
-        ws.cell(row=current_row, column=1).value = idx
-        ws.cell(row=current_row, column=2).value = name
-        ws.cell(row=current_row, column=3).value = tab_num
-        ws.cell(row=current_row, column=4).value = count
-        current_row += 1
-        idx += 1
+        final_list.append({
+            "fio": name,
+            "full_name": full_name,
+            "pos": pos,
+            "tab": tab_num,
+            "shifts": count,
+            "milk_note": milk_note
+        })
+        grand_total += count
         
+    # Load workbook
+    wb = openpyxl.load_workbook(template_path)
+    ws = wb.active
+    
+    row_tpl = None
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value and isinstance(cell.value, str):
+                cell.value = cell.value.replace("[МЕСЯЦ]", m_str).replace("[ГОД]", str(year)).replace("[НОРМА_ДНЕЙ]", work_days_norm).replace("[ИТОГО]", str(grand_total))
+                if row_tpl is None and any(tag in cell.value for tag in [
+                    "[№]",
+                    "[ФИО]",
+                    "[ФИО_ПОЛНОЕ]",
+                    "[ДОЛЖНОСТЬ]",
+                    "[ТАБ]",
+                    "[СМЕНЫ]",
+                    "[ПРИМЕЧАНИЕ]"
+                ]):
+                    row_tpl = cell.row
+
+    if row_tpl is not None and final_list:
+        tpl_vals = {c: ws.cell(row=row_tpl, column=c).value for c in range(1, ws.max_column + 1)}
+        ws.insert_rows(row_tpl + 1, len(final_list) - 1)
+        for i, data in enumerate(final_list):
+            curr_r = row_tpl + i
+            ws.row_dimensions[curr_r].height = None 
+            for c_idx in range(1, ws.max_column + 1):
+                cell = ws.cell(row=curr_r, column=c_idx)
+                if i > 0: 
+                    src = ws.cell(row=row_tpl, column=c_idx)
+                    cell.value = src.value
+                    if src.has_style:
+                        cell.font = copy.copy(src.font)
+                        cell.border = copy.copy(src.border)
+                        cell.fill = copy.copy(src.fill)
+                        cell.alignment = copy.copy(src.alignment)
+                v = tpl_vals.get(c_idx)
+                if v and isinstance(v, str):
+                    v = v.replace("[№]", str(i+1)).replace("[ФИО]", data["fio"]).replace("[ФИО_ПОЛНОЕ]", data["full_name"]).replace("[ДОЛЖНОСТЬ]", data["pos"]).replace("[ТАБ]", data["tab"]).replace("[СМЕНЫ]", str(data["shifts"])).replace("[ПРИМЕЧАНИЕ]", data["milk_note"])
+                    cell.value = int(v) if str(v).isdigit() else v
+
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     tmp.close()
     wb.save(tmp.name)
     
     return FileResponse(tmp.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"Отчет_Молоко_{type}.xlsx")
+
 
 
 
