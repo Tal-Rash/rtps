@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.41"
+APP_VERSION = "web-tabel-1.42"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
@@ -539,7 +539,7 @@ async def export_milk(year: int, month: int, type: str):
                     "[ДОЛЖНОСТЬ]",
                     "[ТАБ]",
                     "[СМЕНЫ]",
-                    "[ПРИМЕЧАНИЕ]"
+                    "[МОЛОКО_ПРИМ]"
                 ]):
                     row_tpl = cell.row
 
@@ -561,7 +561,7 @@ async def export_milk(year: int, month: int, type: str):
                         cell.alignment = copy.copy(src.alignment)
                 v = tpl_vals.get(c_idx)
                 if v and isinstance(v, str):
-                    v = v.replace("[№]", str(i+1)).replace("[ФИО]", data["fio"]).replace("[ФИО_ПОЛНОЕ]", data["full_name"]).replace("[ДОЛЖНОСТЬ]", data["pos"]).replace("[ТАБ]", data["tab"]).replace("[СМЕНЫ]", str(data["shifts"])).replace("[ПРИМЕЧАНИЕ]", data["milk_note"])
+                    v = v.replace("[№]", str(i+1)).replace("[ФИО]", data["fio"]).replace("[ФИО_ПОЛНОЕ]", data["full_name"]).replace("[ДОЛЖНОСТЬ]", data["pos"]).replace("[ТАБ]", data["tab"]).replace("[СМЕНЫ]", str(data["shifts"])).replace("[МОЛОКО_ПРИМ]", data["milk_note"])
                     cell.value = int(v) if str(v).isdigit() else v
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
