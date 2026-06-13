@@ -138,6 +138,7 @@ async def home_route(request: Request):
     response = HTMLResponse(content=html)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
+MONTH_NAMES = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
 def load_state(year: int, month: int) -> dict:
     with DB_LOCK, connect() as conn:
@@ -163,8 +164,9 @@ def load_state(year: int, month: int) -> dict:
 
         timesheet = {}
         try:
+            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
             ts_rows = cur.execute(
-                "SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, str(month))
+                "SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, m_str)
             ).fetchall()
             for r in ts_rows:
                 timesheet.setdefault(text(r["tab_num"]), {})[int(r["c"])] = text(r["v"])
@@ -223,13 +225,14 @@ async def api_save_state(request: Request):
         cur.execute("BEGIN")
         
         if timesheet is not None:
-            cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, str(month)))
+            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+            cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, m_str))
             insert_ts = []
             if isinstance(timesheet, dict):
                 for tab_num, row_data in timesheet.items():
                     if not row_data: continue
                     for c, v in row_data.items():
-                        if v: insert_ts.append((year, str(month), str(tab_num), int(c), str(v)))
+                        if v: insert_ts.append((year, m_str, str(tab_num), int(c), str(v)))
             cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
 
         if employees is not None:
