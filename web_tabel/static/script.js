@@ -339,9 +339,18 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 let draggedRowIndex = -1;
+let dragTarget = null;
+
+document.addEventListener('mousedown', e => {
+  dragTarget = e.target;
+});
 
 function rowDragStart(event, rIndex) {
   if (!CAN_EDIT) return;
+  if (dragTarget && !dragTarget.closest('.col-idx')) {
+      event.preventDefault();
+      return;
+  }
   draggedRowIndex = rIndex;
   event.dataTransfer.effectAllowed = 'move';
 }
@@ -498,6 +507,14 @@ document.addEventListener('mousedown', function(e) {
   isSelecting = true;
   startCell = cell;
   selectRange(startCell, startCell);
+
+  e.preventDefault();
+  cell.focus();
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
 });
 
 document.addEventListener('mouseover', function(e) {
@@ -506,7 +523,6 @@ document.addEventListener('mouseover', function(e) {
   if (!cell || !CAN_EDIT) return;
   
   selectRange(startCell, cell);
-  window.getSelection().removeAllRanges(); 
 });
 
 document.addEventListener('mouseup', function(e) {
