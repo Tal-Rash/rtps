@@ -1136,6 +1136,7 @@ td.holiday-col .cell.day-cell::selection {
   overflow: visible;
   line-height: 1.2;
   word-wrap: break-word;
+  font-size: 15px;
 }
 
 .col-fio {
