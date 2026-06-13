@@ -168,14 +168,18 @@ function renderTable() {
     const emp = appState.employees[r] || {};
     const tabNum = emp.tab_num || `empty_${r}`;
     vHTML += `<tr>`;
-    for (let c = 0; c < 13; c++) {
-      if (c === 5 || c === 9) {
+    vHTML += `<td style="text-align: left;">${escapeHtml(emp.tab_num || '')}</td>`;
+    vHTML += `<td style="text-align: left;">${escapeHtml(emp.name || '')}</td>`;
+    
+    const cols = [1, 2, 3, 'sep', 5, 6, 7, 'sep', 9, 10, 11];
+    cols.forEach(c => {
+      if (c === 'sep') {
         vHTML += `<td style="background:#f0f0f0;"></td>`; // separator
       } else {
         const val = (appState.vacations && appState.vacations[tabNum] && appState.vacations[tabNum][c]) || "";
         vHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited('${tabNum}', ${c}, this)">${escapeHtml(val)}</td>`;
       }
-    }
+    });
     vHTML += `</tr>`;
   }
   vbody.innerHTML = vHTML;
