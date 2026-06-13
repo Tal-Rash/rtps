@@ -33,8 +33,48 @@ def load_web_secret() -> str:
 
 WEB_SECRET = load_web_secret()
 
-def connect() -> sqlite3.Connection:
+def init_db():
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        # Check if we need to migrate timesheet/vacations from r -> tab_num
+        cur.execute("PRAGMA table_info('timesheet')")
+        cols = [c["name"] for c in cur.fetchall()]
+        if "tab_num" not in cols and "r" in cols:
+            print("Auto-migrating timesheet and vacations to tab_num...")
+            years = cur.execute("SELECT DISTINCT y FROM employees").fetchall()
+            for y_row in years:
+                year = y_row["y"]
+                emps = cur.execute("SELECT rowid, tab_num FROM employees WHERE y=? ORDER BY rowid", (year,)).fetchall()
+                r_to_tab = {str(idx): emp["tab_num"] for idx, emp in enumerate(emps)}
+                
+                # Migrate timesheet
+                ts_rows = cur.execute("SELECT m, r, c, v FROM timesheet WHERE y=?", (year,)).fetchall()
+                cur.execute("CREATE TABLE IF NOT EXISTS timesheet_new (y INT, m TEXT, tab_num TEXT, c INT, v TEXT, PRIMARY KEY(y,m,tab_num,c))")
+                for row in ts_rows:
+                    if str(row["r"]) in r_to_tab:
+                        cur.execute("INSERT OR REPLACE INTO timesheet_new (y, m, tab_num, c, v) VALUES (?, ?, ?, ?, ?)", 
+                                    (year, row["m"], r_to_tab[str(row["r"])], row["c"], row["v"]))
+                
+                # Migrate vacations
+                vac_rows = cur.execute("SELECT r, c, v FROM vacations WHERE y=?", (year,)).fetchall()
+                cur.execute("CREATE TABLE IF NOT EXISTS vacations_new (y INT, tab_num TEXT, c INT, v TEXT, PRIMARY KEY(y,tab_num,c))")
+                for row in vac_rows:
+                    if str(row["r"]) in r_to_tab:
+                        cur.execute("INSERT OR REPLACE INTO vacations_new (y, tab_num, c, v) VALUES (?, ?, ?, ?)", 
+                                    (year, r_to_tab[str(row["r"])], row["c"], row["v"]))
+                                    
+            cur.execute("DROP TABLE IF EXISTS timesheet")
+            cur.execute("ALTER TABLE timesheet_new RENAME TO timesheet")
+            cur.execute("DROP TABLE IF EXISTS vacations")
+            cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
+            conn.commit()
+
+init_db()
+
+def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
