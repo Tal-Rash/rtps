@@ -448,14 +448,5 @@
 .cell-weekend { background:#ffe5e5 !important; }
 .cell-vacation { background:#e5ffe5 !important; }
 .cell-sick { background:#ffe5ff !important; }
-.dropdown-menu button {
-  padding: 8px 12px;
-  background: white;
-  cursor: pointer;
-}
-.dropdown-menu button:hover {
-  background: #f0f0f0;
-}
-
 .tab-content { display: none; width: 100%; }
 .tab-content.active { display: block; }
