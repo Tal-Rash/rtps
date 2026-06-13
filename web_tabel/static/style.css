@@ -1147,9 +1147,9 @@ td.holiday-col .cell.day-cell::selection {
 }
 
 .col-day {
-  width: 24px;
-  min-width: 24px;
-  max-width: 24px;
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
   text-align: center;
 }
 
