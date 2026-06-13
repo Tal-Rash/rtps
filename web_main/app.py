@@ -166,7 +166,7 @@ def get_client_ip(request: Request):
 def debug_logs():
     import subprocess
     try:
-        res = subprocess.run(["journalctl", "-u", "tabel.service", "-n", "100", "--no-pager"], capture_output=True, text=True)
+        res = subprocess.run(["cat", "/etc/nginx/sites-enabled/default"], capture_output=True, text=True)
         return Response(content=res.stdout + "\nSTDERR:\n" + res.stderr, media_type="text/plain")
     except Exception as e:
         return Response(content=str(e), media_type="text/plain")
