@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.43"
+APP_VERSION = "web-tabel-1.45"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
@@ -38,6 +38,8 @@ def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS month_hints (y INT, m TEXT, hint TEXT, PRIMARY KEY(y,m))")
+
         # Add is_excluded column if not exists
         cur.execute("PRAGMA table_info('employees')")
         emp_cols = [c["name"] for c in cur.fetchall()]
@@ -98,7 +100,7 @@ def init_db():
             cur.execute("ALTER TABLE timesheet_new RENAME TO timesheet")
             cur.execute("DROP TABLE IF EXISTS vacations")
             cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
-            cur.execute("CREATE TABLE IF NOT EXISTS month_hints (y INT, m TEXT, hint TEXT, PRIMARY KEY(y,m))")
+            
 
             if month_hint is not None:
                 m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
@@ -242,6 +244,7 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
         import sqlite3
         with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
+
             rows = cur.execute(
                 "SELECT c, v FROM ts_norms_data WHERE y=? AND c IN (6, 7)",
                 (year,),
@@ -275,6 +278,7 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
 def load_state(year: int, month: int) -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
+
         
         employees = []
         try:
@@ -375,6 +379,7 @@ async def export_summary(year: int, month: int, type: str):
 
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
+
         emp_rows = cur.execute("SELECT DISTINCT name FROM employees WHERE y=? AND name != ''", (year,)).fetchall()
         employees = sorted(list(set(row["name"] for row in emp_rows)))
         
@@ -453,6 +458,7 @@ async def export_milk(year: int, month: int, type: str):
     with DB_LOCK, connect() as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+
         emp_rows = cur.execute("SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note FROM employees WHERE y=? AND name != '' ORDER BY rowid", (year,)).fetchall()
         
         m_comp_set = set()
@@ -578,6 +584,7 @@ async def export_sick_email(emp: str, type: str, start: str, end: str, email: st
 
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
+
         emp_data = cur.execute("SELECT tab_num FROM employees WHERE name=?", (emp,)).fetchone()
         tab_num = str(emp_data["tab_num"]) if emp_data else ""
         
@@ -674,6 +681,7 @@ async def api_save_state(request: Request):
         
         with DB_LOCK, connect() as conn:
             cur = conn.cursor()
+
             cur.execute("BEGIN")
             
             if timesheet is not None:
