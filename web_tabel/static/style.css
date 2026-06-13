@@ -844,7 +844,7 @@ textarea {
 .table-wrap>table {
   border-collapse: separate;
   border-spacing: 0;
-  width: 100%;
+  width: max-content;
   min-width: 720px;
   table-layout: fixed;
 }
@@ -1122,13 +1122,8 @@ td.holiday-col .cell.day-cell::selection {
 }
 
 .col-fio {
-  white-space: nowrap;
-}
-
-.col-fio .cell {
-  width: auto;
-  overflow: visible;
-  text-overflow: clip;
+  width: 280px;
+  min-width: 280px;
 }
 
 .col-tab {
@@ -1167,6 +1162,7 @@ th.col-day {
 }
 
 .month-table {
+  table-layout: fixed;
   width: max-content;
 }
 
