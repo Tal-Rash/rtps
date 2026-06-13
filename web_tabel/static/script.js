@@ -339,18 +339,9 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 let draggedRowIndex = -1;
-let dragTarget = null;
-
-document.addEventListener('mousedown', e => {
-  dragTarget = e.target;
-});
 
 function rowDragStart(event, rIndex) {
   if (!CAN_EDIT) return;
-  if (dragTarget && !dragTarget.closest('.col-idx')) {
-      event.preventDefault();
-      return;
-  }
   draggedRowIndex = rIndex;
   event.dataTransfer.effectAllowed = 'move';
 }
@@ -495,6 +486,16 @@ let startCell = null;
 let currentSelectedCells = new Set();
 
 document.addEventListener('mousedown', function(e) {
+  // Управление HTML5 drag-and-drop: строка перетаскивается только за номер
+  const tr = e.target.closest('tr');
+  if (tr && tr.hasAttribute('ondragstart')) {
+    if (e.target.closest('.col-idx')) {
+      tr.setAttribute('draggable', 'true');
+    } else {
+      tr.removeAttribute('draggable');
+    }
+  }
+
   const cell = e.target.closest('.day-cell');
   if (!cell || !CAN_EDIT) {
     if (!e.target.closest('.json-menu')) {
