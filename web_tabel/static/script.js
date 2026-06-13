@@ -484,6 +484,7 @@ function applyVacations() {
 let isSelecting = false;
 let startCell = null;
 let currentSelectedCells = new Set();
+let lastHoveredCell = null;
 
 document.addEventListener('mousedown', function(e) {
   // Управление HTML5 drag-and-drop: строка перетаскивается только за номер
@@ -507,27 +508,42 @@ document.addEventListener('mousedown', function(e) {
   
   isSelecting = true;
   startCell = cell;
+  lastHoveredCell = cell;
   selectRange(startCell, startCell);
-
-  e.preventDefault();
-  cell.focus();
-  const range = document.createRange();
-  range.selectNodeContents(cell);
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
 });
 
-document.addEventListener('mouseover', function(e) {
+document.addEventListener('mousemove', function(e) {
   if (!isSelecting || !startCell) return;
-  const cell = e.target.closest('.day-cell');
+  
+  // Используем elementFromPoint для обхода захвата мыши
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el) return;
+  
+  const cell = el.closest('.day-cell');
   if (!cell || !CAN_EDIT) return;
   
-  selectRange(startCell, cell);
+  if (cell !== lastHoveredCell) {
+    selectRange(startCell, cell);
+    lastHoveredCell = cell;
+    
+    // Снимаем стандартное выделение текста, чтобы не мешало
+    window.getSelection().removeAllRanges();
+  }
 });
 
 document.addEventListener('mouseup', function(e) {
+  if (isSelecting && currentSelectedCells.size > 1) {
+    if (startCell) {
+      startCell.focus();
+      const range = document.createRange();
+      range.selectNodeContents(startCell);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
   isSelecting = false;
+  lastHoveredCell = null;
 });
 
 function clearSelection() {
