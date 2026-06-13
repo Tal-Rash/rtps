@@ -751,8 +751,8 @@ async def api_save_state(request: Request):
 
 
             if month_hint is not None:
-                # Save it globally
-                cur.execute("INSERT OR REPLACE INTO ts_settings (k, v) VALUES ('month_hint', ?)", (str(month_hint),))
+                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+                cur.execute("INSERT OR REPLACE INTO month_hints (y, m, hint) VALUES (?, ?, ?)", (year, m_str, str(month_hint)))
 
             conn.commit()
             
