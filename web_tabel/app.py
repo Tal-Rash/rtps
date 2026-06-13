@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.29"
+APP_VERSION = "web-tabel-1.31"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -90,6 +90,12 @@ def init_db():
             cur.execute("ALTER TABLE timesheet_new RENAME TO timesheet")
             cur.execute("DROP TABLE IF EXISTS vacations")
             cur.execute("ALTER TABLE vacations_new RENAME TO vacations")
+            cur.execute("CREATE TABLE IF NOT EXISTS month_hints (y INT, m TEXT, hint TEXT, PRIMARY KEY(y,m))")
+
+            if month_hint is not None:
+                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+                cur.execute("INSERT OR REPLACE INTO month_hints (y, m, hint) VALUES (?, ?, ?)", (year, m_str, str(month_hint)))
+
             conn.commit()
 
 try:
@@ -217,7 +223,17 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
     holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
     db_path = ROOT.parent / "base" / "common_database.db"
     if not db_path.exists():
-        return {
+    
+        month_hint = ""
+        try:
+            m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+            hint_row = cur.execute("SELECT hint FROM month_hints WHERE y=? AND m=?", (year, m_str)).fetchone()
+            if hint_row:
+                month_hint = str(hint_row["hint"])
+        except Exception:
+            pass
+
+    return {
             "transfer": sorted(transfer_dates),
             "holiday": sorted(holiday_dates),
         }
@@ -313,6 +329,7 @@ def load_state(year: int, month: int) -> dict:
         "timesheet": timesheet,
         "vacations": vacations,
         "ts_norms_data": ts_norms_data,
+        "month_hint": month_hint,
     }
 
 @app.get("/api/debug_startup")
@@ -348,6 +365,7 @@ async def api_save_state(request: Request):
         employees = payload.get("employees")
         vacations = payload.get("vacations")
         ts_norms_data = payload.get("ts_norms_data")
+        month_hint = payload.get("month_hint")
         
         with DB_LOCK, connect() as conn:
             cur = conn.cursor()
@@ -391,6 +409,11 @@ async def api_save_state(request: Request):
                         for c, v in row_data.items():
                             if v: insert_norms.append((year, int(r_idx), int(c), str(v)))
                 cur.executemany("INSERT INTO ts_norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
+
+
+            if month_hint is not None:
+                m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+                cur.execute("INSERT OR REPLACE INTO month_hints (y, m, hint) VALUES (?, ?, ?)", (year, m_str, str(month_hint)))
 
             conn.commit()
             

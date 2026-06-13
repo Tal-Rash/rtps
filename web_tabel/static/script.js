@@ -81,6 +81,11 @@ function daysInMonth(year, month) {
 }
 
 function renderTable() {
+  const mh = document.getElementById("monthHint");
+  if (mh) {
+    mh.value = appState.month_hint || "";
+    if (!CAN_EDIT) mh.readOnly = true;
+  }
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
   const days = daysInMonth(year, month);
@@ -277,7 +282,8 @@ async function saveState() {
       employees: cleanEmployees,
       timesheet: objTimesheet,
       vacations: objVac,
-      ts_norms_data: arrNorms
+      ts_norms_data: arrNorms,
+      month_hint: appState.month_hint || ""
     };
     
     const res = await fetch(`${APP_PREFIX}/api/state`, {

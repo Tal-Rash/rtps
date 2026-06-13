@@ -54,6 +54,9 @@
             <tbody id="tabelBody"></tbody>
           </table>
         </div>
+        <div class="month-hint-wrap" style="margin-top: 10px;">
+          <textarea id="monthHint" class="month-hint" style="width: 100%; min-height: 60px; padding: 5px; box-sizing: border-box; resize: vertical;" placeholder="Сноска / Примечания к месяцу..." oninput="appState.month_hint = this.value; markUnsaved();"></textarea>
+        </div>
       </div>
 
       <div class="tab-content" id="tab-data">
