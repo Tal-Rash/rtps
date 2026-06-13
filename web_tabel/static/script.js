@@ -66,11 +66,11 @@ function renderTable() {
   
   // Render Headers
   const thead = document.getElementById("tabelHeader");
-  let hHTML = `<th>№</th><th>Должность</th><th>ФИО</th><th>Таб. №</th>`;
+  let hHTML = `<th class="col-idx">№</th><th class="col-pos">Должность</th><th class="col-fio">ФИО</th><th class="col-tab">Таб. №</th>`;
   for (let d = 1; d <= days; d++) {
-    hHTML += `<th>${String(d).padStart(2, '0')}</th>`;
+    hHTML += `<th class="col-day">${String(d).padStart(2, '0')}</th>`;
   }
-  hHTML += `<th>Итого</th>`;
+  hHTML += `<th class="col-total">Итого</th>`;
   thead.innerHTML = hHTML;
   
   // Render Body for Tabel
@@ -79,10 +79,10 @@ function renderTable() {
   
   appState.employees.forEach((emp, rIndex) => {
     bHTML += `<tr>`;
-    bHTML += `<td>${rIndex + 1}</td>`;
-    bHTML += `<td>${escapeHtml(emp.pos)}</td>`;
-    bHTML += `<td style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</td>`;
-    bHTML += `<td>${escapeHtml(emp.tab_num)}</td>`;
+    bHTML += `<td class="col-idx"><div class="rownum"><span>${rIndex + 1}</span></div></td>`;
+    bHTML += `<td class="col-pos"><div class="cell" style="text-align: left;">${escapeHtml(emp.pos)}</div></td>`;
+    bHTML += `<td class="col-fio"><div class="cell" style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</div></td>`;
+    bHTML += `<td class="col-tab"><div class="cell center">${escapeHtml(emp.tab_num)}</div></td>`;
     
     let total = 0;
     const rowData = appState.timesheet[rIndex] || {};
@@ -90,18 +90,18 @@ function renderTable() {
     for (let d = 1; d <= days; d++) {
       const val = rowData[d] || "";
       const isWeekend = [0, 6].includes(new Date(year, month - 1, d).getDay());
-      let classes = [];
-      if (isWeekend) classes.push("cell-weekend");
-      if (val === "В") classes.push("cell-weekend");
-      if (val === "ОТ" || val === "О" || val === "ОВ" || val === "А" || val === "У") classes.push("cell-vacation");
-      if (val === "Б") classes.push("cell-sick");
+      let tdClass = "col-day";
+      if (isWeekend) tdClass += " holiday-col";
+      if (val === "В") tdClass += " holiday-col";
+      if (val === "ОТ" || val === "О" || val === "ОВ" || val === "А" || val === "У") tdClass += " transfer-col";
+      if (val === "Б") tdClass += " holiday-col";
       if (val.match(/^[0-9]+$/)) total += parseInt(val);
       
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : '';
-      bHTML += `<td class="cell ${classes.join(' ')}" ${contentEditable} oninput="cellEdited(${rIndex}, ${d}, this)">${escapeHtml(val)}</td>`;
+      bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited(${rIndex}, ${d}, this)">${escapeHtml(val)}</div></td>`;
     }
     
-    bHTML += `<td id="total_${rIndex}"><strong>${total}</strong></td>`;
+    bHTML += `<td class="col-total" id="total_${rIndex}"><div class="cell center"><strong>${total}</strong></div></td>`;
     bHTML += `</tr>`;
   });
   
