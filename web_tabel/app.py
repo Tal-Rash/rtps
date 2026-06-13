@@ -23,7 +23,7 @@ DB_FILE = ROOT / "data" / "tabel.db"
 COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.2"
+APP_VERSION = "web-tabel-1.3"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -164,24 +164,24 @@ def load_state(year: int, month: int) -> dict:
         timesheet = {}
         try:
             ts_rows = cur.execute(
-                "SELECT r, c, v FROM timesheet WHERE y=? AND m=?", (year, str(month))
+                "SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, str(month))
             ).fetchall()
             for r in ts_rows:
-                timesheet.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
+                timesheet.setdefault(text(r["tab_num"]), {})[int(r["c"])] = text(r["v"])
         except Exception:
             pass
             
         vacations = {}
         try:
-            vac_rows = cur.execute("SELECT r, c, v FROM vacations WHERE y=?", (year,)).fetchall()
+            vac_rows = cur.execute("SELECT tab_num, c, v FROM vacations WHERE y=?", (year,)).fetchall()
             for r in vac_rows:
-                vacations.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
+                vacations.setdefault(text(r["tab_num"]), {})[int(r["c"])] = text(r["v"])
         except Exception:
             pass
 
         ts_norms_data = {}
         try:
-            norms_rows = cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)).fetchall()
+            norms_rows = cur.execute("SELECT r, c, v FROM norms_data WHERE y=?", (year,)).fetchall()
             for r in norms_rows:
                 ts_norms_data.setdefault(int(r["r"]), {})[int(r["c"])] = text(r["v"])
         except Exception:
@@ -225,11 +225,12 @@ async def api_save_state(request: Request):
         if timesheet is not None:
             cur.execute("DELETE FROM timesheet WHERE y=? AND m=?", (year, str(month)))
             insert_ts = []
-            for r, row_data in enumerate(timesheet):
-                if not row_data: continue
-                for c, v in row_data.items():
-                    if v: insert_ts.append((year, str(month), r, int(c), str(v)))
-            cur.executemany("INSERT INTO timesheet(y, m, r, c, v) VALUES(?,?,?,?,?)", insert_ts)
+            if isinstance(timesheet, dict):
+                for tab_num, row_data in timesheet.items():
+                    if not row_data: continue
+                    for c, v in row_data.items():
+                        if v: insert_ts.append((year, str(month), str(tab_num), int(c), str(v)))
+            cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
 
         if employees is not None:
             cur.execute("DELETE FROM employees WHERE y=?", (year,))
@@ -242,20 +243,22 @@ async def api_save_state(request: Request):
         if vacations is not None:
             cur.execute("DELETE FROM vacations WHERE y=?", (year,))
             insert_vac = []
-            for r, row_data in enumerate(vacations):
-                if not row_data: continue
-                for c, v in row_data.items():
-                    if v: insert_vac.append((year, r, int(c), str(v)))
-            cur.executemany("INSERT INTO vacations(y, r, c, v) VALUES(?,?,?,?)", insert_vac)
+            if isinstance(vacations, dict):
+                for tab_num, row_data in vacations.items():
+                    if not row_data: continue
+                    for c, v in row_data.items():
+                        if v: insert_vac.append((year, str(tab_num), int(c), str(v)))
+            cur.executemany("INSERT INTO vacations(y, tab_num, c, v) VALUES(?,?,?,?)", insert_vac)
 
         if ts_norms_data is not None:
-            cur.execute("DELETE FROM ts_norms_data WHERE y=?", (year,))
+            cur.execute("DELETE FROM norms_data WHERE y=?", (year,))
             insert_norms = []
-            for r, row_data in enumerate(ts_norms_data):
-                if not row_data: continue
-                for c, v in row_data.items():
-                    if v: insert_norms.append((year, r, int(c), str(v)))
-            cur.executemany("INSERT INTO ts_norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
+            if isinstance(ts_norms_data, dict) or isinstance(ts_norms_data, list):
+                for r_idx, row_data in (ts_norms_data.items() if isinstance(ts_norms_data, dict) else enumerate(ts_norms_data)):
+                    if not row_data: continue
+                    for c, v in row_data.items():
+                        if v: insert_norms.append((year, int(r_idx), int(c), str(v)))
+            cur.executemany("INSERT INTO norms_data(y, r, c, v) VALUES(?,?,?,?)", insert_norms)
 
         conn.commit()
         

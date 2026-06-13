@@ -99,14 +99,15 @@ function renderTable() {
   let bHTML = "";
   
   appState.employees.forEach((emp, rIndex) => {
-    bHTML += `<tr>`;
+    const tabNum = emp.tab_num || `empty_${rIndex}`;
+    bHTML += `<tr draggable="true" ondragstart="rowDragStart(event, ${rIndex})" ondragover="rowDragOver(event, ${rIndex})" ondrop="rowDrop(event, ${rIndex})">`;
     bHTML += `<td class="col-idx"><div class="rownum"><span>${rIndex + 1}</span></div></td>`;
     bHTML += `<td class="col-pos"><div class="cell" style="text-align: left;">${escapeHtml(emp.pos)}</div></td>`;
     bHTML += `<td class="col-fio"><div class="cell" style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</div></td>`;
     bHTML += `<td class="col-tab"><div class="cell center">${escapeHtml(emp.tab_num)}</div></td>`;
     
     let total = 0;
-    const rowData = appState.timesheet[rIndex] || {};
+    const rowData = appState.timesheet[tabNum] || {};
     
     for (let d = 1; d <= days; d++) {
       const val = rowData[d] || "";
@@ -119,10 +120,10 @@ function renderTable() {
       if (val.match(/^[0-9]+$/)) total += parseInt(val);
       
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : '';
-      bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited(${rIndex}, ${d}, this)">${escapeHtml(val)}</div></td>`;
+      bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
     }
     
-    bHTML += `<td class="col-total" id="total_${rIndex}"><div class="cell center"><strong>${total}</strong></div></td>`;
+    bHTML += `<td class="col-total" id="total_${tabNum}"><div class="cell center"><strong>${total}</strong></div></td>`;
     bHTML += `</tr>`;
   });
   
@@ -163,15 +164,16 @@ function renderTable() {
   // Render Vacations
   const vbody = document.getElementById("vacationsBody");
   let vHTML = "";
-  // 11 rows
   for (let r = 0; r < 11; r++) {
+    const emp = appState.employees[r] || {};
+    const tabNum = emp.tab_num || `empty_${r}`;
     vHTML += `<tr>`;
     for (let c = 0; c < 13; c++) {
       if (c === 5 || c === 9) {
         vHTML += `<td style="background:#f0f0f0;"></td>`; // separator
       } else {
-        const val = (appState.vacations && appState.vacations[r] && appState.vacations[r][c]) || "";
-        vHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited(${r}, ${c}, this)">${escapeHtml(val)}</td>`;
+        const val = (appState.vacations && appState.vacations[tabNum] && appState.vacations[tabNum][c]) || "";
+        vHTML += `<td class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited('${tabNum}', ${c}, this)">${escapeHtml(val)}</td>`;
       }
     }
     vHTML += `</tr>`;
@@ -179,18 +181,18 @@ function renderTable() {
   vbody.innerHTML = vHTML;
 }
 
-function cellEdited(r, c, el) {
-  if (!appState.timesheet[r]) appState.timesheet[r] = {};
-  appState.timesheet[r][c] = el.innerText.trim();
+function cellEdited(tabNum, c, el) {
+  if (!appState.timesheet[tabNum]) appState.timesheet[tabNum] = {};
+  appState.timesheet[tabNum][c] = el.innerText.trim();
   markDirty(true);
   
   let total = 0;
   const days = daysInMonth(appState.year, appState.month);
   for (let d = 1; d <= days; d++) {
-    const v = appState.timesheet[r][d] || "";
+    const v = appState.timesheet[tabNum][d] || "";
     if (v.match(/^[0-9]+$/)) total += parseInt(v);
   }
-  document.getElementById(`total_${r}`).innerHTML = `<strong>${total}</strong>`;
+  document.getElementById(`total_${tabNum}`).innerHTML = `<div class="cell center"><strong>${total}</strong></div>`;
 }
 
 function dataEdited(r, c, el) {
@@ -210,10 +212,10 @@ function empEdited(r, field, el) {
   markDirty(true);
 }
 
-function vacEdited(r, c, el) {
+function vacEdited(tabNum, c, el) {
   if (!appState.vacations) appState.vacations = {};
-  if (!appState.vacations[r]) appState.vacations[r] = {};
-  appState.vacations[r][c] = el.innerText.trim();
+  if (!appState.vacations[tabNum]) appState.vacations[tabNum] = {};
+  appState.vacations[tabNum][c] = el.innerText.trim();
   markDirty(true);
 }
 
@@ -224,14 +226,18 @@ async function saveState() {
   btn.textContent = "Сохранение...";
   
   try {
-    const arrTimesheet = [];
-    appState.employees.forEach((_, r) => {
-      arrTimesheet[r] = appState.timesheet[r] || {};
+    const objTimesheet = {};
+    appState.employees.forEach((emp, r) => {
+      const tabNum = emp.tab_num || `empty_${r}`;
+      objTimesheet[tabNum] = appState.timesheet[tabNum] || {};
     });
     
-    // Convert objects to arrays for vacations and norms
-    const arrVac = [];
-    for (let r=0; r<11; r++) { arrVac[r] = (appState.vacations && appState.vacations[r]) || {}; }
+    const objVac = {};
+    for (let r=0; r<11; r++) { 
+        const emp = appState.employees[r] || {};
+        const tabNum = emp.tab_num || `empty_${r}`;
+        objVac[tabNum] = (appState.vacations && appState.vacations[tabNum]) || {}; 
+    }
     const arrNorms = [];
     for (let r=0; r<12; r++) { arrNorms[r] = (appState.ts_norms_data && appState.ts_norms_data[r]) || {}; }
 
@@ -249,9 +255,9 @@ async function saveState() {
     const payload = {
       year: appState.year,
       month: appState.month,
-      timesheet: arrTimesheet,
       employees: cleanEmployees,
-      vacations: arrVac,
+      timesheet: objTimesheet,
+      vacations: objVac,
       ts_norms_data: arrNorms
     };
     
@@ -291,3 +297,31 @@ window.addEventListener('beforeunload', (e) => {
     e.returnValue = '';
   }
 });
+
+let draggedRowIndex = -1;
+
+function rowDragStart(event, rIndex) {
+  if (!CAN_EDIT) return;
+  draggedRowIndex = rIndex;
+  event.dataTransfer.effectAllowed = 'move';
+}
+
+function rowDragOver(event, rIndex) {
+  if (!CAN_EDIT) return;
+  if (draggedRowIndex < 0 || draggedRowIndex === rIndex) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+}
+
+function rowDrop(event, rIndex) {
+  if (!CAN_EDIT) return;
+  event.preventDefault();
+  if (draggedRowIndex < 0 || draggedRowIndex === rIndex) return;
+  
+  const moved = appState.employees.splice(draggedRowIndex, 1)[0];
+  appState.employees.splice(rIndex, 0, moved);
+  
+  draggedRowIndex = -1;
+  markDirty(true);
+  renderTable();
+}
