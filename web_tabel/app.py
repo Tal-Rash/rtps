@@ -415,36 +415,70 @@ async def export_summary(year: int, month: int, type: str):
         
         result = {emp: 0 for emp in employees}
         
-        # We need to count occurrences of the codes in timesheet
-        placeholders = ','.join(['?']*len(codes))
-        query = f"""
-            SELECT e.name, t.v, t.m, t.c
-            FROM timesheet t
-            JOIN employees e ON t.tab_num = e.tab_num AND t.y = e.y
-            WHERE t.y=? AND t.v IN ({placeholders})
-        """
-        ts_rows = cur.execute(query, [year] + codes).fetchall()
-        
         sys_dates = load_system_dates(year)
-        all_holidays = set(sys_dates.get("holiday", []))
+        holiday_set = set(sys_dates.get("holiday", []))
+        transfer_set = set(sys_dates.get("transfer", []))
         
         monthsNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
         month_map = {name: i+1 for i, name in enumerate(monthsNames)}
         
-        for row in ts_rows:
-            name = row["name"]
-            v = row["v"]
-            m_str = row["m"]
-            d = row["c"]
+        if codes == ["WORK_WEEKEND"]:
+            ts_rows = cur.execute("""
+                SELECT e.name, t.v, t.m, t.c
+                FROM timesheet t
+                JOIN employees e ON t.tab_num = e.tab_num AND t.y = e.y
+                WHERE t.y=? AND t.v != ''
+            """, (year,)).fetchall()
             
-            if v in ("О", "ОВ"):
-                m_int = month_map.get(m_str)
-                if m_int and (m_int, d) in all_holidays:
+            from datetime import date
+            ignore_codes = {"В", "B", "О", "ДО", "К", "У", "Б", "БН", "ОВ"}
+            
+            for row in ts_rows:
+                name = row["name"]
+                v = str(row["v"]).strip().upper()
+                if not v or v in ignore_codes:
                     continue
                     
-            if name in result:
-                result[name] += 1
+                m_str = row["m"]
+                d = int(row["c"])
+                m_int = month_map.get(m_str)
+                if not m_int: continue
                 
+                is_holiday = (m_int, d) in holiday_set
+                is_transfer = (m_int, d) in transfer_set
+                try:
+                    weekday = date(year, m_int, d).weekday()
+                    is_weekend = weekday in (5, 6)
+                except ValueError:
+                    is_weekend = False
+                    
+                if is_weekend or is_holiday or is_transfer:
+                    if name in result:
+                        result[name] += 1
+        else:
+            placeholders = ','.join(['?']*len(codes))
+            query = f"""
+                SELECT e.name, t.v, t.m, t.c
+                FROM timesheet t
+                JOIN employees e ON t.tab_num = e.tab_num AND t.y = e.y
+                WHERE t.y=? AND t.v IN ({placeholders})
+            """
+            ts_rows = cur.execute(query, [year] + codes).fetchall()
+            
+            for row in ts_rows:
+                name = row["name"]
+                v = row["v"]
+                m_str = row["m"]
+                d = row["c"]
+                
+                if v in ("О", "ОВ"):
+                    m_int = month_map.get(m_str)
+                    if m_int and (m_int, int(d)) in holiday_set:
+                        continue
+                        
+                if name in result:
+                    result[name] += 1
+                    
     total = sum(result.values())
     
     html = f"""

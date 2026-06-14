@@ -458,6 +458,9 @@ function updateExportMenu() {
     `;
   }
   
+  optionsHTML += `<hr style="margin: 4px 0; border: 0; border-top: 1px solid var(--line);"/>`;
+  optionsHTML += `<button onclick="exportSummary('WORK_WEEKEND:Работа в выходные')">Работа в выходные</button>`;
+  
   panel.innerHTML = optionsHTML;
 }
 
