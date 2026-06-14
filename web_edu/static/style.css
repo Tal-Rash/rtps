@@ -1383,6 +1383,7 @@ th.col-day {
   background: #e8f0ff !important;
   box-shadow: inset 0 0 0 1px rgba(39, 110, 241, .45);
 }
+}
 
 @media (max-width:900px) {
   .topbar {
