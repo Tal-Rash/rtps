@@ -506,45 +506,69 @@ function applyVacations() {
   appState.employees.forEach((emp, r) => {
     const tabNum = emp.tab_num || `empty_${r}`;
     const vacData = appState.vacations[tabNum];
-    if (!vacData) return;
     
     const vacDays = new Set();
-    const cols = [[1,2,3], [5,6,7], [9,10,11]];
-    cols.forEach(pair => {
-      const sDateStr = vacData[pair[0]];
-      const eDateStr = vacData[pair[1]];
-      
-      const sDate = parseVacationDate(sDateStr, year);
-      const eDate = parseVacationDate(eDateStr, year);
-      
-      if (sDate && eDate && eDate >= sDate) {
-        let curr = new Date(sDate);
-        while (curr <= eDate) {
-          if (curr.getFullYear() === year) {
-            const m = curr.getMonth() + 1;
-            const d = curr.getDate();
-            const isH = appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d);
-            if (!isH) {
-              vacDays.add(`${m}-${d}`);
+    if (vacData) {
+      const cols = [[1,2,3], [5,6,7], [9,10,11]];
+      cols.forEach(pair => {
+        const sDateStr = vacData[pair[0]];
+        const eDateStr = vacData[pair[1]];
+        
+        const sDate = parseVacationDate(sDateStr, year);
+        const eDate = parseVacationDate(eDateStr, year);
+        
+        if (sDate && eDate && eDate >= sDate) {
+          let curr = new Date(sDate);
+          while (curr <= eDate) {
+            if (curr.getFullYear() === year) {
+              const m = curr.getMonth() + 1;
+              const d = curr.getDate();
+              const isH = appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d);
+              if (!isH) {
+                vacDays.add(`${m}-${d}`);
+              }
             }
+            curr.setDate(curr.getDate() + 1);
           }
-          curr.setDate(curr.getDate() + 1);
         }
-      }
-    });
+      });
+    }
     
     if (!appState.timesheet[tabNum]) appState.timesheet[tabNum] = {};
     for (let d = 1; d <= days; d++) {
       const isVac = vacDays.has(`${month}-${d}`);
       const currVal = appState.timesheet[tabNum][d] || "";
+      
+      const date = new Date(year, month - 1, d);
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+      let isH = false, isT = false;
+      if (appState.system_dates) {
+        isT = appState.system_dates.transfer.some(dt => dt[0] === month && dt[1] === d);
+        isH = appState.system_dates.holiday.some(dt => dt[0] === month && dt[1] === d);
+      }
+      const isRestDay = isWeekend || isH || isT;
+      
       if (isVac) {
         if (currVal !== "О" && currVal !== "ДО") {
           appState.timesheet[tabNum][d] = "О";
           changed = true;
         }
-      } else if (currVal === "О") {
-        appState.timesheet[tabNum][d] = "";
-        changed = true;
+      } else {
+        if (currVal === "О") {
+          appState.timesheet[tabNum][d] = "";
+          changed = true;
+        }
+        
+        // Auto-fill "В" for empty rest days
+        if (isRestDay && (!appState.timesheet[tabNum][d] || appState.timesheet[tabNum][d] === "")) {
+          appState.timesheet[tabNum][d] = "В";
+          changed = true;
+        }
+        // Auto-clear "В" if it's no longer a rest day (e.g. system_dates changed)
+        else if (!isRestDay && appState.timesheet[tabNum][d] === "В") {
+          appState.timesheet[tabNum][d] = "";
+          changed = true;
+        }
       }
     }
   });
