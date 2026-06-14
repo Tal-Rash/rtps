@@ -414,15 +414,36 @@ async def export_summary(year: int, month: int, type: str):
         # We need to count occurrences of the codes in timesheet
         placeholders = ','.join(['?']*len(codes))
         query = f"""
-            SELECT e.name, t.v 
+            SELECT e.name, t.v, t.m, t.c
             FROM timesheet t
             JOIN employees e ON t.tab_num = e.tab_num AND t.y = e.y
             WHERE t.y=? AND t.v IN ({placeholders})
         """
         ts_rows = cur.execute(query, [year] + codes).fetchall()
         
+        system_holidays = set()
+        try:
+            sys_rows = cur.execute("SELECT m, d FROM system_dates WHERE y=? AND type='holiday'", (year,)).fetchall()
+            for r in sys_rows:
+                system_holidays.add((int(r["m"]), int(r["d"])))
+        except Exception:
+            pass
+            
+        all_holidays = FIXED_HOLIDAYS | system_holidays
+        monthsNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
+        month_map = {name: i+1 for i, name in enumerate(monthsNames)}
+        
         for row in ts_rows:
             name = row["name"]
+            v = row["v"]
+            m_str = row["m"]
+            d = row["c"]
+            
+            if v in ("О", "ОВ"):
+                m_int = month_map.get(m_str)
+                if m_int and (m_int, d) in all_holidays:
+                    continue
+                    
             if name in result:
                 result[name] += 1
                 
