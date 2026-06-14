@@ -618,10 +618,11 @@ function selectRange(start, end) {
   for (let r = minRow; r <= maxRow; r++) {
     const rowTds = Array.from(allRows[r].querySelectorAll('td'));
     for (let c = minCol; c <= maxCol; c++) {
-      const cell = rowTds[c]?.querySelector('.day-cell');
-      if (cell) {
-        cell.classList.add('multi-selected');
-        currentSelectedCells.add(cell);
+      const tdElement = rowTds[c];
+      const cell = tdElement?.querySelector('.day-cell');
+      if (cell && tdElement) {
+        tdElement.classList.add('multi-selected');
+        currentSelectedCells.add(tdElement);
         
         const shadows = [];
         if (r === minRow) shadows.push('inset 0 1.5px 0 0 #276ef1');
@@ -630,9 +631,9 @@ function selectRange(start, end) {
         if (c === maxCol) shadows.push('inset -1.5px 0 0 0 #276ef1');
         
         if (shadows.length > 0) {
-          cell.style.setProperty('box-shadow', shadows.join(', '), 'important');
+          tdElement.style.setProperty('box-shadow', shadows.join(', '), 'important');
         } else {
-          cell.style.boxShadow = '';
+          tdElement.style.boxShadow = '';
         }
       }
     }
@@ -647,9 +648,12 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (currentSelectedCells.size > 1) {
       e.preventDefault();
-      currentSelectedCells.forEach(c => {
-        c.innerText = "";
-        c.dispatchEvent(new Event('input', { bubbles: true }));
+      currentSelectedCells.forEach(td => {
+        const c = td.querySelector('.cell');
+        if (c) {
+          c.innerText = "";
+          c.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       });
       return;
     }
@@ -720,9 +724,12 @@ document.addEventListener('paste', function(e) {
   if (rows.length === 1 && rows[0].split('\t').length === 1) {
     const text = rows[0];
     if (currentSelectedCells.size > 1) {
-      currentSelectedCells.forEach(c => {
-        c.innerText = text;
-        c.dispatchEvent(new Event('input', { bubbles: true }));
+      currentSelectedCells.forEach(td => {
+        const c = td.querySelector('.cell');
+        if (c) {
+          c.innerText = text;
+          c.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       });
     } else {
       document.execCommand('insertText', false, text);
