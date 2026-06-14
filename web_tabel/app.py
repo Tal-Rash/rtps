@@ -296,6 +296,15 @@ def load_state(year: int, month: int) -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
 
+        # Автоматическая миграция: добавляем колонку exclude_date, если её нет на сервере
+        try:
+            cur.execute("SELECT exclude_date FROM employees LIMIT 1")
+        except sqlite3.OperationalError:
+            try:
+                cur.execute("ALTER TABLE employees ADD COLUMN exclude_date TEXT DEFAULT ''")
+                conn.commit()
+            except Exception:
+                pass
         
         employees = []
         try:
