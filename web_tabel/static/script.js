@@ -40,7 +40,15 @@ function switchTab(tabId) {
   
   if (tabId === 'months') {
     applyVacations();
+    setTimeout(autoResizeMonthHint, 10);
   }
+}
+
+function autoResizeMonthHint() {
+  const mh = document.getElementById("monthHint");
+  if (!mh || mh.offsetParent === null) return;
+  mh.style.height = 'auto';
+  mh.style.height = mh.scrollHeight + 'px';
 }
 
 function markDirty(dirty) {
@@ -90,10 +98,7 @@ function renderTable() {
   if (mh) {
     mh.value = appState.month_hint || "";
     if (!CAN_EDIT) mh.readOnly = true;
-    setTimeout(() => {
-      mh.style.height = '';
-      mh.style.height = mh.scrollHeight + 'px';
-    }, 0);
+    setTimeout(autoResizeMonthHint, 50);
   }
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
