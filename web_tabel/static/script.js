@@ -235,7 +235,7 @@ function renderTabelBody() {
       
       const contentEditable = (CAN_EDIT && !isCellExcluded) ? 'contenteditable="true"' : '';
       const cleanVal = String(val).trim().toUpperCase();
-      let extraStyle = (cleanVal === "В" || cleanVal === "B") ? ' style="color: #a0a0a0 !important;"' : "";
+      let extraStyle = (cleanVal === "В" || cleanVal === "B") ? ' style="color: rgba(16, 32, 51, 0.2) !important;"' : "";
       bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
     }
     
