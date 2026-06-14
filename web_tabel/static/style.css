@@ -1481,3 +1481,7 @@ td.multi-selected {
   z-index: 4; 
   background: linear-gradient(180deg, #f8fbff, #edf4ff);
 }
+
+.light-v {
+  color: #a0a0a0 !important;
+}

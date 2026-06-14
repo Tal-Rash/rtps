@@ -234,7 +234,8 @@ function renderTabelBody() {
       }
       
       const contentEditable = (CAN_EDIT && !isCellExcluded) ? 'contenteditable="true"' : '';
-      bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
+      let extraCellClass = val === "В" ? " light-v" : "";
+      bHTML += `<td class="${tdClass}"><div class="cell day-cell${extraCellClass}" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
     }
     
     bHTML += `</tr>`;
