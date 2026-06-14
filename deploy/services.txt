@@ -4,3 +4,4 @@ spravochnik.service
 zamer-kp.service
 web_main.service
 tabel.service
+edu.service

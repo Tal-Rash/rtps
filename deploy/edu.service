@@ -1,0 +1,16 @@
+[Unit]
+Description=RTPS Edu web app
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rtps/web_edu
+Environment=WEB_HOST=0.0.0.0
+Environment=WEB_PORT=8007
+ExecStart=/usr/bin/python3 /opt/rtps/web_edu/app.py
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target

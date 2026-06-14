@@ -224,7 +224,8 @@ async def home_page(request: Request):
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik"),
-        "TABEL_LINK": link_for("tabel", "/tabel")
+        "TABEL_LINK": link_for("tabel", "/tabel"),
+        "EDU_LINK": link_for("edu", "/edu")
     }
     try:
         return templates.TemplateResponse(request=request, name="home.html", context=context)
