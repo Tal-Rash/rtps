@@ -100,6 +100,7 @@ function renderTable() {
     if (!CAN_EDIT) mh.readOnly = true;
     setTimeout(autoResizeMonthHint, 50);
   }
+  updateExportMenu();
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
   const days = daysInMonth(year, month);
@@ -410,6 +411,40 @@ function exportSummary(type) {
   const url = `${APP_PREFIX}/api/export-summary?year=${year}&month=${month}&type=${encodeURIComponent(type)}`;
   document.getElementById("reportIframe").src = url;
   document.getElementById("reportModal").style.display = "block";
+}
+
+function updateExportMenu() {
+  const panel = document.getElementById("exportMenuPanel");
+  if (!panel) return;
+  const hintText = appState.month_hint || "";
+  const lines = hintText.split("\n");
+  let optionsHTML = "";
+  
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const match = line.match(/^([a-zA-Zа-яА-ЯёЁ]+)\s*[-—]\s*(.+)$/);
+    if (match) {
+      const code = match[1].trim().toUpperCase();
+      let desc = match[2].trim();
+      if (code !== "М" && code !== "M") { 
+        const title = desc.charAt(0).toUpperCase() + desc.slice(1);
+        optionsHTML += `<button onclick="exportSummary('${code}:${title.replace(/'/g, "\\'")}')">${escapeHtml(title)}</button>`;
+      }
+    }
+  });
+
+  if (!optionsHTML) {
+    optionsHTML = `
+      <button onclick="exportSummary('О:Отпуска')">Отпуска</button>
+      <button onclick="exportSummary('ОВ:Отпуска внеплановые')">Отпуска внеплановые</button>
+      <button onclick="exportSummary('ДО:Отпуск б/с')">Отпуск б/с</button>
+      <button onclick="exportSummary('У:Учебный отпуск')">Учебный отпуск</button>
+      <button onclick="exportSummary('Б:Больничный')">Больничный</button>
+    `;
+  }
+  
+  panel.innerHTML = optionsHTML;
 }
 
 function openSickModal() {

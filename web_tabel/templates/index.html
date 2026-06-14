@@ -46,7 +46,7 @@
           </div>
           <div class="json-menu">
             <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Выгрузка  </button>
-            <div class="json-menu-panel">
+            <div class="json-menu-panel" id="exportMenuPanel">
               <button onclick="exportSummary('Отпуска')">Отпуска</button>
               <button onclick="exportSummary('Отпуска внеплановые')">Отпуска внеплановые</button>
               <button onclick="exportSummary('Отпуск б/с')">Отпуск б/с</button>
@@ -72,7 +72,7 @@
           </table>
         </div>
         <div class="month-hint-wrap" style="margin-top: 10px;">
-          <textarea id="monthHint" class="month-hint" style="width: 100%; min-height: 60px; padding: 5px; box-sizing: border-box; resize: none; overflow: hidden;" placeholder="Сноска / Примечания к месяцу..." oninput="appState.month_hint = this.value; markUnsaved(); autoResizeMonthHint();"></textarea>
+          <textarea id="monthHint" class="month-hint" style="width: 100%; min-height: 60px; padding: 5px; box-sizing: border-box; resize: none; overflow: hidden;" placeholder="Сноска / Примечания к месяцу..." oninput="appState.month_hint = this.value; markUnsaved(); autoResizeMonthHint(); updateExportMenu();"></textarea>
         </div>
       </div>
 

@@ -393,15 +393,19 @@ import calendar
 async def export_summary(year: int, month: int, type: str):
     import urllib.parse
     type = urllib.parse.unquote(type)
-    
-    code_map = {
-        "Отпуска": ["О"],
-        "Отпуска внеплановые": ["ОВ"],
-        "Отпуск б/с": ["ДО"],
-        "Учебный отпуск": ["У"],
-        "Больничный": ["Б"]
-    }
-    codes = code_map.get(type, [type])
+    if ":" in type:
+        codes = [type.split(":")[0].strip()]
+        title = type.split(":", 1)[1].strip()
+    else:
+        code_map = {
+            "Отпуска": ["О"],
+            "Отпуска внеплановые": ["ОВ"],
+            "Отпуск б/с": ["ДО"],
+            "Учебный отпуск": ["У"],
+            "Больничный": ["Б"]
+        }
+        codes = code_map.get(type, [type])
+        title = type
 
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
@@ -444,7 +448,7 @@ async def export_summary(year: int, month: int, type: str):
     total = sum(result.values())
     
     html = f"""
-    <html><head><meta charset="utf-8"><title>Сводка: {type}</title>
+    <html><head><meta charset="utf-8"><title>Сводка: {title}</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; }}
         table {{ border-collapse: collapse; width: 600px; margin-top: 20px; }}
@@ -454,7 +458,7 @@ async def export_summary(year: int, month: int, type: str):
         .right {{ text-align: right; font-weight: bold; }}
     </style>
     </head><body>
-    <h2 class="center">{type} за {year} год</h2>
+    <h2 class="center">{title} за {year} год</h2>
     <div class="center" style="color: #666;">Коды: {', '.join(codes)}</div>
     <table>
         <tr><th style="width: 50px;">№</th><th>ФИО</th><th style="width: 100px;">Дней</th></tr>
