@@ -225,7 +225,7 @@ function renderTabelBody() {
         tdClass += " bg-vacation";
       } else if (val === "К" || val === "У") {
         tdClass += " bg-trip";
-      } else if (val === "Б" || val === "РВ") {
+      } else if (val === "Б" || val === "БН" || val === "РВ") {
         tdClass += " bg-ill";
       } else if (isH) {
         tdClass += " bg-holiday";
