@@ -117,7 +117,7 @@ async def index(request: Request):
         "USER_NAME": session["full_name"],
         "CAN_EDIT": "true" if session["can_edit"] else "false"
     }
-    return templates.TemplateResponse("index.html", context)
+    return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 @app.get("/api/state")
 async def api_state(request: Request):
