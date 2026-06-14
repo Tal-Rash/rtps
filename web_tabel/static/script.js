@@ -234,8 +234,9 @@ function renderTabelBody() {
       }
       
       const contentEditable = (CAN_EDIT && !isCellExcluded) ? 'contenteditable="true"' : '';
-      let extraCellClass = val === "В" ? " light-v" : "";
-      bHTML += `<td class="${tdClass}"><div class="cell day-cell${extraCellClass}" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
+      const cleanVal = String(val).trim().toUpperCase();
+      let extraStyle = (cleanVal === "В" || cleanVal === "B") ? ' style="color: #a0a0a0 !important;"' : "";
+      bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
     }
     
     bHTML += `</tr>`;
