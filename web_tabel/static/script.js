@@ -238,8 +238,17 @@ function renderTabelBody() {
       }
       
       const contentEditable = (CAN_EDIT && !isCellExcluded) ? 'contenteditable="true"' : '';
-      let extraStyle = (cleanVal === "В" || cleanVal === "B") ? ' style="color: rgba(16, 32, 51, 0.2) !important;"' : "";
-      bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
+      
+      let extraStyle = "";
+      let extraTdStyle = "";
+      if (cleanVal === "В" || cleanVal === "B") {
+        extraStyle = ' style="color: rgba(16, 32, 51, 0.2) !important;"';
+      } else if (tdClass.includes("bg-work-weekend")) {
+        extraTdStyle = ' style="background-color: #B3E5FC !important; color: #102033 !important;"';
+        extraStyle = ' style="background-color: #B3E5FC !important; color: #102033 !important;"';
+      }
+      
+      bHTML += `<td class="${tdClass}"${extraTdStyle}><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
     }
     
     bHTML += `</tr>`;
