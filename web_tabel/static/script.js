@@ -221,20 +221,23 @@ function renderTabelBody() {
         isH = appState.system_dates.holiday.some(date => date[0] === month && date[1] === d);
       }
       
-      if (val === "О" || val === "ДО") {
+      const cleanVal = String(val).trim().toUpperCase();
+      
+      if (cleanVal === "О" || cleanVal === "ДО") {
         tdClass += " bg-vacation";
-      } else if (val === "К" || val === "У") {
+      } else if (cleanVal === "К" || cleanVal === "У") {
         tdClass += " bg-trip";
-      } else if (val === "Б" || val === "БН" || val === "РВ") {
+      } else if (cleanVal === "Б" || cleanVal === "БН") {
         tdClass += " bg-ill";
+      } else if ((isWeekend || isH || isT) && cleanVal !== "" && cleanVal !== "В" && cleanVal !== "B") {
+        tdClass += " bg-work-weekend";
       } else if (isH) {
         tdClass += " bg-holiday";
-      } else if (isWeekend || isT || val === "В") {
+      } else if (isWeekend || isT || cleanVal === "В" || cleanVal === "B") {
         tdClass += " bg-weekend";
       }
       
       const contentEditable = (CAN_EDIT && !isCellExcluded) ? 'contenteditable="true"' : '';
-      const cleanVal = String(val).trim().toUpperCase();
       let extraStyle = (cleanVal === "В" || cleanVal === "B") ? ' style="color: rgba(16, 32, 51, 0.2) !important;"' : "";
       bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
     }

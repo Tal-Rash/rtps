@@ -1443,6 +1443,7 @@ td.bg-vacation, td.bg-vacation .cell.day-cell { background: #FFFF99 !important; 
 td.bg-trip, td.bg-trip .cell.day-cell { background: #E1BEE7 !important; color: #102033 !important; }
 td.bg-ill, td.bg-ill .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
 td.bg-milk, td.bg-milk .cell.day-cell { background: #B3E5FC !important; color: #102033 !important; }
+td.bg-work-weekend, td.bg-work-weekend .cell.day-cell { background: #B3E5FC !important; color: #102033 !important; }
 
 th.bg-weekend { background: #CCFFCC !important; }
 th.bg-holiday { background: #FFCCCC !important; }
@@ -1452,7 +1453,8 @@ td.bg-holiday .cell.day-cell::selection,
 td.bg-vacation .cell.day-cell::selection,
 td.bg-trip .cell.day-cell::selection,
 td.bg-ill .cell.day-cell::selection,
-td.bg-milk .cell.day-cell::selection {
+td.bg-milk .cell.day-cell::selection,
+td.bg-work-weekend .cell.day-cell::selection {
   background: rgba(16, 32, 51, .15);
 }
 

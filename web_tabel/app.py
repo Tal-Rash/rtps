@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.49"
+APP_VERSION = "web-tabel-1.50"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
