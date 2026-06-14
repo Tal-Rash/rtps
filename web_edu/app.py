@@ -67,7 +67,7 @@ def connect():
 
 init_db()
 
-app = FastAPI(title="RTPS Обучение", root_path=APP_PREFIX)
+app = FastAPI(title="RTPS Обучение")
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
 
