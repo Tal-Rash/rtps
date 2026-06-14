@@ -275,7 +275,7 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
                 if not line:
                     continue
                 parts = line.split(".")
-                if len(parts) == 2:
+                if len(parts) >= 2:
                     try:
                         d, m = int(parts[0]), int(parts[1])
                         if col_idx == 6:
@@ -421,15 +421,9 @@ async def export_summary(year: int, month: int, type: str):
         """
         ts_rows = cur.execute(query, [year] + codes).fetchall()
         
-        system_holidays = set()
-        try:
-            sys_rows = cur.execute("SELECT m, d FROM system_dates WHERE y=? AND type='holiday'", (year,)).fetchall()
-            for r in sys_rows:
-                system_holidays.add((int(r["m"]), int(r["d"])))
-        except Exception:
-            pass
-            
-        all_holidays = FIXED_HOLIDAYS | system_holidays
+        sys_dates = load_system_dates(year)
+        all_holidays = set(sys_dates.get("holiday", []))
+        
         monthsNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
         month_map = {name: i+1 for i, name in enumerate(monthsNames)}
         
