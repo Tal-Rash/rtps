@@ -90,6 +90,10 @@ function renderTable() {
   if (mh) {
     mh.value = appState.month_hint || "";
     if (!CAN_EDIT) mh.readOnly = true;
+    setTimeout(() => {
+      mh.style.height = '';
+      mh.style.height = mh.scrollHeight + 'px';
+    }, 0);
   }
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
