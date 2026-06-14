@@ -109,13 +109,13 @@ textarea {
   font-weight: 400;
 }
 
-.toolbar button.save-ready {
+.toolbar button.dirty {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
 
-.toolbar button.save-ready:hover {
+.toolbar button.dirty:hover {
   background: #1f63df;
   border-color: #1f63df;
   color: #fff;
