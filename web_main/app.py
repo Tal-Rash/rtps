@@ -337,7 +337,8 @@ async def users_page(request: Request):
                     "g_r": get_mod_role(mods, "grafik_ppr", u[3]),
                     "z_r": get_mod_role(mods, "zamer_kp", u[3]),
                     "s_r": get_mod_role(mods, "spravochnik", u[3]),
-                    "t_r": get_mod_role(mods, "tabel", u[3])
+                    "t_r": get_mod_role(mods, "tabel", u[3]),
+                    "e_r": get_mod_role(mods, "edu", u[3])
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -345,7 +346,7 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -355,6 +356,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
     if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
+    if module_edu != "none": modules.append(f"edu:{module_edu}")
     if role == "admin": modules.append("admin")
     
     try:
@@ -365,7 +367,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -375,6 +377,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
     if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
+    if module_edu != "none": modules.append(f"edu:{module_edu}")
     if role == "admin": modules.append("admin")
     
     try:
@@ -382,7 +385,12 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
             conn.execute("UPDATE users SET full_name=?, password=?, role=?, allowed_modules=? WHERE id=?", (full_name, password, role, ",".join(modules), id))
     except Exception as e:
         print("Error updating user:", e)
-    return RedirectResponse("/users", status_code=303)
+    
+    redirect = RedirectResponse("/users", status_code=303)
+    if str(id) == session.get("user_id"):
+        cookie_val = _cookie_value(str(id), role, ",".join(modules), full_name)
+        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
+    return redirect
 
 @app.post("/users/delete")
 async def delete_user(request: Request, id: int = Form(...)):
