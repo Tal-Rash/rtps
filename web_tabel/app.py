@@ -300,7 +300,7 @@ def load_state(year: int, month: int) -> dict:
         employees = []
         try:
             emp_rows = cur.execute(
-                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded FROM employees WHERE y=? ORDER BY rowid", (year,)
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded, exclude_date FROM employees WHERE y=? ORDER BY rowid", (year,)
             ).fetchall()
             for r in emp_rows:
                 employees.append({
@@ -311,7 +311,8 @@ def load_state(year: int, month: int) -> dict:
                     "milk_issue": int(r["milk_issue"] or 0),
                     "full_name": text(r["full_name"]),
                     "milk_note": text(r["milk_note"]),
-                    "is_excluded": int(dict(r).get("is_excluded", 0) or 0)
+                    "is_excluded": int(dict(r).get("is_excluded", 0) or 0),
+                    "exclude_date": text(dict(r).get("exclude_date", ""))
                 })
         except Exception:
             pass
@@ -721,8 +722,8 @@ async def api_save_state(request: Request):
                 insert_emp = []
                 for r, emp in enumerate(employees):
                     insert_emp.append((year, emp.get("pos",""), emp.get("name",""), emp.get("tab_num",""), 
-                                       emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note","")))
-                cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note) VALUES(?,?,?,?,?,?,?,?)", insert_emp)
+                                       emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note",""), emp.get("exclude_date","")))
+                cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date) VALUES(?,?,?,?,?,?,?,?,?)", insert_emp)
 
             if vacations is not None:
                 cur.execute("DELETE FROM vacations WHERE y=?", (year,))

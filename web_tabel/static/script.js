@@ -118,40 +118,58 @@ function renderTable() {
   
   appState.employees.forEach((emp, rIndex) => {
     const tabNum = emp.tab_num || `empty_${rIndex}`;
-    const trClass = emp.is_excluded ? "excluded" : "";
+    
+    let isFullyExcluded = false;
+    let excludeDayStart = null;
+    if (emp.exclude_date) {
+      const parts = emp.exclude_date.split('-');
+      if (parts.length === 3) {
+        const exY = parseInt(parts[0]);
+        const exM = parseInt(parts[1]);
+        const exD = parseInt(parts[2]);
+        if (year > exY || (year === exY && month > exM)) {
+          isFullyExcluded = true;
+        } else if (year === exY && month === exM) {
+          excludeDayStart = exD;
+        }
+      }
+    }
+    
+    const trClass = isFullyExcluded ? "excluded" : "";
     bHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${rIndex})" ondragover="rowDragOver(event, ${rIndex})" ondrop="rowDrop(event, ${rIndex})">`;
     bHTML += `<td class="col-idx"><div class="rownum"><span>${rIndex + 1}</span></div></td>`;
     bHTML += `<td class="col-pos"><div class="cell" style="text-align: left;">${escapeHtml(emp.pos)}</div></td>`;
     bHTML += `<td class="col-fio"><div class="cell" style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</div></td>`;
     bHTML += `<td class="col-tab"><div class="cell center">${escapeHtml(emp.tab_num)}</div></td>`;
     
-    let total = 0;
     const rowData = appState.timesheet[tabNum] || {};
     
     for (let d = 1; d <= days; d++) {
       const val = rowData[d] || "";
+      let isCellExcluded = isFullyExcluded || (excludeDayStart && d >= excludeDayStart);
       const isWeekend = [0, 6].includes(new Date(year, month - 1, d).getDay());
       let tdClass = "col-day";
-        let isH = false, isT = false;
-        if (appState.system_dates) {
-          isT = appState.system_dates.transfer.some(date => date[0] === month && date[1] === d);
-          isH = appState.system_dates.holiday.some(date => date[0] === month && date[1] === d);
-        }
-        
-        if (val === "О" || val === "ДО") {
-          tdClass += " bg-vacation";
-        } else if (val === "К" || val === "У") {
-          tdClass += " bg-trip";
-        } else if (val === "Б" || val === "РВ") {
-          tdClass += " bg-ill";
-        } else if (isH) {
-          tdClass += " bg-holiday";
-        } else if (isWeekend || isT || val === "В") {
-          tdClass += " bg-weekend";
-        }
-        if (val.match(/^[0-9]+$/)) total += parseInt(val);
+      if (isCellExcluded) tdClass += " excluded";
       
-      const contentEditable = CAN_EDIT ? 'contenteditable="true"' : '';
+      let isH = false, isT = false;
+      if (appState.system_dates) {
+        isT = appState.system_dates.transfer.some(date => date[0] === month && date[1] === d);
+        isH = appState.system_dates.holiday.some(date => date[0] === month && date[1] === d);
+      }
+      
+      if (val === "О" || val === "ДО") {
+        tdClass += " bg-vacation";
+      } else if (val === "К" || val === "У") {
+        tdClass += " bg-trip";
+      } else if (val === "Б" || val === "РВ") {
+        tdClass += " bg-ill";
+      } else if (isH) {
+        tdClass += " bg-holiday";
+      } else if (isWeekend || isT || val === "В") {
+        tdClass += " bg-weekend";
+      }
+      
+      const contentEditable = (CAN_EDIT && !isCellExcluded) ? 'contenteditable="true"' : '';
       bHTML += `<td class="${tdClass}"><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)">${escapeHtml(val)}</div></td>`;
     }
     
@@ -177,10 +195,8 @@ function renderTable() {
   // Render Employees
   const ebody = document.getElementById("employeesBody");
   let eHTML = "";
-  // 11 rows
-  for (let r = 0; r < 11; r++) {
-    const emp = appState.employees[r] || {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
-    const trClass = emp.is_excluded ? "excluded" : "";
+  appState.employees.forEach((emp, r) => {
+    const trClass = "";
     eHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     eHTML += `<td class="col-idx" style="cursor: grab;"><div class="rownum"><span>${r + 1}</span></div></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'pos', this)">${escapeHtml(emp.pos)}</div></td>`;
@@ -189,10 +205,10 @@ function renderTable() {
     eHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'tab_num', this)">${escapeHtml(emp.tab_num)}</div></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk', this)" ${emp.milk ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk_issue', this)" ${emp.milk_issue ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
-    eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'is_excluded', this)" ${emp.is_excluded ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
+    eHTML += `<td><input type="date" onchange="empEdited(${r}, 'exclude_date', this)" value="${emp.exclude_date || ''}" ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'milk_note', this)">${escapeHtml(emp.milk_note)}</div></td>`;
     eHTML += `</tr>`;
-  }
+  });
   ebody.innerHTML = eHTML;
 
   // Render Vacations
@@ -201,7 +217,7 @@ function renderTable() {
   for (let r = 0; r < 11; r++) {
     const emp = appState.employees[r] || {};
     const tabNum = emp.tab_num || `empty_${r}`;
-    const trClass = emp.is_excluded ? "excluded" : "";
+    const trClass = emp.exclude_date ? "excluded" : "";
     vHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     vHTML += `<td class="col-idx" style="cursor: grab;"><div class="rownum"><span>${r + 1}</span></div></td>`;
     vHTML += `<td style="text-align: left;">${escapeHtml(emp.tab_num || '')}</td>`;
@@ -237,9 +253,11 @@ function dataEdited(r, c, el) {
 }
 
 function empEdited(r, field, el) {
-  if (!appState.employees[r]) appState.employees[r] = {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:""};
+  if (!appState.employees[r]) appState.employees[r] = {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:"", exclude_date:""};
   if (field === 'milk' || field === 'milk_issue' || field === 'is_excluded') {
     appState.employees[r][field] = el.checked ? 1 : 0;
+  } else if (field === 'exclude_date') {
+    appState.employees[r][field] = el.value;
   } else {
     appState.employees[r][field] = el.innerText.trim();
   }
