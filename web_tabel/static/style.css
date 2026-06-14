@@ -1482,6 +1482,8 @@ td.multi-selected {
   background: linear-gradient(180deg, #f8fbff, #edf4ff);
 }
 
-.light-v {
+td.bg-weekend .cell.day-cell.light-v,
+td.bg-holiday .cell.day-cell.light-v,
+table td .cell.day-cell.light-v {
   color: #a0a0a0 !important;
 }
