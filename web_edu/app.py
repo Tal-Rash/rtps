@@ -195,7 +195,8 @@ async def save_protocol(request: Request, data: dict):
     return {"status": "ok"}
 
 @app.post("/api/settings/columns")
-async def save_columns(request: Request, data: list):
+async def save_columns(request: Request):
+    data = await request.json()
     # data is list of dicts: [{"name": "ПТМ", "period_months": 12}, ...]
     session = get_session(request)
     if not session or not session["can_edit"]: return JSONResponse({"error": "Unauthorized"}, status_code=401)
