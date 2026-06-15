@@ -76,12 +76,12 @@ function renderMatrix() {
   hHTML += `</tr>`;
   thead.innerHTML = hHTML;
   
-  // Filter Employees
-  let filteredEmployees = appState.employees;
+  // Filter Employees (default category "workers")
+  let filteredEmployees = appState.employees.map(e => ({ ...e, category: e.category || "workers" }));
   if (currentFilter === "workers") {
-    filteredEmployees = appState.employees.filter(e => e.category !== "itr");
+    filteredEmployees = filteredEmployees.filter(e => e.category !== "itr");
   } else if (currentFilter === "itr") {
-    filteredEmployees = appState.employees.filter(e => e.category === "itr");
+    filteredEmployees = filteredEmployees.filter(e => e.category === "itr");
   }
 
   let bHTML = "";
@@ -164,12 +164,12 @@ async function onCellBlur(e) {
   const cIdx = parseInt(cell.dataset.col, 10);
   let text = cell.innerText.trim();
   
-  // Get the employee from filtered list since rIdx is the visual row index
-  let filteredEmployees = appState.employees;
+  // Get the employee from filtered list (default category "workers")
+  let filteredEmployees = appState.employees.map(e => ({ ...e, category: e.category || "workers" }));
   if (currentFilter === "workers") {
-    filteredEmployees = appState.employees.filter(emp => emp.category !== "itr");
+    filteredEmployees = filteredEmployees.filter(emp => emp.category !== "itr");
   } else if (currentFilter === "itr") {
-    filteredEmployees = appState.employees.filter(emp => emp.category === "itr");
+    filteredEmployees = filteredEmployees.filter(emp => emp.category === "itr");
   }
   const emp = filteredEmployees[rIdx];
   const col = appState.columns[cIdx];
