@@ -28,7 +28,7 @@ SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
-DB_FILE = ROOT.parent / "base" / "common_database.db"
+DB_FILE = ROOT.parent / "base" / "web_users.db"
 
 app = FastAPI(title="RTPS Web Main")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))

@@ -92,7 +92,7 @@ def get_session(request: Request):
             user_id, role, mods, full_name = session
             if user_id != "legacy":
                 try:
-                    conn = sqlite3.connect(DB_FILE)
+                    conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
                     conn.row_factory = sqlite3.Row
                     cur = conn.cursor()
                     user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (user_id,)).fetchone()
