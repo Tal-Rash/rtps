@@ -909,6 +909,13 @@ textarea {
   word-break: break-word;
 }
 
+#employeesGrid th {
+  padding: 6px 6px;
+  font-size: 14px;
+  line-height: 1.1;
+  white-space: normal;
+}
+
 #employeesGrid td {
   vertical-align: middle;
 }
