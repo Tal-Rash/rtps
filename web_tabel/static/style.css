@@ -938,6 +938,20 @@ textarea {
   word-break: break-word;
 }
 
+#vacationsGrid th {
+  padding: 10px 10px;
+  line-height: 1.15;
+}
+
+#vacationsGrid td {
+  padding: 4px 6px;
+}
+
+#vacationsGrid .cell {
+  padding: 6px 10px;
+  line-height: 1.2;
+}
+
 .cell.center {
   text-align: center;
 }
