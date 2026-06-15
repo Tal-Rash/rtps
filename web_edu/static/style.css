@@ -225,6 +225,12 @@ button:disabled {
   min-width: 132px;
 }
 
+.matrix-table .cell {
+  min-height: 0;
+  padding: 0 2px;
+  line-height: 1;
+}
+
 .edu-row.dragging {
   opacity: .55;
 }
@@ -296,7 +302,7 @@ button:disabled {
 .auto-text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   margin-top: 0;
   color: var(--muted);
   font-size: 11px;
@@ -320,6 +326,10 @@ button:disabled {
   margin: 0;
   padding: 0;
   white-space: nowrap;
+}
+
+.auto-date {
+  font-size: 13px;
 }
 
 .auto-status {
