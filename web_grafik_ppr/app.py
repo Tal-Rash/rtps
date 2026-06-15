@@ -138,27 +138,28 @@ APP_PREFIX = "/grafik-ppr"
 
 def ensure_database() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if DB_FILE.exists():
-        return
-    if SOURCE_DB.exists():
+    if not DB_FILE.exists() and SOURCE_DB.exists():
         shutil.copy2(SOURCE_DB, DB_FILE)
-        return
     with sqlite3.connect(DB_FILE) as conn:
-        cur = conn.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS repairs (y INT, m TEXT, t TEXT, r INT, c INT, v TEXT, PRIMARY KEY(y,m,t,r,c))")
-        cur.execute("CREATE TABLE IF NOT EXISTS norms (y INT, cat TEXT, k TEXT, v TEXT, PRIMARY KEY(y,cat,k))")
-        cur.execute("CREATE TABLE IF NOT EXISTS inventory (y INT, ser TEXT, num TEXT, inv TEXT, PRIMARY KEY(y,ser,num))")
-        cur.execute("CREATE TABLE IF NOT EXISTS repair_settings (k TEXT PRIMARY KEY, v TEXT)")
-        cur.execute("CREATE TABLE IF NOT EXISTS acts_state (y INT, m TEXT, act_num TEXT, is_done INT, sap_order_done INT DEFAULT 0, PRIMARY KEY(y, m, act_num))")
-        cur.execute("CREATE TABLE IF NOT EXISTS report_notes (y INT, m TEXT, k TEXT, v TEXT, PRIMARY KEY(y,m,k))")
+        ensure_schema(conn.cursor())
         conn.commit()
 
 
 def conn() -> sqlite3.Connection:
     c = connect_sqlite(DB_FILE)
-    c.execute("CREATE TABLE IF NOT EXISTS tu28_data (y INT, m TEXT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,m,r,k))")
-    c.execute("CREATE TABLE IF NOT EXISTS repair_schedule (y INT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,r,k))")
+    ensure_schema(c.cursor())
     return c
+
+
+def ensure_schema(cur: sqlite3.Cursor) -> None:
+    cur.execute("CREATE TABLE IF NOT EXISTS repairs (y INT, m TEXT, t TEXT, r INT, c INT, v TEXT, PRIMARY KEY(y,m,t,r,c))")
+    cur.execute("CREATE TABLE IF NOT EXISTS norms (y INT, cat TEXT, k TEXT, v TEXT, PRIMARY KEY(y,cat,k))")
+    cur.execute("CREATE TABLE IF NOT EXISTS inventory (y INT, ser TEXT, num TEXT, inv TEXT, PRIMARY KEY(y,ser,num))")
+    cur.execute("CREATE TABLE IF NOT EXISTS repair_settings (k TEXT PRIMARY KEY, v TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS acts_state (y INT, m TEXT, act_num TEXT, is_done INT, sap_order_done INT DEFAULT 0, PRIMARY KEY(y, m, act_num))")
+    cur.execute("CREATE TABLE IF NOT EXISTS report_notes (y INT, m TEXT, k TEXT, v TEXT, PRIMARY KEY(y,m,k))")
+    cur.execute("CREATE TABLE IF NOT EXISTS tu28_data (y INT, m TEXT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,m,r,k))")
+    cur.execute("CREATE TABLE IF NOT EXISTS repair_schedule (y INT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,r,k))")
 
 
 def s(value) -> str:

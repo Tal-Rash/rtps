@@ -10,7 +10,7 @@ const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
 const TEM_NORM_ROWS = window.APP_CONFIG.TEM_NORM_ROWS;
 const AGR_NORM_ROWS = window.APP_CONFIG.AGR_NORM_ROWS;
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
-const sections = [{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
+const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
 
@@ -322,7 +322,7 @@ function setPath(path, value){
 }
 function handleGridInput(el){
   if (!el || !el.dataset) return;
-  setLastCell(el);
+  if (el.dataset.month !== undefined) setLastCell(el);
   const value = String(el.value ?? '').toUpperCase();
   if (el.value !== value) el.value = value;
   setPath(el.dataset.path, value);
@@ -428,7 +428,7 @@ function renderSafe(){
   updateSaveButtonState();
   const content = document.getElementById('content');
   if (!content) return;
-  content.innerHTML = renderMonths();
+  content.innerHTML = ui.section === 'repairSchedule' ? renderRepairSchedule() : renderMonths();
   applyMonthSelectionClasses();
   renderOpenModals();
   updateHistoryButtons();
@@ -480,6 +480,89 @@ function renderMonths(){
     ${renderMonthTable('plan', 'План', m, headers)}
     ${renderMonthTable('fact', 'Факт', m, headers)}
   `;
+}
+function ensureRepairSchedule(){
+  if (!Array.isArray(appState.repair_schedule)) appState.repair_schedule = [];
+  return appState.repair_schedule;
+}
+function repairScheduleCell(rowIndex, key, value, cls='cell'){
+  const ro = CAN_EDIT ? '' : 'readonly';
+  return `<input ${ro} class="${cls}" data-path="repair_schedule.${rowIndex}.${key}" value="${esc(value || '')}" oninput="handleGridInput(this)">`;
+}
+function renderRepairSchedule(){
+  const rows = ensureRepairSchedule();
+  const bodyHtml = rows.length
+    ? rows.map((row, idx) => `
+        <tr>
+          <td class="col-idx"><div class="rownum"><span>${idx + 1}</span></div></td>
+          <td>${repairScheduleCell(idx, 'unit', row.unit, 'cell')}</td>
+          <td>${repairScheduleCell(idx, 'number', row.number, 'cell center')}</td>
+          <td>${repairScheduleCell(idx, 'last_repair_type', row.last_repair_type, 'cell center')}</td>
+          <td>${repairScheduleCell(idx, 'last_repair_date', row.last_repair_date, 'cell center')}</td>
+          <td>${repairScheduleCell(idx, 'next_repair_type', row.next_repair_type, 'cell center')}</td>
+          <td>${repairScheduleCell(idx, 'next_repair_date', row.next_repair_date, 'cell center')}</td>
+          <td>${repairScheduleCell(idx, 'note', row.note, 'cell')}</td>
+          <td class="repair-schedule-action"><button class="rowbtn" ${CAN_EDIT ? '' : 'disabled'} onclick="deleteRepairScheduleRow(${idx})">-</button></td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="9" class="empty-table-cell">Нет записей</td></tr>`;
+  return `
+    <div class="section-head repair-schedule-head">
+      <div class="section-title">График ремонтов на ${appState.year} г.</div>
+      <div class="row-actions">
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="addRepairScheduleRow()">+ строку</button>
+      </div>
+    </div>
+    <div class="table-wrap repair-schedule-wrap">
+      <table class="compact repair-schedule-table">
+        <colgroup>
+          <col style="width:45px">
+          <col style="width:150px">
+          <col style="width:90px">
+          <col style="width:120px">
+          <col style="width:140px">
+          <col style="width:120px">
+          <col style="width:140px">
+          <col style="width:260px">
+          <col style="width:46px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>Серия</th>
+            <th>Номер</th>
+            <th>Последний ремонт</th>
+            <th>Дата ремонта</th>
+            <th>Следующий ремонт</th>
+            <th>Плановая дата</th>
+            <th>Примечание</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+function addRepairScheduleRow(){
+  if (!CAN_EDIT) return;
+  ensureRepairSchedule().push({
+    unit: '',
+    number: '',
+    last_repair_type: '',
+    last_repair_date: '',
+    next_repair_type: '',
+    next_repair_date: '',
+    note: '',
+  });
+  markDirty(true);
+  render();
+}
+function deleteRepairScheduleRow(index){
+  if (!CAN_EDIT) return;
+  ensureRepairSchedule().splice(index, 1);
+  markDirty(true);
+  render();
 }
 function renderMonthTable(type, title, m, headers){
   const tableRows = m[type].map((row, rIdx) => {
