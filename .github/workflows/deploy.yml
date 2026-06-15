@@ -98,4 +98,12 @@ jobs:
           done
 
           systemctl reload nginx
+
+          # Установка cron-задачи для резервного копирования
+          # Удаляем старый скрипт backup_to_telegram.py (если остался)
+          rm -f /opt/rtps/backup_to_telegram.py
+          
+          # Настраиваем crontab, удаляя старые записи и добавляя новую на 2 часа ночи
+          CRON_CMD="0 2 * * * /usr/bin/python3 /opt/rtps/backup_db.py >> /opt/rtps/backups/backup.log 2>&1"
+          (crontab -l 2>/dev/null | grep -v "backup_to_telegram.py" | grep -v "backup_db.py" || true; echo "$CRON_CMD") | crontab -
           EOF
