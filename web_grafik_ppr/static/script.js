@@ -690,7 +690,7 @@ function renderRepairSchedule(){
     '<th rowspan="2" class="col-number">Номер</th>',
     '<th rowspan="2" class="col-planfact">План/факт</th>',
     '<th rowspan="2" class="repair-head">КР</th>',
-    ...columns.map((col) => `<th rowspan="2" class="repair-head">${esc(col.code || '')}</th>`),
+    ...columns.map((col) => `<th rowspan="2" class="repair-head">${esc(normalizeRepairCode(col.code || ''))}</th>`),
   ].join('');
   const bodyHtml = objects.length
     ? objects.map((row, idx) => {
