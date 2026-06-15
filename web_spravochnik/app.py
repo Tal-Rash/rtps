@@ -583,6 +583,7 @@ HTML = """<!doctype html>
     .table-shell{margin-top:12px;background:#fff;border:1px solid #2f6fed;border-radius:18px;overflow:hidden}
     .panel.active{display:block}
     table{border-collapse:collapse;width:100%;min-width:760px}
+    table.norms-table{table-layout:fixed}
     th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center}
     th{background:#eef4fb;font-weight:700}
     td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
@@ -727,7 +728,21 @@ function renderTable(name, rows, editableRows){
         : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
     )
     : '';
-  let html = rowbar + '<div class="table-shell"><table><thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  const tableClass = name === 'norms' ? ' class="norms-table"' : '';
+  const colGroup = name === 'norms'
+    ? `<colgroup>
+        <col style="width:42px">
+        <col style="width:14%">
+        <col style="width:10%">
+        <col style="width:10%">
+        <col style="width:10%">
+        <col style="width:8%">
+        <col style="width:8%">
+        <col style="width:20%">
+        <col style="width:20%">
+      </colgroup>`
+    : '';
+  let html = rowbar + `<div class="table-shell"><table${tableClass}>${colGroup}<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[6] || 0) > 0;
     const draggable = name === 'inventory' && CAN_EDIT
