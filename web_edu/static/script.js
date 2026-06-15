@@ -89,6 +89,7 @@ function renderMatrix() {
       const tInfo = empTrainings[col.name] || { last: null, period_months: col.period_months, protocol: "" };
       
       let cellText = "";
+      let autoText = "";
       let cellClass = "";
       
       if (currentMode === "protocols") {
@@ -103,19 +104,21 @@ function renderMatrix() {
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             const isSoon = !isExpired && diffDays <= 30;
             
-            cellText = `${formatDate(lastDate)}\nслед аттестация:\n ${formatDate(nextDate)}`;
+            cellText = formatDate(lastDate);
+            autoText = `<div class="auto-text">след аттестация:<br>${formatDate(nextDate)}`;
             if (isExpired) {
               cellClass = "bg-expired";
-              cellText += "\n(Просрочено)";
+              autoText += "<br>(Просрочено)";
             } else if (isSoon) {
               cellClass = "bg-warning";
             }
+            autoText += `</div>`;
           }
         }
       }
       
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : '';
-      bHTML += `<td class="${cellClass}"><div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}">${cellText}</div></td>`;
+      bHTML += `<td class="${cellClass}"><div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}">${cellText}</div>${autoText}</td>`;
     }
     bHTML += `</tr>`;
   }
