@@ -898,6 +898,21 @@ textarea {
   outline: none;
 }
 
+#employeesGrid .cell {
+  white-space: normal;
+  text-transform: none;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.25;
+  height: auto;
+  min-height: 35px;
+  word-break: break-word;
+}
+
+#employeesGrid td {
+  vertical-align: middle;
+}
+
 .cell.center {
   text-align: center;
 }
