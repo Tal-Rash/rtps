@@ -8,6 +8,7 @@ import os
 import secrets
 import sqlite3
 import time
+import sys
 from http import HTTPStatus
 from pathlib import Path
 import re
@@ -18,6 +19,9 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from rtps_common import connect_sqlite, resolve_user_access
+
 DATA_DIR = ROOT / "data"
 SHARED_DATA_DIR = ROOT.parent / "data"
 AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
@@ -61,7 +65,7 @@ WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 def init_db() -> None:
     try:
         DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(DB_FILE) as conn:
+        with connect_sqlite(DB_FILE) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,21 +140,10 @@ def get_current_session(request: Request):
             role = session[1]
             modules = session[2]
             if user_id != "legacy":
-                try:
-                    conn = sqlite3.connect(DB_FILE)
-                    conn.row_factory = sqlite3.Row
-                    cur = conn.cursor()
-                    user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (user_id,)).fetchone()
-                    conn.close()
-                    if user_row:
-                        role = user_row["role"]
-                        modules = user_row["allowed_modules"] or ""
-                    else:
-                        return None # User deleted, invalidate session
-                except Exception as e:
-                    import traceback
-                    print("DB check error:", traceback.format_exc())
-                    return None # DB error, fail securely
+                resolved = resolve_user_access(DB_FILE, user_id, role, modules)
+                if not resolved:
+                    return None # User deleted, invalidate session
+                role, modules = resolved
             return {"user_id": user_id, "role": role, "modules": modules, "full_name": session[3]}
     return None
 

@@ -5,6 +5,7 @@ import json
 import sqlite3
 import os
 import io
+import sys
 from pathlib import Path
 from threading import Lock
 from urllib.parse import unquote
@@ -17,9 +18,13 @@ import hmac
 import hashlib
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from rtps_common import connect_sqlite, module_role, resolve_user_access
+
 SHARED_DATA_DIR = ROOT.parent / "data"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
+WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
 APP_VERSION = "web-tabel-1.50"
@@ -113,9 +118,7 @@ except Exception as e:
     print("STARTUP ERROR:", traceback.format_exc())
 
 def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_sqlite(DB_FILE)
 
 def connect_common() -> sqlite3.Connection | None:
     if not COMMON_DB_FILE.exists():
@@ -176,31 +179,12 @@ def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str)
     username = session[0]
     role = session[1]
     modules = session[2]
-    
-    if username != "legacy":
-        try:
-            conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
-            conn.close()
-            if not user_row:
-                return ""
-            role = user_row["role"]
-            modules = user_row["allowed_modules"] or ""
-        except Exception as e:
-            return ""
-    if role == "admin":
-        return "admin"
-    for part in modules.split(","):
-        part = part.strip()
-        if not part: continue
-        if ":" in part:
-            k, v = part.split(":", 1)
-            if k == module: return v
-        else:
-            if part == module: return role
-    return ""
+
+    resolved = resolve_user_access(WEB_USERS_DB, username, role, modules)
+    if not resolved:
+        return ""
+    role, modules = resolved
+    return module_role(role, modules, module) or ""
 
 app = FastAPI(title="RTPS Tabel")
 

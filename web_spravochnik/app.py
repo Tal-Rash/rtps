@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import sqlite3
+import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +16,9 @@ from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from rtps_common import connect_sqlite, module_role, resolve_user_access
+
 DATA_DIR = ROOT / "data"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 APP_PREFIX = "/spravochnik"
@@ -151,9 +155,7 @@ def ensure_db() -> None:
 
 
 def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_sqlite(DB_FILE)
 
 
 def text(value) -> str:
@@ -221,31 +223,12 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
     username = session[0]
     role = session[1]
     modules = session[2]
-    
-    if username != "legacy":
-        try:
-            conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
-            conn.close()
-            if not user_row:
-                return None
-            role = user_row["role"]
-            modules = user_row["allowed_modules"] or ""
-        except Exception:
-            return None
 
-    for part in modules.split(","):
-        part = part.strip()
-        if not part: continue
-        if ":" in part:
-            k, v = part.split(":", 1)
-            if k == mod_name: return v
-        else:
-            if part == mod_name: return role
-    if role == "admin": return "admin"
-    return None
+    resolved = resolve_user_access(ROOT.parent / "base" / "web_users.db", username, role, modules)
+    if not resolved:
+        return None
+    role, modules = resolved
+    return module_role(role, modules, mod_name)
 
 def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
     session = current_session(handler)
@@ -1146,32 +1129,12 @@ def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str)
     username = session[0]
     role = session[1]
     modules = session[2]
-    
-    if username != "legacy":
-        try:
-            conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
-            conn.close()
-            if not user_row:
-                return ""
-            role = user_row["role"]
-            modules = user_row["allowed_modules"] or ""
-        except Exception:
-            return ""
 
-    if role == "admin":
-        return "admin"
-    for part in modules.split(","):
-        part = part.strip()
-        if not part: continue
-        if ":" in part:
-            k, v = part.split(":", 1)
-            if k == module: return v
-        else:
-            if part == module: return role
-    return ""
+    resolved = resolve_user_access(ROOT.parent / "base" / "web_users.db", username, role, modules)
+    if not resolved:
+        return ""
+    role, modules = resolved
+    return module_role(role, modules, module) or ""
 
 def require_auth_fastapi(request: Request, need_edit: bool = False):
     session = get_current_session_fastapi(request)

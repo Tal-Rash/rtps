@@ -12,6 +12,7 @@ import secrets
 import sqlite3
 import threading
 import webbrowser
+import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -39,6 +40,9 @@ FIXED_HOLIDAYS = {
 }
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from rtps_common import connect_sqlite, module_role, resolve_user_access
+
 DATA_DIR = ROOT / "data"
 DB_FILE = DATA_DIR / "grafik_ppr_web.db"
 SHARED_DATA_DIR = ROOT.parent / "data"
@@ -151,9 +155,9 @@ def ensure_database() -> None:
 
 
 def conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB_FILE)
+    c = connect_sqlite(DB_FILE)
     c.execute("CREATE TABLE IF NOT EXISTS tu28_data (y INT, m TEXT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,m,r,k))")
-    c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE IF NOT EXISTS repair_schedule (y INT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,r,k))")
     return c
 
 
@@ -244,6 +248,7 @@ def default_state(year: int) -> dict:
     inventory = []
     acts = {}
     notes = {}
+    repair_schedule = []
     return {
         "year": year,
         "system_dates": load_system_dates(year),
@@ -251,6 +256,7 @@ def default_state(year: int) -> dict:
         "norms": norms,
         "acts": acts,
         "notes": notes,
+        "repair_schedule": repair_schedule,
     }
 
 
@@ -339,6 +345,13 @@ def load_state(year: int) -> dict:
         notes = cur.execute("SELECT m, k, v FROM report_notes WHERE y=? ORDER BY m, k", (year,)).fetchall()
         for row in notes:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
+
+        schedule_rows = cur.execute("SELECT r, k, v FROM repair_schedule WHERE y=? ORDER BY r, k", (year,)).fetchall()
+        repair_schedule: dict[int, dict[str, str]] = {}
+        for row in schedule_rows:
+            r = int(row["r"])
+            repair_schedule.setdefault(r, {})[s(row["k"])] = s(row["v"])
+        state["repair_schedule"] = [repair_schedule[idx] for idx in sorted(repair_schedule)]
 
         tu28_data = cur.execute("SELECT m, r, k, v FROM tu28_data WHERE y=? ORDER BY m, r, k", (year,)).fetchall()
         for row in tu28_data:
@@ -1142,6 +1155,7 @@ def save_state(state: dict) -> dict:
             cur.execute("DELETE FROM acts_state WHERE y=?", (year,))
             cur.execute("DELETE FROM report_notes WHERE y=?", (year,))
             cur.execute("DELETE FROM tu28_data WHERE y=?", (year,))
+            cur.execute("DELETE FROM repair_schedule WHERE y=?", (year,))
             cur.execute("INSERT OR REPLACE INTO repair_settings VALUES ('last_year', ?)", (str(year),))
 
             for month in state.get("months", []):
@@ -1185,6 +1199,23 @@ def save_state(state: dict) -> dict:
                     value = s(value)
                     if value:
                         cur.execute("INSERT INTO report_notes VALUES (?,?,?,?)", (year, m_name, key, value))
+
+            schedule_fields = [
+                "unit",
+                "number",
+                "last_repair_type",
+                "last_repair_date",
+                "next_repair_type",
+                "next_repair_date",
+                "note",
+            ]
+            for r, row in enumerate(state.get("repair_schedule", []) or []):
+                if not isinstance(row, dict):
+                    continue
+                for key in schedule_fields:
+                    value = s(row.get(key)).strip()
+                    if value:
+                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, key, value))
 
     return load_state(year)
 
@@ -1278,31 +1309,12 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
     username = session[0]
     role = session[1]
     modules = session[2]
-    
-    if username != "legacy":
-        try:
-            conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
-            conn.close()
-            if not user_row:
-                return None
-            role = user_row["role"]
-            modules = user_row["allowed_modules"] or ""
-        except Exception:
-            return None
 
-    for part in modules.split(","):
-        part = part.strip()
-        if not part: continue
-        if ":" in part:
-            k, v = part.split(":", 1)
-            if k == mod_name: return v
-        else:
-            if part == mod_name: return role
-    if role == "admin": return "admin"
-    return None
+    resolved = resolve_user_access(ROOT.parent / "base" / "web_users.db", username, role, modules)
+    if not resolved:
+        return None
+    role, modules = resolved
+    return module_role(role, modules, mod_name)
 
 def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
     if not AUTH_ENABLED:

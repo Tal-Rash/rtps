@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import sqlite3
 import os
+import sys
 from pathlib import Path
 from threading import Lock
 from urllib.parse import unquote
@@ -17,9 +18,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from rtps_common import connect_sqlite, module_has_access, resolve_user_access
+
 SHARED_DATA_DIR = ROOT.parent / "data"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
+WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/edu"
 APP_VERSION = "web-edu-1.1"
@@ -64,9 +69,7 @@ def init_db():
         cur.execute("CREATE TABLE IF NOT EXISTS employee_row_order (tab_num TEXT PRIMARY KEY, sort_order INTEGER NOT NULL)")
 
 def connect():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_sqlite(DB_FILE)
 
 init_db()
 
@@ -94,31 +97,24 @@ def get_session(request: Request):
         session = verify_cookie(cookie)
         if session:
             user_id, role, mods, full_name = session
-            if user_id != "legacy":
-                try:
-                    conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
-                    conn.row_factory = sqlite3.Row
-                    cur = conn.cursor()
-                    user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (user_id,)).fetchone()
-                    conn.close()
-                    if not user_row:
-                        return None
-                    role = user_row["role"]
-                    mods = user_row["allowed_modules"] or ""
-                except Exception:
-                    return None
-            has_access = False
-            if role == "admin" or "admin" in mods: has_access = True
-            elif "edu:edit" in mods or "edu:view" in mods or "edu" in mods.split(","): has_access = True
-            
-            can_edit = False
-            if role == "admin" or "admin" in mods or "edu:edit" in mods:
-                can_edit = True
-            elif role in ("edit", "editor") and ("edu" in mods.split(",") or "edu:view" in mods):
-                can_edit = True
-                
-            if has_access:
-                return {"user_id": user_id, "role": role, "modules": mods, "full_name": full_name, "can_edit": can_edit}
+            resolved = resolve_user_access(WEB_USERS_DB, user_id, role, mods)
+            if not resolved:
+                return None
+            role, mods = resolved
+            if module_has_access(role, mods, "edu"):
+                can_edit = (
+                    role == "admin"
+                    or "admin" in mods
+                    or "edu:edit" in mods
+                    or (role in ("edit", "editor") and ("edu" in mods.split(",") or "edu:view" in mods))
+                )
+                return {
+                    "user_id": user_id,
+                    "role": role,
+                    "modules": mods,
+                    "full_name": full_name,
+                    "can_edit": can_edit,
+                }
     return None
 
 @app.get(f"{APP_PREFIX}", include_in_schema=False)
