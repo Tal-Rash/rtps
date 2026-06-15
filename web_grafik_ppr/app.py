@@ -186,6 +186,133 @@ def default_repair_schedule_state() -> dict:
     }
 
 
+def _repair_schedule_parse_date(value) -> dt.date | None:
+    text = s(value).strip()
+    if not text:
+        return None
+    try:
+        day_s, month_s, year_s = text.split(".")
+        day = int(day_s)
+        month = int(month_s)
+        year = int(year_s)
+        result = dt.date(year, month, day)
+    except Exception:
+        return None
+    return result
+
+
+def _repair_schedule_format_date(value: dt.date | None) -> str:
+    if not isinstance(value, dt.date):
+        return ""
+    return value.strftime("%d.%m.%Y")
+
+
+def _repair_schedule_add_months(value: dt.date | None, months: float) -> dt.date | None:
+    if not isinstance(value, dt.date):
+        return None
+    try:
+        months_total = float(months)
+    except Exception:
+        return None
+    if months_total <= 0:
+        return value
+    whole = int(months_total)
+    fraction = months_total - whole
+    year = value.year
+    month = value.month + whole
+    while month > 12:
+        year += 1
+        month -= 12
+    while month < 1:
+        year -= 1
+        month += 12
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    result = dt.date(year, month, day)
+    if fraction > 0:
+        result += dt.timedelta(days=round(30 * fraction))
+    return result
+
+
+def _repair_schedule_period_row(periodicity: dict, series_name: str) -> list:
+    series_list = periodicity.get("series", []) if isinstance(periodicity, dict) else []
+    values_list = periodicity.get("values", []) if isinstance(periodicity, dict) else []
+    target = s(series_name).strip().upper()
+    row_index = 0
+    for idx, item in enumerate(series_list):
+        if s(item).strip().upper() == target:
+            row_index = idx
+            break
+    if not isinstance(values_list, list) or row_index >= len(values_list):
+        return []
+    row = values_list[row_index]
+    return row if isinstance(row, list) else []
+
+
+def _repair_schedule_period_months(periodicity: dict, code: str, series_name: str) -> float:
+    row = _repair_schedule_period_row(periodicity, series_name)
+    index_map = {"ТР1": 0, "ТР2": 1, "ТР3": 2, "СР": 3, "КР": 4}
+    idx = index_map.get(normalize_repair_code(code))
+    if idx is None or idx >= len(row):
+        return 0.0
+    try:
+        value = float(str(row[idx]).replace(",", ".").strip())
+    except Exception:
+        return 0.0
+    return value if value > 0 else 0.0
+
+
+def _repair_schedule_code_factor(code: str) -> float:
+    normalized = normalize_repair_code(code)
+    if normalized == "ТР1":
+        return 1.0
+    if normalized == "ТР2":
+        return 0.5
+    if normalized == "ТР3":
+        return 0.25
+    if normalized == "СР":
+        return 0.125
+    if normalized == "КР":
+        return 1.0
+    return 0.0
+
+
+def compute_repair_schedule_derived(schedule: dict) -> dict:
+    if not isinstance(schedule, dict):
+        return schedule
+    columns = schedule.get("columns", []) if isinstance(schedule.get("columns", []), list) else []
+    periodicity = schedule.get("periodicity", {}) if isinstance(schedule.get("periodicity", {}), dict) else {}
+    objects = schedule.get("objects", []) if isinstance(schedule.get("objects", []), list) else []
+    for row in objects:
+        if not isinstance(row, dict):
+            continue
+        if not isinstance(row.get("kr"), dict):
+            row["kr"] = {"plan": "", "fact": ""}
+        fact_date = _repair_schedule_parse_date(row["kr"].get("fact"))
+        plan_date = fact_date or _repair_schedule_parse_date(row["kr"].get("plan"))
+        row["kr"]["plan"] = _repair_schedule_format_date(plan_date)
+        source_date = fact_date or plan_date
+        plan_list = row.get("plan", []) if isinstance(row.get("plan", []), list) else []
+        fact_list = row.get("fact", []) if isinstance(row.get("fact", []), list) else []
+        while len(plan_list) < len(columns):
+            plan_list.append("")
+        while len(fact_list) < len(columns):
+            fact_list.append("")
+        for cidx, col in enumerate(columns):
+            code = s((col or {}).get("code"))
+            period_months = _repair_schedule_period_months(periodicity, code, row.get("series", ""))
+            target_date = None
+            if source_date and period_months > 0:
+                target_date = _repair_schedule_add_months(source_date, period_months * _repair_schedule_code_factor(code))
+            planned = _repair_schedule_format_date(target_date)
+            plan_list[cidx] = planned
+            fact_date_col = _repair_schedule_parse_date(fact_list[cidx])
+            source_date = fact_date_col or target_date or source_date
+        row["plan"] = plan_list
+        row["fact"] = fact_list
+    schedule["objects"] = objects
+    return schedule
+
+
 def s(value) -> str:
     return "" if value is None else str(value)
 
@@ -450,6 +577,7 @@ def load_state(year: int) -> dict:
             })
         if not schedule["objects"]:
             schedule["objects"] = default_repair_schedule_state()["objects"]
+        schedule = compute_repair_schedule_derived(schedule)
         state["repair_schedule"] = schedule
 
         tu28_data = cur.execute("SELECT m, r, k, v FROM tu28_data WHERE y=? ORDER BY m, r, k", (year,)).fetchall()
@@ -1300,6 +1428,9 @@ def save_state(state: dict) -> dict:
                         cur.execute("INSERT INTO report_notes VALUES (?,?,?,?)", (year, m_name, key, value))
 
             schedule = state.get("repair_schedule", {}) or {}
+            if isinstance(schedule, dict):
+                schedule = compute_repair_schedule_derived(schedule)
+                state["repair_schedule"] = schedule
             columns = schedule.get("columns", []) if isinstance(schedule, dict) else []
             objects = schedule.get("objects", []) if isinstance(schedule, dict) else []
             periodicity = schedule.get("periodicity", {}) if isinstance(schedule, dict) else {}
