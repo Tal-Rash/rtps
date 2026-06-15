@@ -748,6 +748,17 @@ function renderTable(name, rows, editableRows){
         <col style="width:200px">
         <col>
       </colgroup>`
+    : name === 'employees'
+      ? `<colgroup>
+          <col style="width:42px">
+          <col style="width:220px">
+          <col style="width:160px">
+          <col style="width:240px">
+          <col style="width:110px">
+          <col style="width:130px">
+          <col style="width:130px">
+          <col style="width:220px">
+        </colgroup>`
     : '';
   let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + '<thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
