@@ -142,7 +142,7 @@ button:disabled {
   border-bottom: 1px solid var(--line);
   padding: 4px 8px;
   background: #fff;
-  vertical-align: middle;
+  vertical-align: top;
   line-height: 1.25;
 }
 
