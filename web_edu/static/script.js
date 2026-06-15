@@ -8,7 +8,7 @@ let appState = {
 };
 
 let currentMode = "dates"; // "dates" or "protocols"
-let currentFilter = "all"; // "all", "workers", "itr"
+// currentFilter removed
 
 window.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -33,13 +33,7 @@ function setMode(mode) {
   renderMatrix();
 }
 
-function setFilter(filter) {
-  currentFilter = filter;
-  document.getElementById("btnFilterAll").classList.toggle("active", filter === "all");
-  document.getElementById("btnFilterWorkers").classList.toggle("active", filter === "workers");
-  document.getElementById("btnFilterITR").classList.toggle("active", filter === "itr");
-  renderMatrix();
-}
+// setFilter removed
 
 function parseDateStr(str) {
   if (!str) return null;
@@ -78,11 +72,7 @@ function renderMatrix() {
   
   // Filter Employees
   let filteredEmployees = appState.employees;
-  if (currentFilter === "workers") {
-    filteredEmployees = appState.employees.filter(e => e.category !== "itr");
-  } else if (currentFilter === "itr") {
-    filteredEmployees = appState.employees.filter(e => e.category === "itr");
-  }
+  // filter by category removed
 
   let bHTML = "";
   const today = new Date();
@@ -166,11 +156,6 @@ async function onCellBlur(e) {
   
   // Get the employee from filtered list since rIdx is the visual row index
   let filteredEmployees = appState.employees;
-  if (currentFilter === "workers") {
-    filteredEmployees = appState.employees.filter(emp => emp.category !== "itr");
-  } else if (currentFilter === "itr") {
-    filteredEmployees = appState.employees.filter(emp => emp.category === "itr");
-  }
   const emp = filteredEmployees[rIdx];
   const col = appState.columns[cIdx];
   
@@ -362,60 +347,4 @@ document.addEventListener("paste", async (e) => {
   }
 });
 
-  // Category Modal Logic
-  let tempCategories = {};
-
-  function openCategoryModal() {
-    if (!CAN_EDIT) {
-      alert("Только редакторы могут менять категории.");
-      return;
-    }
-    // Extract unique positions from employees
-    const posSet = new Set();
-    tempCategories = {};
-    appState.employees.forEach(e => {
-      if (e.position) {
-        posSet.add(e.position);
-        if (!tempCategories[e.position]) {
-          tempCategories[e.position] = e.category || "workers";
-        }
-      }
-    });
-
-    const tbody = document.getElementById("categoryTableBody");
-    let html = "";
-    Array.from(posSet).sort().forEach(pos => {
-      const cat = tempCategories[pos] || "workers";
-      html += `<tr>
-        <td>${pos}</td>
-        <td>
-          <select class="num" onchange="tempCategories['${pos}'] = this.value">
-            <option value="workers" ${cat === "workers" ? "selected" : ""}>Рабочий</option>
-            <option value="itr" ${cat === "itr" ? "selected" : ""}>ИТР</option>
-          </select>
-        </td>
-      </tr>`;
-    });
-    tbody.innerHTML = html;
-    document.getElementById("categoryModal").style.display = "flex";
-  }
-
-  function closeCategoryModal() {
-    document.getElementById("categoryModal").style.display = "none";
-  }
-
-  async function saveCategories() {
-    try {
-      const res = await fetch(`${APP_PREFIX}/api/settings/categories`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(tempCategories)
-      });
-      if (!res.ok) throw new Error("Failed to save categories");
-      closeCategoryModal();
-      loadState();
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка сохранения: " + err.message);
-    }
-  }
+  // Category modal removed
