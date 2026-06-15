@@ -913,6 +913,24 @@ textarea {
   vertical-align: middle;
 }
 
+#employeesGrid td:nth-child(6),
+#employeesGrid td:nth-child(7) {
+  text-align: center;
+}
+
+#employeesGrid td:nth-child(6) input[type="checkbox"],
+#employeesGrid td:nth-child(7) input[type="checkbox"] {
+  display: block;
+  margin: 0 auto;
+}
+
+#employeesGrid td:last-child .cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+
 .cell.center {
   text-align: center;
 }
