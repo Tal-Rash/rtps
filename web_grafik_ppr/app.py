@@ -26,6 +26,10 @@ MONTHS_RU = [
 ]
 TEM_NORM_ROWS = ["ТО2", "ТО3", "ТР1", "ТР2", "ТР3", "СР", "КР"]
 AGR_NORM_ROWS = ["ТО", "ТР", "КР"]
+REPAIR_SCHEDULE_COLUMN_CODES = [
+    "ТР-1", "ТР-2", "ТР-1", "ТР-3", "ТР-1", "ТР-2", "ТР-1", "СР",
+    "ТР-1", "ТР-2", "ТР-1", "ТР-3", "ТР-1", "ТР-2", "ТР-1", "КР",
+]
 REPORT_TEMPLATE_NAME = "Отчет_шаблон.xlsx"
 TU28_TEMPLATE_NAME = "ТУ-28_шаблон.xlsx"
 MONTH_DAY_LIMIT_FOR_REPORT = 25
@@ -162,6 +166,21 @@ def ensure_schema(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE TABLE IF NOT EXISTS repair_schedule (y INT, r INT, k TEXT, v TEXT, PRIMARY KEY(y,r,k))")
 
 
+def default_repair_schedule_state() -> dict:
+    columns = [{"code": code} for code in REPAIR_SCHEDULE_COLUMN_CODES]
+    return {
+        "columns": columns,
+        "objects": [
+            {
+                "series": "",
+                "number": "",
+                "plan": ["" for _ in columns],
+                "fact": ["" for _ in columns],
+            }
+        ],
+    }
+
+
 def s(value) -> str:
     return "" if value is None else str(value)
 
@@ -249,7 +268,6 @@ def default_state(year: int) -> dict:
     inventory = []
     acts = {}
     notes = {}
-    repair_schedule = []
     return {
         "year": year,
         "system_dates": load_system_dates(year),
@@ -257,7 +275,7 @@ def default_state(year: int) -> dict:
         "norms": norms,
         "acts": acts,
         "notes": notes,
-        "repair_schedule": repair_schedule,
+        "repair_schedule": default_repair_schedule_state(),
     }
 
 
@@ -348,11 +366,53 @@ def load_state(year: int) -> dict:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
 
         schedule_rows = cur.execute("SELECT r, k, v FROM repair_schedule WHERE y=? ORDER BY r, k", (year,)).fetchall()
-        repair_schedule: dict[int, dict[str, str]] = {}
+        schedule = default_repair_schedule_state()
+        columns = schedule["columns"]
+        objects: dict[int, dict[str, dict[int, str] | str]] = {}
         for row in schedule_rows:
-            r = int(row["r"])
-            repair_schedule.setdefault(r, {})[s(row["k"])] = s(row["v"])
-        state["repair_schedule"] = [repair_schedule[idx] for idx in sorted(repair_schedule)]
+            idx = int(row["r"])
+            key = s(row["k"])
+            value = s(row["v"])
+            if idx == -1 and key.startswith("col_"):
+                try:
+                    cidx = int(key[4:])
+                except ValueError:
+                    continue
+                if 0 <= cidx < len(columns) and value:
+                    columns[cidx]["code"] = value
+                continue
+            if idx < 0:
+                continue
+            obj = objects.setdefault(idx, {"series": "", "number": "", "plan": {}, "fact": {}})
+            if key == "series":
+                obj["series"] = value
+            elif key == "number":
+                obj["number"] = value
+            elif key.startswith("plan_"):
+                try:
+                    cidx = int(key[5:])
+                except ValueError:
+                    continue
+                obj["plan"][cidx] = value
+            elif key.startswith("fact_"):
+                try:
+                    cidx = int(key[5:])
+                except ValueError:
+                    continue
+                obj["fact"][cidx] = value
+        schedule["columns"] = columns
+        schedule["objects"] = []
+        for idx in sorted(objects):
+            obj = objects[idx]
+            schedule["objects"].append({
+                "series": s(obj["series"]),
+                "number": s(obj["number"]),
+                "plan": [s(obj["plan"].get(i, "")) for i in range(len(columns))],
+                "fact": [s(obj["fact"].get(i, "")) for i in range(len(columns))],
+            })
+        if not schedule["objects"]:
+            schedule["objects"] = default_repair_schedule_state()["objects"]
+        state["repair_schedule"] = schedule
 
         tu28_data = cur.execute("SELECT m, r, k, v FROM tu28_data WHERE y=? ORDER BY m, r, k", (year,)).fetchall()
         for row in tu28_data:
@@ -1201,22 +1261,30 @@ def save_state(state: dict) -> dict:
                     if value:
                         cur.execute("INSERT INTO report_notes VALUES (?,?,?,?)", (year, m_name, key, value))
 
-            schedule_fields = [
-                "unit",
-                "number",
-                "last_repair_type",
-                "last_repair_date",
-                "next_repair_type",
-                "next_repair_date",
-                "note",
-            ]
-            for r, row in enumerate(state.get("repair_schedule", []) or []):
+            schedule = state.get("repair_schedule", {}) or {}
+            columns = schedule.get("columns", []) if isinstance(schedule, dict) else []
+            objects = schedule.get("objects", []) if isinstance(schedule, dict) else []
+            for cidx, col in enumerate(columns):
+                value = s((col or {}).get("code")).strip()
+                if value:
+                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, -1, f"col_{cidx}", value))
+            for r, row in enumerate(objects):
                 if not isinstance(row, dict):
                     continue
-                for key in schedule_fields:
-                    value = s(row.get(key)).strip()
+                series = s(row.get("series")).strip()
+                number = s(row.get("number")).strip()
+                if series:
+                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "series", series))
+                if number:
+                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "number", number))
+                for cidx, value in enumerate(row.get("plan", []) or []):
+                    value = s(value).strip()
                     if value:
-                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, key, value))
+                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"plan_{cidx}", value))
+                for cidx, value in enumerate(row.get("fact", []) or []):
+                    value = s(value).strip()
+                    if value:
+                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"fact_{cidx}", value))
 
     return load_state(year)
 

@@ -10,6 +10,7 @@ const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
 const TEM_NORM_ROWS = window.APP_CONFIG.TEM_NORM_ROWS;
 const AGR_NORM_ROWS = window.APP_CONFIG.AGR_NORM_ROWS;
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
+const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР-1', 'ТР-2', 'ТР-1', 'ТР-3', 'ТР-1', 'ТР-2', 'ТР-1', 'СР', 'ТР-1', 'ТР-2', 'ТР-1', 'ТР-3', 'ТР-1', 'ТР-2', 'ТР-1', 'КР'];
 const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
@@ -481,31 +482,105 @@ function renderMonths(){
     ${renderMonthTable('fact', 'Факт', m, headers)}
   `;
 }
-function ensureRepairSchedule(){
-  if (!Array.isArray(appState.repair_schedule)) appState.repair_schedule = [];
-  return appState.repair_schedule;
+function defaultRepairScheduleState(){
+  const columns = REPAIR_SCHEDULE_COLUMN_CODES.map((code) => ({ code }));
+  return {
+    columns,
+    objects: [blankRepairScheduleObject(columns.length)],
+  };
 }
-function repairScheduleCell(rowIndex, key, value, cls='cell'){
+function blankRepairScheduleObject(columnCount){
+  const cols = Number.isFinite(columnCount) ? columnCount : REPAIR_SCHEDULE_COLUMN_CODES.length;
+  return {
+    series: '',
+    number: '',
+    plan: Array.from({ length: cols }, () => ''),
+    fact: Array.from({ length: cols }, () => ''),
+  };
+}
+function normalizeRepairSchedule(){
+  let schedule = appState.repair_schedule;
+  const defaults = defaultRepairScheduleState();
+  const defaultColumns = defaults.columns;
+  if (!schedule || typeof schedule !== 'object') {
+    schedule = defaults;
+  } else if (Array.isArray(schedule)) {
+    schedule = {
+      columns: defaultColumns.map((col) => ({ ...col })),
+      objects: schedule.map((row) => {
+        const obj = row && typeof row === 'object' ? row : {};
+        return {
+          series: String(obj.series ?? obj.unit ?? ''),
+          number: String(obj.number ?? ''),
+          plan: Array.isArray(obj.plan) ? obj.plan.map((v) => String(v ?? '')) : [],
+          fact: Array.isArray(obj.fact) ? obj.fact.map((v) => String(v ?? '')) : [],
+        };
+      }),
+    };
+  }
+  if (!Array.isArray(schedule.columns) || schedule.columns.length === 0) {
+    schedule.columns = defaultColumns.map((col) => ({ ...col }));
+  } else {
+    schedule.columns = schedule.columns.map((col, idx) => ({
+      code: String((col && col.code) ?? defaultColumns[idx % defaultColumns.length].code ?? ''),
+    }));
+  }
+  const colCount = schedule.columns.length;
+  if (!Array.isArray(schedule.objects)) schedule.objects = [];
+  schedule.objects = schedule.objects.map((row) => {
+    const obj = row && typeof row === 'object' ? row : {};
+    const plan = Array.isArray(obj.plan) ? obj.plan.slice(0, colCount).map((v) => String(v ?? '')) : [];
+    const fact = Array.isArray(obj.fact) ? obj.fact.slice(0, colCount).map((v) => String(v ?? '')) : [];
+    while (plan.length < colCount) plan.push('');
+    while (fact.length < colCount) fact.push('');
+    return {
+      series: String(obj.series ?? obj.unit ?? ''),
+      number: String(obj.number ?? ''),
+      plan,
+      fact,
+    };
+  });
+  if (!schedule.objects.length) {
+    schedule.objects.push(blankRepairScheduleObject(colCount));
+  }
+  appState.repair_schedule = schedule;
+  return schedule;
+}
+function repairScheduleCell(path, value, cls='cell'){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="repair_schedule.${rowIndex}.${key}" value="${esc(value || '')}" oninput="handleGridInput(this)">`;
+  return `<input ${ro} class="${cls}" data-path="${path}" value="${esc(value || '')}" oninput="handleGridInput(this)">`;
 }
 function renderRepairSchedule(){
-  const rows = ensureRepairSchedule();
-  const bodyHtml = rows.length
-    ? rows.map((row, idx) => `
-        <tr>
-          <td class="col-idx"><div class="rownum"><span>${idx + 1}</span></div></td>
-          <td>${repairScheduleCell(idx, 'unit', row.unit, 'cell')}</td>
-          <td>${repairScheduleCell(idx, 'number', row.number, 'cell center')}</td>
-          <td>${repairScheduleCell(idx, 'last_repair_type', row.last_repair_type, 'cell center')}</td>
-          <td>${repairScheduleCell(idx, 'last_repair_date', row.last_repair_date, 'cell center')}</td>
-          <td>${repairScheduleCell(idx, 'next_repair_type', row.next_repair_type, 'cell center')}</td>
-          <td>${repairScheduleCell(idx, 'next_repair_date', row.next_repair_date, 'cell center')}</td>
-          <td>${repairScheduleCell(idx, 'note', row.note, 'cell')}</td>
-          <td class="repair-schedule-action"><button class="rowbtn" ${CAN_EDIT ? '' : 'disabled'} onclick="deleteRepairScheduleRow(${idx})">-</button></td>
-        </tr>
-      `).join('')
-    : `<tr><td colspan="9" class="empty-table-cell">Нет записей</td></tr>`;
+  const schedule = normalizeRepairSchedule();
+  const columns = schedule.columns || [];
+  const objects = schedule.objects || [];
+  const headerCells = [
+    '<th rowspan="2" class="col-idx">№</th>',
+    '<th rowspan="2" class="col-series">Серия</th>',
+    '<th rowspan="2" class="col-number">Номер</th>',
+    '<th rowspan="2" class="col-planfact">План/факт</th>',
+    ...columns.map((col) => `<th rowspan="2" class="repair-head">${esc(col.code || '')}</th>`),
+  ].join('');
+  const bodyHtml = objects.length
+    ? objects.map((row, idx) => {
+        const rowNum = idx + 1;
+        const planCells = columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.plan.${cidx}`, row.plan[cidx] || '', 'cell center')}</td>`).join('');
+        const factCells = columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.fact.${cidx}`, row.fact[cidx] || '', 'cell center')}</td>`).join('');
+        return `
+          <tr class="repair-group-start">
+            <td class="col-idx" rowspan="2"><div class="rownum"><span>${rowNum}</span></div></td>
+            <td class="col-series" rowspan="2">${repairScheduleCell(`repair_schedule.objects.${idx}.series`, row.series || '', 'cell')}</td>
+            <td class="col-number" rowspan="2">${repairScheduleCell(`repair_schedule.objects.${idx}.number`, row.number || '', 'cell')}</td>
+            <td class="col-planfact">План</td>
+            ${planCells}
+          </tr>
+          <tr>
+            <td class="col-planfact">Факт</td>
+            ${factCells}
+          </tr>
+        `;
+      }).join('')
+    : `<tr><td colspan="${4 + columns.length}" class="empty-table-cell">Нет записей</td></tr>`;
   return `
     <div class="section-head repair-schedule-head">
       <div class="section-title">График ремонтов на ${appState.year} г.</div>
@@ -517,27 +592,13 @@ function renderRepairSchedule(){
       <table class="compact repair-schedule-table">
         <colgroup>
           <col style="width:45px">
-          <col style="width:150px">
-          <col style="width:90px">
-          <col style="width:120px">
-          <col style="width:140px">
-          <col style="width:120px">
-          <col style="width:140px">
-          <col style="width:260px">
-          <col style="width:46px">
+          <col style="width:130px">
+          <col style="width:110px">
+          <col style="width:100px">
+          ${columns.map(() => '<col style="width:92px">').join('')}
         </colgroup>
         <thead>
-          <tr>
-            <th>№</th>
-            <th>Серия</th>
-            <th>Номер</th>
-            <th>Последний ремонт</th>
-            <th>Дата ремонта</th>
-            <th>Следующий ремонт</th>
-            <th>Плановая дата</th>
-            <th>Примечание</th>
-            <th></th>
-          </tr>
+          <tr>${headerCells}</tr>
         </thead>
         <tbody>${bodyHtml}</tbody>
       </table>
@@ -546,21 +607,16 @@ function renderRepairSchedule(){
 }
 function addRepairScheduleRow(){
   if (!CAN_EDIT) return;
-  ensureRepairSchedule().push({
-    unit: '',
-    number: '',
-    last_repair_type: '',
-    last_repair_date: '',
-    next_repair_type: '',
-    next_repair_date: '',
-    note: '',
-  });
+  const schedule = normalizeRepairSchedule();
+  schedule.objects.push(blankRepairScheduleObject((schedule.columns || []).length));
   markDirty(true);
   render();
 }
 function deleteRepairScheduleRow(index){
   if (!CAN_EDIT) return;
-  ensureRepairSchedule().splice(index, 1);
+  const schedule = normalizeRepairSchedule();
+  if (schedule.objects.length <= 1) return;
+  schedule.objects.splice(index, 1);
   markDirty(true);
   render();
 }

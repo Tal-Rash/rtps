@@ -445,12 +445,16 @@
     .month-table tbody tr { height:28px; }
     .repair-schedule-head { margin-bottom:10px; }
     .repair-schedule-wrap { width:fit-content; max-width:100%; margin:0 auto; }
-    .table-wrap > table.repair-schedule-table { width:max-content; min-width:980px; table-layout:fixed; }
-    .repair-schedule-table th { white-space:normal; line-height:1.1; }
+    .table-wrap > table.repair-schedule-table { width:max-content; min-width:1080px; table-layout:fixed; }
+    .repair-schedule-table th { white-space:normal; line-height:1.1; text-align:center; }
     .repair-schedule-table tbody tr { height:30px; }
     .repair-schedule-table .cell { height:30px; min-height:30px; }
-    .repair-schedule-action { text-align:center; }
-    .repair-schedule-action .rowbtn { width:100%; height:30px; border:0; border-radius:0; }
+    .repair-schedule-table .col-planfact { width:84px; text-align:center; font-weight:700; }
+    .repair-schedule-table .col-series { width:130px; }
+    .repair-schedule-table .col-number { width:110px; }
+    .repair-schedule-table .col-idx { width:45px; }
+    .repair-schedule-table .repair-head { text-align:center; font-weight:700; }
+    .repair-schedule-table .repair-group-start > * { border-top:1px solid var(--line); }
     .empty-table-cell { padding:16px !important; text-align:center; color:var(--muted); }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
     #tu28Modal tr.selected-row > * { background:#e8f0ff !important; box-shadow:inset 0 0 0 1px rgba(39,110,241,.45); }
