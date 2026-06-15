@@ -304,10 +304,26 @@ button:disabled {
   text-align: center;
 }
 
+.auto-line {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  align-items: baseline;
+  line-height: 1;
+}
+
 .auto-label,
 .auto-date,
 .auto-status {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+
+.auto-status {
   display: block;
+  margin-top: 0;
+  line-height: 1;
 }
 
 .bg-expired {
