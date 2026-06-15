@@ -787,9 +787,7 @@ function renderTable(name, rows, editableRows){
   html += '</tbody></table></div>';
   panel.innerHTML = html;
   if (name === 'employees') {
-    requestAnimationFrame(() => {
-      panel.querySelectorAll('textarea').forEach(autoResizeTextarea);
-    });
+    resizeEmployeeTable(panel);
   }
 }
 
@@ -829,10 +827,19 @@ function autoResizeTextarea(el){
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
 }
+function resizeEmployeeTable(panel){
+  const target = panel || document.getElementById('employees');
+  if (!target) return;
+  const run = () => target.querySelectorAll('textarea').forEach(autoResizeTextarea);
+  requestAnimationFrame(() => {
+    run();
+    requestAnimationFrame(run);
+  });
+}
 window.addEventListener('resize', () => {
   const panel = document.getElementById('employees');
   if (!panel || !panel.classList.contains('active')) return;
-  panel.querySelectorAll('textarea').forEach(autoResizeTextarea);
+  resizeEmployeeTable(panel);
 });
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
 function addRow(name){
@@ -1051,6 +1058,9 @@ function showTab(id, btn){
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   btn.classList.add('active');
+  if (id === 'employees') {
+    resizeEmployeeTable(document.getElementById('employees'));
+  }
 }
 function escapeHtml(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
