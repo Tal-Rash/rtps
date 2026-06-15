@@ -311,22 +311,12 @@ button:disabled {
   text-align: center;
 }
 
-.auto-line {
-  display: flex;
-  gap: 1px;
-  justify-content: center;
-  align-items: center;
-  line-height: 1;
-  white-space: nowrap;
-}
-
 .auto-label,
 .auto-date,
 .auto-status {
-  display: inline-block;
+  display: block;
   margin: 0;
   padding: 0;
-  white-space: nowrap;
 }
 
 .auto-date {
