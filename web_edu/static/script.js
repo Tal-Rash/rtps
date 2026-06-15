@@ -154,7 +154,7 @@ function renderMatrix() {
           const diffDays = Math.ceil((nextDate - today) / (1000 * 60 * 60 * 24));
 
           cellText = formatDate(lastDate);
-          autoText = `<div class="auto-text"><span class="auto-label">след. аттестация:</span><span class="auto-date">${formatDate(nextDate)}</span>`;
+          autoText = `<div class="auto-text"><span class="auto-label">сл. аттестация:</span><span class="auto-date">${formatDate(nextDate)}</span>`;
           if (nextDate < today) {
             cellClass = "bg-expired";
             autoText += `<div class="auto-status">Просрочено</div>`;
