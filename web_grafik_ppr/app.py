@@ -511,7 +511,7 @@ def load_state(year: int) -> dict:
                 except ValueError:
                     continue
                 if 0 <= cidx < len(columns) and value:
-                    columns[cidx]["code"] = value
+                    columns[cidx]["code"] = normalize_repair_code(value)
                 continue
             if idx >= 0 and key.startswith("periodicity_series_"):
                 try:
@@ -1435,7 +1435,7 @@ def save_state(state: dict) -> dict:
             objects = schedule.get("objects", []) if isinstance(schedule, dict) else []
             periodicity = schedule.get("periodicity", {}) if isinstance(schedule, dict) else {}
             for cidx, col in enumerate(columns):
-                value = s((col or {}).get("code")).strip()
+                value = normalize_repair_code(s((col or {}).get("code")).strip())
                 if value:
                     cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, -1, f"col_{cidx}", value))
             series_rows = periodicity.get("series", []) if isinstance(periodicity, dict) else []
