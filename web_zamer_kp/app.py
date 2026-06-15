@@ -38,7 +38,7 @@ DB_LOCK = Lock()
 INPUT_ROWS = 12
 INPUT_DATA_COLS = 10
 DEFAULT_REPAIR_OPTIONS = {
-    "tem": ["", "ТО-2", "ТО-3", "ТО-4", "ТР-1", "ТР-2", "ТР-3", "СР", "КР"],
+    "tem": ["", "ТО2", "ТО3", "ТО4", "ТР1", "ТР2", "ТР3", "СР", "КР"],
     "pe": ["", "ТО", "ТР", "СР", "КР"],
 }
 DEFAULT_NORMS = [
@@ -118,6 +118,7 @@ def ensure_db() -> None:
             )
             """
         )
+        _migrate_archive_repair_types(conn)
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS kp_norms_data (
@@ -166,6 +167,38 @@ def ensure_db() -> None:
         conn.commit()
 
 
+def _migrate_archive_repair_types(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    rows = cur.execute(
+        "SELECT y, measurement_date, locomotive, repair_type, r, c FROM archive_data WHERE repair_type LIKE '%-%' OR repair_type LIKE '% %'"
+    ).fetchall()
+    for row in rows:
+        year = int(row["y"] or 0)
+        measurement_date = text(row["measurement_date"]).strip()
+        locomotive = text(row["locomotive"]).strip()
+        repair_type = text(row["repair_type"]).strip()
+        normalized = normalize_repair_type(repair_type)
+        if not normalized or normalized == repair_type:
+            continue
+        r = int(row["r"] or 0)
+        c = int(row["c"] or 0)
+        exists = cur.execute(
+            "SELECT 1 FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=? AND r=? AND c=?",
+            (year, measurement_date, locomotive, normalized, r, c),
+        ).fetchone()
+        if exists:
+            cur.execute(
+                "DELETE FROM archive_data WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=? AND r=? AND c=?",
+                (year, measurement_date, locomotive, repair_type, r, c),
+            )
+        else:
+            cur.execute(
+                "UPDATE archive_data SET repair_type=? WHERE y=? AND measurement_date=? AND locomotive=? AND repair_type=? AND r=? AND c=?",
+                (normalized, year, measurement_date, locomotive, repair_type, r, c),
+            )
+    conn.commit()
+
+
 
 
 
@@ -179,6 +212,10 @@ def _ensure_inventory_sync_columns(conn: sqlite3.Connection) -> None:
 
 def text(value) -> str:
     return "" if value is None else str(value)
+
+
+def normalize_repair_type(value) -> str:
+    return text(value).strip().upper().replace(" ", "").replace("-", "")
 
 
 def parse_cookie_values(handler: BaseHTTPRequestHandler, name: str) -> list[str]:
@@ -745,7 +782,7 @@ def save_state(payload: dict, full_name: str = "") -> dict:
 def build_archive_rows(payload: dict) -> tuple[dict, list[tuple[int, str, str, str, int, int, str]], list[str]]:
     locomotive = text(payload.get("locomotive")).strip()
     measurement_date = text(payload.get("measurement_date")).strip() or dt.date.today().isoformat()
-    repair_type = text(payload.get("repair_type")).strip()
+    repair_type = normalize_repair_type(payload.get("repair_type"))
     rows = payload.get("measurements") or []
 
     try:
@@ -926,7 +963,7 @@ def update_archive_cells(payload: dict) -> dict:
             year = int(change.get("year"))
             measurement_date = text(change.get("measurement_date")).strip()
             locomotive = text(change.get("locomotive")).strip()
-            repair_type = text(change.get("repair_type")).strip()
+            repair_type = normalize_repair_type(change.get("repair_type"))
             source_r = int(change.get("source_r"))
             display_col = int(change.get("display_col"))
             if display_col < 10 or display_col > 19:
@@ -959,7 +996,7 @@ def delete_archive_measurement(payload: dict) -> dict:
         year = int(payload.get("year"))
         measurement_date = text(payload.get("measurement_date")).strip()
         locomotive = text(payload.get("locomotive")).strip()
-        repair_type = text(payload.get("repair_type")).strip()
+        repair_type = normalize_repair_type(payload.get("repair_type"))
     except Exception:
         return {"error": "Некорректные данные для удаления архива."}, 400
 
@@ -1155,7 +1192,7 @@ def build_phone_reference_payload(selected_numbers: list[str] | None = None) -> 
 
 def build_phone_archive_measurement_record(year_value, measurement_date, locomotive_value, repair_type_value, rows_by_index) -> dict | None:
     locomotive_value = text(locomotive_value).strip()
-    repair_type_value = text(repair_type_value).strip()
+    repair_type_value = normalize_repair_type(repair_type_value)
     measurement_date = text(measurement_date).strip()
     if not locomotive_value or not repair_type_value or not measurement_date:
         return None
@@ -1620,7 +1657,7 @@ def import_phone_archive_payload(payload: dict) -> dict:
             series = text(locomotive.get("series")).strip()
             loco_number = text(locomotive.get("number")).strip()
             measurement_date = text(item.get("measurementDate")).strip()
-            repair_type = text(item.get("repairType")).strip()
+            repair_type = normalize_repair_type(item.get("repairType"))
             wheel_pairs = item.get("wheelPairs") or []
             if not loco_number or not measurement_date or not repair_type or not isinstance(wheel_pairs, list) or not wheel_pairs:
                 continue
@@ -1659,7 +1696,7 @@ def import_phone_measurement_payload(payload: dict) -> dict:
     series = text(locomotive.get("series")).strip()
     loco_number = text(locomotive.get("number")).strip()
     measurement_date = text(payload.get("measurementDate")).strip()
-    repair_type = text(payload.get("repairType")).strip()
+    repair_type = normalize_repair_type(payload.get("repairType"))
     wheel_pairs = payload.get("wheelPairs") or []
     wheel_pair_count = int(locomotive.get("wheelPairCount") or len(wheel_pairs))
 
@@ -1850,7 +1887,7 @@ def build_archive_export_rows(selected_locomotives: list[str] | None = None, dat
             r = int(row["r"])
             if r < 2:
                 continue
-            key = (int(row["y"] or 0), text(row["measurement_date"]), text(row["locomotive"]), text(row["repair_type"]), r)
+            key = (int(row["y"] or 0), text(row["measurement_date"]), text(row["locomotive"]), normalize_repair_type(row["repair_type"]), r)
             grouped.setdefault(key, [""] * 12)
             c = int(row["c"])
             if 0 <= c < 12:
@@ -1889,7 +1926,7 @@ def build_archive_export_rows(selected_locomotives: list[str] | None = None, dat
                 [
                     format_excel_export_date(measurement_date),
                     locomotive,
-                    repair_type,
+                    normalize_repair_type(repair_type),
                     series,
                     values[0] or "1",
                     values[1] or str(r - 1),
@@ -2011,7 +2048,7 @@ def phone_archive_export_payload(selected_locomotives: list[str] | None = None, 
                 int(row["y"] or 0),
                 text(row["measurement_date"]).strip(),
                 text(row["locomotive"]).strip(),
-                text(row["repair_type"]).strip(),
+                normalize_repair_type(row["repair_type"]),
             )
             grouped.setdefault(key, {})[int(row["r"])] = grouped.setdefault(key, {}).get(int(row["r"]), [""] * 12)
             grouped[key][int(row["r"])][int(row["c"])] = text(row["v"])
@@ -2237,7 +2274,7 @@ def import_phone_measurement_payload(payload: dict) -> dict:
     series = text(locomotive.get("series")).strip()
     number = text(locomotive.get("number")).strip()
     measurement_date = text(measurement.get("measurementDate")).strip() or dt.date.today().isoformat()
-    repair_type = text(measurement.get("repairType")).strip()
+    repair_type = normalize_repair_type(measurement.get("repairType"))
     measurement_id = text(measurement.get("measurementId")).strip() or f"{measurement_date}:{number}:{repair_type}"
     wheel_pairs = measurement.get("wheelPairs")
     if not isinstance(wheel_pairs, list) or not wheel_pairs:
@@ -2693,10 +2730,10 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
 
             date_and_repair = f"{loco}\n{formatted_date}"
             if repair_type:
-                date_and_repair += f"\n{repair_type}"
+                date_and_repair += f"\n{normalize_repair_type(repair_type)}"
 
             section_value = values[0] or "1"
-            stats = stats_by_section.get((year, measurement_date, loco, repair_type, section_value), {})
+            stats = stats_by_section.get((year, measurement_date, loco, normalize_repair_type(repair_type), section_value), {})
             row_values = [
                 date_and_repair,
                 section_value,
@@ -2724,7 +2761,7 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
                 "year": year,
                 "measurement_date": measurement_date,
                 "locomotive": loco,
-                "repair_type": repair_type,
+                "repair_type": normalize_repair_type(repair_type),
                 "source_r": row_index,
                 "section": section_value,
                 "stats": stats,

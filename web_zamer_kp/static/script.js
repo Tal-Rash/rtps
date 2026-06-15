@@ -39,6 +39,13 @@ function fmt(value){
   if (/^-?\d+\.\d+$/.test(s) || /^-?\d+$/.test(s)) return s.replace('.', ',');
   return s;
 }
+function normalizeRepairType(value){
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/-/g, '');
+}
 function parse_float(value){
   if (value === null || value === undefined || value === '') return null;
   const x = parseFloat(String(value ?? '').replace(',', '.'));
@@ -842,7 +849,7 @@ function allowedRepairs(number){
   if (text.includes('пэ-2м') || text.includes('пэ2м') || text.includes('пэ 2м') || text.includes('pe-2m') || text.includes('pe2m')) {
     return ['', 'ТО', 'ТР', 'СР', 'КР'];
   }
-  return ['', 'ТО-2', 'ТО-3', 'ТО-4', 'ТР-1', 'ТР-2', 'ТР-3', 'СР', 'КР'];
+  return ['', 'ТО2', 'ТО3', 'ТО4', 'ТР1', 'ТР2', 'ТР3', 'СР', 'КР'];
 }
 function sectionSpec(axisCount, sectionCount){
   const total = Math.max(1, Number(axisCount) || 1);
@@ -1336,7 +1343,7 @@ async function loadKpData(nextValue){
 }
 function renderRepairOptions(){
   const select = document.getElementById('repairType');
-  const current = currentRepairType || '';
+  const current = normalizeRepairType(currentRepairType || '');
   const options = allowedRepairs(getCurrentLoco());
   select.innerHTML = options.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
   select.value = options.includes(current) ? current : '';
@@ -1520,7 +1527,10 @@ async function loadArchive(){
     return;
   }
   const payload = await res.json();
-  archiveRows = payload.rows || [];
+  archiveRows = (payload.rows || []).map((row) => ({
+    ...row,
+    repair_type: normalizeRepairType(row.repair_type),
+  }));
   if (archiveSelectedMeasurementKey && !archiveRows.some(row => archiveMeasurementKey(row) === archiveSelectedMeasurementKey)) {
     archiveSelectedMeasurementKey = null;
   }
@@ -1539,7 +1549,7 @@ async function deleteSelectedArchiveMeasurement(){
     alert('Выберите строку архива для удаления.');
     return;
   }
-  const labelParts = [selectedMeta.locomotive, selectedMeta.measurement_date, selectedMeta.repair_type].filter(Boolean);
+  const labelParts = [selectedMeta.locomotive, selectedMeta.measurement_date, normalizeRepairType(selectedMeta.repair_type)].filter(Boolean);
   const ok = confirm(`Удалить замер из архива?\n\n${labelParts.join(' / ')}`);
   if (!ok) return;
   const status = document.getElementById('archiveStatus');
@@ -1552,7 +1562,7 @@ async function deleteSelectedArchiveMeasurement(){
       year: selectedMeta.year,
       measurement_date: selectedMeta.measurement_date,
       locomotive: selectedMeta.locomotive,
-      repair_type: selectedMeta.repair_type,
+      repair_type: normalizeRepairType(selectedMeta.repair_type),
     }),
   });
   if (!res.ok) {
@@ -1715,7 +1725,7 @@ async function loadState(nextLocomotive, preloadedState = null, manualConfig = n
   state.locomotives = state.locomotives && state.locomotives.length ? state.locomotives : (LOCOMOTIVE_CHOICES || []);
   savedState = cloneState(state);
   canceledState = null;
-  currentRepairType = state.repair_type || currentRepairType || '';
+  currentRepairType = normalizeRepairType(state.repair_type || currentRepairType || '');
   savedRepairType = currentRepairType;
   canceledRepairType = '';
   document.getElementById('locomotive').value = state.locomotive || '';
@@ -1862,7 +1872,7 @@ async function saveToArchive(){
   const payload = {
     locomotive: getCurrentLoco(),
     measurement_date: document.getElementById('measurementDate').value || state.measurement_date || new Date().toISOString().slice(0, 10),
-    repair_type: document.getElementById('repairType').value || '',
+    repair_type: normalizeRepairType(document.getElementById('repairType').value || ''),
     measurements: state.measurements,
     wheel_pair_count: state.wheel_pair_count,
     section_count: state.section_count,
@@ -1870,7 +1880,7 @@ async function saveToArchive(){
   };
   state.locomotive = payload.locomotive;
   state.measurement_date = payload.measurement_date;
-  currentRepairType = payload.repair_type;
+  currentRepairType = normalizeRepairType(payload.repair_type);
   setStatus('Сохранение в архив...');
   const sendRequest = async (overwrite) => {
     const res = await fetch(`${API}/api/archive`, {
