@@ -145,8 +145,14 @@ async def api_state(request: Request):
         columns = [{"name": c["name"], "period_months": c["period_months"] or 12} for c in cols]
         
         # Load active employees (from main DB, like tabel)
-        emp_rows = cur.execute("SELECT name, tab_num, pos FROM employees WHERE name IS NOT NULL AND name != '' GROUP BY name").fetchall()
-        employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"]} for r in emp_rows]
+        emp_rows = cur.execute("""
+            SELECT e.name, e.tab_num, e.pos, COALESCE(pc.category, 'workers') as category
+            FROM employees e
+            LEFT JOIN position_categories pc ON e.pos = pc.pos
+            WHERE e.name IS NOT NULL AND e.name != '' 
+            GROUP BY e.name
+        """).fetchall()
+        employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"], "category": r["category"]} for r in emp_rows]
         
         # Load trainings
         t_rows = cur.execute("SELECT tab_num, training_type, last_date, period_months, protocol_num FROM employee_trainings").fetchall()
@@ -225,9 +231,25 @@ async def save_columns(request: Request):
         conn.commit()
     return {"status": "ok"}
 
-if __name__ == '__main__':
+@app.post("/api/settings/categories")
+async def save_categories(request: Request, data: dict):
+    session = get_session(request)
+    if not session or not session["can_edit"]: return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    
+    try:
+        with DB_LOCK, connect() as conn:
+            cur = conn.cursor()
+            for pos, cat in data.items():
+                cur.execute(
+                    "INSERT INTO position_categories (pos, category) VALUES (?, ?) ON CONFLICT(pos) DO UPDATE SET category=excluded.category",
+                    (pos, cat)
+                )
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+if __name__ == "__main__":
     import uvicorn
     host = os.environ.get('WEB_HOST', '127.0.0.1')
     port = int(os.environ.get('WEB_PORT', 8007))
     uvicorn.run('app:app', host=host, port=port, reload=False)
-

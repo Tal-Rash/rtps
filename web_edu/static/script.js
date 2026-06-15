@@ -8,6 +8,7 @@ let appState = {
 };
 
 let currentMode = "dates"; // "dates" or "protocols"
+let currentFilter = "all"; // "all", "workers", "itr"
 
 window.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -29,6 +30,14 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById("btnModeDates").classList.toggle("active", mode === "dates");
   document.getElementById("btnModeProtocols").classList.toggle("active", mode === "protocols");
+  renderMatrix();
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.getElementById("btnFilterAll").classList.toggle("active", filter === "all");
+  document.getElementById("btnFilterWorkers").classList.toggle("active", filter === "workers");
+  document.getElementById("btnFilterITR").classList.toggle("active", filter === "itr");
   renderMatrix();
 }
 
@@ -59,24 +68,28 @@ function renderMatrix() {
   const thead = document.getElementById("eduHead");
   const tbody = document.getElementById("eduBody");
   
-  // Headers
-  let hHTML = "<tr>";
-  hHTML += `<th style="width:200px;">ФИО</th>`;
-  hHTML += `<th style="width:80px;">Таб. №</th>`;
-  hHTML += `<th style="width:250px;">Профессия</th>`;
-  for (const col of appState.columns) {
-    hHTML += `<th>${col.name.replace(/\n/g, '<br>')}</th>`;
+  // Render Headers
+  let hHTML = `<tr><th style="width:200px">ФИО работника</th><th style="width:70px">Таб. №</th><th style="width:150px">Должность</th>`;
+  for (let c of appState.columns) {
+    hHTML += `<th>${c.name}</th>`;
   }
-  hHTML += "</tr>";
+  hHTML += `</tr>`;
   thead.innerHTML = hHTML;
   
-  // Body
+  // Filter Employees
+  let filteredEmployees = appState.employees;
+  if (currentFilter === "workers") {
+    filteredEmployees = appState.employees.filter(e => e.category !== "itr");
+  } else if (currentFilter === "itr") {
+    filteredEmployees = appState.employees.filter(e => e.category === "itr");
+  }
+
   let bHTML = "";
   const today = new Date();
   today.setHours(0,0,0,0);
   
-  for (let rIdx = 0; rIdx < appState.employees.length; rIdx++) {
-    const emp = appState.employees[rIdx];
+  for (let rIdx = 0; rIdx < filteredEmployees.length; rIdx++) {
+    const emp = filteredEmployees[rIdx];
     bHTML += `<tr>`;
     bHTML += `<td>${emp.fio}</td>`;
     bHTML += `<td>${emp.tab_num}</td>`;
@@ -151,7 +164,14 @@ async function onCellBlur(e) {
   const cIdx = parseInt(cell.dataset.col, 10);
   let text = cell.innerText.trim();
   
-  const emp = appState.employees[rIdx];
+  // Get the employee from filtered list since rIdx is the visual row index
+  let filteredEmployees = appState.employees;
+  if (currentFilter === "workers") {
+    filteredEmployees = appState.employees.filter(emp => emp.category !== "itr");
+  } else if (currentFilter === "itr") {
+    filteredEmployees = appState.employees.filter(emp => emp.category === "itr");
+  }
+  const emp = filteredEmployees[rIdx];
   const col = appState.columns[cIdx];
   
   if (currentMode === "protocols") {
@@ -341,3 +361,61 @@ document.addEventListener("paste", async (e) => {
     }
   }
 });
+
+  // Category Modal Logic
+  let tempCategories = {};
+
+  function openCategoryModal() {
+    if (!CAN_EDIT) {
+      alert("Только редакторы могут менять категории.");
+      return;
+    }
+    // Extract unique positions from employees
+    const posSet = new Set();
+    tempCategories = {};
+    appState.employees.forEach(e => {
+      if (e.position) {
+        posSet.add(e.position);
+        if (!tempCategories[e.position]) {
+          tempCategories[e.position] = e.category || "workers";
+        }
+      }
+    });
+
+    const tbody = document.getElementById("categoryTableBody");
+    let html = "";
+    Array.from(posSet).sort().forEach(pos => {
+      const cat = tempCategories[pos] || "workers";
+      html += `<tr>
+        <td>${pos}</td>
+        <td>
+          <select class="num" onchange="tempCategories['${pos}'] = this.value">
+            <option value="workers" ${cat === "workers" ? "selected" : ""}>Рабочий</option>
+            <option value="itr" ${cat === "itr" ? "selected" : ""}>ИТР</option>
+          </select>
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+    document.getElementById("categoryModal").style.display = "flex";
+  }
+
+  function closeCategoryModal() {
+    document.getElementById("categoryModal").style.display = "none";
+  }
+
+  async function saveCategories() {
+    try {
+      const res = await fetch(`${APP_PREFIX}/api/settings/categories`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(tempCategories)
+      });
+      if (!res.ok) throw new Error("Failed to save categories");
+      closeCategoryModal();
+      loadState();
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сохранения: " + err.message);
+    }
+  }
