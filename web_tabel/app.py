@@ -820,4 +820,4 @@ async def api_save_state(request: Request):
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "0.0.0.0")
     port = int(os.environ.get("WEB_PORT", "8005"))
-    uvicorn.run("app:app", host=host, port=port, reload=True)
+    uvicorn.run("app:app", host=host, port=port, reload=False)

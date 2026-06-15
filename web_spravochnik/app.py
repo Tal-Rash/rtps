@@ -1299,7 +1299,7 @@ def main() -> None:
     if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
         import threading, webbrowser
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    uvicorn.run("app:app", host=host, port=port, reload=True)
+    uvicorn.run("app:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
     main()

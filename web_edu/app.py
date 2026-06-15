@@ -229,5 +229,5 @@ if __name__ == '__main__':
     import uvicorn
     host = os.environ.get('WEB_HOST', '127.0.0.1')
     port = int(os.environ.get('WEB_PORT', 8007))
-    uvicorn.run('app:app', host=host, port=port, reload=True)
+    uvicorn.run('app:app', host=host, port=port, reload=False)
 

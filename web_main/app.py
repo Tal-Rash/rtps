@@ -437,4 +437,4 @@ async def redir_zamer():
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")
     port = int(os.environ.get("WEB_PORT", "8001"))
-    uvicorn.run("app:app", host=host, port=port, reload=True)
+    uvicorn.run("app:app", host=host, port=port, reload=False)
