@@ -474,6 +474,16 @@ function rowActionsHtml(){
       </div>
   `;
 }
+function rowActionsSpacerHtml(){
+  return `
+      <div class="row-actions row-actions-spacer" aria-hidden="true">
+        <button type="button" tabindex="-1">+ строку</button>
+        <button type="button" tabindex="-1" class="danger">- строку</button>
+        <button type="button" tabindex="-1">↺</button>
+        <button type="button" tabindex="-1">↻</button>
+      </div>
+  `;
+}
 function monthSelectHtml(){
   return `
     <select id="actsMonthSelect" onchange="setMonth(parseInt(this.value, 10))" style="border:1px solid var(--line); border-radius:8px; padding:2px 8px; font:inherit; font-size:15px; background:#fff; width:112px; min-width:112px; max-width:112px;">
@@ -908,7 +918,7 @@ function renderMonthTable(type, title, m, headers){
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
     '<col style="width:120px">'
   ].join('');
-  const controlsHtml = type === 'plan' ? rowActionsHtml() : '<div></div>';
+  const controlsHtml = type === 'plan' ? rowActionsHtml() : rowActionsSpacerHtml();
   return `
     <div class="section-head month-table-head" style="margin-top:16px;">
       <div class="month-table-actions">
