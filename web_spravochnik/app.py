@@ -732,13 +732,13 @@ function renderTable(name, rows, editableRows){
   const colGroup = name === 'norms'
     ? `<colgroup>
         <col style="width:42px">
-        <col style="width:14%">
+        <col style="width:9%">
         <col style="width:10%">
         <col style="width:10%">
         <col style="width:10%">
         <col style="width:8%">
         <col style="width:8%">
-        <col style="width:20%">
+        <col style="width:15%">
         <col style="width:20%">
       </colgroup>`
     : '';
