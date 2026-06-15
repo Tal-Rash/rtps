@@ -584,8 +584,9 @@ HTML = """<!doctype html>
     .panel.active{display:block}
     table{border-collapse:collapse;width:100%;min-width:760px}
     table.norms-table{table-layout:fixed}
-    th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center}
+    th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
     th{background:#eef4fb;font-weight:700}
+    table.norms-table th, table.norms-table td{white-space:nowrap}
     td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
     td input[type=checkbox]{width:auto;height:auto}
     .left{text-align:left!important}
@@ -732,14 +733,14 @@ function renderTable(name, rows, editableRows){
   const colGroup = name === 'norms'
     ? `<colgroup>
         <col style="width:42px">
-        <col style="width:9%">
-        <col style="width:10%">
-        <col style="width:10%">
-        <col style="width:10%">
-        <col style="width:8%">
-        <col style="width:8%">
-        <col style="width:15%">
-        <col style="width:20%">
+        <col style="width:84px">
+        <col style="width:84px">
+        <col style="width:84px">
+        <col style="width:112px">
+        <col style="width:72px">
+        <col style="width:72px">
+        <col style="width:96px">
+        <col>
       </colgroup>`
     : '';
   let html = rowbar + `<div class="table-shell"><table${tableClass}>${colGroup}<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
