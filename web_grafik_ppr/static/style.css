@@ -338,7 +338,7 @@
     }
     .act-start:disabled { opacity:.5; cursor:default; }
     .table-wrap { overflow:auto; border:1px solid var(--accent); border-radius:18px; background:#fff; }
-    .month-table-wrap { width:fit-content; max-width:100%; margin:0 auto; }
+    .month-table-wrap { width:fit-content; max-width:100%; margin:0; }
     .table-wrap > table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     .table-wrap > table th,
     .table-wrap > table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
