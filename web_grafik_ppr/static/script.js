@@ -591,7 +591,7 @@ function addRepairMonths(date, months){
   if (fraction) result.setDate(result.getDate() + Math.round(30 * fraction));
   return result;
 }
-function repairSchedulePeriodMonths(seriesName){
+function repairSchedulePeriodRow(seriesName){
   const schedule = normalizeRepairSchedule();
   const periodicity = schedule.periodicity || defaultRepairPeriodicityState();
   const target = repairSeriesKey(seriesName);
@@ -599,12 +599,7 @@ function repairSchedulePeriodMonths(seriesName){
     ? periodicity.series.findIndex((item) => repairSeriesKey(item) === target)
     : -1;
   if (rowIndex < 0) rowIndex = 0;
-  const row = Array.isArray(periodicity.values) ? periodicity.values[rowIndex] || [] : [];
-  for (const value of row) {
-    const numeric = Number(String(value ?? '').replace(',', '.'));
-    if (Number.isFinite(numeric) && numeric > 0) return numeric;
-  }
-  return 0;
+  return Array.isArray(periodicity.values) ? periodicity.values[rowIndex] || [] : [];
 }
 function repairScheduleColumnFactor(code){
   const normalized = normalizeRepairCode(code);
@@ -615,21 +610,29 @@ function repairScheduleColumnFactor(code){
   if (normalized === 'КР') return 1;
   return 0;
 }
+function repairScheduleColumnPeriodMonths(code, seriesName){
+  const row = repairSchedulePeriodRow(seriesName);
+  const normalized = normalizeRepairCode(code);
+  const indexMap = { 'ТР1': 0, 'ТР2': 1, 'ТР3': 2, 'СР': 3, 'КР': 4 };
+  const idx = indexMap[normalized];
+  if (!Number.isInteger(idx) || idx < 0 || idx >= row.length) return 0;
+  const numeric = Number(String(row[idx] ?? '').replace(',', '.'));
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return numeric;
+}
 function updateRepairScheduleDerivedValues(){
   const schedule = normalizeRepairSchedule();
   const columns = schedule.columns || [];
   const objects = schedule.objects || [];
   objects.forEach((row, idx) => {
     if (!row.kr) row.kr = { plan: '', fact: '' };
-    const baseMonths = repairSchedulePeriodMonths(row.series);
     const krFactDate = parseRepairDate(row.kr.fact);
     const krPlanDate = krFactDate || parseRepairDate(row.kr.plan);
     row.kr.plan = formatRepairDate(krPlanDate);
-    let sourceDate = krPlanDate;
-    if (krFactDate) sourceDate = krFactDate;
+    let sourceDate = krFactDate || krPlanDate;
     columns.forEach((col, cidx) => {
-      const factor = repairScheduleColumnFactor(col.code);
-      const targetDate = sourceDate && baseMonths > 0 && factor > 0 ? addRepairMonths(sourceDate, baseMonths * factor) : null;
+      const periodMonths = repairScheduleColumnPeriodMonths(col.code, row.series);
+      const targetDate = sourceDate && periodMonths > 0 ? addRepairMonths(sourceDate, periodMonths * repairScheduleColumnFactor(col.code)) : null;
       const planned = formatRepairDate(targetDate);
       row.plan[cidx] = planned;
       const factDate = parseRepairDate(row.fact[cidx]);
