@@ -160,6 +160,9 @@ function renderMatrix() {
             autoText += `<div class="auto-status">Просрочено</div>`;
           } else if (diffDays <= 30) {
             cellClass = "bg-warning";
+            autoText += `<div class="auto-status">Действ.</div>`;
+          } else {
+            autoText += `<div class="auto-status">Действ.</div>`;
           }
           autoText += "</div>";
         }
