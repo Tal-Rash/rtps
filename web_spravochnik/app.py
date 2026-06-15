@@ -787,7 +787,9 @@ function renderTable(name, rows, editableRows){
   html += '</tbody></table></div>';
   panel.innerHTML = html;
   if (name === 'employees') {
-    panel.querySelectorAll('textarea').forEach(autoResizeTextarea);
+    requestAnimationFrame(() => {
+      panel.querySelectorAll('textarea').forEach(autoResizeTextarea);
+    });
   }
 }
 
@@ -827,6 +829,11 @@ function autoResizeTextarea(el){
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
 }
+window.addEventListener('resize', () => {
+  const panel = document.getElementById('employees');
+  if (!panel || !panel.classList.contains('active')) return;
+  panel.querySelectorAll('textarea').forEach(autoResizeTextarea);
+});
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
 function addRow(name){
   if (!CAN_EDIT) return;
