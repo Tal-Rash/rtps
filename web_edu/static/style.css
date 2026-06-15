@@ -296,28 +296,30 @@ button:disabled {
 .auto-text {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 1px;
   margin-top: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   text-align: center;
 }
 
 .auto-line {
   display: flex;
-  gap: 2px;
+  gap: 1px;
   justify-content: center;
-  align-items: baseline;
+  align-items: center;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .auto-label,
 .auto-date,
 .auto-status {
-  display: inline;
+  display: inline-block;
   margin: 0;
   padding: 0;
+  white-space: nowrap;
 }
 
 .auto-status {
