@@ -587,13 +587,14 @@ HTML = """<!doctype html>
     table.employees-table{table-layout:fixed}
     th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
     th{background:#eef4fb;font-weight:700}
-    table.employees-table td{height:auto;vertical-align:middle}
+    table.employees-table td{height:auto;vertical-align:middle;position:relative}
     table.employees-table th{height:34px;vertical-align:middle}
     table.norms-table th, table.norms-table td{white-space:nowrap}
     table.employees-table th, table.employees-table td{white-space:normal}
     td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
     td textarea{width:100%;min-height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent;resize:none;overflow:hidden;display:block;line-height:1.25;box-sizing:border-box}
     td input[type=checkbox]{width:auto;height:auto}
+    table.employees-table td input[type=checkbox]{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
     .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
