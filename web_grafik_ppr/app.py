@@ -170,10 +170,15 @@ def default_repair_schedule_state() -> dict:
     columns = [{"code": code} for code in REPAIR_SCHEDULE_COLUMN_CODES]
     return {
         "columns": columns,
+        "periodicity": {
+            "series": ["ТЭМ-2УМ", "ТЭМ-2", ""],
+            "values": [["", "", "", "", ""] for _ in range(3)],
+        },
         "objects": [
             {
                 "series": "",
                 "number": "",
+                "kr": {"plan": "", "fact": ""},
                 "plan": ["" for _ in columns],
                 "fact": ["" for _ in columns],
             }
@@ -368,7 +373,7 @@ def load_state(year: int) -> dict:
         schedule_rows = cur.execute("SELECT r, k, v FROM repair_schedule WHERE y=? ORDER BY r, k", (year,)).fetchall()
         schedule = default_repair_schedule_state()
         columns = schedule["columns"]
-        objects: dict[int, dict[str, dict[int, str] | str]] = {}
+        objects: dict[int, dict[str, dict[int, str] | dict[str, str] | str]] = {}
         for row in schedule_rows:
             idx = int(row["r"])
             key = s(row["k"])
@@ -381,6 +386,31 @@ def load_state(year: int) -> dict:
                 if 0 <= cidx < len(columns) and value:
                     columns[cidx]["code"] = value
                 continue
+            if idx >= 0 and key.startswith("periodicity_series_"):
+                try:
+                    sidx = int(key.rsplit("_", 1)[1])
+                except Exception:
+                    continue
+                while len(schedule["periodicity"]["series"]) <= sidx:
+                    schedule["periodicity"]["series"].append("")
+                    schedule["periodicity"]["values"].append(["", "", "", "", ""])
+                if 0 <= sidx < len(schedule["periodicity"]["series"]):
+                    schedule["periodicity"]["series"][sidx] = value
+                continue
+            if idx >= 0 and key.startswith("periodicity_value_"):
+                try:
+                    _, _, r_str, c_str = key.split("_", 3)
+                    r_idx = int(r_str)
+                    c_idx = int(c_str)
+                except Exception:
+                    continue
+                while len(schedule["periodicity"]["values"]) <= r_idx:
+                    schedule["periodicity"]["series"].append("")
+                    schedule["periodicity"]["values"].append(["", "", "", "", ""])
+                while len(schedule["periodicity"]["values"][r_idx]) <= c_idx:
+                    schedule["periodicity"]["values"][r_idx].append("")
+                schedule["periodicity"]["values"][r_idx][c_idx] = value
+                continue
             if idx < 0:
                 continue
             obj = objects.setdefault(idx, {"series": "", "number": "", "plan": {}, "fact": {}})
@@ -388,6 +418,10 @@ def load_state(year: int) -> dict:
                 obj["series"] = value
             elif key == "number":
                 obj["number"] = value
+            elif key == "kr_plan":
+                obj.setdefault("kr", {})["plan"] = value
+            elif key == "kr_fact":
+                obj.setdefault("kr", {})["fact"] = value
             elif key.startswith("plan_"):
                 try:
                     cidx = int(key[5:])
@@ -407,6 +441,10 @@ def load_state(year: int) -> dict:
             schedule["objects"].append({
                 "series": s(obj["series"]),
                 "number": s(obj["number"]),
+                "kr": {
+                    "plan": s((obj.get("kr") or {}).get("plan", "")),
+                    "fact": s((obj.get("kr") or {}).get("fact", "")),
+                },
                 "plan": [s(obj["plan"].get(i, "")) for i in range(len(columns))],
                 "fact": [s(obj["fact"].get(i, "")) for i in range(len(columns))],
             })
@@ -1264,10 +1302,24 @@ def save_state(state: dict) -> dict:
             schedule = state.get("repair_schedule", {}) or {}
             columns = schedule.get("columns", []) if isinstance(schedule, dict) else []
             objects = schedule.get("objects", []) if isinstance(schedule, dict) else []
+            periodicity = schedule.get("periodicity", {}) if isinstance(schedule, dict) else {}
             for cidx, col in enumerate(columns):
                 value = s((col or {}).get("code")).strip()
                 if value:
                     cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, -1, f"col_{cidx}", value))
+            series_rows = periodicity.get("series", []) if isinstance(periodicity, dict) else []
+            for r, value in enumerate(series_rows):
+                value = s(value).strip()
+                if value:
+                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"periodicity_series_{r}", value))
+            values_rows = periodicity.get("values", []) if isinstance(periodicity, dict) else []
+            for r, row in enumerate(values_rows):
+                if not isinstance(row, list):
+                    continue
+                for cidx, value in enumerate(row):
+                    value = s(value).strip()
+                    if value:
+                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"periodicity_value_{r}_{cidx}", value))
             for r, row in enumerate(objects):
                 if not isinstance(row, dict):
                     continue
@@ -1277,6 +1329,13 @@ def save_state(state: dict) -> dict:
                     cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "series", series))
                 if number:
                     cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "number", number))
+                kr = row.get("kr") or {}
+                kr_plan = s(kr.get("plan")).strip()
+                kr_fact = s(kr.get("fact")).strip()
+                if kr_plan:
+                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "kr_plan", kr_plan))
+                if kr_fact:
+                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "kr_fact", kr_fact))
                 for cidx, value in enumerate(row.get("plan", []) or []):
                     value = s(value).strip()
                     if value:

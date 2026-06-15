@@ -11,10 +11,11 @@ const TEM_NORM_ROWS = window.APP_CONFIG.TEM_NORM_ROWS;
 const AGR_NORM_ROWS = window.APP_CONFIG.AGR_NORM_ROWS;
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
 const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'СР', 'ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'КР'];
+const REPAIR_PERIODICITY_COLUMNS = ['TP1', 'TP2', 'TP3', 'CP', 'KP'];
+const REPAIR_PERIODICITY_DEFAULT_SERIES = ['ТЭМ-2УМ', 'ТЭМ-2', ''];
 const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
-window.repairSchedulePeriodicityDraft = null;
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function normalizeRepairCode(v){
@@ -303,6 +304,7 @@ function handleMonthPaste(e){
 document.addEventListener('mouseup', endMonthSelection, true);
 document.addEventListener('copy', handleMonthCopy, true);
 document.addEventListener('paste', handleMonthPaste, true);
+document.addEventListener('paste', handleRepairPeriodicityPaste, true);
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeJsonMenu();
 });
@@ -495,6 +497,7 @@ function blankRepairScheduleObject(columnCount){
   return {
     series: '',
     number: '',
+    kr: { plan: '', fact: '' },
     plan: Array.from({ length: cols }, () => ''),
     fact: Array.from({ length: cols }, () => ''),
   };
@@ -513,6 +516,10 @@ function normalizeRepairSchedule(){
         return {
           series: String(obj.series ?? obj.unit ?? ''),
           number: String(obj.number ?? ''),
+          kr: {
+            plan: String(obj.kr?.plan ?? ''),
+            fact: String(obj.kr?.fact ?? ''),
+          },
           plan: Array.isArray(obj.plan) ? obj.plan.map((v) => String(v ?? '')) : [],
           fact: Array.isArray(obj.fact) ? obj.fact.map((v) => String(v ?? '')) : [],
         };
@@ -537,6 +544,10 @@ function normalizeRepairSchedule(){
     return {
       series: String(obj.series ?? obj.unit ?? ''),
       number: String(obj.number ?? ''),
+      kr: {
+        plan: String(obj.kr?.plan ?? ''),
+        fact: String(obj.kr?.fact ?? ''),
+      },
       plan,
       fact,
     };
@@ -546,6 +557,30 @@ function normalizeRepairSchedule(){
   }
   appState.repair_schedule = schedule;
   return schedule;
+}
+function defaultRepairPeriodicityState(){
+  return {
+    series: REPAIR_PERIODICITY_DEFAULT_SERIES.slice(),
+    values: REPAIR_PERIODICITY_DEFAULT_SERIES.map(() => REPAIR_PERIODICITY_COLUMNS.map(() => '')),
+  };
+}
+function normalizeRepairPeriodicity(){
+  const schedule = normalizeRepairSchedule();
+  let periodicity = schedule.periodicity;
+  if (!periodicity || typeof periodicity !== 'object') {
+    periodicity = defaultRepairPeriodicityState();
+  }
+  const series = Array.isArray(periodicity.series) ? periodicity.series.slice(0, REPAIR_PERIODICITY_DEFAULT_SERIES.length).map((v, i) => String(v ?? REPAIR_PERIODICITY_DEFAULT_SERIES[i] ?? '')) : [];
+  while (series.length < REPAIR_PERIODICITY_DEFAULT_SERIES.length) series.push(REPAIR_PERIODICITY_DEFAULT_SERIES[series.length] || '');
+  const values = Array.isArray(periodicity.values) ? periodicity.values.slice(0, series.length).map((row) => {
+    const cells = Array.isArray(row) ? row.slice(0, REPAIR_PERIODICITY_COLUMNS.length).map((v) => String(v ?? '')) : [];
+    while (cells.length < REPAIR_PERIODICITY_COLUMNS.length) cells.push('');
+    return cells;
+  }) : [];
+  while (values.length < series.length) values.push(REPAIR_PERIODICITY_COLUMNS.map(() => ''));
+  periodicity = { series, values };
+  schedule.periodicity = periodicity;
+  return periodicity;
 }
 function repairScheduleCell(path, value, cls='cell'){
   const ro = CAN_EDIT ? '' : 'readonly';
@@ -632,14 +667,12 @@ function deleteRepairScheduleRow(index){
 }
 function openRepairSchedulePeriodicity(){
   if (!CAN_EDIT) return;
-  const schedule = normalizeRepairSchedule();
-  window.repairSchedulePeriodicityDraft = true;
-  const body = document.getElementById('errorModalBody');
-  const modal = document.getElementById('errorModal');
+  const periodicity = normalizeRepairPeriodicity();
+  const body = document.getElementById('repairPeriodicityModalBody');
+  const modal = document.getElementById('repairPeriodicityModal');
   if (!body || !modal) return;
   body.innerHTML = `
     <div style="display:grid; gap:10px;">
-      <div style="font-weight:700;">Периодичность ремонтов</div>
       <div class="table-wrap repair-periodicity-wrap">
         <table class="compact repair-periodicity-table">
           <colgroup>
@@ -653,59 +686,90 @@ function openRepairSchedulePeriodicity(){
           <thead>
             <tr>
               <th>Серия</th>
-              <th>TP1</th>
-              <th>TP2</th>
-              <th>TP3</th>
-              <th>CP</th>
-              <th>KP</th>
+              ${REPAIR_PERIODICITY_COLUMNS.map((label) => `<th>${label}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            ${['ТЭМ-2УМ', 'ТЭМ-2', ''].map((series) => `
+            ${periodicity.series.map((series, rowIdx) => `
               <tr>
-                <td>${series}</td>
-                ${['', '', '', '', ''].map(() => '<td></td>').join('')}
+                <td>${repairPeriodicityCell(`series.${rowIdx}`, series, 'cell')}</td>
+                ${periodicity.values[rowIdx].map((value, colIdx) => `<td>${repairPeriodicityCell(`values.${rowIdx}.${colIdx}`, value, 'cell center')}</td>`).join('')}
               </tr>
             `).join('')}
           </tbody>
         </table>
-      </div>
-      <div class="section-modal-actions" style="padding:0; border-top:0; background:transparent;">
-        <button type="button" onclick="closeErrorModal()">Отмена</button>
-        <button type="button" class="primary" onclick="saveRepairSchedulePeriodicity()">Сохранить</button>
       </div>
     </div>
   `;
   modal.classList.add('visible');
   modal.setAttribute('aria-hidden', 'false');
 }
-function closeErrorModal(){
-  const modal = document.getElementById('errorModal');
+function repairPeriodicityCell(path, value, cls='cell'){
+  const ro = CAN_EDIT ? '' : 'readonly';
+  return `<input ${ro} class="${cls}" data-periodicity="1" data-path="${path}" value="${esc(value || '')}" oninput="handleRepairPeriodicityInput(this)">`;
+}
+function saveRepairSchedulePeriodicity(){
+  if (!CAN_EDIT) return;
+  normalizeRepairPeriodicity();
+  markDirty(true);
+  render();
+  closeRepairPeriodicityModal();
+}
+function closeRepairPeriodicityModal(){
+  const modal = document.getElementById('repairPeriodicityModal');
   if (!modal) return;
   modal.classList.remove('visible');
   modal.setAttribute('aria-hidden', 'true');
 }
-function saveRepairSchedulePeriodicity(){
-  if (!CAN_EDIT) return;
-  const schedule = normalizeRepairSchedule();
-  if (!window.repairSchedulePeriodicityDraft) return;
-  const cols = [
-    { code: 'TP1' },
-    { code: 'TP2' },
-    { code: 'TP3' },
-    { code: 'CP' },
-    { code: 'KP' },
-  ];
-  schedule.columns = cols;
-  schedule.objects = (schedule.objects || []).map((row) => ({
-    ...row,
-    plan: Array.from({ length: cols.length }, (_, idx) => String((row.plan || [])[idx] || '')),
-    fact: Array.from({ length: cols.length }, (_, idx) => String((row.fact || [])[idx] || '')),
-  }));
-  window.repairSchedulePeriodicityDraft = null;
+function handleRepairPeriodicityInput(el){
+  if (!el || !el.dataset || !el.dataset.periodicity) return;
+  const path = String(el.dataset.path || '');
+  const parts = path.split('.');
+  const periodicity = normalizeRepairPeriodicity();
+  const value = String(el.value ?? '').toUpperCase();
+  if (el.value !== value) el.value = value;
+  if (parts[0] === 'series' && parts.length === 2) {
+    const rowIdx = Number(parts[1]);
+    if (Number.isFinite(rowIdx) && periodicity.series[rowIdx] !== undefined) periodicity.series[rowIdx] = value;
+  } else if (parts[0] === 'values' && parts.length === 3) {
+    const rowIdx = Number(parts[1]);
+    const colIdx = Number(parts[2]);
+    if (Number.isFinite(rowIdx) && Number.isFinite(colIdx) && periodicity.values[rowIdx] && periodicity.values[rowIdx][colIdx] !== undefined) {
+      periodicity.values[rowIdx][colIdx] = value;
+    }
+  }
+  markDirty(true);
+}
+function handleRepairPeriodicityPaste(e){
+  const target = e && e.target;
+  if (!target || !target.dataset || !target.dataset.periodicity) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+  const path = String(target.dataset.path || '');
+  const parts = path.split('.');
+  if (parts.length < 2) return;
+  const periodicity = normalizeRepairPeriodicity();
+  const rows = String(text).replace(/\r/g, '').split('\n').map((line) => line.split('\t'));
+  while (rows.length && rows[rows.length - 1].every((v) => v === '')) rows.pop();
+  if (!rows.length) return;
+  const startRow = Number(parts[1]);
+  const startCol = parts[0] === 'series' ? 0 : Number(parts[2]);
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      const value = String(rows[r][c] ?? '').toUpperCase();
+      const rr = startRow + r;
+      const cc = startCol + c;
+      if (parts[0] === 'series') {
+        if (cc === 0 && periodicity.series[rr] !== undefined) periodicity.series[rr] = value;
+        else if (cc > 0 && periodicity.values[rr] && periodicity.values[rr][cc - 1] !== undefined) periodicity.values[rr][cc - 1] = value;
+      } else if (periodicity.values[rr] && periodicity.values[rr][cc] !== undefined) {
+        periodicity.values[rr][cc] = value;
+      }
+    }
+  }
+  e.preventDefault();
   markDirty(true);
   render();
-  closeErrorModal();
 }
 function renderMonthTable(type, title, m, headers){
   const tableRows = m[type].map((row, rIdx) => {

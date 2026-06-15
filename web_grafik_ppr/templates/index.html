@@ -124,6 +124,19 @@
       </div>
     </div>
   </div>
+  <div id="repairPeriodicityModal" class="modal-overlay" aria-hidden="true" onclick="closeRepairPeriodicityModal()">
+    <div class="modal-window wide" style="width:min(1280px, calc(100vw - 36px));" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="section-title" style="margin:0 auto;">Периодичность ремонтов</div>
+        <button class="modal-close" onclick="closeRepairPeriodicityModal()"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div id="repairPeriodicityModalBody" class="section-modal-body"></div>
+      <div class="section-modal-actions">
+        <button onclick="closeRepairPeriodicityModal()">Отмена</button>
+        <button class="primary" onclick="saveRepairSchedulePeriodicity()">Сохранить</button>
+      </div>
+    </div>
+  </div>
 <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
 </body>
 </html>
