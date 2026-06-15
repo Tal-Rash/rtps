@@ -330,6 +330,9 @@ function handleGridInput(el){
   const value = String(el.value ?? '').toUpperCase();
   if (el.value !== value) el.value = value;
   setPath(el.dataset.path, value);
+  if (String(el.dataset.path || '').startsWith('repair_schedule.')) {
+    updateRepairScheduleDerivedValues();
+  }
 }
 function focusCell(el){ if (el) el.focus(); }
 function monthCells(type){
@@ -558,6 +561,87 @@ function normalizeRepairSchedule(){
   appState.repair_schedule = schedule;
   return schedule;
 }
+function repairSeriesKey(value){
+  return String(value ?? '').trim().toUpperCase();
+}
+function parseRepairDate(value){
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const match = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+}
+function formatRepairDate(date){
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+}
+function addRepairMonths(date, months){
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const total = Number(months);
+  if (!Number.isFinite(total) || total <= 0) return new Date(date.getTime());
+  const whole = Math.trunc(total);
+  const fraction = total - whole;
+  const result = new Date(date.getTime());
+  result.setMonth(result.getMonth() + whole);
+  if (fraction) result.setDate(result.getDate() + Math.round(30 * fraction));
+  return result;
+}
+function repairSchedulePeriodMonths(seriesName){
+  const schedule = normalizeRepairSchedule();
+  const periodicity = schedule.periodicity || defaultRepairPeriodicityState();
+  const target = repairSeriesKey(seriesName);
+  let rowIndex = Array.isArray(periodicity.series)
+    ? periodicity.series.findIndex((item) => repairSeriesKey(item) === target)
+    : -1;
+  if (rowIndex < 0) rowIndex = 0;
+  const row = Array.isArray(periodicity.values) ? periodicity.values[rowIndex] || [] : [];
+  for (const value of row) {
+    const numeric = Number(String(value ?? '').replace(',', '.'));
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return 0;
+}
+function repairScheduleColumnFactor(code){
+  const normalized = normalizeRepairCode(code);
+  if (normalized === 'ТР1') return 1;
+  if (normalized === 'ТР2') return 0.5;
+  if (normalized === 'ТР3') return 0.25;
+  if (normalized === 'СР') return 0.125;
+  if (normalized === 'КР') return 1;
+  return 0;
+}
+function updateRepairScheduleDerivedValues(){
+  const schedule = normalizeRepairSchedule();
+  const columns = schedule.columns || [];
+  const objects = schedule.objects || [];
+  objects.forEach((row, idx) => {
+    if (!row.kr) row.kr = { plan: '', fact: '' };
+    const baseMonths = repairSchedulePeriodMonths(row.series);
+    const krFactDate = parseRepairDate(row.kr.fact);
+    const krPlanDate = krFactDate || parseRepairDate(row.kr.plan);
+    row.kr.plan = formatRepairDate(krPlanDate);
+    let sourceDate = krPlanDate;
+    if (krFactDate) sourceDate = krFactDate;
+    columns.forEach((col, cidx) => {
+      const factor = repairScheduleColumnFactor(col.code);
+      const targetDate = sourceDate && baseMonths > 0 && factor > 0 ? addRepairMonths(sourceDate, baseMonths * factor) : null;
+      const planned = formatRepairDate(targetDate);
+      row.plan[cidx] = planned;
+      const factDate = parseRepairDate(row.fact[cidx]);
+      sourceDate = factDate || targetDate || sourceDate;
+      const cell = document.querySelector(`input[data-path="repair_schedule.objects.${idx}.plan.${cidx}"]`);
+      if (cell && cell.value !== planned) cell.value = planned;
+    });
+    const krCell = document.querySelector(`input[data-path="repair_schedule.objects.${idx}.kr.plan"]`);
+    if (krCell && krCell.value !== row.kr.plan) krCell.value = row.kr.plan;
+  });
+  return schedule;
+}
 function defaultRepairPeriodicityState(){
   return {
     series: REPAIR_PERIODICITY_DEFAULT_SERIES.slice(),
@@ -584,10 +668,12 @@ function normalizeRepairPeriodicity(){
 }
 function repairScheduleCell(path, value, cls='cell'){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-path="${path}" value="${esc(value || '')}" oninput="handleGridInput(this)">`;
+  const derivedRo = String(path || '').includes('.plan.') ? 'readonly' : '';
+  return `<input ${derivedRo || ro} class="${cls}" data-path="${path}" value="${esc(value || '')}" oninput="handleGridInput(this)">`;
 }
 function renderRepairSchedule(){
   const schedule = normalizeRepairSchedule();
+  updateRepairScheduleDerivedValues();
   const columns = schedule.columns || [];
   const objects = schedule.objects || [];
   const headerCells = [
@@ -711,6 +797,7 @@ function repairPeriodicityCell(path, value, cls='cell'){
 function saveRepairSchedulePeriodicity(){
   if (!CAN_EDIT) return;
   normalizeRepairPeriodicity();
+  updateRepairScheduleDerivedValues();
   markDirty(true);
   render();
   closeRepairPeriodicityModal();
@@ -738,6 +825,7 @@ function handleRepairPeriodicityInput(el){
       periodicity.values[rowIdx][colIdx] = value;
     }
   }
+  updateRepairScheduleDerivedValues();
   markDirty(true);
 }
 function handleRepairPeriodicityPaste(e){
@@ -768,6 +856,7 @@ function handleRepairPeriodicityPaste(e){
     }
   }
   e.preventDefault();
+  updateRepairScheduleDerivedValues();
   markDirty(true);
   render();
 }
@@ -1639,6 +1728,7 @@ function selectRow(section, idx){ ui.selected[section] = idx; }
 async function saveState(options = {}){
   const refreshReport = options.refreshReport !== false;
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
+  updateRepairScheduleDerivedValues();
   setStatus('Сохранение...');
   const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`, { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
   if (!res.ok) { setStatus('Ошибка'); return; }
