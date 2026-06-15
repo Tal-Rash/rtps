@@ -140,7 +140,7 @@ button:disabled {
 .matrix-table td {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  padding: 6px 8px;
+  padding: 4px 8px;
   background: #fff;
   vertical-align: middle;
   line-height: 1.25;
@@ -272,14 +272,15 @@ button:disabled {
   min-height: 34px;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  gap: 1px;
+  gap: 0;
+  padding-top: 0;
   outline: none;
   font-size: 13px;
-  line-height: 1.25;
+  line-height: 1.08;
 }
 
 .cell[contenteditable="true"] {
@@ -296,10 +297,10 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-top: -1px;
+  margin-top: 0;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.05;
+  line-height: 1;
   text-align: center;
 }
 
