@@ -115,11 +115,15 @@ def ensure_db() -> None:
             CREATE TABLE IF NOT EXISTS employees (
                 y INT, pos TEXT, name TEXT, tab_num TEXT,
                 milk INT DEFAULT 0, milk_issue INT DEFAULT 0,
+                exclude_date TEXT DEFAULT '',
                 full_name TEXT DEFAULT '', milk_note TEXT DEFAULT '',
                 PRIMARY KEY(y,pos,name)
             )
             """
         )
+        emp_cols = {row[1] for row in cur.execute("PRAGMA table_info(employees)").fetchall()}
+        if "exclude_date" not in emp_cols:
+            cur.execute("ALTER TABLE employees ADD COLUMN exclude_date TEXT DEFAULT ''")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS inventory (
@@ -318,10 +322,10 @@ def load_state(year: int) -> dict:
             if 0 <= r < 12 and 0 <= c < 8:
                 norms[r][c] = text(row["v"])
         for row in cur.execute(
-            "SELECT pos, name, full_name, tab_num, milk, milk_issue, milk_note FROM employees WHERE y=? ORDER BY rowid",
+            "SELECT pos, name, full_name, tab_num, milk, milk_issue, exclude_date, milk_note FROM employees WHERE y=? ORDER BY rowid",
             (year,),
         ):
-            employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["milk_note"])])
+            employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["exclude_date"]), text(row["milk_note"])])
         inventory_rows = cur.execute(
             """
             SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number, rowid
@@ -393,17 +397,18 @@ def save_state(payload: dict) -> None:
         cur.execute("DELETE FROM employees WHERE y=?", (year,))
         emp_rows = []
         for row in employees:
-            row = list(row or []) + [""] * 7
+            row = list(row or []) + [""] * 8
             pos, name, full_name, tab_num = [text(v).strip() for v in row[:4]]
             milk = 1 if row[4] else 0
             milk_issue = 1 if row[5] else 0
-            milk_note = text(row[6]).strip()
+            exclude_date = text(row[6]).strip()
+            milk_note = text(row[7]).strip()
             if pos or name:
-                emp_rows.append((year, pos, name, full_name, tab_num, milk, milk_issue, milk_note))
+                emp_rows.append((year, pos, name, full_name, tab_num, milk, milk_issue, exclude_date, milk_note))
         cur.executemany(
             """
-            INSERT INTO employees (y, pos, name, full_name, tab_num, milk, milk_issue, milk_note)
-            VALUES (?,?,?,?,?,?,?,?)
+            INSERT INTO employees (y, pos, name, full_name, tab_num, milk, milk_issue, exclude_date, milk_note)
+            VALUES (?,?,?,?,?,?,?,?,?)
             """,
             emp_rows,
         )
@@ -678,7 +683,7 @@ let savedState = null;
 let canceledState = null;
 const headers = {
   norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
-  employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Молоко прим.'],
+  employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Дата искл.','Молоко прим.'],
   inventory: ['Серия','Номер','Инвентарный №','Кол-во КП','Ко-во секций','8-значный номер']
 };
 
@@ -758,6 +763,7 @@ function renderTable(name, rows, editableRows){
           <col style="width:110px">
           <col style="width:100px">
           <col style="width:100px">
+          <col style="width:120px">
           <col>
         </colgroup>`
     : '';
@@ -777,6 +783,8 @@ function renderTable(name, rows, editableRows){
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
         html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
+      } else if (name === 'employees' && c === 6) {
+        html += `<td><input type="date" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.value)"` : 'disabled'}></td>`;
       } else if (name === 'employees') {
         const cls = c < 3 ? 'left' : '';
         html += `<td><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autoResizeTextarea(this);" oninput="setCell('${name}',${r},${c},this.value); autoResizeTextarea(this);" onmousedown="event.stopPropagation()"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
