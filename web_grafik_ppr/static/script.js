@@ -14,6 +14,7 @@ const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР-1', 'ТР-2', 'ТР-1', 'ТР-3', '�
 const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
+window.repairSchedulePeriodicityDraft = null;
 
 function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function normalizeRepairCode(v){
@@ -585,6 +586,8 @@ function renderRepairSchedule(){
     <div class="section-head repair-schedule-head">
       <div class="section-title">График ремонтов на ${appState.year} г.</div>
       <div class="row-actions">
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="openRepairSchedulePeriodicity()">Периодичность</button>
+        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="deleteRepairScheduleRow()">- строку</button>
         <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="addRepairScheduleRow()">+ строку</button>
       </div>
     </div>
@@ -616,9 +619,58 @@ function deleteRepairScheduleRow(index){
   if (!CAN_EDIT) return;
   const schedule = normalizeRepairSchedule();
   if (schedule.objects.length <= 1) return;
-  schedule.objects.splice(index, 1);
+  const rowIndex = Number.isFinite(index) ? index : schedule.objects.length - 1;
+  schedule.objects.splice(rowIndex, 1);
   markDirty(true);
   render();
+}
+function openRepairSchedulePeriodicity(){
+  if (!CAN_EDIT) return;
+  const schedule = normalizeRepairSchedule();
+  window.repairSchedulePeriodicityDraft = (schedule.columns || []).map((col) => String((col && col.code) || ''));
+  const body = document.getElementById('errorModalBody');
+  const modal = document.getElementById('errorModal');
+  if (!body || !modal) return;
+  body.innerHTML = `
+    <div style="display:grid; gap:10px;">
+      <div style="font-weight:700;">Периодичность ремонтов</div>
+      <div class="repair-periodicity-grid">
+        ${window.repairSchedulePeriodicityDraft.map((value, idx) => `
+          <label class="repair-periodicity-item">
+            <span>${idx + 1}</span>
+            <input data-periodicity-idx="${idx}" value="${esc(value)}" oninput="window.repairSchedulePeriodicityDraft[${idx}] = this.value.toUpperCase()">
+          </label>
+        `).join('')}
+      </div>
+      <div class="section-modal-actions" style="padding:0; border-top:0; background:transparent;">
+        <button type="button" onclick="closeErrorModal()">Отмена</button>
+        <button type="button" class="primary" onclick="saveRepairSchedulePeriodicity()">Сохранить</button>
+      </div>
+    </div>
+  `;
+  modal.classList.add('visible');
+  modal.setAttribute('aria-hidden', 'false');
+}
+function closeErrorModal(){
+  const modal = document.getElementById('errorModal');
+  if (!modal) return;
+  modal.classList.remove('visible');
+  modal.setAttribute('aria-hidden', 'true');
+}
+function saveRepairSchedulePeriodicity(){
+  if (!CAN_EDIT) return;
+  const schedule = normalizeRepairSchedule();
+  if (!window.repairSchedulePeriodicityDraft) return;
+  schedule.columns = window.repairSchedulePeriodicityDraft.map((code) => ({ code: String(code || '').toUpperCase() }));
+  schedule.objects = (schedule.objects || []).map((row) => ({
+    ...row,
+    plan: Array.from({ length: schedule.columns.length }, (_, idx) => String((row.plan || [])[idx] || '')),
+    fact: Array.from({ length: schedule.columns.length }, (_, idx) => String((row.fact || [])[idx] || '')),
+  }));
+  window.repairSchedulePeriodicityDraft = null;
+  markDirty(true);
+  render();
+  closeErrorModal();
 }
 function renderMonthTable(type, title, m, headers){
   const tableRows = m[type].map((row, rIdx) => {
