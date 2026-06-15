@@ -587,7 +587,7 @@ HTML = """<!doctype html>
     table.employees-table{table-layout:fixed}
     th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
     th{background:#eef4fb;font-weight:700}
-    table.employees-table td{height:auto;vertical-align:top}
+    table.employees-table td{height:auto;vertical-align:middle}
     table.employees-table th{height:34px;vertical-align:middle}
     table.norms-table th, table.norms-table td{white-space:nowrap}
     table.employees-table th, table.employees-table td{white-space:normal}
