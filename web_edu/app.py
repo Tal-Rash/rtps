@@ -90,6 +90,19 @@ def get_session(request: Request):
         session = verify_cookie(cookie)
         if session:
             user_id, role, mods, full_name = session
+            if user_id != "legacy":
+                try:
+                    conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
+                    conn.row_factory = sqlite3.Row
+                    cur = conn.cursor()
+                    user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (user_id,)).fetchone()
+                    conn.close()
+                    if not user_row:
+                        return None
+                    role = user_row["role"]
+                    mods = user_row["allowed_modules"] or ""
+                except Exception:
+                    return None
             has_access = False
             if role == "admin" or "admin" in mods: has_access = True
             elif "edu:edit" in mods or "edu:view" in mods or "edu" in mods.split(","): has_access = True

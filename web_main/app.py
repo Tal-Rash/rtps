@@ -145,9 +145,12 @@ def get_current_session(request: Request):
                     if user_row:
                         role = user_row["role"]
                         modules = user_row["allowed_modules"] or ""
+                    else:
+                        return None # User deleted, invalidate session
                 except Exception as e:
                     import traceback
                     print("DB check error:", traceback.format_exc())
+                    return None # DB error, fail securely
             return {"user_id": user_id, "role": role, "modules": modules, "full_name": session[3]}
     return None
 

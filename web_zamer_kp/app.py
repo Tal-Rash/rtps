@@ -244,7 +244,7 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
     
     if username != "legacy":
         try:
-            conn = sqlite3.connect(DB_FILE)
+            conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
@@ -254,7 +254,7 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
             role = user_row["role"]
             modules = user_row["allowed_modules"] or ""
         except Exception:
-            pass
+            return None
 
     for part in modules.split(","):
         part = part.strip()
@@ -2840,18 +2840,19 @@ def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str)
     role = session[1]
     modules = session[2]
     
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
-        conn.close()
-        if not user_row:
+    if username != "legacy":
+        try:
+            conn = sqlite3.connect(ROOT.parent / "base" / "web_users.db")
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            user_row = cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (username,)).fetchone()
+            conn.close()
+            if not user_row:
+                return ""
+            role = user_row["role"]
+            modules = user_row["allowed_modules"] or ""
+        except Exception:
             return ""
-        role = user_row["role"]
-        modules = user_row["allowed_modules"] or ""
-    except Exception:
-        pass
 
     if role == "admin":
         return "admin"
