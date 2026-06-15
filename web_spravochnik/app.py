@@ -743,7 +743,7 @@ function renderTable(name, rows, editableRows){
         <col>
       </colgroup>`
     : '';
-  let html = rowbar + `<div class="table-shell"><table${tableClass}>${colGroup}<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>`;
+  let html = rowbar + '<div class="table-shell"><table' + tableClass + '>' + colGroup + '<thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[6] || 0) > 0;
     const draggable = name === 'inventory' && CAN_EDIT
