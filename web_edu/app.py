@@ -22,7 +22,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/edu"
-APP_VERSION = "web-edu-1.0"
+APP_VERSION = "web-edu-1.1"
 DB_LOCK = Lock()
 
 def load_web_secret() -> str:
@@ -60,6 +60,8 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        cur.execute("CREATE TABLE IF NOT EXISTS position_categories (pos TEXT PRIMARY KEY, category TEXT)")
+
 def connect():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
@@ -69,6 +71,7 @@ init_db()
 
 app = FastAPI(title="RTPS Обучение")
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
+app.mount(f"{APP_PREFIX}/static", StaticFiles(directory=str(ROOT / "static")), name="edu_static")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
 
 def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
@@ -117,7 +120,12 @@ def get_session(request: Request):
                 return {"user_id": user_id, "role": role, "modules": mods, "full_name": full_name, "can_edit": can_edit}
     return None
 
+@app.get(f"{APP_PREFIX}", include_in_schema=False)
+async def prefixed_index_redirect():
+    return RedirectResponse(f"{APP_PREFIX}/", status_code=303)
+
 @app.get("/", response_class=HTMLResponse)
+@app.get(f"{APP_PREFIX}/", response_class=HTMLResponse, include_in_schema=False)
 async def index(request: Request):
     session = get_session(request)
     if not session:
@@ -133,6 +141,7 @@ async def index(request: Request):
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 @app.get("/api/state")
+@app.get(f"{APP_PREFIX}/api/state", include_in_schema=False)
 async def api_state(request: Request):
     session = get_session(request)
     if not session: return JSONResponse({"error": "Unauthorized"}, status_code=401)
@@ -150,7 +159,9 @@ async def api_state(request: Request):
             FROM employees e
             LEFT JOIN position_categories pc ON e.pos = pc.pos
             WHERE e.name IS NOT NULL AND e.name != '' 
-            GROUP BY e.name
+              AND COALESCE(e.is_excluded, 0) = 0
+            GROUP BY e.name, e.tab_num, e.pos
+            ORDER BY e.pos, e.name
         """).fetchall()
         employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"], "category": r["category"]} for r in emp_rows]
         
@@ -171,6 +182,7 @@ async def api_state(request: Request):
     return {"columns": columns, "employees": employees, "trainings": trainings}
 
 @app.post("/api/save_training")
+@app.post(f"{APP_PREFIX}/api/save_training", include_in_schema=False)
 async def save_training(request: Request, data: dict):
     session = get_session(request)
     if not session or not session["can_edit"]: return JSONResponse({"error": "Unauthorized"}, status_code=401)
@@ -179,6 +191,17 @@ async def save_training(request: Request, data: dict):
     t_type = data.get("training_type")
     last_date = data.get("last_date")
     period_months = data.get("period_months", 12)
+    if not tab_num or not t_type:
+        return JSONResponse({"error": "Missing tab_num or training_type"}, status_code=400)
+    try:
+        period_months = int(period_months or 12)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid period_months"}, status_code=400)
+    if last_date:
+        try:
+            dt.date.fromisoformat(last_date)
+        except ValueError:
+            return JSONResponse({"error": "Invalid last_date"}, status_code=400)
     
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
@@ -193,6 +216,7 @@ async def save_training(request: Request, data: dict):
     return {"status": "ok"}
 
 @app.post("/api/save_protocol")
+@app.post(f"{APP_PREFIX}/api/save_protocol", include_in_schema=False)
 async def save_protocol(request: Request, data: dict):
     session = get_session(request)
     if not session or not session["can_edit"]: return JSONResponse({"error": "Unauthorized"}, status_code=401)
@@ -200,6 +224,8 @@ async def save_protocol(request: Request, data: dict):
     tab_num = data.get("tab_num")
     t_type = data.get("training_type")
     protocol = data.get("protocol")
+    if not tab_num or not t_type:
+        return JSONResponse({"error": "Missing tab_num or training_type"}, status_code=400)
     
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
@@ -214,6 +240,7 @@ async def save_protocol(request: Request, data: dict):
     return {"status": "ok"}
 
 @app.post("/api/settings/columns")
+@app.post(f"{APP_PREFIX}/api/settings/columns", include_in_schema=False)
 async def save_columns(request: Request):
     data = await request.json()
     # data is list of dicts: [{"name": "ПТМ", "period_months": 12}, ...]
@@ -224,14 +251,23 @@ async def save_columns(request: Request):
         cur = conn.cursor()
         cur.execute("DELETE FROM training_columns")
         for idx, col in enumerate(data):
+            name = str(col.get("name", "")).strip()
+            if not name:
+                continue
+            try:
+                period_months = int(col.get("period_months", 12) or 12)
+            except (TypeError, ValueError):
+                period_months = 12
+            period_months = max(1, min(period_months, 1200))
             cur.execute("INSERT INTO training_columns (name, sort_order, period_months) VALUES (?, ?, ?)", 
-                        (col["name"], idx, col.get("period_months", 12)))
+                        (name, idx, period_months))
             # Also update periods in existing trainings
-            cur.execute("UPDATE employee_trainings SET period_months=? WHERE training_type=?", (col.get("period_months", 12), col["name"]))
+            cur.execute("UPDATE employee_trainings SET period_months=? WHERE training_type=?", (period_months, name))
         conn.commit()
     return {"status": "ok"}
 
 @app.post("/api/settings/categories")
+@app.post(f"{APP_PREFIX}/api/settings/categories", include_in_schema=False)
 async def save_categories(request: Request, data: dict):
     session = get_session(request)
     if not session or not session["can_edit"]: return JSONResponse({"error": "Unauthorized"}, status_code=401)

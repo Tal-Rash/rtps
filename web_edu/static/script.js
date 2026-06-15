@@ -7,22 +7,49 @@ let appState = {
   trainings: {}
 };
 
-let currentMode = "dates"; // "dates" or "protocols"
-// currentFilter removed
+let currentMode = "dates";
+let tempColumns = [];
+let tempCategories = {};
 
 window.addEventListener("DOMContentLoaded", () => {
   loadState();
+  if (!CAN_EDIT) {
+    document.getElementById("btnCategorySettings")?.remove();
+    document.getElementById("btnSettings")?.remove();
+  }
 });
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function requestJson(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      message = data.error || message;
+    } catch {
+      // Keep the generic HTTP message.
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
 
 async function loadState() {
   try {
-    const res = await fetch(`${APP_PREFIX}/api/state`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    appState = data;
+    appState = await requestJson(`${APP_PREFIX}/api/state`);
     renderMatrix();
   } catch (err) {
     console.error(err);
+    alert(`Ошибка загрузки модуля обучения: ${err.message}`);
   }
 }
 
@@ -33,27 +60,51 @@ function setMode(mode) {
   renderMatrix();
 }
 
-// setFilter removed
-
 function parseDateStr(str) {
   if (!str) return null;
   const parts = str.split("-");
-  if (parts.length === 3) {
-    return new Date(parts[0], parts[1] - 1, parts[2]);
+  if (parts.length !== 3) return null;
+  const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  if (date.getFullYear() !== Number(parts[0]) || date.getMonth() !== Number(parts[1]) - 1 || date.getDate() !== Number(parts[2])) {
+    return null;
   }
-  return null;
+  return date;
+}
+
+function parseRuDate(value) {
+  let dateStr = String(value || "").split("\n")[0].trim();
+  if (!dateStr) return null;
+
+  const cleanText = dateStr.replace(/\D/g, "");
+  if (cleanText.length === 6) {
+    dateStr = `${cleanText.substring(0, 2)}.${cleanText.substring(2, 4)}.20${cleanText.substring(4, 6)}`;
+  } else if (cleanText.length === 8) {
+    dateStr = `${cleanText.substring(0, 2)}.${cleanText.substring(2, 4)}.${cleanText.substring(4, 8)}`;
+  }
+
+  const parts = dateStr.split(".");
+  if (parts.length !== 3) return undefined;
+
+  const day = Number(parts[0]);
+  const month = Number(parts[1]);
+  const year = Number(parts[2]);
+  const date = new Date(year, month - 1, day);
+  if (!year || !month || !day || date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return undefined;
+  }
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function addMonths(date, months) {
-  let d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + Number(months || 12));
   return d;
 }
 
 function formatDate(date) {
   if (!date) return "";
-  const d = String(date.getDate()).padStart(2, '0');
-  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
   const y = date.getFullYear();
   return `${d}.${m}.${y}`;
 }
@@ -61,83 +112,73 @@ function formatDate(date) {
 function renderMatrix() {
   const thead = document.getElementById("eduHead");
   const tbody = document.getElementById("eduBody");
-  
-  // Render Headers
-  let hHTML = `<tr><th style="width:200px">ФИО работника</th><th style="width:70px">Таб. №</th><th style="width:150px">Должность</th>`;
-  for (let c of appState.columns) {
-    hHTML += `<th>${c.name}</th>`;
+
+  let hHTML = `<tr>
+    <th class="col-fio">ФИО работника</th>
+    <th class="col-tab">Таб. №</th>
+    <th class="col-pos">Должность</th>`;
+  for (const c of appState.columns) {
+    hHTML += `<th class="col-training">${escapeHtml(c.name)}</th>`;
   }
-  hHTML += `</tr>`;
+  hHTML += "</tr>";
   thead.innerHTML = hHTML;
-  
-  // Filter Employees
-  let filteredEmployees = appState.employees;
-  // filter by category removed
 
   let bHTML = "";
   const today = new Date();
-  today.setHours(0,0,0,0);
-  
-  for (let rIdx = 0; rIdx < filteredEmployees.length; rIdx++) {
-    const emp = filteredEmployees[rIdx];
-    bHTML += `<tr>`;
-    bHTML += `<td>${emp.fio}</td>`;
-    bHTML += `<td>${emp.tab_num}</td>`;
-    bHTML += `<td>${emp.position}</td>`;
-    
+  today.setHours(0, 0, 0, 0);
+
+  appState.employees.forEach((emp, rIdx) => {
+    const categoryClass = emp.category === "itr" ? "category-itr" : "category-workers";
+    bHTML += `<tr class="${categoryClass}">
+      <td class="col-fio">${escapeHtml(emp.fio)}</td>
+      <td class="col-tab">${escapeHtml(emp.tab_num)}</td>
+      <td class="col-pos">${escapeHtml(emp.position)}</td>`;
+
     const empTrainings = appState.trainings[emp.tab_num] || {};
-    
-    for (let cIdx = 0; cIdx < appState.columns.length; cIdx++) {
-      const col = appState.columns[cIdx];
+    appState.columns.forEach((col, cIdx) => {
       const tInfo = empTrainings[col.name] || { last: null, period_months: col.period_months, protocol: "" };
-      
       let cellText = "";
       let autoText = "";
       let cellClass = "";
-      
+
       if (currentMode === "protocols") {
         cellText = tInfo.protocol || "";
-      } else {
-        if (tInfo.last) {
-          const lastDate = parseDateStr(tInfo.last);
-          if (lastDate) {
-            const nextDate = addMonths(lastDate, tInfo.period_months);
-            const isExpired = nextDate < today;
-            const diffTime = nextDate - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            const isSoon = !isExpired && diffDays <= 30;
-            
-            cellText = formatDate(lastDate);
-            autoText = `<div class="auto-text">след аттестация:<br>${formatDate(nextDate)}`;
-            if (isExpired) {
-              cellClass = "bg-expired";
-              autoText += "<br>(Просрочено)";
-            } else if (isSoon) {
-              cellClass = "bg-warning";
-            }
-            autoText += `</div>`;
+      } else if (tInfo.last) {
+        const lastDate = parseDateStr(tInfo.last);
+        if (lastDate) {
+          const nextDate = addMonths(lastDate, tInfo.period_months || col.period_months);
+          const diffDays = Math.ceil((nextDate - today) / (1000 * 60 * 60 * 24));
+
+          cellText = formatDate(lastDate);
+          autoText = `<div class="auto-text">след. аттестация:<br>${formatDate(nextDate)}`;
+          if (nextDate < today) {
+            cellClass = "bg-expired";
+            autoText += "<br>Просрочено";
+          } else if (diffDays <= 30) {
+            cellClass = "bg-warning";
           }
+          autoText += "</div>";
         }
       }
-      
-      const contentEditable = CAN_EDIT ? 'contenteditable="true"' : '';
-      bHTML += `<td class="${cellClass}"><div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}">${cellText}</div>${autoText}</td>`;
-    }
-    bHTML += `</tr>`;
-  }
-  
-  tbody.innerHTML = bHTML;
-  
-  if (CAN_EDIT) {
-    attachCellListeners();
-  }
+
+      const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
+      bHTML += `<td class="${cellClass}">
+        <div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}">${escapeHtml(cellText)}</div>
+        ${autoText}
+      </td>`;
+    });
+    bHTML += "</tr>";
+  });
+
+  tbody.innerHTML = bHTML || `<tr><td class="empty-state" colspan="${appState.columns.length + 3}">Нет сотрудников для отображения</td></tr>`;
+
+  if (CAN_EDIT) attachCellListeners();
 }
 
 function attachCellListeners() {
-  const cells = document.querySelectorAll(".cell[contenteditable='true']");
-  cells.forEach(c => {
-    c.addEventListener("blur", onCellBlur);
-    c.addEventListener("keydown", onCellKeydown);
+  document.querySelectorAll(".cell[contenteditable='true']").forEach((cell) => {
+    cell.addEventListener("blur", onCellBlur);
+    cell.addEventListener("keydown", onCellKeydown);
   });
 }
 
@@ -148,121 +189,64 @@ function onCellKeydown(e) {
   }
 }
 
+async function saveCellValue(rIdx, cIdx, rawText) {
+  const emp = appState.employees[rIdx];
+  const col = appState.columns[cIdx];
+  if (!emp || !col) return;
+
+  if (currentMode === "protocols") {
+    const protocol = String(rawText || "").trim();
+    await requestJson(`${APP_PREFIX}/api/save_protocol`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tab_num: emp.tab_num,
+        training_type: col.name,
+        protocol
+      })
+    });
+
+    if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
+    if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
+    appState.trainings[emp.tab_num][col.name].protocol = protocol;
+    return;
+  }
+
+  const isoDate = parseRuDate(rawText);
+  if (isoDate === undefined) {
+    throw new Error("Введите дату в формате ДД.ММ.ГГГГ");
+  }
+
+  await requestJson(`${APP_PREFIX}/api/save_training`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tab_num: emp.tab_num,
+      training_type: col.name,
+      last_date: isoDate,
+      period_months: col.period_months
+    })
+  });
+
+  if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
+  if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
+  appState.trainings[emp.tab_num][col.name].last = isoDate;
+}
+
 async function onCellBlur(e) {
   const cell = e.target;
-  const rIdx = parseInt(cell.dataset.row, 10);
-  const cIdx = parseInt(cell.dataset.col, 10);
-  let text = cell.innerText.trim();
-  
-  // Get the employee from filtered list since rIdx is the visual row index
-  let filteredEmployees = appState.employees;
-  const emp = filteredEmployees[rIdx];
-  const col = appState.columns[cIdx];
-  
-  if (currentMode === "protocols") {
-    // Save protocol
-    try {
-      const res = await fetch(`${APP_PREFIX}/api/save_protocol`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          tab_num: emp.tab_num,
-          training_type: col.name,
-          protocol: text
-        })
-      });
-      if (!res.ok) throw new Error("Failed to save protocol");
-      // update local state
-      if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
-      if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = {period_months: col.period_months};
-      appState.trainings[emp.tab_num][col.name].protocol = text;
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка сохранения: " + err.message);
-    }
-  } else {
-    // Save dates
-    // Just take the first line if it's already formatted
-    let dateStr = text.split('\n')[0].trim();
-    if (!dateStr) {
-      try {
-        const res = await fetch(`${APP_PREFIX}/api/save_training`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            tab_num: emp.tab_num,
-            training_type: col.name,
-            last_date: null,
-            period_months: col.period_months
-          })
-        });
-        if (!res.ok) throw new Error("Failed to clear date");
-        if (appState.trainings[emp.tab_num] && appState.trainings[emp.tab_num][col.name]) {
-          appState.trainings[emp.tab_num][col.name].last = null;
-        }
-        renderMatrix();
-      } catch (err) {
-        console.error(err);
-        alert("Ошибка очистки: " + err.message);
-      }
-      return;
-    }
-    
-    // Auto format dates
-    let cleanText = dateStr.replace(/\D/g, "");
-    if (cleanText.length === 6) {
-      dateStr = `${cleanText.substring(0,2)}.${cleanText.substring(2,4)}.20${cleanText.substring(4,6)}`;
-    } else if (cleanText.length === 8) {
-      dateStr = `${cleanText.substring(0,2)}.${cleanText.substring(2,4)}.${cleanText.substring(4,8)}`;
-    }
-    
-    // parse DD.MM.YYYY
-    const parts = dateStr.split(".");
-    if (parts.length !== 3) {
-      // Ignore invalid date if not formatted
-      return;
-    }
-    const y = parseInt(parts[2], 10);
-    const m = parseInt(parts[1], 10);
-    const d = parseInt(parts[0], 10);
-    
-    if (isNaN(y) || isNaN(m) || isNaN(d)) return;
-    
-    const isoDate = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    
-    try {
-      const res = await fetch(`${APP_PREFIX}/api/save_training`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          tab_num: emp.tab_num,
-          training_type: col.name,
-          last_date: isoDate,
-          period_months: col.period_months
-        })
-      });
-      if (!res.ok) throw new Error("Failed to save date");
-      
-      if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
-      if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = {period_months: col.period_months};
-      appState.trainings[emp.tab_num][col.name].last = isoDate;
-      renderMatrix();
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка сохранения: " + err.message);
-    }
+  try {
+    await saveCellValue(Number(cell.dataset.row), Number(cell.dataset.col), cell.innerText);
+    renderMatrix();
+  } catch (err) {
+    console.error(err);
+    alert(`Ошибка сохранения: ${err.message}`);
+    renderMatrix();
   }
 }
 
-// Settings Modal Logic
-let tempColumns = [];
-
 function openSettingsModal() {
-  if (!CAN_EDIT) {
-    alert("Только редакторы могут настраивать колонки.");
-    return;
-  }
-  // copy from state
+  if (!CAN_EDIT) return;
   tempColumns = JSON.parse(JSON.stringify(appState.columns));
   renderSettingsTable();
   document.getElementById("settingsModal").style.display = "flex";
@@ -277,26 +261,26 @@ function renderSettingsTable() {
   let html = "";
   tempColumns.forEach((col, idx) => {
     html += `<tr>
-      <td><input type="text" class="input" style="width:100%;" value="${col.name.replace(/"/g, '&quot;')}" onchange="updateSettingsCol(${idx}, 'name', this.value)"></td>
-      <td><input type="number" class="input" style="width:100%; text-align:center;" value="${col.period_months}" onchange="updateSettingsCol(${idx}, 'period_months', this.value)"></td>
-      <td><button class="btn btn-outline" style="padding: 4px 8px; font-size:12px; color:red; border-color:#ffcccc;" onclick="deleteSettingsRow(${idx})">🗑</button></td>
+      <td><input type="text" class="input" value="${escapeHtml(col.name)}" onchange="updateSettingsCol(${idx}, 'name', this.value)"></td>
+      <td><input type="number" class="input input-number" min="1" max="1200" value="${escapeHtml(col.period_months)}" onchange="updateSettingsCol(${idx}, 'period_months', this.value)"></td>
+      <td><button class="btn btn-danger" onclick="deleteSettingsRow(${idx})" title="Удалить">×</button></td>
     </tr>`;
   });
   tbody.innerHTML = html;
 }
 
 function updateSettingsCol(idx, field, value) {
-  if (field === 'period_months') value = parseInt(value, 10) || 12;
+  if (field === "period_months") value = Math.max(1, Math.min(Number(value) || 12, 1200));
   tempColumns[idx][field] = value;
 }
 
 function addSettingsRow() {
-  tempColumns.push({name: "Новый курс", period_months: 12});
+  tempColumns.push({ name: "Новый курс", period_months: 12 });
   renderSettingsTable();
 }
 
 function deleteSettingsRow(idx) {
-  if (confirm("Вы уверены, что хотите удалить эту колонку?")) {
+  if (confirm("Удалить этот вид обучения?")) {
     tempColumns.splice(idx, 1);
     renderSettingsTable();
   }
@@ -304,47 +288,94 @@ function deleteSettingsRow(idx) {
 
 async function saveSettings() {
   try {
-    const res = await fetch(`${APP_PREFIX}/api/settings/columns`, {
+    await requestJson(`${APP_PREFIX}/api/settings/columns`, {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(tempColumns)
     });
-    if (!res.ok) throw new Error("Failed to save settings");
     closeSettingsModal();
-    loadState();
+    await loadState();
   } catch (err) {
     console.error(err);
-    alert("Ошибка сохранения настроек: " + err.message);
+    alert(`Ошибка сохранения настроек: ${err.message}`);
   }
 }
 
-// Copy/Paste logic (basic)
+function openCategoryModal() {
+  if (!CAN_EDIT) return;
+  tempCategories = {};
+  for (const emp of appState.employees) {
+    if (emp.position) tempCategories[emp.position] = emp.category || "workers";
+  }
+  renderCategoryTable();
+  document.getElementById("categoryModal").style.display = "flex";
+}
+
+function closeCategoryModal() {
+  document.getElementById("categoryModal").style.display = "none";
+}
+
+function renderCategoryTable() {
+  const tbody = document.getElementById("categoryTableBody");
+  const positions = Object.keys(tempCategories).sort((a, b) => a.localeCompare(b, "ru"));
+  tbody.innerHTML = positions.map((pos) => {
+    const value = tempCategories[pos] || "workers";
+    return `<tr>
+      <td>${escapeHtml(pos)}</td>
+      <td>
+        <select class="input category-select" data-pos="${escapeHtml(pos)}">
+          <option value="workers" ${value === "workers" ? "selected" : ""}>Рабочие</option>
+          <option value="itr" ${value === "itr" ? "selected" : ""}>ИТР</option>
+        </select>
+      </td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="2" class="empty-state">Должности не найдены</td></tr>`;
+  tbody.querySelectorAll(".category-select").forEach((select) => {
+    select.addEventListener("change", () => {
+      tempCategories[select.dataset.pos] = select.value;
+    });
+  });
+}
+
+async function saveCategories() {
+  try {
+    await requestJson(`${APP_PREFIX}/api/settings/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tempCategories)
+    });
+    closeCategoryModal();
+    await loadState();
+  } catch (err) {
+    console.error(err);
+    alert(`Ошибка сохранения категорий: ${err.message}`);
+  }
+}
+
 document.addEventListener("paste", async (e) => {
   if (!CAN_EDIT) return;
   const activeEl = document.activeElement;
   if (!activeEl || !activeEl.classList.contains("cell")) return;
-  
+
   e.preventDefault();
   const pasteData = (e.clipboardData || window.clipboardData).getData("text");
   if (!pasteData) return;
-  
-  const lines = pasteData.trim().split("\n");
-  const startRow = parseInt(activeEl.dataset.row, 10);
-  const startCol = parseInt(activeEl.dataset.col, 10);
-  
-  let hasUpdates = false;
-  for (let i = 0; i < lines.length; i++) {
-    const cells = lines[i].split("\t");
-    for (let j = 0; j < cells.length; j++) {
-      const rIdx = startRow + i;
-      const cIdx = startCol + j;
-      const targetCell = document.querySelector(`.cell[data-row="${rIdx}"][data-col="${cIdx}"]`);
-      if (targetCell) {
-        targetCell.innerText = cells[j].trim();
-        await onCellBlur({target: targetCell});
+
+  const lines = pasteData.replace(/\r/g, "").split("\n").filter((line) => line.length);
+  const startRow = Number(activeEl.dataset.row);
+  const startCol = Number(activeEl.dataset.col);
+
+  try {
+    for (let i = 0; i < lines.length; i++) {
+      const cells = lines[i].split("\t");
+      for (let j = 0; j < cells.length; j++) {
+        await saveCellValue(startRow + i, startCol + j, cells[j]);
       }
     }
+    renderMatrix();
+  } catch (err) {
+    console.error(err);
+    alert(`Ошибка вставки: ${err.message}`);
+    renderMatrix();
   }
 });
-
-  // Category modal removed

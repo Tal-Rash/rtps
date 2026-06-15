@@ -36,6 +36,10 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    location = /edu {
+        return 301 /edu/;
+    }
+
     location /edu/ {
         proxy_pass http://127.0.0.1:8007/;
         proxy_set_header Host $host;
