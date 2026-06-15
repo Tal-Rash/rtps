@@ -584,10 +584,13 @@ HTML = """<!doctype html>
     .panel.active{display:block}
     table{border-collapse:collapse;width:100%;min-width:760px}
     table.norms-table{table-layout:fixed}
+    table.employees-table{table-layout:fixed}
     th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
     th{background:#eef4fb;font-weight:700}
     table.norms-table th, table.norms-table td{white-space:nowrap}
+    table.employees-table th, table.employees-table td{white-space:normal}
     td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
+    td textarea{width:100%;min-height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent;resize:none;overflow:hidden;display:block;line-height:1.25}
     td input[type=checkbox]{width:auto;height:auto}
     .left{text-align:left!important}
     .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
@@ -730,6 +733,7 @@ function renderTable(name, rows, editableRows){
     )
     : '';
   const tableClass = name === 'norms' ? ' class="norms-table"' : '';
+  const employeesTableClass = name === 'employees' ? ' class="employees-table"' : '';
   const colGroup = name === 'norms'
     ? `<colgroup>
         <col style="width:42px">
@@ -743,7 +747,7 @@ function renderTable(name, rows, editableRows){
         <col>
       </colgroup>`
     : '';
-  let html = rowbar + `<div class="table-shell"><table${tableClass}>${colGroup}<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  let html = rowbar + `<div class="table-shell"><table${tableClass || employeesTableClass}>${colGroup}<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>`;
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[6] || 0) > 0;
     const draggable = name === 'inventory' && CAN_EDIT
@@ -759,6 +763,9 @@ function renderTable(name, rows, editableRows){
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
         html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
+      } else if (name === 'employees') {
+        const cls = c < 3 ? 'left' : '';
+        html += `<td><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autosizeCell(this);" oninput="setCell('${name}',${r},${c},this.value); autosizeCell(this);" onmousedown="event.stopPropagation()"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
       } else if (name === 'inventory' && c === 2) {
         const cls = 'left';
         html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
@@ -777,6 +784,9 @@ function renderTable(name, rows, editableRows){
   });
   html += '</tbody></table></div>';
   panel.innerHTML = html;
+  if (name === 'employees') {
+    panel.querySelectorAll('textarea').forEach(autosizeCell);
+  }
 }
 
 let selected = {employees: -1, inventory: -1};
@@ -809,6 +819,11 @@ function updateInventorySelectionHighlight(){
   panel.querySelectorAll('tbody tr').forEach((tr, index) => {
     tr.classList.toggle('selected-row', index === selected.inventory);
   });
+}
+function autosizeCell(el){
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
 }
 function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
 function addRow(name){
