@@ -369,6 +369,11 @@ function setSection(section){
     openSectionModal(section);
     return;
   }
+  if (section === 'repairSchedule' && ui.section === 'repairSchedule' && !ui.modal) {
+    ui.section = 'months';
+    render();
+    return;
+  }
   ui.modal = null;
   ui.section = section;
   render();
