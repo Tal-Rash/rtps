@@ -61,6 +61,7 @@ def init_db():
             pass
 
         cur.execute("CREATE TABLE IF NOT EXISTS position_categories (pos TEXT PRIMARY KEY, category TEXT)")
+        cur.execute("CREATE TABLE IF NOT EXISTS employee_row_order (tab_num TEXT PRIMARY KEY, sort_order INTEGER NOT NULL)")
 
 def connect():
     conn = sqlite3.connect(DB_FILE)
@@ -155,15 +156,16 @@ async def api_state(request: Request):
         
         # Load active employees (from main DB, like tabel)
         emp_rows = cur.execute("""
-            SELECT e.name, e.tab_num, e.pos, COALESCE(pc.category, 'workers') as category
+            SELECT e.name, e.tab_num, e.pos, COALESCE(pc.category, 'workers') as category, eo.sort_order AS row_order
             FROM employees e
             LEFT JOIN position_categories pc ON e.pos = pc.pos
+            LEFT JOIN employee_row_order eo ON e.tab_num = eo.tab_num
             WHERE e.name IS NOT NULL AND e.name != '' 
               AND COALESCE(e.is_excluded, 0) = 0
             GROUP BY e.name, e.tab_num, e.pos
-            ORDER BY e.pos, e.name
+            ORDER BY COALESCE(eo.sort_order, 2147483647), e.pos, e.name
         """).fetchall()
-        employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"], "category": r["category"]} for r in emp_rows]
+        employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"], "category": r["category"], "row_order": r["row_order"]} for r in emp_rows]
         
         # Load trainings
         t_rows = cur.execute("SELECT tab_num, training_type, last_date, period_months, protocol_num FROM employee_trainings").fetchall()
@@ -281,6 +283,31 @@ async def save_categories(request: Request, data: dict):
                     (pos, cat)
                 )
         return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/settings/employee_order")
+@app.post(f"{APP_PREFIX}/api/settings/employee_order", include_in_schema=False)
+async def save_employee_order(request: Request, data: list[str]):
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    tab_nums = [str(tab_num).strip() for tab_num in data if str(tab_num).strip()]
+    if not tab_nums:
+        return {"status": "ok"}
+
+    try:
+        with DB_LOCK, connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM employee_row_order")
+            for idx, tab_num in enumerate(tab_nums):
+                cur.execute(
+                    "INSERT INTO employee_row_order (tab_num, sort_order) VALUES (?, ?)",
+                    (tab_num, idx)
+                )
+            conn.commit()
+        return {"status": "ok"}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 

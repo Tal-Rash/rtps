@@ -169,7 +169,7 @@ button:disabled {
   width: 220px;
   min-width: 220px;
   position: sticky;
-  left: 0;
+  left: 34px;
   z-index: 4;
 }
 
@@ -178,7 +178,7 @@ button:disabled {
   min-width: 82px;
   text-align: center;
   position: sticky;
-  left: 220px;
+  left: 254px;
   z-index: 4;
 }
 
@@ -186,8 +186,26 @@ button:disabled {
   width: 220px;
   min-width: 220px;
   position: sticky;
-  left: 302px;
+  left: 336px;
   z-index: 4;
+}
+
+.matrix-table .col-drag {
+  width: 34px;
+  min-width: 34px;
+  text-align: center;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+}
+
+.matrix-table th.col-drag {
+  z-index: 9;
+  background: linear-gradient(180deg, #f8fbff, #edf4ff);
+}
+
+.matrix-table td.col-drag {
+  background: #fff;
 }
 
 .matrix-table th.col-fio,
@@ -205,6 +223,41 @@ button:disabled {
 .matrix-table .col-training {
   width: 132px;
   min-width: 132px;
+}
+
+.edu-row.dragging {
+  opacity: .55;
+}
+
+.edu-row.drop-before > td {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.edu-row.drop-after > td {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.row-handle {
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.row-handle:active {
+  cursor: grabbing;
+}
+
+.row-handle:hover {
+  background: var(--accent-soft);
+  border-color: var(--line);
+  color: var(--accent);
 }
 
 .category-itr td.col-fio,

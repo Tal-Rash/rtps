@@ -10,6 +10,7 @@ let appState = {
 let currentMode = "dates";
 let tempColumns = [];
 let tempCategories = {};
+let draggedRowTabNum = null;
 
 window.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -114,6 +115,7 @@ function renderMatrix() {
   const tbody = document.getElementById("eduBody");
 
   let hHTML = `<tr>
+    <th class="col-drag"></th>
     <th class="col-fio">ФИО работника</th>
     <th class="col-tab">Таб. №</th>
     <th class="col-pos">Должность</th>`;
@@ -129,7 +131,9 @@ function renderMatrix() {
 
   appState.employees.forEach((emp, rIdx) => {
     const categoryClass = emp.category === "itr" ? "category-itr" : "category-workers";
-    bHTML += `<tr class="${categoryClass}">
+    const handleHtml = CAN_EDIT ? `<button type="button" class="row-handle" draggable="true" aria-label="Перетащить строку" data-tab="${escapeHtml(emp.tab_num)}">☰</button>` : "";
+    bHTML += `<tr class="edu-row ${categoryClass}" data-tab="${escapeHtml(emp.tab_num)}">
+      <td class="col-drag">${handleHtml}</td>
       <td class="col-fio">${escapeHtml(emp.fio)}</td>
       <td class="col-tab">${escapeHtml(emp.tab_num)}</td>
       <td class="col-pos">${escapeHtml(emp.position)}</td>`;
@@ -170,9 +174,12 @@ function renderMatrix() {
     bHTML += "</tr>";
   });
 
-  tbody.innerHTML = bHTML || `<tr><td class="empty-state" colspan="${appState.columns.length + 3}">Нет сотрудников для отображения</td></tr>`;
+  tbody.innerHTML = bHTML || `<tr><td class="empty-state" colspan="${appState.columns.length + 4}">Нет сотрудников для отображения</td></tr>`;
 
-  if (CAN_EDIT) attachCellListeners();
+  if (CAN_EDIT) {
+    attachCellListeners();
+    attachRowDragListeners();
+  }
 }
 
 function attachCellListeners() {
@@ -180,6 +187,100 @@ function attachCellListeners() {
     cell.addEventListener("blur", onCellBlur);
     cell.addEventListener("keydown", onCellKeydown);
   });
+}
+
+function attachRowDragListeners() {
+  document.querySelectorAll(".row-handle").forEach((handle) => {
+    handle.addEventListener("dragstart", onRowDragStart);
+    handle.addEventListener("dragend", onRowDragEnd);
+  });
+  document.querySelectorAll("tr.edu-row").forEach((row) => {
+    row.addEventListener("dragover", onRowDragOver);
+    row.addEventListener("dragleave", onRowDragLeave);
+    row.addEventListener("drop", onRowDrop);
+  });
+}
+
+function clearRowDropHints() {
+  document.querySelectorAll("tr.edu-row").forEach((row) => {
+    row.classList.remove("drop-before", "drop-after");
+  });
+}
+
+function onRowDragStart(e) {
+  const handle = e.currentTarget;
+  const row = handle.closest("tr.edu-row");
+  draggedRowTabNum = handle.dataset.tab;
+  row?.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", draggedRowTabNum || "");
+}
+
+function onRowDragEnd() {
+  draggedRowTabNum = null;
+  document.querySelectorAll("tr.edu-row").forEach((row) => row.classList.remove("dragging", "drop-before", "drop-after"));
+}
+
+function onRowDragOver(e) {
+  if (!draggedRowTabNum) return;
+  e.preventDefault();
+  const row = e.currentTarget;
+  if (row.dataset.tab === draggedRowTabNum) return;
+
+  const rect = row.getBoundingClientRect();
+  const after = e.clientY > rect.top + rect.height / 2;
+  clearRowDropHints();
+  row.classList.add(after ? "drop-after" : "drop-before");
+}
+
+function onRowDragLeave() {
+  clearRowDropHints();
+}
+
+async function saveEmployeeOrder() {
+  const order = appState.employees.map((emp) => emp.tab_num);
+  await requestJson(`${APP_PREFIX}/api/settings/employee_order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(order)
+  });
+}
+
+async function moveEmployeeRow(sourceTabNum, targetTabNum, after) {
+  if (!sourceTabNum || !targetTabNum || sourceTabNum === targetTabNum) return;
+
+  const fromIdx = appState.employees.findIndex((emp) => emp.tab_num === sourceTabNum);
+  const targetIdx = appState.employees.findIndex((emp) => emp.tab_num === targetTabNum);
+  if (fromIdx < 0 || targetIdx < 0) return;
+
+  const [moved] = appState.employees.splice(fromIdx, 1);
+  if (targetIdx < 0) {
+    appState.employees.splice(fromIdx, 0, moved);
+    return;
+  }
+  let insertAt = targetIdx + (after ? 1 : 0);
+  if (fromIdx < targetIdx) insertAt -= 1;
+  appState.employees.splice(insertAt, 0, moved);
+
+  renderMatrix();
+  try {
+    await saveEmployeeOrder();
+  } catch (err) {
+    console.error(err);
+    alert(`Ошибка сохранения порядка строк: ${err.message}`);
+    await loadState();
+  }
+}
+
+async function onRowDrop(e) {
+  if (!draggedRowTabNum) return;
+  e.preventDefault();
+  const row = e.currentTarget;
+  const targetTabNum = row.dataset.tab;
+  const rect = row.getBoundingClientRect();
+  const after = e.clientY > rect.top + rect.height / 2;
+  clearRowDropHints();
+  await moveEmployeeRow(draggedRowTabNum, targetTabNum, after);
 }
 
 function onCellKeydown(e) {
