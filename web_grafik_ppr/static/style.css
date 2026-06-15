@@ -456,24 +456,13 @@
     .repair-schedule-table .repair-head { text-align:center; font-weight:700; }
     .repair-schedule-table .repair-group-start > * { border-top:1px solid var(--line); }
     .empty-table-cell { padding:16px !important; text-align:center; color:var(--muted); }
-    .repair-periodicity-grid {
-      display:grid;
-      grid-template-columns:repeat(4, minmax(120px, 1fr));
-      gap:8px;
-    }
-    .repair-periodicity-item {
-      display:grid;
-      gap:4px;
-      font-size:13px;
-      color:var(--muted);
-    }
-    .repair-periodicity-item input {
-      border:1px solid var(--line);
-      border-radius:8px;
-      padding:8px 10px;
-      font:inherit;
-      text-transform:uppercase;
-    }
+    .repair-periodicity-wrap { width:100%; max-width:100%; margin:0 auto; }
+    .repair-periodicity-table { width:100%; min-width:640px; table-layout:fixed; }
+    .repair-periodicity-table th,
+    .repair-periodicity-table td { text-align:center; font-size:18px; height:34px; }
+    .repair-periodicity-table td { padding:0 6px; }
+    .repair-periodicity-table td:first-child,
+    .repair-periodicity-table th:first-child { text-align:center; }
     .group-row td { background:#f5f8fd; font-weight:700; text-align:center; }
     #tu28Modal tr.selected-row > * { background:#e8f0ff !important; box-shadow:inset 0 0 0 1px rgba(39,110,241,.45); }
     @media (max-width:900px) { .topbar { flex-direction:column; align-items:stretch; } .controls { justify-content:flex-start; } .months-row { display:flex; align-items:flex-start; flex-direction:column; position:static; } .month-strip { flex-wrap:wrap; overflow:visible; } .month-tools { display:none; } .repair-strip { flex-wrap:wrap; } }

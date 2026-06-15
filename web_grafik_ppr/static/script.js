@@ -10,7 +10,7 @@ const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
 const TEM_NORM_ROWS = window.APP_CONFIG.TEM_NORM_ROWS;
 const AGR_NORM_ROWS = window.APP_CONFIG.AGR_NORM_ROWS;
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
-const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР-1', 'ТР-2', 'ТР-1', 'ТР-3', 'ТР-1', 'ТР-2', 'ТР-1', 'СР', 'ТР-1', 'ТР-2', 'ТР-1', 'ТР-3', 'ТР-1', 'ТР-2', 'ТР-1', 'КР'];
+const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'СР', 'ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'КР'];
 const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
@@ -560,13 +560,18 @@ function renderRepairSchedule(){
     '<th rowspan="2" class="col-series">Серия</th>',
     '<th rowspan="2" class="col-number">Номер</th>',
     '<th rowspan="2" class="col-planfact">План/факт</th>',
+    '<th rowspan="2" class="repair-head">КР</th>',
     ...columns.map((col) => `<th rowspan="2" class="repair-head">${esc(col.code || '')}</th>`),
   ].join('');
   const bodyHtml = objects.length
     ? objects.map((row, idx) => {
         const rowNum = idx + 1;
-        const planCells = columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.plan.${cidx}`, row.plan[cidx] || '', 'cell center')}</td>`).join('');
-        const factCells = columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.fact.${cidx}`, row.fact[cidx] || '', 'cell center')}</td>`).join('');
+        const planCells = [`<td>${repairScheduleCell(`repair_schedule.objects.${idx}.kr.plan`, row.kr?.plan || '', 'cell center')}</td>`]
+          .concat(columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.plan.${cidx}`, row.plan[cidx] || '', 'cell center')}</td>`))
+          .join('');
+        const factCells = [`<td>${repairScheduleCell(`repair_schedule.objects.${idx}.kr.fact`, row.kr?.fact || '', 'cell center')}</td>`]
+          .concat(columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.fact.${cidx}`, row.fact[cidx] || '', 'cell center')}</td>`))
+          .join('');
         return `
           <tr class="repair-group-start">
             <td class="col-idx" rowspan="2"><div class="rownum"><span>${rowNum}</span></div></td>
@@ -581,7 +586,7 @@ function renderRepairSchedule(){
           </tr>
         `;
       }).join('')
-    : `<tr><td colspan="${4 + columns.length}" class="empty-table-cell">Нет записей</td></tr>`;
+    : `<tr><td colspan="${5 + columns.length}" class="empty-table-cell">Нет записей</td></tr>`;
   return `
     <div class="section-head repair-schedule-head">
       <div class="section-title">График ремонтов на ${appState.year} г.</div>
@@ -598,6 +603,7 @@ function renderRepairSchedule(){
           <col style="width:130px">
           <col style="width:110px">
           <col style="width:100px">
+          <col style="width:92px">
           ${columns.map(() => '<col style="width:92px">').join('')}
         </colgroup>
         <thead>
@@ -627,20 +633,42 @@ function deleteRepairScheduleRow(index){
 function openRepairSchedulePeriodicity(){
   if (!CAN_EDIT) return;
   const schedule = normalizeRepairSchedule();
-  window.repairSchedulePeriodicityDraft = (schedule.columns || []).map((col) => String((col && col.code) || ''));
+  window.repairSchedulePeriodicityDraft = true;
   const body = document.getElementById('errorModalBody');
   const modal = document.getElementById('errorModal');
   if (!body || !modal) return;
   body.innerHTML = `
     <div style="display:grid; gap:10px;">
       <div style="font-weight:700;">Периодичность ремонтов</div>
-      <div class="repair-periodicity-grid">
-        ${window.repairSchedulePeriodicityDraft.map((value, idx) => `
-          <label class="repair-periodicity-item">
-            <span>${idx + 1}</span>
-            <input data-periodicity-idx="${idx}" value="${esc(value)}" oninput="window.repairSchedulePeriodicityDraft[${idx}] = this.value.toUpperCase()">
-          </label>
-        `).join('')}
+      <div class="table-wrap repair-periodicity-wrap">
+        <table class="compact repair-periodicity-table">
+          <colgroup>
+            <col style="width:150px">
+            <col style="width:120px">
+            <col style="width:120px">
+            <col style="width:120px">
+            <col style="width:120px">
+            <col style="width:120px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Серия</th>
+              <th>TP1</th>
+              <th>TP2</th>
+              <th>TP3</th>
+              <th>CP</th>
+              <th>KP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${['ТЭМ-2УМ', 'ТЭМ-2', ''].map((series) => `
+              <tr>
+                <td>${series}</td>
+                ${['', '', '', '', ''].map(() => '<td></td>').join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
       <div class="section-modal-actions" style="padding:0; border-top:0; background:transparent;">
         <button type="button" onclick="closeErrorModal()">Отмена</button>
@@ -661,11 +689,18 @@ function saveRepairSchedulePeriodicity(){
   if (!CAN_EDIT) return;
   const schedule = normalizeRepairSchedule();
   if (!window.repairSchedulePeriodicityDraft) return;
-  schedule.columns = window.repairSchedulePeriodicityDraft.map((code) => ({ code: String(code || '').toUpperCase() }));
+  const cols = [
+    { code: 'TP1' },
+    { code: 'TP2' },
+    { code: 'TP3' },
+    { code: 'CP' },
+    { code: 'KP' },
+  ];
+  schedule.columns = cols;
   schedule.objects = (schedule.objects || []).map((row) => ({
     ...row,
-    plan: Array.from({ length: schedule.columns.length }, (_, idx) => String((row.plan || [])[idx] || '')),
-    fact: Array.from({ length: schedule.columns.length }, (_, idx) => String((row.fact || [])[idx] || '')),
+    plan: Array.from({ length: cols.length }, (_, idx) => String((row.plan || [])[idx] || '')),
+    fact: Array.from({ length: cols.length }, (_, idx) => String((row.fact || [])[idx] || '')),
   }));
   window.repairSchedulePeriodicityDraft = null;
   markDirty(true);
