@@ -466,3 +466,29 @@ button:disabled {
     max-height: none;
   }
 }
+
+@media (max-width: 480px) {
+  .matrix-table .col-fio {
+    min-width: 120px;
+  }
+
+  .matrix-table .col-tab {
+    width: 72px;
+    min-width: 72px;
+  }
+
+  .matrix-table .col-pos {
+    width: 150px;
+    min-width: 150px;
+  }
+
+  .matrix-table .col-training {
+    width: 100px;
+    min-width: 100px;
+  }
+
+  .matrix-table .col-training-first {
+    width: 100px;
+    min-width: 100px;
+  }
+}
