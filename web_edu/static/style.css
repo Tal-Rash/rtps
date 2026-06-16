@@ -229,6 +229,11 @@ button:disabled {
   min-width: 120px;
 }
 
+.matrix-table .col-training-first {
+  width: 140px;
+  min-width: 140px;
+}
+
 .matrix-table .cell {
   min-height: 0;
   padding: 0 2px;

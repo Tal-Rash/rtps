@@ -123,7 +123,8 @@ function renderMatrix() {
     <th class="col-tab">Таб. №</th>
     <th class="col-pos">Должность</th>`;
   for (const c of appState.columns) {
-    hHTML += `<th class="col-training">${escapeHtml(c.name)}</th>`;
+    const trainingClass = c.name === appState.columns[0]?.name ? "col-training col-training-first" : "col-training";
+    hHTML += `<th class="${trainingClass}">${escapeHtml(c.name)}</th>`;
   }
   hHTML += "</tr>";
   thead.innerHTML = hHTML;
@@ -172,7 +173,8 @@ function renderMatrix() {
       }
 
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
-      bHTML += `<td class="${cellClass}">
+      const trainingClass = cIdx === 0 ? "col-training col-training-first" : "col-training";
+      bHTML += `<td class="${cellClass} ${trainingClass}">
         <div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}">${escapeHtml(cellText)}</div>
         ${autoText}
       </td>`;
