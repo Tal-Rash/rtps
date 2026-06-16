@@ -166,8 +166,9 @@ button:disabled {
 }
 
 .matrix-table .col-fio {
-  width: 220px;
-  min-width: 220px;
+  width: max-content;
+  min-width: max-content;
+  white-space: nowrap;
   position: sticky;
   left: 34px;
   z-index: 4;
@@ -183,8 +184,8 @@ button:disabled {
 }
 
 .matrix-table .col-pos {
-  width: 220px;
-  min-width: 220px;
+  width: 200px;
+  min-width: 200px;
   position: sticky;
   left: 336px;
   z-index: 4;
@@ -221,8 +222,8 @@ button:disabled {
 }
 
 .matrix-table .col-training {
-  width: 132px;
-  min-width: 132px;
+  width: 120px;
+  min-width: 120px;
 }
 
 .matrix-table .cell {
