@@ -166,9 +166,12 @@ button:disabled {
 }
 
 .matrix-table .col-fio {
-  width: max-content;
-  min-width: max-content;
+  width: 211px;
+  min-width: 211px;
+  max-width: 211px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   position: sticky;
   left: 34px;
   z-index: 4;
