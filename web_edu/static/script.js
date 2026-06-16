@@ -14,6 +14,9 @@ let draggedRowTabNum = null;
 
 window.addEventListener("DOMContentLoaded", () => {
   loadState();
+  window.addEventListener("resize", () => {
+    requestAnimationFrame(updateStickyOffsets);
+  });
   if (!CAN_EDIT) {
     document.getElementById("btnCategorySettings")?.remove();
     document.getElementById("btnSettings")?.remove();
@@ -183,6 +186,40 @@ function renderMatrix() {
     attachCellListeners();
     attachRowDragListeners();
   }
+
+  requestAnimationFrame(updateStickyOffsets);
+}
+
+function updateStickyOffsets() {
+  const table = document.getElementById("eduTable");
+  if (!table) return;
+
+  const sampleRow = table.querySelector("tbody tr.edu-row") || table.querySelector("thead tr");
+  if (!sampleRow) return;
+
+  const dragCell = sampleRow.querySelector(".col-drag");
+  const fioCell = sampleRow.querySelector(".col-fio");
+  const tabCell = sampleRow.querySelector(".col-tab");
+  const posCell = sampleRow.querySelector(".col-pos");
+  if (!dragCell || !fioCell || !tabCell || !posCell) return;
+
+  const dragLeft = dragCell.offsetLeft;
+  const fioLeft = fioCell.offsetLeft;
+  const tabLeft = tabCell.offsetLeft;
+  const posLeft = posCell.offsetLeft;
+
+  table.querySelectorAll(".col-drag").forEach((el) => {
+    el.style.left = `${dragLeft}px`;
+  });
+  table.querySelectorAll(".col-fio").forEach((el) => {
+    el.style.left = `${fioLeft}px`;
+  });
+  table.querySelectorAll(".col-tab").forEach((el) => {
+    el.style.left = `${tabLeft}px`;
+  });
+  table.querySelectorAll(".col-pos").forEach((el) => {
+    el.style.left = `${posLeft}px`;
+  });
 }
 
 function attachCellListeners() {
