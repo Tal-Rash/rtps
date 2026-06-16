@@ -198,8 +198,14 @@ async def home_page(request: Request):
     
     users_link = ""
     logs_link = ""
+    pending_users_count = 0
     if session["role"] == "admin" or "admin" in session["modules"]:
-        users_link = '<a class="badge" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом</a>'
+        with sqlite3.connect(DB_FILE) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM users WHERE role='pending'")
+            pending_users_count = int(cur.fetchone()[0] or 0)
+        pending_badge = f' <span class="badge-alert">{pending_users_count}</span>' if pending_users_count > 0 else ""
+        users_link = f'<a class="badge badge-users" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом{pending_badge}</a>'
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
         
     def link_for(mod_name, url):
@@ -216,6 +222,7 @@ async def home_page(request: Request):
         "STARTED_AT": dt.datetime.now().strftime("%d.%m.%Y %H:%M"),
         "AUTH_BADGE": auth_badge,
         "USERS_LINK": users_link,
+        "PENDING_USERS_COUNT": pending_users_count,
         "LOGS_LINK": logs_link,
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
