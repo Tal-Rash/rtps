@@ -205,10 +205,15 @@ function updateStickyOffsets() {
   const posCell = sampleRow.querySelector(".col-pos");
   if (!dragCell || !fioCell || !tabCell || !posCell) return;
 
-  const dragLeft = dragCell.offsetLeft;
-  const fioLeft = fioCell.offsetLeft;
-  const tabLeft = tabCell.offsetLeft;
-  const posLeft = posCell.offsetLeft;
+  const dragRect = dragCell.getBoundingClientRect();
+  const fioRect = fioCell.getBoundingClientRect();
+  const tabRect = tabCell.getBoundingClientRect();
+  const posRect = posCell.getBoundingClientRect();
+
+  const dragLeft = dragRect.left;
+  const fioLeft = dragLeft + dragRect.width;
+  const tabLeft = fioLeft + fioRect.width;
+  const posLeft = tabLeft + tabRect.width;
 
   table.querySelectorAll(".col-drag").forEach((el) => {
     el.style.left = `${dragLeft}px`;
