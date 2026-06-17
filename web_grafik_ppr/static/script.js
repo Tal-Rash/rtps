@@ -1,7 +1,24 @@
 const BOOT_VERSION = window.APP_CONFIG.APP_VERSION;
 let appState = window.APP_CONFIG.STATE_JSON;
 const EMPLOYEE_NAMES = window.APP_CONFIG.EMPLOYEE_NAMES;
-let ui = { section: 'months', modal: null, monthIndex: new Date().getMonth(), mode: 'plan', selected: { months: null, norms: null }, monthSelection: null, draggingSelection: false, lastCell: null, tu28MonthIndex: new Date().getMonth(), tu28RowIndex: null, tu28Staff: {}, tu28ExtraRepairs: {} };
+let ui = {
+  section: 'months',
+  modal: null,
+  monthIndex: new Date().getMonth(),
+  mode: 'plan',
+  selected: { months: null, norms: null },
+  monthSelection: null,
+  draggingSelection: false,
+  repairScheduleSelection: null,
+  repairScheduleDragging: false,
+  repairPeriodicitySelection: null,
+  repairPeriodicityDragging: false,
+  lastCell: null,
+  tu28MonthIndex: new Date().getMonth(),
+  tu28RowIndex: null,
+  tu28Staff: {},
+  tu28ExtraRepairs: {}
+};
 let dirty = false;
 let savedAppState = null;
 let savedMonthsState = null;
@@ -135,6 +152,13 @@ function getMonthCellInfo(el){
   if (!Number.isFinite(monthIndex) || !Number.isFinite(row) || !Number.isFinite(col)) return null;
   return { monthIndex, table: el.dataset.table, row, col, path: el.dataset.path };
 }
+function getGridCellInfo(el){
+  if (!el || !el.dataset || !el.dataset.grid) return null;
+  const row = Number(el.dataset.row);
+  const col = Number(el.dataset.col);
+  if (!Number.isFinite(row) || !Number.isFinite(col)) return null;
+  return { grid: String(el.dataset.grid), row, col, path: el.dataset.path };
+}
 function selectionBounds(a, b){
   return {
     startRow: Math.min(a.row, b.row),
@@ -219,6 +243,209 @@ function selectedMonthCellText(info){
   if (!row || !row.cells) return '';
   return String(row.cells[info.col] ?? '');
 }
+function repairGridBounds(a, b){
+  return {
+    startRow: Math.min(a.row, b.row),
+    endRow: Math.max(a.row, b.row),
+    startCol: Math.min(a.col, b.col),
+    endCol: Math.max(a.col, b.col),
+  };
+}
+function getRepairScheduleSelection(){
+  return ui.section === 'repairSchedule' ? ui.repairScheduleSelection : null;
+}
+function getRepairPeriodicitySelection(){
+  return ui.repairPeriodicitySelection;
+}
+function setRepairScheduleSelection(anchor, focus){
+  if (!anchor || !focus) return;
+  ui.repairScheduleSelection = { anchor, focus, ...repairGridBounds(anchor, focus) };
+  applyRepairScheduleSelectionClasses();
+}
+function setRepairPeriodicitySelection(anchor, focus){
+  if (!anchor || !focus) return;
+  ui.repairPeriodicitySelection = { anchor, focus, ...repairGridBounds(anchor, focus) };
+  applyRepairPeriodicitySelectionClasses();
+}
+function clearRepairScheduleSelection(){
+  ui.repairScheduleSelection = null;
+  applyRepairScheduleSelectionClasses();
+}
+function clearRepairPeriodicitySelection(){
+  ui.repairPeriodicitySelection = null;
+  applyRepairPeriodicitySelectionClasses();
+}
+function applyGridSelectionClasses(grid, selection){
+  document.querySelectorAll(`input.selected-cell[data-grid="${grid}"]`).forEach((el) => {
+    el.classList.remove('selected-cell');
+    el.style.boxShadow = '';
+  });
+  if (!selection) return;
+  document.querySelectorAll(`input[data-grid="${grid}"]`).forEach((el) => {
+    const row = Number(el.dataset.row);
+    const col = Number(el.dataset.col);
+    if (row >= selection.startRow && row <= selection.endRow && col >= selection.startCol && col <= selection.endCol) {
+      el.classList.add('selected-cell');
+      const shadows = [];
+      if (row === selection.startRow) shadows.push('inset 0 1.5px 0 0 #276ef1');
+      if (row === selection.endRow) shadows.push('inset 0 -1.5px 0 0 #276ef1');
+      if (col === selection.startCol) shadows.push('inset 1.5px 0 0 0 #276ef1');
+      if (col === selection.endCol) shadows.push('inset -1.5px 0 0 0 #276ef1');
+      if (shadows.length > 0) {
+        el.style.setProperty('box-shadow', shadows.join(', '), 'important');
+      } else {
+        el.style.boxShadow = '';
+      }
+    }
+  });
+}
+function applyRepairScheduleSelectionClasses(){
+  applyGridSelectionClasses('repair-schedule', ui.section === 'repairSchedule' ? ui.repairScheduleSelection : null);
+}
+function applyRepairPeriodicitySelectionClasses(){
+  applyGridSelectionClasses('repair-periodicity', ui.repairPeriodicitySelection);
+}
+function repairScheduleGridText(info){
+  const schedule = normalizeRepairSchedule();
+  const objIndex = Math.floor(info.row / 2);
+  const isFact = info.row % 2 === 1;
+  const row = schedule.objects && schedule.objects[objIndex];
+  if (!row) return '';
+  if (info.col === 0) return String((row.kr && (isFact ? row.kr.fact : row.kr.plan)) ?? '');
+  const idx = info.col - 1;
+  const source = isFact ? row.fact : row.plan;
+  return String(source && source[idx] !== undefined ? source[idx] : '');
+}
+function repairPeriodicityGridText(info){
+  const periodicity = normalizeRepairPeriodicity();
+  if (info.row < 0 || info.row >= periodicity.series.length) return '';
+  if (info.col === 0) return String(periodicity.series[info.row] ?? '');
+  return String((periodicity.values[info.row] && periodicity.values[info.row][info.col - 1]) ?? '');
+}
+function getGridSelectionText(grid, selection){
+  if (!selection) return '';
+  const lines = [];
+  for (let row = selection.startRow; row <= selection.endRow; row++) {
+    const values = [];
+    for (let col = selection.startCol; col <= selection.endCol; col++) {
+      values.push(grid === 'repair-schedule'
+        ? repairScheduleGridText({ row, col })
+        : repairPeriodicityGridText({ row, col }));
+    }
+    lines.push(values.join('\t'));
+  }
+  return lines.join('\n');
+}
+function writeGridCellValue(grid, row, col, value){
+  const selector = `input[data-grid="${grid}"][data-row="${row}"][data-col="${col}"]`;
+  const cell = document.querySelector(selector);
+  if (!cell) return false;
+  const normalized = value ?? '';
+  cell.value = normalized;
+  setPath(cell.dataset.path, normalized);
+  return true;
+}
+function pasteGridSelectionText(grid, target, text){
+  if (!CAN_EDIT) return;
+  const info = getGridCellInfo(target);
+  if (!info || info.grid !== grid) return;
+  const rows = String(text ?? '').replace(/\r/g, '').split('\n');
+  while (rows.length && rows[rows.length - 1] === '') rows.pop();
+  if (!rows.length) return;
+  const matrix = rows.map((line) => line.split('\t'));
+  const sel = grid === 'repair-schedule' ? getRepairScheduleSelection() : getRepairPeriodicitySelection();
+  const useSelection = !!(sel && sel.anchor && sel.focus);
+  const startRow = useSelection ? sel.startRow : info.row;
+  const startCol = useSelection ? sel.startCol : info.col;
+  const sourceRows = matrix.length;
+  const sourceCols = Math.max(...matrix.map((row) => row.length), 1);
+  const targetRows = matrix.length === 1 && matrix[0].length === 1 && useSelection
+    ? (sel.endRow - sel.startRow + 1)
+    : sourceRows;
+  const targetCols = matrix.length === 1 && matrix[0].length === 1 && useSelection
+    ? (sel.endCol - sel.startCol + 1)
+    : sourceCols;
+  const fillSingle = matrix.length === 1 && matrix[0].length === 1 && useSelection;
+  for (let r = 0; r < targetRows; r++) {
+    for (let c = 0; c < targetCols; c++) {
+      const sourceRow = fillSingle ? 0 : Math.min(r, matrix.length - 1);
+      const sourceCol = fillSingle ? 0 : Math.min(c, matrix[sourceRow].length - 1);
+      const value = matrix[sourceRow][sourceCol] ?? '';
+      writeGridCellValue(grid, startRow + r, startCol + c, value);
+    }
+  }
+  if (useSelection) {
+    const nextFocus = { row: startRow + targetRows - 1, col: startCol + targetCols - 1 };
+    if (grid === 'repair-schedule') setRepairScheduleSelection(sel.anchor, nextFocus);
+    if (grid === 'repair-periodicity') setRepairPeriodicitySelection(sel.anchor, nextFocus);
+  }
+  updateRepairScheduleDerivedValues();
+  markDirty(true);
+  render();
+}
+function beginGridSelection(grid, e){
+  if (!CAN_EDIT || e.button !== 0) return;
+  const target = e.currentTarget || e.target;
+  const info = getGridCellInfo(target);
+  if (!info || info.grid !== grid) return;
+  e.preventDefault();
+  setLastCell(target);
+  const currentSel = grid === 'repair-schedule' ? getRepairScheduleSelection() : getRepairPeriodicitySelection();
+  const keepAnchor = e.shiftKey && currentSel && currentSel.anchor;
+  const anchor = keepAnchor ? currentSel.anchor : info;
+  if (grid === 'repair-schedule') setRepairScheduleSelection(anchor, info);
+  if (grid === 'repair-periodicity') setRepairPeriodicitySelection(anchor, info);
+  if (grid === 'repair-schedule') ui.repairScheduleDragging = true;
+  if (grid === 'repair-periodicity') ui.repairPeriodicityDragging = true;
+  focusCell(target);
+}
+function extendGridSelection(grid, e){
+  const dragging = grid === 'repair-schedule' ? ui.repairScheduleDragging : ui.repairPeriodicityDragging;
+  if (!dragging) return;
+  const target = e.currentTarget || e.target;
+  const info = getGridCellInfo(target);
+  const sel = grid === 'repair-schedule' ? ui.repairScheduleSelection : ui.repairPeriodicitySelection;
+  if (!info || !sel || !sel.anchor) return;
+  if (sel.anchor.grid !== info.grid) return;
+  const next = { row: info.row, col: info.col };
+  if (grid === 'repair-schedule') setRepairScheduleSelection(sel.anchor, next);
+  if (grid === 'repair-periodicity') setRepairPeriodicitySelection(sel.anchor, next);
+}
+function endGridSelection(){
+  ui.repairScheduleDragging = false;
+  ui.repairPeriodicityDragging = false;
+}
+function handleGridCopy(e){
+  const target = e && e.target;
+  const info = getGridCellInfo(target);
+  if (!info) return;
+  const sel = info.grid === 'repair-schedule' ? getRepairScheduleSelection() : info.grid === 'repair-periodicity' ? getRepairPeriodicitySelection() : null;
+  if (!sel) return;
+  const text = getGridSelectionText(info.grid, sel);
+  if (text === '') return;
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', text);
+}
+function handleGridPaste(e){
+  if (!CAN_EDIT) return;
+  if (e.defaultPrevented) return;
+  const target = e && e.target;
+  const info = getGridCellInfo(target);
+  if (!info) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+  e.preventDefault();
+  pasteGridSelectionText(info.grid, target, text);
+}
+function handleGridKeydown(e){
+  const info = getGridCellInfo(e.target);
+  if (!info) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    e.target.value = '';
+    setPath(e.target.dataset.path, '');
+  }
+}
 function getSelectedMonthSelection(){
   if (ui.section !== 'months' || !ui.monthSelection) return null;
   return ui.monthSelection;
@@ -232,9 +459,9 @@ function copyMonthSelectionText(){
     for (let col = sel.startCol; col <= sel.endCol; col++) {
       values.push(selectedMonthCellText({ monthIndex: sel.monthIndex, table: sel.table, row, col }));
     }
-    lines.push(values.join('\\t'));
+    lines.push(values.join('\t'));
   }
-  return lines.join('\\n');
+  return lines.join('\n');
 }
 function writeMonthCellValue(monthIndex, table, row, col, value){
   const selector = `input[data-month="${monthIndex}"][data-table="${table}"][data-row="${row}"][data-col="${col}"]`;
@@ -249,10 +476,10 @@ function pasteMonthSelectionText(target, text){
   if (!CAN_EDIT) return;
   const info = getMonthCellInfo(target);
   if (!info || ui.section !== 'months') return;
-  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  const rows = String(text ?? '').replace(/\r/g, '').split('\n');
   while (rows.length && rows[rows.length - 1] === '') rows.pop();
   if (!rows.length) return;
-  const matrix = rows.map((line) => line.split('\\t'));
+  const matrix = rows.map((line) => line.split('\t'));
   const sel = getSelectedMonthSelection();
   const useSelection = sel && sel.monthIndex === info.monthIndex && sel.table === info.table;
   const startRow = useSelection ? sel.startRow : info.row;
@@ -302,9 +529,11 @@ function handleMonthPaste(e){
   pasteMonthSelectionText(target, text);
 }
 document.addEventListener('mouseup', endMonthSelection, true);
+document.addEventListener('mouseup', endGridSelection, true);
 document.addEventListener('copy', handleMonthCopy, true);
+document.addEventListener('copy', handleGridCopy, true);
 document.addEventListener('paste', handleMonthPaste, true);
-document.addEventListener('paste', handleRepairPeriodicityPaste, true);
+document.addEventListener('paste', handleGridPaste, true);
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeJsonMenu();
 });
@@ -371,11 +600,13 @@ function setSection(section){
   }
   if (section === 'repairSchedule' && ui.section === 'repairSchedule' && !ui.modal) {
     ui.section = 'months';
+    clearRepairScheduleSelection();
     render();
     return;
   }
   ui.modal = null;
   ui.section = section;
+  if (section !== 'repairSchedule') clearRepairScheduleSelection();
   render();
 }
 function setMonth(index){ ui.monthIndex = index; clearMonthSelection(); render(); }
@@ -442,6 +673,7 @@ function renderSafe(){
   if (!content) return;
   content.innerHTML = ui.section === 'repairSchedule' ? renderRepairSchedule() : renderMonths();
   applyMonthSelectionClasses();
+  applyRepairScheduleSelectionClasses();
   renderOpenModals();
   updateHistoryButtons();
 }
@@ -684,10 +916,13 @@ function normalizeRepairPeriodicity(){
   schedule.periodicity = periodicity;
   return periodicity;
 }
-function repairScheduleCell(path, value, cls='cell'){
+function repairScheduleCell(path, value, cls='cell', gridRow=null, gridCol=null){
   const ro = CAN_EDIT ? '' : 'readonly';
   const derivedRo = String(path || '').includes('.plan.') ? 'readonly' : '';
-  return `<input ${derivedRo || ro} class="${cls}" data-path="${path}" value="${esc(value || '')}" oninput="handleGridInput(this)">`;
+  const gridAttrs = Number.isFinite(gridRow) && Number.isFinite(gridCol)
+    ? ` data-grid="repair-schedule" data-row="${gridRow}" data-col="${gridCol}" onfocus="setLastCell(this)" onmousedown="beginGridSelection('repair-schedule', event)" onmouseenter="extendGridSelection('repair-schedule', event)" onmouseup="endGridSelection()" oncopy="handleGridCopy(event)" onpaste="handleGridPaste(event)" onkeydown="handleGridKeydown(event)"`
+    : '';
+  return `<input ${derivedRo || ro} class="${cls}" data-path="${path}" value="${esc(value || '')}"${gridAttrs} oninput="handleGridInput(this)">`;
 }
 function renderRepairSchedule(){
   const schedule = normalizeRepairSchedule();
@@ -705,11 +940,11 @@ function renderRepairSchedule(){
   const bodyHtml = objects.length
     ? objects.map((row, idx) => {
         const rowNum = idx + 1;
-        const planCells = [`<td>${repairScheduleCell(`repair_schedule.objects.${idx}.kr.plan`, row.kr?.plan || '', 'cell center')}</td>`]
-          .concat(columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.plan.${cidx}`, row.plan[cidx] || '', 'cell center')}</td>`))
+        const planCells = [`<td>${repairScheduleCell(`repair_schedule.objects.${idx}.kr.plan`, row.kr?.plan || '', 'cell center', idx * 2, 0)}</td>`]
+          .concat(columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.plan.${cidx}`, row.plan[cidx] || '', 'cell center', idx * 2, cidx + 1)}</td>`))
           .join('');
-        const factCells = [`<td>${repairScheduleCell(`repair_schedule.objects.${idx}.kr.fact`, row.kr?.fact || '', 'cell center')}</td>`]
-          .concat(columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.fact.${cidx}`, row.fact[cidx] || '', 'cell center')}</td>`))
+        const factCells = [`<td>${repairScheduleCell(`repair_schedule.objects.${idx}.kr.fact`, row.kr?.fact || '', 'cell center', idx * 2 + 1, 0)}</td>`]
+          .concat(columns.map((_, cidx) => `<td>${repairScheduleCell(`repair_schedule.objects.${idx}.fact.${cidx}`, row.fact[cidx] || '', 'cell center', idx * 2 + 1, cidx + 1)}</td>`))
           .join('');
         return `
           <tr class="repair-group-start">
@@ -796,8 +1031,8 @@ function openRepairSchedulePeriodicity(){
           <tbody>
             ${periodicity.series.map((series, rowIdx) => `
               <tr>
-                <td>${repairPeriodicityCell(`series.${rowIdx}`, series, 'cell')}</td>
-                ${periodicity.values[rowIdx].map((value, colIdx) => `<td>${repairPeriodicityCell(`values.${rowIdx}.${colIdx}`, value, 'cell center')}</td>`).join('')}
+                <td>${repairPeriodicityCell(`series.${rowIdx}`, series, 'cell', rowIdx, 0)}</td>
+                ${periodicity.values[rowIdx].map((value, colIdx) => `<td>${repairPeriodicityCell(`values.${rowIdx}.${colIdx}`, value, 'cell center', rowIdx, colIdx + 1)}</td>`).join('')}
               </tr>
             `).join('')}
           </tbody>
@@ -805,12 +1040,16 @@ function openRepairSchedulePeriodicity(){
       </div>
     </div>
   `;
+  applyRepairPeriodicitySelectionClasses();
   modal.classList.add('visible');
   modal.setAttribute('aria-hidden', 'false');
 }
-function repairPeriodicityCell(path, value, cls='cell'){
+function repairPeriodicityCell(path, value, cls='cell', rowIdx=null, colIdx=null){
   const ro = CAN_EDIT ? '' : 'readonly';
-  return `<input ${ro} class="${cls}" data-periodicity="1" data-path="${path}" value="${esc(value || '')}" oninput="handleRepairPeriodicityInput(this)">`;
+  const gridAttrs = Number.isFinite(rowIdx) && Number.isFinite(colIdx)
+    ? ` data-grid="repair-periodicity" data-row="${rowIdx}" data-col="${colIdx}" onfocus="setLastCell(this)" onmousedown="beginGridSelection('repair-periodicity', event)" onmouseenter="extendGridSelection('repair-periodicity', event)" onmouseup="endGridSelection()" oncopy="handleGridCopy(event)" onpaste="handleGridPaste(event)" onkeydown="handleGridKeydown(event)"`
+    : '';
+  return `<input ${ro} class="${cls}" data-periodicity="1" data-path="${path}" value="${esc(value || '')}"${gridAttrs} oninput="handleRepairPeriodicityInput(this)">`;
 }
 function saveRepairSchedulePeriodicity(){
   if (!CAN_EDIT) return;
