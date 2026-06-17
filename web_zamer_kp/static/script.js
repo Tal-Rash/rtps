@@ -17,6 +17,9 @@ let kpSelectedStatus = null;
 let kpSelectionAnchor = null;
 let kpSelectionFocus = null;
 let kpSuppressFocusSelection = false;
+let wearRows = [];
+let wearSelectedLoco = '';
+let wearLoading = false;
 let archiveRows = [];
 let archiveSortDesc = true;
 let archiveSelectedMeasurementKey = null;
@@ -770,24 +773,38 @@ function setActiveTab(tab){
   const inputTab = document.getElementById('tabInput');
   const kpTab = document.getElementById('tabKp');
   const archiveTab = document.getElementById('tabArchive');
+  const wearTab = document.getElementById('tabWear');
   const panelInput = document.getElementById('panelInput');
   const panelKp = document.getElementById('panelKp');
   const panelArchive = document.getElementById('panelArchive');
+  const panelWear = document.getElementById('panelWear');
   if (inputTab) inputTab.classList.toggle('active', tab === 'input');
   if (kpTab) kpTab.classList.toggle('active', tab === 'kp');
   if (archiveTab) archiveTab.classList.toggle('active', tab === 'archive');
+  if (wearTab) wearTab.classList.toggle('active', tab === 'wear');
   if (panelInput) panelInput.classList.toggle('active', tab === 'input');
   if (panelKp) panelKp.classList.toggle('active', tab === 'kp');
   if (panelArchive) panelArchive.classList.toggle('active', tab === 'archive');
+  if (panelWear) panelWear.classList.toggle('active', tab === 'wear');
 }
 async function switchTab(tab){
   setActiveTab(tab);
   if (tab === 'kp') {
     renderKpLocomotiveOptions();
-    await loadKpData(document.getElementById('kpLocomotive')?.value || kpSelectedLoco || state?.locomotive || '');
+    await loadKpData(document.getElementById('kpLocomotive')?.value || kpSelectedLoco || state?.locomotive || '').catch(error => {
+      console.error(error);
+    });
   }
   if (tab === 'archive') {
-    await loadArchive();
+    await loadArchive().catch(error => {
+      console.error(error);
+    });
+  }
+  if (tab === 'wear') {
+    renderWearLocomotiveOptions();
+    await loadWearAnalysis(document.getElementById('wearLocomotive')?.value || wearSelectedLoco || state?.locomotive || kpSelectedLoco || '').catch(error => {
+      console.error(error);
+    });
   }
 }
 function getCurrentLoco(){
@@ -1056,6 +1073,132 @@ function renderKpTable(){
   applyKpSearchFilter();
   renderKpSelectionHighlight();
   renderKpStatus(kpStatusLabel(kpSelectedStatus, allMode, kpRows.length));
+}
+function renderWearLocomotiveOptions(){
+  const select = document.getElementById('wearLocomotive');
+  if (!select) return;
+  const current = String(wearSelectedLoco || state?.locomotive || kpSelectedLoco || '').trim();
+  const options = (LOCOMOTIVE_CHOICES || []).map(item => {
+    const number = String(item.number || '').trim();
+    const label = String(item.label || number || '').trim();
+    return `<option value="${esc(number)}">${esc(label)}</option>`;
+  }).join('');
+  select.innerHTML = options || '<option value="">Нет локомотивов</option>';
+  if (current && [...select.options].some(option => option.value === current)) {
+    select.value = current;
+  } else if (select.options.length) {
+    select.value = select.options[0].value;
+  }
+  wearSelectedLoco = select.value || current || '';
+}
+function formatWearDate(value){
+  const textValue = String(value ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(textValue)) {
+    const [year, month, day] = textValue.split('-');
+    return `${day}.${month}.${year}`;
+  }
+  return textValue;
+}
+function wearNumber(value){
+  if (value === null || value === undefined || value === '') return '';
+  const parsed = Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(parsed)) return String(value);
+  if (Math.abs(parsed - Math.round(parsed)) < 1e-9) return String(Math.round(parsed));
+  return parsed.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+}
+function wearDeltaClass(metric){
+  if (!metric) return 'trend-none';
+  if (metric.trend === 'worse') return 'trend-worse';
+  if (metric.trend === 'better') return 'trend-better';
+  if (metric.trend === 'stable') return 'trend-stable';
+  return 'trend-none';
+}
+function wearDeltaText(metric){
+  if (!metric) return '';
+  if (metric.latest === null || metric.latest === undefined || metric.latest === '') return 'нет данных';
+  if (metric.previous === null || metric.previous === undefined || metric.previous === '') return 'нет сравнения';
+  const delta = Number(metric.delta);
+  if (!Number.isFinite(delta)) return 'нет сравнения';
+  const sign = delta > 0 ? '+' : '';
+  return `Δ ${sign}${wearNumber(delta)}`;
+}
+function renderWearAnalysisTable(){
+  const tbody = document.getElementById('wearBody');
+  const summary = document.getElementById('wearSummary');
+  if (!tbody) return;
+  if (!wearRows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:14px;color:var(--muted);">Нет данных для анализа</td></tr>';
+    if (summary) summary.textContent = '';
+    return;
+  }
+  if (summary) {
+    const filled = wearRows.filter(row => row.session_count > 0).length;
+    summary.textContent = `КП: ${wearRows.length} · с историями: ${filled}`;
+  }
+  tbody.innerHTML = wearRows.map(row => {
+    const metricCell = (key) => {
+      const metric = row.metrics?.[key] || null;
+      const cls = wearDeltaClass(metric);
+      const latest = wearNumber(metric?.latest);
+      const previous = wearNumber(metric?.previous);
+      const delta = wearDeltaText(metric);
+      const lines = [];
+      if (metric && metric.latest !== null && metric.latest !== undefined && metric.latest !== '') lines.push(`<div class="wear-value">${esc(latest)}</div>`);
+      if (metric && metric.previous !== null && metric.previous !== undefined && metric.previous !== '') lines.push(`<div class="wear-prev">пред.: ${esc(previous)}</div>`);
+      lines.push(`<div class="wear-delta ${cls}">${esc(delta)}</div>`);
+      return `<td class="${cls}">${lines.join('')}</td>`;
+    };
+    const statusClass = row.status_key === 'worse' ? 'trend-worse' : row.status_key === 'better' ? 'trend-better' : row.status_key === 'stable' ? 'trend-stable' : 'trend-none';
+    const lastInfo = [formatWearDate(row.last_measurement_date), row.last_repair_type].filter(Boolean).join(' / ');
+    return `
+      <tr>
+        <td class="wear-pair">${esc(String(row.wheel_pair || ''))}</td>
+        <td class="wear-last">${esc(lastInfo || '—')}</td>
+        <td class="${statusClass}"><span class="wear-badge ${statusClass}">${esc(row.status_label || '—')}</span></td>
+        ${metricCell('prokat')}
+        ${metricCell('greben')}
+        ${metricCell('krut')}
+        ${metricCell('bandage_thickness')}
+        ${metricCell('diameter_diff')}
+      </tr>
+    `;
+  }).join('');
+}
+async function loadWearAnalysis(nextLoco = ''){
+  const status = document.getElementById('wearStatus');
+  const select = document.getElementById('wearLocomotive');
+  const refreshBtn = document.getElementById('wearRefreshBtn');
+  const loco = String(nextLoco || select?.value || wearSelectedLoco || state?.locomotive || kpSelectedLoco || '').trim();
+  if (select && loco) select.value = loco;
+  wearSelectedLoco = loco;
+  if (status) status.textContent = 'Загрузка анализа...';
+  if (refreshBtn) refreshBtn.disabled = true;
+  wearLoading = true;
+  try {
+    const res = await fetch(`${API}/api/wear-analysis?locomotive=${encodeURIComponent(loco)}`, { cache: 'no-store' });
+    if (!res.ok) {
+      wearRows = [];
+      renderWearAnalysisTable();
+      if (status) status.textContent = 'Не удалось загрузить анализ';
+      return;
+    }
+    const payload = await res.json();
+    wearSelectedLoco = payload.locomotive || loco;
+    wearRows = payload.rows || [];
+    renderWearLocomotiveOptions();
+    renderWearAnalysisTable();
+    if (status) {
+      const countText = payload.series ? `${payload.series} ${payload.locomotive}` : payload.locomotive;
+      status.textContent = payload.rows?.length ? `Загружен анализ для ${countText}` : 'Нет данных для анализа';
+    }
+  } catch (error) {
+    wearRows = [];
+    renderWearAnalysisTable();
+    if (status) status.textContent = error.message || 'Не удалось загрузить анализ';
+  } finally {
+    wearLoading = false;
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
 }
 function applyKpSearchFilter(){
   const textValue = (document.getElementById('kpSearch')?.value || kpSearchText || '').trim().toLowerCase();
@@ -1733,11 +1876,14 @@ async function loadState(nextLocomotive, preloadedState = null, manualConfig = n
   renderLocoOptions();
   renderArchiveLocomotives();
   renderKpLocomotiveOptions();
+  renderWearLocomotiveOptions();
   renderRepairOptions();
   renderMeta();
   renderTable();
   updateArchiveSortButton();
-  await loadArchive();
+  await loadArchive().catch(error => {
+    console.error(error);
+  });
   setDirty(false);
   setStatus('Готово');
 }
@@ -2002,13 +2148,19 @@ document.getElementById('measurementDate').addEventListener('change', onDateChan
 document.getElementById('repairType').addEventListener('change', onRepairChange);
 document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
 document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilter);
-document.getElementById('archiveLocomotive').addEventListener('change', loadArchive);
-document.getElementById('archiveSearch').addEventListener('input', loadArchive);
-document.getElementById('archiveExcelFile').addEventListener('change', event => {
+document.getElementById('wearLocomotive')?.addEventListener('change', e => loadWearAnalysis(e.target.value));
+document.getElementById('archiveLocomotive')?.addEventListener('change', loadArchive);
+document.getElementById('archiveSearch')?.addEventListener('input', loadArchive);
+document.getElementById('archiveExcelFile')?.addEventListener('change', event => {
   const file = event.target.files?.[0];
   if (file) importArchiveExcelFile(file);
 });
-document.getElementById('saveBtn').style.display = CAN_EDIT ? '' : 'none';
+const saveBtn = document.getElementById('saveBtn');
+if (saveBtn) saveBtn.style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
-initialLoadPromise = loadState();
+initialLoadPromise = loadState().catch(error => {
+  console.error(error);
+  setStatus(error?.message || 'Не удалось загрузить данные');
+  return null;
+});
 if (!CAN_EDIT) switchTab('kp');

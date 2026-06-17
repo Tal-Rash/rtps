@@ -22,9 +22,10 @@
     </div>
 
     <div class="tabs" role="tablist" aria-label="Разделы">
-      <button id="tabInput" class="tab active" type="button" ${CAN_EDIT ? '' : 'style="display:none"'} onclick="switchTab('input')">Ввод замера</button>
+      <button id="tabInput" class="tab active" type="button" {{TAB_INPUT_STYLE}} onclick="switchTab('input')">Ввод замера</button>
       <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
       <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
+      <button id="tabWear" class="tab" type="button" onclick="switchTab('wear')">Анализ износа</button>
     </div>
 
     <div id="panelInput" class="panel active">
@@ -232,6 +233,45 @@
         </div>
       </div>
       <div id="archiveStatus" class="status"></div>
+    </div>
+
+    <div id="panelWear" class="panel">
+      <div class="wear-controls">
+        <label>Локомотив
+          <select id="wearLocomotive" style="width:220px"></select>
+        </label>
+        <button id="wearRefreshBtn" type="button" onclick="loadWearAnalysis()">Обновить анализ</button>
+        <div id="wearSummary" class="wear-summary"></div>
+      </div>
+      <div class="wear-note">Тренд считается по архиву замеров: сравниваем последние доступные значения по каждой КП и показываем, растет износ или нет.</div>
+      <div class="table-shell wear-table-shell">
+        <table id="wearTable" class="wear-table" aria-label="Анализ износа колесных пар">
+          <colgroup>
+            <col style="width:86px">
+            <col style="width:180px">
+            <col style="width:150px">
+            <col style="width:150px">
+            <col style="width:150px">
+            <col style="width:150px">
+            <col style="width:150px">
+            <col style="width:190px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>КП</th>
+              <th>Последний замер</th>
+              <th>Статус</th>
+              <th>Прокат</th>
+              <th>Гребень</th>
+              <th>Крутизна</th>
+              <th>Бандаж</th>
+              <th>Разница диаметров</th>
+            </tr>
+          </thead>
+          <tbody id="wearBody"></tbody>
+        </table>
+      </div>
+      <div id="wearStatus" class="status"></div>
     </div>
   </div>
 
