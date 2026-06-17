@@ -18,14 +18,24 @@
 body {
   margin: 0;
   font-family: "Segoe UI", Arial, sans-serif;
+  min-height: 100vh;
   background: linear-gradient(180deg, #e8eefb, #f7f9fc 170px) fixed;
   color: var(--text);
 }
 
 .shell {
   max-width: 1700px;
+  min-height: 100vh;
   margin: 0 auto;
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
 }
 
 .topbar {
@@ -120,12 +130,14 @@ button:disabled {
 }
 
 .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
-  max-height: calc(100vh - 126px);
+  max-height: none;
 }
 
 .matrix-table {
