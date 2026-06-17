@@ -345,6 +345,16 @@ function writeGridCellValue(grid, row, col, value){
   setPath(cell.dataset.path, normalized);
   return true;
 }
+function clearGridSelectionValues(grid, selection){
+  if (!selection) return false;
+  let changed = false;
+  for (let row = selection.startRow; row <= selection.endRow; row++) {
+    for (let col = selection.startCol; col <= selection.endCol; col++) {
+      changed = writeGridCellValue(grid, row, col, '') || changed;
+    }
+  }
+  return changed;
+}
 function pasteGridSelectionText(grid, target, text){
   if (!CAN_EDIT) return;
   const info = getGridCellInfo(target);
@@ -442,8 +452,19 @@ function handleGridKeydown(e){
   if (!info) return;
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
-    e.target.value = '';
-    setPath(e.target.dataset.path, '');
+    const sel = info.grid === 'repair-schedule' ? getRepairScheduleSelection() : getRepairPeriodicitySelection();
+    const selected = sel && info.row >= sel.startRow && info.row <= sel.endRow && info.col >= sel.startCol && info.col <= sel.endCol;
+    if (selected) {
+      clearGridSelectionValues(info.grid, sel);
+    } else {
+      e.target.value = '';
+      setPath(e.target.dataset.path, '');
+    }
+    if (info.grid === 'repair-schedule') {
+      updateRepairScheduleDerivedValues();
+    }
+    markDirty(true);
+    render();
   }
 }
 function getSelectedMonthSelection(){

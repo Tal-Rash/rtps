@@ -19,7 +19,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-0.9"
+APP_VERSION = "web-gpp-1.0"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
