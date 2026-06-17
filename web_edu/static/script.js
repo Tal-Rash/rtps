@@ -11,11 +11,16 @@ let currentMode = "dates";
 let tempColumns = [];
 let tempCategories = {};
 let draggedRowTabNum = null;
+let resizeResetTimer = null;
 
 window.addEventListener("DOMContentLoaded", () => {
   loadState();
   window.addEventListener("resize", () => {
-    requestAnimationFrame(updateStickyOffsets);
+    if (resizeResetTimer) clearTimeout(resizeResetTimer);
+    resizeResetTimer = setTimeout(() => {
+      resetTableScroll();
+      requestAnimationFrame(updateStickyOffsets);
+    }, 80);
   });
   if (!CAN_EDIT) {
     document.getElementById("btnCategorySettings")?.remove();
@@ -189,7 +194,21 @@ function renderMatrix() {
     attachRowDragListeners();
   }
 
+  resetTableScroll();
   requestAnimationFrame(updateStickyOffsets);
+}
+
+function resetTableScroll() {
+  const wrap = document.querySelector(".table-wrap");
+  if (wrap) {
+    wrap.scrollLeft = 0;
+    wrap.scrollTop = wrap.scrollTop;
+  }
+  const scroller = document.scrollingElement || document.documentElement;
+  if (scroller) scroller.scrollLeft = 0;
+  if (window.scrollX !== 0) {
+    window.scrollTo(0, window.scrollY);
+  }
 }
 
 function updateStickyOffsets() {
@@ -210,8 +229,8 @@ function updateStickyOffsets() {
   const tabRect = tabCell.getBoundingClientRect();
   const posRect = posCell.getBoundingClientRect();
 
-  const dragLeft = dragRect.left;
-  const fioLeft = dragLeft + dragRect.width;
+  const dragLeft = 0;
+  const fioLeft = dragRect.width;
   const tabLeft = fioLeft + fioRect.width;
   const posLeft = tabLeft + tabRect.width;
 

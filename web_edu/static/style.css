@@ -468,6 +468,15 @@ button:disabled {
 }
 
 @media (max-width: 480px) {
+  .matrix-table .col-drag,
+  .matrix-table .col-fio,
+  .matrix-table .col-tab,
+  .matrix-table .col-pos {
+    position: static;
+    left: auto;
+    z-index: auto;
+  }
+
   .matrix-table .col-fio {
     min-width: 120px;
   }
