@@ -125,7 +125,7 @@ button:disabled {
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
-  max-height: calc(100vh - 130px);
+  max-height: calc(100vh - 104px);
 }
 
 .matrix-table {
