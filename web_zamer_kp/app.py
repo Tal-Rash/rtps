@@ -2858,33 +2858,30 @@ def _wear_pair_number_from_row(values: list[str], source_row: int) -> int:
     return 1
 
 
-def _wear_session_metrics(values: list[str]) -> dict[str, float | None]:
-    def pair_values(left_col: int, right_col: int) -> list[float]:
-        result: list[float] = []
-        for col in (left_col, right_col):
-            if col >= len(values):
-                continue
-            parsed = parse_float_value(values[col])
-            if parsed is not None:
-                result.append(parsed)
-        return result
+def _wear_session_metrics(values: list[str]) -> dict[str, dict[str, float | None] | float | None]:
+    def value_at(col: int) -> float | None:
+        if col >= len(values):
+            return None
+        return parse_float_value(values[col])
 
-    prokat = pair_values(2, 3)
-    greben = pair_values(4, 5)
-    krut = pair_values(6, 7)
-    bandage = pair_values(8, 9)
-    diameters = pair_values(10, 11)
+    left_diameter = value_at(10)
+    right_diameter = value_at(11)
 
     return {
-        "prokat": max(prokat) if prokat else None,
-        "greben": min(greben) if greben else None,
-        "krut": min(krut) if krut else None,
-        "bandage_thickness": min(bandage) if bandage else None,
-        "diameter_diff": (max(diameters) - min(diameters)) if len(diameters) >= 2 else None,
+        "prokat": {"left": value_at(2), "right": value_at(3)},
+        "greben": {"left": value_at(4), "right": value_at(5)},
+        "krut": {"left": value_at(6), "right": value_at(7)},
+        "bandage_thickness": {"left": value_at(8), "right": value_at(9)},
+        "diameter_diff": (max(v for v in [left_diameter, right_diameter] if v is not None) - min(v for v in [left_diameter, right_diameter] if v is not None)) if left_diameter is not None and right_diameter is not None else None,
     }
 
 
-def load_wear_analysis_rows(locomotive: str = "") -> dict:
+def load_wear_analysis_rows(locomotive: str = "", date_from: str = "", date_to: str = "") -> dict:
+    date_from = text(date_from).strip()
+    date_to = text(date_to).strip()
+    if date_from and date_to and date_from > date_to:
+        date_from, date_to = date_to, date_from
+
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         locomotives = load_locomotives(cur)
@@ -2900,15 +2897,20 @@ def load_wear_analysis_rows(locomotive: str = "") -> dict:
             wheel_pair_count = axis_count or 12
         wheel_pair_count = max(1, wheel_pair_count)
 
-        rows = cur.execute(
-            """
-            SELECT y, measurement_date, locomotive, repair_type, r, c, v
-            FROM archive_data
-            WHERE locomotive=? AND TRIM(COALESCE(measurement_date, '')) <> ''
-            ORDER BY measurement_date ASC, y ASC, repair_type ASC, r ASC, c ASC
-            """,
-            (selected,),
-        ).fetchall()
+        query = [
+            "SELECT y, measurement_date, locomotive, repair_type, r, c, v",
+            "FROM archive_data",
+            "WHERE locomotive=? AND TRIM(COALESCE(measurement_date, '')) <> ''",
+        ]
+        params: list[str] = [selected]
+        if date_from:
+            query.append("AND measurement_date >= ?")
+            params.append(date_from)
+        if date_to:
+            query.append("AND measurement_date <= ?")
+            params.append(date_to)
+        query.append("ORDER BY measurement_date ASC, y ASC, repair_type ASC, r ASC, c ASC")
+        rows = cur.execute("\n".join(query), params).fetchall()
 
         sessions: dict[tuple[str, str, int], dict[str, object]] = {}
         for row in rows:
@@ -2967,30 +2969,38 @@ def load_wear_analysis_rows(locomotive: str = "") -> dict:
 
             for metric in WEAR_TREND_METRICS:
                 key = metric["key"]
-                history: list[float] = []
-                for session in pair_sessions:
-                    metrics = session.get("metrics")
-                    if isinstance(metrics, dict):
-                        value = metrics.get(key)
-                        if value is not None:
-                            history.append(value)
-                latest = history[-1] if history else None
-                previous = history[-2] if len(history) >= 2 else None
-                trend, delta = _wear_trend_compare(key, latest, previous)
-                if latest is not None and previous is not None:
-                    total_compared += 1
-                    if trend == "worse":
-                        worse_count += 1
-                    elif trend == "better":
-                        better_count += 1
-                    elif trend == "stable":
-                        stable_count += 1
+                side_payload: dict[str, dict[str, object]] = {}
+                for side in ("left", "right"):
+                    history: list[float] = []
+                    for session in pair_sessions:
+                        metrics = session.get("metrics")
+                        if isinstance(metrics, dict):
+                            metric_value = metrics.get(key)
+                            if isinstance(metric_value, dict):
+                                value = metric_value.get(side)
+                                if value is not None:
+                                    history.append(value)
+                    latest = history[-1] if history else None
+                    previous = history[-2] if len(history) >= 2 else None
+                    trend, delta = _wear_trend_compare(key, latest, previous)
+                    if latest is not None and previous is not None:
+                        total_compared += 1
+                        if trend == "worse":
+                            worse_count += 1
+                        elif trend == "better":
+                            better_count += 1
+                        elif trend == "stable":
+                            stable_count += 1
+                    side_payload[side] = {
+                        "latest": latest,
+                        "previous": previous,
+                        "delta": delta,
+                        "trend": trend,
+                    }
                 metric_payload[key] = {
                     "label": metric["label"],
-                    "latest": latest,
-                    "previous": previous,
-                    "delta": delta,
-                    "trend": trend,
+                    "left": side_payload["left"],
+                    "right": side_payload["right"],
                 }
 
             if total_compared <= 0:
@@ -3026,6 +3036,8 @@ def load_wear_analysis_rows(locomotive: str = "") -> dict:
             "locomotive": selected,
             "series": series,
             "wheel_pair_count": wheel_pair_count,
+            "date_from": date_from,
+            "date_to": date_to,
             "rows": result_rows,
         }
 
@@ -3180,11 +3192,11 @@ async def get_kp_data(request: Request, locomotive: str = ""):
     return json_response(load_kp_view(locomotive.strip()))
 
 @app.get("/api/wear-analysis")
-async def get_wear_analysis(request: Request, locomotive: str = ""):
+async def get_wear_analysis(request: Request, locomotive: str = "", date_from: str = "", date_to: str = ""):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
-    return json_response(load_wear_analysis_rows(locomotive.strip()))
+    return json_response(load_wear_analysis_rows(locomotive.strip(), date_from.strip(), date_to.strip()))
 
 @app.get("/api/norms")
 async def get_norms(request: Request):

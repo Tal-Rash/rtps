@@ -89,16 +89,20 @@
     .kp-table td.selected { background:#e8f0fe; }
     .kp-table td.selected input { background:transparent; }
     .wear-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+.wear-controls label { display:flex; align-items:center; gap:8px; }
     .wear-summary { margin-left:auto; color:var(--muted); font-size:13px; }
     .wear-note { margin:6px 0 8px; color:var(--muted); font-size:13px; line-height:1.4; }
     .wear-table-shell { margin-top:0; padding:0; overflow:auto; max-width:100%; }
     .wear-table th, .wear-table td { font-size:12px; vertical-align:middle; }
     .wear-table th { padding:10px 8px; white-space:normal; }
-    .wear-table td { padding:8px 10px; white-space:pre-line; line-height:1.15; }
+    .wear-table td { padding:8px 10px; white-space:pre-line; line-height:1.15; vertical-align:top; }
     .wear-pair { font-weight:700; font-size:14px; }
     .wear-last { white-space:pre-line; }
     .wear-value { font-weight:700; font-size:13px; }
     .wear-prev, .wear-delta { font-size:12px; line-height:1.15; }
+    .wear-side-block { display:flex; flex-direction:column; gap:2px; margin-bottom:6px; }
+    .wear-side-block:last-child { margin-bottom:0; }
+    .wear-side-value { font-weight:700; font-size:13px; }
     .wear-delta.trend-worse { color:#b42318; }
     .wear-delta.trend-better { color:#1f7a3a; }
     .wear-delta.trend-stable { color:#4c647f; }

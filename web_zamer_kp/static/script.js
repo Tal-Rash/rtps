@@ -19,6 +19,8 @@ let kpSelectionFocus = null;
 let kpSuppressFocusSelection = false;
 let wearRows = [];
 let wearSelectedLoco = '';
+let wearDateFrom = '';
+let wearDateTo = '';
 let wearLoading = false;
 let archiveRows = [];
 let archiveSortDesc = true;
@@ -1122,6 +1124,22 @@ function wearDeltaText(metric){
   const sign = delta > 0 ? '+' : '';
   return `Δ ${sign}${wearNumber(delta)}`;
 }
+function renderWearSideMetric(metric, sideLabel){
+  if (!metric) return '';
+  const latest = wearNumber(metric.latest);
+  const previous = wearNumber(metric.previous);
+  const delta = wearDeltaText(metric);
+  const cls = wearDeltaClass(metric);
+  const lines = [];
+  if (metric.latest !== null && metric.latest !== undefined && metric.latest !== '') {
+    lines.push(`<div class="wear-side-value">${esc(sideLabel)} ${esc(latest)}</div>`);
+  }
+  if (metric.previous !== null && metric.previous !== undefined && metric.previous !== '') {
+    lines.push(`<div class="wear-prev">пред.: ${esc(previous)}</div>`);
+  }
+  lines.push(`<div class="wear-delta ${cls}">${esc(delta)}</div>`);
+  return `<div class="wear-side-block ${cls}">${lines.join('')}</div>`;
+}
 function renderWearAnalysisTable(){
   const tbody = document.getElementById('wearBody');
   const summary = document.getElementById('wearSummary');
@@ -1138,15 +1156,23 @@ function renderWearAnalysisTable(){
   tbody.innerHTML = wearRows.map(row => {
     const metricCell = (key) => {
       const metric = row.metrics?.[key] || null;
-      const cls = wearDeltaClass(metric);
-      const latest = wearNumber(metric?.latest);
-      const previous = wearNumber(metric?.previous);
-      const delta = wearDeltaText(metric);
-      const lines = [];
-      if (metric && metric.latest !== null && metric.latest !== undefined && metric.latest !== '') lines.push(`<div class="wear-value">${esc(latest)}</div>`);
-      if (metric && metric.previous !== null && metric.previous !== undefined && metric.previous !== '') lines.push(`<div class="wear-prev">пред.: ${esc(previous)}</div>`);
-      lines.push(`<div class="wear-delta ${cls}">${esc(delta)}</div>`);
-      return `<td class="${cls}">${lines.join('')}</td>`;
+      if (key === 'diameter_diff') {
+        const cls = wearDeltaClass(metric);
+        const latest = wearNumber(metric?.latest);
+        const previous = wearNumber(metric?.previous);
+        const delta = wearDeltaText(metric);
+        const lines = [];
+        if (metric && metric.latest !== null && metric.latest !== undefined && metric.latest !== '') lines.push(`<div class="wear-value">${esc(latest)}</div>`);
+        if (metric && metric.previous !== null && metric.previous !== undefined && metric.previous !== '') lines.push(`<div class="wear-prev">пред.: ${esc(previous)}</div>`);
+        lines.push(`<div class="wear-delta ${cls}">${esc(delta)}</div>`);
+        return `<td class="${cls}">${lines.join('')}</td>`;
+      }
+      const left = metric?.left || null;
+      const right = metric?.right || null;
+      const leftBlock = renderWearSideMetric(left, 'Л');
+      const rightBlock = renderWearSideMetric(right, 'П');
+      const cellClass = wearDeltaClass(left || right);
+      return `<td class="${cellClass}">${leftBlock}${rightBlock}</td>`;
     };
     const statusClass = row.status_key === 'worse' ? 'trend-worse' : row.status_key === 'better' ? 'trend-better' : row.status_key === 'stable' ? 'trend-stable' : 'trend-none';
     const lastInfo = [formatWearDate(row.last_measurement_date), row.last_repair_type].filter(Boolean).join(' / ');
@@ -1167,15 +1193,27 @@ function renderWearAnalysisTable(){
 async function loadWearAnalysis(nextLoco = ''){
   const status = document.getElementById('wearStatus');
   const select = document.getElementById('wearLocomotive');
+  const dateFromInput = document.getElementById('wearDateFrom');
+  const dateToInput = document.getElementById('wearDateTo');
   const refreshBtn = document.getElementById('wearRefreshBtn');
   const loco = String(nextLoco || select?.value || wearSelectedLoco || state?.locomotive || kpSelectedLoco || '').trim();
+  const dateFrom = String(dateFromInput?.value || wearDateFrom || '').trim();
+  const dateTo = String(dateToInput?.value || wearDateTo || '').trim();
   if (select && loco) select.value = loco;
+  if (dateFromInput) dateFromInput.value = dateFrom;
+  if (dateToInput) dateToInput.value = dateTo;
   wearSelectedLoco = loco;
+  wearDateFrom = dateFrom;
+  wearDateTo = dateTo;
   if (status) status.textContent = 'Загрузка анализа...';
   if (refreshBtn) refreshBtn.disabled = true;
   wearLoading = true;
   try {
-    const res = await fetch(`${API}/api/wear-analysis?locomotive=${encodeURIComponent(loco)}`, { cache: 'no-store' });
+    const params = new URLSearchParams();
+    if (loco) params.set('locomotive', loco);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    const res = await fetch(`${API}/api/wear-analysis?${params.toString()}`, { cache: 'no-store' });
     if (!res.ok) {
       wearRows = [];
       renderWearAnalysisTable();
@@ -1184,12 +1222,15 @@ async function loadWearAnalysis(nextLoco = ''){
     }
     const payload = await res.json();
     wearSelectedLoco = payload.locomotive || loco;
+    wearDateFrom = payload.date_from || dateFrom;
+    wearDateTo = payload.date_to || dateTo;
     wearRows = payload.rows || [];
     renderWearLocomotiveOptions();
     renderWearAnalysisTable();
     if (status) {
       const countText = payload.series ? `${payload.series} ${payload.locomotive}` : payload.locomotive;
-      status.textContent = payload.rows?.length ? `Загружен анализ для ${countText}` : 'Нет данных для анализа';
+      const periodText = (wearDateFrom || wearDateTo) ? ` · период ${wearDateFrom || '...'} — ${wearDateTo || '...'}` : '';
+      status.textContent = payload.rows?.length ? `Загружен анализ для ${countText}${periodText}` : 'Нет данных для анализа';
     }
   } catch (error) {
     wearRows = [];
@@ -1877,6 +1918,7 @@ async function loadState(nextLocomotive, preloadedState = null, manualConfig = n
   renderArchiveLocomotives();
   renderKpLocomotiveOptions();
   renderWearLocomotiveOptions();
+  renderWearAnalysisTable();
   renderRepairOptions();
   renderMeta();
   renderTable();
@@ -2149,6 +2191,8 @@ document.getElementById('repairType').addEventListener('change', onRepairChange)
 document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
 document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilter);
 document.getElementById('wearLocomotive')?.addEventListener('change', e => loadWearAnalysis(e.target.value));
+document.getElementById('wearDateFrom')?.addEventListener('change', () => loadWearAnalysis());
+document.getElementById('wearDateTo')?.addEventListener('change', () => loadWearAnalysis());
 document.getElementById('archiveLocomotive')?.addEventListener('change', loadArchive);
 document.getElementById('archiveSearch')?.addEventListener('input', loadArchive);
 document.getElementById('archiveExcelFile')?.addEventListener('change', event => {
@@ -2158,9 +2202,11 @@ document.getElementById('archiveExcelFile')?.addEventListener('change', event =>
 const saveBtn = document.getElementById('saveBtn');
 if (saveBtn) saveBtn.style.display = CAN_EDIT ? '' : 'none';
 updateHistoryButtons();
+renderWearLocomotiveOptions();
 initialLoadPromise = loadState().catch(error => {
   console.error(error);
   setStatus(error?.message || 'Не удалось загрузить данные');
   return null;
 });
 if (!CAN_EDIT) switchTab('kp');
+loadWearAnalysis().catch(() => undefined);
