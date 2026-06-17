@@ -97,11 +97,11 @@ WEAR_TREND_METRICS = [
         "worse_when": "lower",
     },
     {
-        "key": "diameter_diff",
-        "label": "Разница диаметров",
+        "key": "diameter",
+        "label": "Диаметр",
         "columns": (10, 11),
-        "aggregate": "diff",
-        "worse_when": "higher",
+        "aggregate": "side",
+        "worse_when": "lower",
     },
 ]
 
@@ -2864,15 +2864,12 @@ def _wear_session_metrics(values: list[str]) -> dict[str, dict[str, float | None
             return None
         return parse_float_value(values[col])
 
-    left_diameter = value_at(10)
-    right_diameter = value_at(11)
-
     return {
         "prokat": {"left": value_at(2), "right": value_at(3)},
         "greben": {"left": value_at(4), "right": value_at(5)},
         "krut": {"left": value_at(6), "right": value_at(7)},
         "bandage_thickness": {"left": value_at(8), "right": value_at(9)},
-        "diameter_diff": (max(v for v in [left_diameter, right_diameter] if v is not None) - min(v for v in [left_diameter, right_diameter] if v is not None)) if left_diameter is not None and right_diameter is not None else None,
+        "diameter": {"left": value_at(10), "right": value_at(11)},
     }
 
 

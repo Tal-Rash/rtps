@@ -1156,17 +1156,6 @@ function renderWearAnalysisTable(){
   tbody.innerHTML = wearRows.map(row => {
     const metricCell = (key) => {
       const metric = row.metrics?.[key] || null;
-      if (key === 'diameter_diff') {
-        const cls = wearDeltaClass(metric);
-        const latest = wearNumber(metric?.latest);
-        const previous = wearNumber(metric?.previous);
-        const delta = wearDeltaText(metric);
-        const lines = [];
-        if (metric && metric.latest !== null && metric.latest !== undefined && metric.latest !== '') lines.push(`<div class="wear-value">${esc(latest)}</div>`);
-        if (metric && metric.previous !== null && metric.previous !== undefined && metric.previous !== '') lines.push(`<div class="wear-prev">пред.: ${esc(previous)}</div>`);
-        lines.push(`<div class="wear-delta ${cls}">${esc(delta)}</div>`);
-        return `<td class="${cls}">${lines.join('')}</td>`;
-      }
       const left = metric?.left || null;
       const right = metric?.right || null;
       const leftBlock = renderWearSideMetric(left, 'Л');
@@ -1185,7 +1174,7 @@ function renderWearAnalysisTable(){
         ${metricCell('greben')}
         ${metricCell('krut')}
         ${metricCell('bandage_thickness')}
-        ${metricCell('diameter_diff')}
+        ${metricCell('diameter')}
       </tr>
     `;
   }).join('');
