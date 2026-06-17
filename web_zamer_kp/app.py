@@ -2977,10 +2977,10 @@ def load_wear_analysis_rows(locomotive: str = "", date_from: str = "", date_to: 
                                 value = metric_value.get(side)
                                 if value is not None:
                                     history.append(value)
-                    latest = history[-1] if history else None
-                    previous = history[-2] if len(history) >= 2 else None
-                    trend, delta = _wear_trend_compare(key, latest, previous)
-                    if latest is not None and previous is not None:
+                    if len(history) >= 2:
+                        first_value = history[0]
+                        latest = history[-1]
+                        trend, delta = _wear_trend_compare(key, latest, first_value)
                         total_compared += 1
                         if trend == "worse":
                             worse_count += 1
@@ -2988,9 +2988,13 @@ def load_wear_analysis_rows(locomotive: str = "", date_from: str = "", date_to: 
                             better_count += 1
                         elif trend == "stable":
                             stable_count += 1
+                    else:
+                        first_value = history[0] if history else None
+                        latest = first_value
+                        trend, delta = "none", None
                     side_payload[side] = {
                         "latest": latest,
-                        "previous": previous,
+                        "previous": first_value,
                         "delta": delta,
                         "trend": trend,
                     }

@@ -1135,7 +1135,7 @@ function renderWearSideMetric(metric, sideLabel){
     lines.push(`<div class="wear-side-value">${esc(sideLabel)} ${esc(latest)}</div>`);
   }
   if (metric.previous !== null && metric.previous !== undefined && metric.previous !== '') {
-    lines.push(`<div class="wear-prev">пред.: ${esc(previous)}</div>`);
+    lines.push(`<div class="wear-prev">нач.: ${esc(previous)}</div>`);
   }
   lines.push(`<div class="wear-delta ${cls}">${esc(delta)}</div>`);
   return `<div class="wear-side-block ${cls}">${lines.join('')}</div>`;
