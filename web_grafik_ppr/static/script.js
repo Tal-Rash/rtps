@@ -1324,6 +1324,12 @@ function renderRepairSummary(){
           ${locoOptions.map((item) => `<option value="${esc(item.key)}" ${filters.locomotive === item.key ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}
         </select>
       </label>
+      <label>С
+        <input id="repairSummaryDateFrom" type="date" style="width:160px" value="${esc(filters.dateFrom)}" onchange="setRepairSummaryFilter('dateFrom', this.value)">
+      </label>
+      <label>По
+        <input id="repairSummaryDateTo" type="date" style="width:160px" value="${esc(filters.dateTo)}" onchange="setRepairSummaryFilter('dateTo', this.value)">
+      </label>
       <button type="button" onclick="repairSummaryResetFilters()">Сбросить</button>
     </div>
     <div class="repair-summary-types">
