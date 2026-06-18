@@ -125,6 +125,7 @@ button:disabled {
 }
 
 .table-wrap {
+  position: relative;
   width: 100%;
   overflow-x: auto;
   overflow-y: visible;
@@ -133,6 +134,7 @@ button:disabled {
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
+  clip-path: inset(0 round 8px);
 }
 
 .matrix-table {
