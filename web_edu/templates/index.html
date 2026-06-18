@@ -33,14 +33,6 @@
           <button class="btn btn-outline" onclick="openSettingsModal()" id="btnSettings">⚙ Настройка колонок</button>
           <button class="btn btn-outline" onclick="loadState()">🔄 Обновить</button>
         </div>
-        <div class="auth-info">
-          <div>Пользователь: <b>{{USER_NAME}}</b></div>
-          {% if CAN_EDIT == "true" %}
-            <div class="badge badge-edit">Редактор</div>
-          {% else %}
-            <div class="badge badge-view">Зритель</div>
-          {% endif %}
-        </div>
       </div>
     </div>
     
