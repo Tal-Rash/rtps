@@ -999,7 +999,7 @@ function renderRepairSchedule(){
     : `<tr><td colspan="${5 + columns.length}" class="empty-table-cell">Нет записей</td></tr>`;
   return `
     <div class="section-head repair-schedule-head">
-      <div class="section-title">График ремонтов на ${appState.year} г.</div>
+      <div class="section-title">График ремонтов</div>
       <div class="row-actions">
         <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="openRepairSchedulePeriodicity()">Периодичность</button>
         <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="deleteRepairScheduleRow()">- строку</button>

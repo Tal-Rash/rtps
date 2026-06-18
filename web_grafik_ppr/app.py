@@ -408,6 +408,7 @@ def default_state(year: int) -> dict:
         "acts": acts,
         "notes": notes,
         "repair_schedule": default_repair_schedule_state(),
+        "repair_schedule_year": year,
     }
 
 
@@ -514,6 +515,13 @@ def load_state(year: int, include_summary: bool = True) -> dict:
     state = default_state(year)
     with DB_LOCK, conn() as db:
         cur = db.cursor()
+        repair_schedule_year = year
+        try:
+            row = cur.execute("SELECT v FROM repair_settings WHERE k='last_year'").fetchone()
+            if row and s(row["v"]).strip():
+                repair_schedule_year = int(s(row["v"]))
+        except Exception:
+            repair_schedule_year = year
 
         repairs = cur.execute(
             "SELECT m, t, r, c, v FROM repairs WHERE y=? ORDER BY m, t, r, c",
@@ -581,7 +589,8 @@ def load_state(year: int, include_summary: bool = True) -> dict:
         for row in notes:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
 
-        state["repair_schedule"] = load_repair_schedule_for_year(cur, year)
+        state["repair_schedule_year"] = repair_schedule_year
+        state["repair_schedule"] = load_repair_schedule_for_year(cur, repair_schedule_year)
 
         tu28_data = cur.execute("SELECT m, r, k, v FROM tu28_data WHERE y=? ORDER BY m, r, k", (year,)).fetchall()
         for row in tu28_data:
