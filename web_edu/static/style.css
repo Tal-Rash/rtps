@@ -128,6 +128,7 @@ button:disabled {
   width: 100%;
   overflow-x: auto;
   overflow-y: visible;
+  padding-bottom: 12px;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
