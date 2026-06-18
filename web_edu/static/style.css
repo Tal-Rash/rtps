@@ -135,13 +135,12 @@ button:disabled {
   width: 100%;
   min-height: 0;
   overflow: auto;
-  scrollbar-gutter: stable both-edges;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
   max-height: none;
-  padding-bottom: 16px;
+  padding-bottom: 48px;
 }
 
 .table-scroll-x {
