@@ -1229,6 +1229,51 @@ function collectRepairSummaryRows(){
     ? collectRepairSummaryRowsFromSchedule()
     : collectRepairSummaryRowsFromMonths();
 }
+function groupRepairSummaryRows(rows){
+  const sorted = Array.isArray(rows) ? rows.slice() : [];
+  sorted.sort((a, b) => {
+    if (a.locoLabel !== b.locoLabel) return a.locoLabel.localeCompare(b.locoLabel, 'ru');
+    if (a.repairCode !== b.repairCode) return a.repairCode.localeCompare(b.repairCode, 'ru');
+    if (a.repairDateSort !== b.repairDateSort) return a.repairDateSort - b.repairDateSort;
+    return a.columnIndex - b.columnIndex;
+  });
+  const grouped = [];
+  for (const row of sorted) {
+    const prev = grouped[grouped.length - 1];
+    const sameGroup = prev
+      && prev.locoKey === row.locoKey
+      && prev.repairCode === row.repairCode
+      && prev.sourceKind === row.sourceKind;
+    if (!sameGroup) {
+      grouped.push({
+        ...row,
+        repairDateFrom: row.repairDate,
+        repairDateTo: row.repairDate,
+      });
+      continue;
+    }
+    const prevDate = new Date(prev.repairDateSort);
+    const currDate = new Date(row.repairDateSort);
+    const diffDays = Math.round((currDate - prevDate) / 86400000);
+    if (diffDays >= 0 && diffDays <= 1) {
+      prev.repairDateTo = row.repairDate;
+      prev.repairDateSort = row.repairDateSort;
+      prev.columnIndex = Math.min(prev.columnIndex, row.columnIndex);
+      continue;
+    }
+    grouped.push({
+      ...row,
+      repairDateFrom: row.repairDate,
+      repairDateTo: row.repairDate,
+    });
+  }
+  return grouped.sort((a, b) => {
+    if (a.repairDateSort !== b.repairDateSort) return b.repairDateSort - a.repairDateSort;
+    if (a.locoLabel !== b.locoLabel) return a.locoLabel.localeCompare(b.locoLabel, 'ru');
+    if (a.repairCode !== b.repairCode) return a.repairCode.localeCompare(b.repairCode, 'ru');
+    return a.columnIndex - b.columnIndex;
+  });
+}
 function setRepairSummaryFilter(name, value){
   const state = repairSummaryNormalizeState();
   state[name] = String(value ?? '').trim();
@@ -1257,14 +1302,15 @@ function renderRepairSummary(){
   const filters = repairSummaryNormalizeState();
   const locoOptions = repairSummaryLocomotiveOptions();
   const typeOptions = repairSummaryKnownTypes(filters.source);
-  const rows = collectRepairSummaryRows();
-  const totalFacts = rows.length;
+  const rawRows = collectRepairSummaryRows();
+  const rows = groupRepairSummaryRows(rawRows);
+  const totalFacts = rawRows.length;
   return `
     <div class="section-head repair-summary-head">
       <div class="section-title">Сводная таблица ремонтов</div>
       <div class="repair-summary-counter">Показано: ${rows.length} · всего фактов: ${totalFacts}</div>
     </div>
-    <div class="repair-summary-note">Берём только значения из факта, план в сводку не попадает.</div>
+    <div class="repair-summary-note">Берём только значения из факта. Одинаковые подряд идущие ремонты одной пары склеиваются в диапазон дат.</div>
     <div class="repair-summary-filters">
       <label>Источник
         <select id="repairSummarySource" style="width:220px" onchange="setRepairSummaryFilter('source', this.value)">
@@ -1295,12 +1341,14 @@ function renderRepairSummary(){
           <col class="col-loco">
           <col class="col-repair">
           <col class="col-date">
+          <col class="col-date">
         </colgroup>
         <thead>
           <tr>
             <th>Локомотив</th>
             <th>Вид ремонта</th>
-            <th>Дата факта</th>
+            <th>От</th>
+            <th>До</th>
           </tr>
         </thead>
         <tbody>
@@ -1308,9 +1356,10 @@ function renderRepairSummary(){
             <tr>
               <td>${esc(row.locoLabel || '—')}</td>
               <td>${esc(row.repairCode || '—')}</td>
-              <td>${esc(row.repairDate || '—')}</td>
+              <td>${esc(row.repairDateFrom || row.repairDate || '—')}</td>
+              <td>${esc(row.repairDateTo || row.repairDate || '—')}</td>
             </tr>
-          `).join('') : `<tr><td colspan="3" class="empty-table-cell">Нет ремонтов, подходящих под фильтры</td></tr>`}
+          `).join('') : `<tr><td colspan="4" class="empty-table-cell">Нет ремонтов, подходящих под фильтры</td></tr>`}
         </tbody>
       </table>
     </div>
