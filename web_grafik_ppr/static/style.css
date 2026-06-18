@@ -347,8 +347,10 @@
     .table-wrap > table tr > *:last-child { border-right:0; }
     .table-wrap > table tbody tr:last-child > * { border-bottom:0; }
     .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:100%; min-height:var(--month-row-height); line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; outline:none; }
+    .month-table .cell { padding:0 4px; font-size:15px; }
     .cell.center { text-align:center; }
     .cell.small { font-size:14px; padding:2px 2px; }
+    .month-table .cell.small { padding:0 2px; }
     .col-day { position:relative; padding:0; height:var(--month-row-height); }
     .cell.day-cell {
       display:block;
@@ -385,8 +387,9 @@
       text-align:center;
     }
     .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:var(--month-row-height); font-size:16px; }
+    .month-table .rownum { padding:0 6px; }
     .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--accent); background:transparent; cursor:pointer; font-weight:800; font-size:15px; }
-    .rowbtn.cat-toggle { width:100%; height:calc(var(--month-row-height) + 2px); border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
+    .rowbtn.cat-toggle { width:100%; height:var(--month-row-height); border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { border-color:var(--accent); color:var(--accent); background:transparent; }
