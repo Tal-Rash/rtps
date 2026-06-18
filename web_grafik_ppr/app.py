@@ -629,7 +629,7 @@ def _repair_summary_rows_from_month_state(state: dict) -> list[dict]:
                 if cell_index < 4 or cell_index >= 4 + month_days:
                     continue
                 code = normalize_repair_code(value)
-                if not code:
+                if not code or not any("А" <= ch <= "Я" for ch in code):
                     continue
                 day = cell_index - 3
                 try:
@@ -666,7 +666,7 @@ def _repair_summary_rows_from_schedule_state(state: dict) -> list[dict]:
         def push_row(repair_code: str, date_value, column_index: int, source_kind: str):
             code = normalize_repair_code(repair_code)
             date_text = s(date_value).strip()
-            if not code or not date_text:
+            if not code or not date_text or not any("А" <= ch <= "Я" for ch in code):
                 return
             parsed = _repair_schedule_parse_date(date_text)
             if not parsed:
@@ -704,7 +704,7 @@ def _repair_summary_pack(rows: list[dict]) -> dict:
     seen_locos: set[str] = set()
     for row in rows:
         code = s(row.get("repairCode")).strip()
-        if code and code not in seen_types:
+        if code and any("А" <= ch <= "Я" for ch in code) and code not in seen_types:
             seen_types.add(code)
             types.append(code)
         loco_key = s(row.get("locoKey")).strip()
