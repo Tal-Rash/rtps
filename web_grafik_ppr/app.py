@@ -16,7 +16,7 @@ import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from urllib.parse import parse_qs, quote, urlparse
 
 APP_VERSION = "web-gpp-1.0"
@@ -56,7 +56,7 @@ SOURCE_DB = ROOT.parent / "base" / "common_database.db"
 SOURCE_DIR = ROOT.parent / "src" / "График ППР"
 ACT_TEMPLATE_NAME = "Акт_шаблон.xlsx"
 
-DB_LOCK = Lock()
+DB_LOCK = RLock()
 SERVER_STARTED_AT = None
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -411,6 +411,90 @@ def default_state(year: int) -> dict:
     }
 
 
+def load_repair_schedule_for_year(cur: sqlite3.Cursor, year: int) -> dict:
+    schedule_rows = cur.execute("SELECT r, k, v FROM repair_schedule WHERE y=? ORDER BY r, k", (year,)).fetchall()
+    schedule = default_repair_schedule_state()
+    columns = schedule["columns"]
+    objects: dict[int, dict[str, dict[int, str] | dict[str, str] | str]] = {}
+    for row in schedule_rows:
+        idx = int(row["r"])
+        key = s(row["k"])
+        value = s(row["v"])
+        if idx == -1 and key.startswith("col_"):
+            try:
+                cidx = int(key[4:])
+            except ValueError:
+                continue
+            if 0 <= cidx < len(columns) and value:
+                columns[cidx]["code"] = normalize_repair_code(value)
+            continue
+        if idx >= 0 and key.startswith("periodicity_series_"):
+            try:
+                sidx = int(key.rsplit("_", 1)[1])
+            except Exception:
+                continue
+            while len(schedule["periodicity"]["series"]) <= sidx:
+                schedule["periodicity"]["series"].append("")
+                schedule["periodicity"]["values"].append(["", "", "", "", ""])
+            if 0 <= sidx < len(schedule["periodicity"]["series"]):
+                schedule["periodicity"]["series"][sidx] = value
+            continue
+        if idx >= 0 and key.startswith("periodicity_value_"):
+            try:
+                _, _, r_str, c_str = key.split("_", 3)
+                r_idx = int(r_str)
+                c_idx = int(c_str)
+            except Exception:
+                continue
+            while len(schedule["periodicity"]["values"]) <= r_idx:
+                schedule["periodicity"]["series"].append("")
+                schedule["periodicity"]["values"].append(["", "", "", "", ""])
+            while len(schedule["periodicity"]["values"][r_idx]) <= c_idx:
+                schedule["periodicity"]["values"][r_idx].append("")
+            schedule["periodicity"]["values"][r_idx][c_idx] = value
+            continue
+        if idx < 0:
+            continue
+        obj = objects.setdefault(idx, {"series": "", "number": "", "plan": {}, "fact": {}})
+        if key == "series":
+            obj["series"] = value
+        elif key == "number":
+            obj["number"] = value
+        elif key == "kr_plan":
+            obj.setdefault("kr", {})["plan"] = value
+        elif key == "kr_fact":
+            obj.setdefault("kr", {})["fact"] = value
+        elif key.startswith("plan_"):
+            try:
+                cidx = int(key[5:])
+            except ValueError:
+                continue
+            obj["plan"][cidx] = value
+        elif key.startswith("fact_"):
+            try:
+                cidx = int(key[5:])
+            except ValueError:
+                continue
+            obj["fact"][cidx] = value
+    schedule["columns"] = columns
+    schedule["objects"] = []
+    for idx in sorted(objects):
+        obj = objects[idx]
+        schedule["objects"].append({
+            "series": s(obj["series"]),
+            "number": s(obj["number"]),
+            "kr": {
+                "plan": s((obj.get("kr") or {}).get("plan", "")),
+                "fact": s((obj.get("kr") or {}).get("fact", "")),
+            },
+            "plan": [s(obj["plan"].get(i, "")) for i in range(len(columns))],
+            "fact": [s(obj["fact"].get(i, "")) for i in range(len(columns))],
+        })
+    if not schedule["objects"]:
+        schedule["objects"] = default_repair_schedule_state()["objects"]
+    return compute_repair_schedule_derived(schedule)
+
+
 def _default_table_rows(year: int, month: int, table_type: str, rows: int = 14) -> list[dict]:
     days = calendar.monthrange(year, month)[1]
     result = []
@@ -426,7 +510,7 @@ def _default_table_rows(year: int, month: int, table_type: str, rows: int = 14) 
     return result
 
 
-def load_state(year: int) -> dict:
+def load_state(year: int, include_summary: bool = True) -> dict:
     state = default_state(year)
     with DB_LOCK, conn() as db:
         cur = db.cursor()
@@ -497,88 +581,7 @@ def load_state(year: int) -> dict:
         for row in notes:
             state["notes"].setdefault(s(row["m"]), {})[s(row["k"])] = s(row["v"])
 
-        schedule_rows = cur.execute("SELECT r, k, v FROM repair_schedule WHERE y=? ORDER BY r, k", (year,)).fetchall()
-        schedule = default_repair_schedule_state()
-        columns = schedule["columns"]
-        objects: dict[int, dict[str, dict[int, str] | dict[str, str] | str]] = {}
-        for row in schedule_rows:
-            idx = int(row["r"])
-            key = s(row["k"])
-            value = s(row["v"])
-            if idx == -1 and key.startswith("col_"):
-                try:
-                    cidx = int(key[4:])
-                except ValueError:
-                    continue
-                if 0 <= cidx < len(columns) and value:
-                    columns[cidx]["code"] = normalize_repair_code(value)
-                continue
-            if idx >= 0 and key.startswith("periodicity_series_"):
-                try:
-                    sidx = int(key.rsplit("_", 1)[1])
-                except Exception:
-                    continue
-                while len(schedule["periodicity"]["series"]) <= sidx:
-                    schedule["periodicity"]["series"].append("")
-                    schedule["periodicity"]["values"].append(["", "", "", "", ""])
-                if 0 <= sidx < len(schedule["periodicity"]["series"]):
-                    schedule["periodicity"]["series"][sidx] = value
-                continue
-            if idx >= 0 and key.startswith("periodicity_value_"):
-                try:
-                    _, _, r_str, c_str = key.split("_", 3)
-                    r_idx = int(r_str)
-                    c_idx = int(c_str)
-                except Exception:
-                    continue
-                while len(schedule["periodicity"]["values"]) <= r_idx:
-                    schedule["periodicity"]["series"].append("")
-                    schedule["periodicity"]["values"].append(["", "", "", "", ""])
-                while len(schedule["periodicity"]["values"][r_idx]) <= c_idx:
-                    schedule["periodicity"]["values"][r_idx].append("")
-                schedule["periodicity"]["values"][r_idx][c_idx] = value
-                continue
-            if idx < 0:
-                continue
-            obj = objects.setdefault(idx, {"series": "", "number": "", "plan": {}, "fact": {}})
-            if key == "series":
-                obj["series"] = value
-            elif key == "number":
-                obj["number"] = value
-            elif key == "kr_plan":
-                obj.setdefault("kr", {})["plan"] = value
-            elif key == "kr_fact":
-                obj.setdefault("kr", {})["fact"] = value
-            elif key.startswith("plan_"):
-                try:
-                    cidx = int(key[5:])
-                except ValueError:
-                    continue
-                obj["plan"][cidx] = value
-            elif key.startswith("fact_"):
-                try:
-                    cidx = int(key[5:])
-                except ValueError:
-                    continue
-                obj["fact"][cidx] = value
-        schedule["columns"] = columns
-        schedule["objects"] = []
-        for idx in sorted(objects):
-            obj = objects[idx]
-            schedule["objects"].append({
-                "series": s(obj["series"]),
-                "number": s(obj["number"]),
-                "kr": {
-                    "plan": s((obj.get("kr") or {}).get("plan", "")),
-                    "fact": s((obj.get("kr") or {}).get("fact", "")),
-                },
-                "plan": [s(obj["plan"].get(i, "")) for i in range(len(columns))],
-                "fact": [s(obj["fact"].get(i, "")) for i in range(len(columns))],
-            })
-        if not schedule["objects"]:
-            schedule["objects"] = default_repair_schedule_state()["objects"]
-        schedule = compute_repair_schedule_derived(schedule)
-        state["repair_schedule"] = schedule
+        state["repair_schedule"] = load_repair_schedule_for_year(cur, year)
 
         tu28_data = cur.execute("SELECT m, r, k, v FROM tu28_data WHERE y=? ORDER BY m, r, k", (year,)).fetchall()
         for row in tu28_data:
@@ -600,7 +603,146 @@ def load_state(year: int) -> dict:
             elif k == "tu28_staff":
                 table[r]["tu28_staff"] = parsed_v
 
+        if include_summary:
+            state["repair_summary"] = build_repair_summary_state(cur)
+
     return state
+
+
+def _repair_summary_rows_from_month_state(state: dict) -> list[dict]:
+    rows: list[dict] = []
+    year = int(state.get("year") or 0)
+    for month_index0, month in enumerate(state.get("months", []) or []):
+        month_number = int(month.get("month") or month_index0 + 1)
+        if not (1 <= month_number <= 12):
+            continue
+        month_days = int(month.get("days") or calendar.monthrange(year, month_number)[1])
+        for row_index, row in enumerate(month.get("fact", []) or []):
+            if not row or row.get("excluded"):
+                continue
+            key = report_unit_key(row)
+            if not key:
+                continue
+            series, number = key
+            cells = row.get("cells") or []
+            for cell_index, value in enumerate(cells):
+                if cell_index < 4 or cell_index >= 4 + month_days:
+                    continue
+                code = normalize_repair_code(value)
+                if not code:
+                    continue
+                day = cell_index - 3
+                try:
+                    date_value = dt.date(year, month_number, day)
+                except Exception:
+                    continue
+                rows.append({
+                    "rowIndex": row_index,
+                    "locoKey": f"{series}|{number}",
+                    "locoLabel": f"{series} {number}".strip(),
+                    "series": series,
+                    "number": number,
+                    "repairCode": code,
+                    "repairDate": _repair_schedule_format_date(date_value),
+                    "repairDateSort": int(dt.datetime(year, month_number, day).timestamp() * 1000),
+                    "columnIndex": cell_index,
+                    "sourceKind": "month",
+                })
+    return rows
+
+
+def _repair_summary_rows_from_schedule_state(state: dict) -> list[dict]:
+    rows: list[dict] = []
+    schedule = state.get("repair_schedule", {}) or {}
+    columns = schedule.get("columns", []) if isinstance(schedule, dict) else []
+    for row_index, row in enumerate(schedule.get("objects", []) or []):
+        series = s(row.get("series")).strip()
+        number = s(row.get("number")).strip()
+        if not series and not number:
+            continue
+        loco_label = " ".join(part for part in [series, number] if part).strip()
+        loco_key = f"{series}|{number}"
+
+        def push_row(repair_code: str, date_value, column_index: int, source_kind: str):
+            code = normalize_repair_code(repair_code)
+            date_text = s(date_value).strip()
+            if not code or not date_text:
+                return
+            parsed = _repair_schedule_parse_date(date_text)
+            if not parsed:
+                return
+            rows.append({
+                "rowIndex": row_index,
+                "locoKey": loco_key,
+                "locoLabel": loco_label,
+                "series": series,
+                "number": number,
+                "repairCode": code,
+                "repairDate": date_text,
+                "repairDateSort": int(dt.datetime(parsed.year, parsed.month, parsed.day).timestamp() * 1000),
+                "columnIndex": column_index,
+                "sourceKind": source_kind,
+            })
+
+        push_row("КР", (row.get("kr") or {}).get("fact", ""), -1, "kr")
+        for cidx, col in enumerate(columns):
+            push_row((col or {}).get("code", ""), (row.get("fact") or [])[cidx] if cidx < len(row.get("fact") or []) else "", cidx, "fact")
+    return rows
+
+
+def _repair_summary_pack(rows: list[dict]) -> dict:
+    rows = list(rows or [])
+    rows.sort(key=lambda item: (
+        -int(item.get("repairDateSort") or 0),
+        s(item.get("locoLabel")),
+        s(item.get("repairCode")),
+        int(item.get("columnIndex") or 0),
+    ))
+    types: list[str] = []
+    locos: list[dict] = []
+    seen_types: set[str] = set()
+    seen_locos: set[str] = set()
+    for row in rows:
+        code = s(row.get("repairCode")).strip()
+        if code and code not in seen_types:
+            seen_types.add(code)
+            types.append(code)
+        loco_key = s(row.get("locoKey")).strip()
+        loco_label = s(row.get("locoLabel")).strip() or loco_key.replace("|", " ").strip()
+        if loco_key and loco_key not in seen_locos:
+            seen_locos.add(loco_key)
+            locos.append({"key": loco_key, "label": loco_label})
+    locos.sort(key=lambda item: s(item.get("label")).lower())
+    return {"rows": rows, "types": types, "loco_options": locos}
+
+
+def build_repair_summary_state(cur: sqlite3.Cursor) -> dict:
+    years: set[int] = set()
+    for table in ("repairs", "repair_schedule"):
+        try:
+            fetched = cur.execute(f"SELECT DISTINCT y FROM {table}").fetchall()
+        except Exception:
+            fetched = []
+        for row in fetched:
+            try:
+                years.add(int(row["y"]))
+            except Exception:
+                continue
+
+    months_rows: list[dict] = []
+    schedule_rows: list[dict] = []
+    for year in sorted(years):
+        try:
+            year_state = load_state(year, include_summary=False)
+        except Exception:
+            continue
+        months_rows.extend(_repair_summary_rows_from_month_state(year_state))
+        schedule_rows.extend(_repair_summary_rows_from_schedule_state(year_state))
+
+    return {
+        "months": _repair_summary_pack(months_rows),
+        "schedule": _repair_summary_pack(schedule_rows),
+    }
 
 
 def find_act_template_path() -> Path | None:

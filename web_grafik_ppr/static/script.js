@@ -1056,7 +1056,15 @@ function repairSummaryMonthTypes(){
   });
   return codes;
 }
+function repairSummaryDataset(source){
+  const key = String(source ?? 'months').trim().toLowerCase() === 'schedule' ? 'schedule' : 'months';
+  const data = appState && appState.repair_summary && appState.repair_summary[key];
+  if (data && typeof data === 'object') return data;
+  return null;
+}
 function repairSummaryKnownTypes(source){
+  const data = repairSummaryDataset(source);
+  if (data && Array.isArray(data.types) && data.types.length) return data.types.map((value) => normalizeRepairCode(value)).filter(Boolean);
   return normalizeRepairCode(source) === 'SCHEDULE'
     ? repairSummaryDefaultTypes()
     : repairSummaryMonthTypes();
@@ -1079,6 +1087,10 @@ function repairSummaryNormalizeState(){
 }
 function repairSummaryLocomotiveOptions(){
   const state = repairSummaryNormalizeState();
+  const data = repairSummaryDataset(state.source);
+  if (data && Array.isArray(data.loco_options) && data.loco_options.length) {
+    return data.loco_options.map((item) => ({ key: String(item.key ?? ''), label: String(item.label ?? '') }));
+  }
   const useSchedule = state.source === 'schedule';
   const seen = new Set();
   const rows = [];
@@ -1224,9 +1236,19 @@ function collectRepairSummaryRowsFromMonths(){
 }
 function collectRepairSummaryRows(){
   const state = repairSummaryNormalizeState();
-  return state.source === 'schedule'
-    ? collectRepairSummaryRowsFromSchedule()
-    : collectRepairSummaryRowsFromMonths();
+  const data = repairSummaryDataset(state.source);
+  const rawRows = data && Array.isArray(data.rows) ? data.rows.slice() : (
+    state.source === 'schedule'
+      ? collectRepairSummaryRowsFromSchedule()
+      : collectRepairSummaryRowsFromMonths()
+  );
+  const selectedTypes = new Set((state.types || []).map((value) => normalizeRepairCode(value)).filter(Boolean));
+  return rawRows.filter((row) => {
+    if (!row) return false;
+    if (!repairSummaryRowMatchesLoco(row, state.locomotive)) return false;
+    if (!repairSummaryDateInRange(row.repairDate, state.dateFrom, state.dateTo)) return false;
+    return selectedTypes.size ? selectedTypes.has(normalizeRepairCode(row.repairCode)) : true;
+  });
 }
 function groupRepairSummaryRows(rows){
   const sorted = Array.isArray(rows) ? rows.slice() : [];
@@ -1297,7 +1319,6 @@ function repairSummaryResetFilters(){
   render();
 }
 function renderRepairSummary(){
-  const schedule = normalizeRepairSchedule();
   const filters = repairSummaryNormalizeState();
   const locoOptions = repairSummaryLocomotiveOptions();
   const typeOptions = repairSummaryKnownTypes(filters.source);
