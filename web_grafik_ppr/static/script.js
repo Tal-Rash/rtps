@@ -694,7 +694,7 @@ function render(){
 function renderSafe(){
   ensureYearOptions();
   ensureLeaveGuard();
-  document.title = `График ППР web ${BOOT_VERSION}`;
+  document.title = `График ППР`;
   bindNav();
   updateSaveButtonState();
   const content = document.getElementById('content');
