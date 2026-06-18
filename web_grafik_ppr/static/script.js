@@ -37,6 +37,10 @@ const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "�
 const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'СР', 'ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'КР'];
 const REPAIR_PERIODICITY_COLUMNS = ['TP1', 'TP2', 'TP3', 'CP', 'KP'];
 const REPAIR_PERIODICITY_DEFAULT_SERIES = ['ТЭМ-2УМ', 'ТЭМ-2', ''];
+const REPAIR_SUMMARY_FIXED_HOLIDAYS = new Set([
+  '01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08',
+  '02-23', '03-08', '05-01', '05-09', '06-12', '11-04',
+]);
 const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
@@ -1139,6 +1143,38 @@ function repairSummaryDateInRange(dateValue, dateFrom, dateTo){
   }
   return true;
 }
+function repairSummaryDateKey(date){
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${month}-${day}`;
+}
+function repairSummaryIsNonWorkingDate(date){
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
+  const key = repairSummaryDateKey(date);
+  if (REPAIR_SUMMARY_FIXED_HOLIDAYS.has(key)) return true;
+  const year = Number(appState.year);
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  if (date.getFullYear() === year) {
+    if (hasSystemDate('holiday', month, day)) return true;
+    if (hasSystemDate('transfer', month, day)) return false;
+  }
+  const wd = date.getDay();
+  return wd === 0 || wd === 6;
+}
+function repairSummaryCanBridgeGap(prevDate, nextDate){
+  if (!(prevDate instanceof Date) || !(nextDate instanceof Date)) return false;
+  if (Number.isNaN(prevDate.getTime()) || Number.isNaN(nextDate.getTime())) return false;
+  if (nextDate <= prevDate) return false;
+  let cursor = new Date(prevDate.getFullYear(), prevDate.getMonth(), prevDate.getDate());
+  cursor.setDate(cursor.getDate() + 1);
+  while (cursor < nextDate) {
+    if (!repairSummaryIsNonWorkingDate(cursor)) return false;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return true;
+}
 function repairSummaryMonthDate(year, monthNumber, day){
   const date = new Date(year, monthNumber - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== monthNumber - 1 || date.getDate() !== day) return null;
@@ -1273,10 +1309,16 @@ function groupRepairSummaryRows(rows){
       });
       continue;
     }
-    const prevDate = new Date(prev.repairDateSort);
-    const currDate = new Date(row.repairDateSort);
-    const diffDays = Math.round((currDate - prevDate) / 86400000);
+    const prevDate = parseRepairDate(prev.repairDateTo || prev.repairDate);
+    const currDate = parseRepairDate(row.repairDateFrom || row.repairDate);
+    const diffDays = prevDate && currDate ? Math.round((currDate - prevDate) / 86400000) : NaN;
     if (diffDays >= 0 && diffDays <= 1) {
+      prev.repairDateTo = row.repairDate;
+      prev.repairDateSort = row.repairDateSort;
+      prev.columnIndex = Math.min(prev.columnIndex, row.columnIndex);
+      continue;
+    }
+    if (prevDate && currDate && repairSummaryCanBridgeGap(prevDate, currDate)) {
       prev.repairDateTo = row.repairDate;
       prev.repairDateSort = row.repairDateSort;
       prev.columnIndex = Math.min(prev.columnIndex, row.columnIndex);
