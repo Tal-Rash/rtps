@@ -1071,7 +1071,6 @@ function repairSummaryNormalizeState(){
   const currentTypes = Array.isArray(ui.repairSummary.types) ? ui.repairSummary.types.map((value) => normalizeRepairCode(value)).filter(Boolean) : [];
   const allowed = new Set(defaults);
   let types = currentTypes.filter((value) => allowed.has(value));
-  if (!types.length) types = defaults.slice();
   ui.repairSummary.types = Array.from(new Set(types));
   ui.repairSummary.locomotive = String(ui.repairSummary.locomotive ?? '').trim();
   ui.repairSummary.dateFrom = String(ui.repairSummary.dateFrom ?? '').trim();
@@ -1294,7 +1293,7 @@ function repairSummaryResetFilters(){
   state.locomotive = '';
   state.dateFrom = '';
   state.dateTo = '';
-  state.types = repairSummaryKnownTypes(state.source);
+  state.types = [];
   render();
 }
 function renderRepairSummary(){
