@@ -1,4 +1,4 @@
-:root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:72px; --cat-col-width:100px; }
+:root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:72px; --cat-col-width:100px; --month-row-height:28px; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
@@ -346,10 +346,10 @@
     .table-wrap > table th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
     .table-wrap > table tr > *:last-child { border-right:0; }
     .table-wrap > table tbody tr:last-child > * { border-bottom:0; }
-    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:100%; min-height:28px; line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; outline:none; }
+    .cell { display:block; width:100%; min-width:0; box-sizing:border-box; border:0; margin:0; padding:3px 4px; height:100%; min-height:var(--month-row-height); line-height:1; font:inherit; font-size:16px; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:uppercase; outline:none; }
     .cell.center { text-align:center; }
     .cell.small { font-size:14px; padding:2px 2px; }
-    .col-day { position:relative; padding:0; height:28px; }
+    .col-day { position:relative; padding:0; height:var(--month-row-height); }
     .cell.day-cell {
       display:block;
       width:100%;
@@ -366,7 +366,7 @@
       box-shadow:none !important;
       -webkit-box-shadow:none !important;
       text-align:center;
-      line-height:28px;
+      line-height:var(--month-row-height);
     }
     .cell.selected-cell,
     .cell.day-cell.selected-cell,
@@ -384,9 +384,9 @@
       width:100%;
       text-align:center;
     }
-    .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:28px; font-size:16px; }
+    .rownum { display:flex; gap:8px; align-items:center; justify-content:center; padding:2px 6px; min-height:var(--month-row-height); font-size:16px; }
     .rowbtn { width:26px; height:26px; border-radius:8px; border:1px solid var(--accent); background:transparent; cursor:pointer; font-weight:800; font-size:15px; }
-    .rowbtn.cat-toggle { width:100%; height:30px; border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
+    .rowbtn.cat-toggle { width:100%; height:calc(var(--month-row-height) + 2px); border-radius:0; border:0; background:transparent; display:flex; align-items:center; justify-content:center; line-height:1; }
     .badge { padding:5px 10px; border-radius:8px; background:var(--soft); color:#1d4aa6; font-weight:700; }
     .footerbar { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
     .danger { border-color:var(--accent); color:var(--accent); background:transparent; }
@@ -419,9 +419,9 @@
     td.holiday-col,
     td.col-day { padding:0; height:100%; position:relative; }
     td.transfer-col .cell,
-    td.holiday-col .cell { padding:0; height:28px; line-height:28px; }
+    td.holiday-col .cell { padding:0; height:var(--month-row-height); line-height:var(--month-row-height); }
     td.transfer-col .cell.small,
-    td.holiday-col .cell.small { padding:0; height:28px; line-height:28px; }
+    td.holiday-col .cell.small { padding:0; height:var(--month-row-height); line-height:var(--month-row-height); }
     td.transfer-col .cell.day-cell { background:#dcf8dc !important; color:#102033 !important; }
     td.holiday-col .cell.day-cell { background:#ffdede !important; color:#102033 !important; }
     td.transfer-col .cell.day-cell::selection,
@@ -443,7 +443,7 @@
     .repair-schedule-table.compact th,
     .repair-schedule-table.compact td { font-size:16px; }
     .month-table { table-layout:fixed; width:auto; }
-    .month-table tbody tr { height:28px; }
+    .month-table tbody tr { height:var(--month-row-height); }
     .repair-schedule-head { margin-bottom:10px; }
     .repair-schedule-wrap { width:fit-content; max-width:100%; margin:0 auto; }
     .table-wrap > table.repair-schedule-table { width:max-content; min-width:1080px; table-layout:fixed; }
