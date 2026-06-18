@@ -14,6 +14,7 @@ let ui = {
   repairPeriodicitySelection: null,
   repairPeriodicityDragging: false,
   repairSummary: {
+    source: 'months',
     locomotive: '',
     dateFrom: '',
     dateTo: '',
@@ -1033,11 +1034,40 @@ function repairSummaryDefaultTypes(){
   (schedule.columns || []).forEach((col) => add(col && col.code));
   return codes;
 }
+function repairSummaryMonthTypes(){
+  const schedule = normalizeRepairSchedule();
+  const seen = new Set();
+  const codes = [];
+  const add = (value) => {
+    const code = normalizeRepairCode(value || '');
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    codes.push(code);
+  };
+  add('КР');
+  (schedule.columns || []).forEach((col) => add(col && col.code));
+  (Array.isArray(appState.months) ? appState.months : []).forEach((month) => {
+    (month?.fact || []).forEach((row) => {
+      (row?.cells || []).forEach((value, idx) => {
+        if (idx < 4) return;
+        add(value);
+      });
+    });
+  });
+  return codes;
+}
+function repairSummaryKnownTypes(source){
+  return normalizeRepairCode(source) === 'SCHEDULE'
+    ? repairSummaryDefaultTypes()
+    : repairSummaryMonthTypes();
+}
 function repairSummaryNormalizeState(){
   if (!ui.repairSummary || typeof ui.repairSummary !== 'object') {
-    ui.repairSummary = { locomotive: '', dateFrom: '', dateTo: '', types: [] };
+    ui.repairSummary = { source: 'months', locomotive: '', dateFrom: '', dateTo: '', types: [] };
   }
-  const defaults = repairSummaryDefaultTypes();
+  const source = String(ui.repairSummary.source ?? 'months').trim().toLowerCase() === 'schedule' ? 'schedule' : 'months';
+  ui.repairSummary.source = source;
+  const defaults = repairSummaryKnownTypes(source);
   const currentTypes = Array.isArray(ui.repairSummary.types) ? ui.repairSummary.types.map((value) => normalizeRepairCode(value)).filter(Boolean) : [];
   const allowed = new Set(defaults);
   let types = currentTypes.filter((value) => allowed.has(value));
@@ -1049,21 +1079,34 @@ function repairSummaryNormalizeState(){
   return ui.repairSummary;
 }
 function repairSummaryLocomotiveOptions(){
-  const schedule = normalizeRepairSchedule();
+  const state = repairSummaryNormalizeState();
+  const useSchedule = state.source === 'schedule';
   const seen = new Set();
   const rows = [];
-  (schedule.objects || []).forEach((row) => {
-    const series = String(row.series ?? '').trim();
-    const number = String(row.number ?? '').trim();
-    if (!series && !number) return;
-    const key = `${series}|${number}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    rows.push({
-      key,
-      label: [series, number].filter(Boolean).join(' ').trim(),
+  if (useSchedule) {
+    const schedule = normalizeRepairSchedule();
+    (schedule.objects || []).forEach((row) => {
+      const series = String(row.series ?? '').trim();
+      const number = String(row.number ?? '').trim();
+      if (!series && !number) return;
+      const key = `${series}|${number}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({ key, label: [series, number].filter(Boolean).join(' ').trim() });
     });
-  });
+  } else {
+    (appState.months || []).forEach((month) => {
+      (month?.fact || []).forEach((row) => {
+        if (!row || row.excluded) return;
+        const key = reportUnitKey(row);
+        if (!key) return;
+        const keyStr = key.join('|');
+        if (seen.has(keyStr)) return;
+        seen.add(keyStr);
+        rows.push({ key: keyStr, label: key.join(' ').trim() });
+      });
+    });
+  }
   rows.sort((a, b) => a.label.localeCompare(b.label, 'ru'));
   return rows;
 }
@@ -1085,7 +1128,12 @@ function repairSummaryDateInRange(dateValue, dateFrom, dateTo){
   }
   return true;
 }
-function collectRepairSummaryRows(){
+function repairSummaryMonthDate(year, monthNumber, day){
+  const date = new Date(year, monthNumber - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== monthNumber - 1 || date.getDate() !== day) return null;
+  return date;
+}
+function collectRepairSummaryRowsFromSchedule(){
   const schedule = normalizeRepairSchedule();
   const filters = repairSummaryNormalizeState();
   const selectedTypes = new Set((filters.types || []).map((value) => normalizeRepairCode(value)).filter(Boolean));
@@ -1123,6 +1171,48 @@ function collectRepairSummaryRows(){
       pushRow(col && col.code, row.fact?.[cidx] || '', cidx, 'fact');
     });
   });
+  return rows;
+}
+function collectRepairSummaryRowsFromMonths(){
+  const filters = repairSummaryNormalizeState();
+  const selectedTypes = new Set((filters.types || []).map((value) => normalizeRepairCode(value)).filter(Boolean));
+  const rows = [];
+  const year = Number(appState.year) || new Date().getFullYear();
+  (appState.months || []).forEach((month, monthIndex) => {
+    const monthNumber = Number(month?.month || monthIndex + 1);
+    if (!Number.isFinite(monthNumber) || monthNumber < 1 || monthNumber > 12) return;
+    (month?.fact || []).forEach((row, rowIndex) => {
+      if (!row || row.excluded) return;
+      const key = reportUnitKey(row);
+      if (!key) return;
+      const locoLabel = key.join(' ').trim();
+      const locoKey = key.join('|');
+      if (!repairSummaryRowMatchesLoco(row, filters.locomotive)) return;
+      (row.cells || []).forEach((value, cellIndex) => {
+        if (cellIndex < 4) return;
+        if (cellIndex >= 4 + month.days) return;
+        const code = normalizeRepairCode(value);
+        if (!code || !selectedTypes.has(code)) return;
+        const day = cellIndex - 3;
+        const date = repairSummaryMonthDate(year, monthNumber, day);
+        if (!date) return;
+        const dateText = formatRepairDate(date);
+        if (!repairSummaryDateInRange(dateText, filters.dateFrom, filters.dateTo)) return;
+        rows.push({
+          rowIndex,
+          locoKey,
+          locoLabel,
+          series: key[0],
+          number: key[1],
+          repairCode: code,
+          repairDate: dateText,
+          repairDateSort: date.getTime(),
+          columnIndex: cellIndex,
+          sourceKind: 'month',
+        });
+      });
+    });
+  });
   rows.sort((a, b) => {
     if (a.repairDateSort !== b.repairDateSort) return b.repairDateSort - a.repairDateSort;
     const locoCmp = a.locoLabel.localeCompare(b.locoLabel, 'ru');
@@ -1132,6 +1222,12 @@ function collectRepairSummaryRows(){
     return a.columnIndex - b.columnIndex;
   });
   return rows;
+}
+function collectRepairSummaryRows(){
+  const state = repairSummaryNormalizeState();
+  return state.source === 'schedule'
+    ? collectRepairSummaryRowsFromSchedule()
+    : collectRepairSummaryRowsFromMonths();
 }
 function setRepairSummaryFilter(name, value){
   const state = repairSummaryNormalizeState();
@@ -1149,23 +1245,20 @@ function toggleRepairSummaryType(code, checked){
 }
 function repairSummaryResetFilters(){
   const state = repairSummaryNormalizeState();
+  state.source = 'months';
   state.locomotive = '';
   state.dateFrom = '';
   state.dateTo = '';
-  state.types = repairSummaryDefaultTypes();
+  state.types = repairSummaryKnownTypes(state.source);
   render();
 }
 function renderRepairSummary(){
   const schedule = normalizeRepairSchedule();
   const filters = repairSummaryNormalizeState();
   const locoOptions = repairSummaryLocomotiveOptions();
-  const typeOptions = repairSummaryDefaultTypes();
+  const typeOptions = repairSummaryKnownTypes(filters.source);
   const rows = collectRepairSummaryRows();
-  const totalFacts = (schedule.objects || []).reduce((acc, row) => {
-    let count = row && row.kr && row.kr.fact ? 1 : 0;
-    count += Array.isArray(row && row.fact) ? row.fact.filter((value, idx) => value && typeOptions.includes(normalizeRepairCode((schedule.columns || [])[idx] && (schedule.columns[idx].code || '')))).length : 0;
-    return acc + count;
-  }, 0);
+  const totalFacts = rows.length;
   return `
     <div class="section-head repair-summary-head">
       <div class="section-title">Сводная таблица ремонтов</div>
@@ -1173,6 +1266,12 @@ function renderRepairSummary(){
     </div>
     <div class="repair-summary-note">Берём только значения из факта, план в сводку не попадает.</div>
     <div class="repair-summary-filters">
+      <label>Источник
+        <select id="repairSummarySource" style="width:220px" onchange="setRepairSummaryFilter('source', this.value)">
+          <option value="months" ${filters.source === 'months' ? 'selected' : ''}>Перебирать месяцы</option>
+          <option value="schedule" ${filters.source === 'schedule' ? 'selected' : ''}>График ремонтов</option>
+        </select>
+      </label>
       <label>Локомотив
         <select id="repairSummaryLoco" style="width:260px" onchange="setRepairSummaryFilter('locomotive', this.value)">
           <option value="" ${!filters.locomotive ? 'selected' : ''}>Все локомотивы</option>
