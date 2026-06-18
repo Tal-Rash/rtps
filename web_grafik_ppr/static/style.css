@@ -456,6 +456,25 @@
     .repair-schedule-table .col-idx { width:45px; }
     .repair-schedule-table .repair-head { text-align:center; font-weight:700; }
     .repair-schedule-table .repair-group-start > * { border-top:1px solid var(--line); }
+    .repair-summary-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .repair-summary-counter { font-weight:700; color:var(--muted); white-space:nowrap; }
+    .repair-summary-note { margin:0 0 10px; color:var(--muted); font-size:14px; }
+    .repair-summary-filters { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px 16px; margin-bottom:10px; }
+    .repair-summary-filters label { display:flex; flex-direction:column; gap:6px; font-weight:700; }
+    .repair-summary-filters select,
+    .repair-summary-filters input[type="date"] { min-width:160px; }
+    .repair-summary-types { display:flex; flex-wrap:wrap; gap:8px 12px; margin-bottom:12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+    .repair-summary-type { display:inline-flex; align-items:center; gap:6px; font-weight:700; user-select:none; }
+    .repair-summary-type input { margin:0; accent-color:var(--accent); }
+    .repair-summary-wrap { width:100%; max-width:100%; margin:0 auto; }
+    .repair-summary-table { width:100%; min-width:640px; table-layout:fixed; }
+    .repair-summary-table th,
+    .repair-summary-table td { text-align:center; }
+    .repair-summary-table th { white-space:normal; line-height:1.1; }
+    .repair-summary-table td:first-child { text-align:left; }
+    .repair-summary-table .col-loco { width:260px; }
+    .repair-summary-table .col-repair { width:160px; }
+    .repair-summary-table .col-date { width:160px; }
     .empty-table-cell { padding:16px !important; text-align:center; color:var(--muted); }
     .repair-periodicity-wrap { width:100%; max-width:100%; margin:0 auto; }
     .repair-periodicity-table { width:100%; min-width:640px; table-layout:fixed; }

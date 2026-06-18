@@ -13,6 +13,12 @@ let ui = {
   repairScheduleDragging: false,
   repairPeriodicitySelection: null,
   repairPeriodicityDragging: false,
+  repairSummary: {
+    locomotive: '',
+    dateFrom: '',
+    dateTo: '',
+    types: [],
+  },
   lastCell: null,
   tu28MonthIndex: new Date().getMonth(),
   tu28RowIndex: null,
@@ -30,7 +36,7 @@ const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "�
 const REPAIR_SCHEDULE_COLUMN_CODES = ['ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'СР', 'ТР1', 'ТР2', 'ТР1', 'ТР3', 'ТР1', 'ТР2', 'ТР1', 'КР'];
 const REPAIR_PERIODICITY_COLUMNS = ['TP1', 'TP2', 'TP3', 'CP', 'KP'];
 const REPAIR_PERIODICITY_DEFAULT_SERIES = ['ТЭМ-2УМ', 'ТЭМ-2', ''];
-const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
+const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
 
@@ -692,7 +698,11 @@ function renderSafe(){
   updateSaveButtonState();
   const content = document.getElementById('content');
   if (!content) return;
-  content.innerHTML = ui.section === 'repairSchedule' ? renderRepairSchedule() : renderMonths();
+  content.innerHTML = ui.section === 'repairSchedule'
+    ? renderRepairSchedule()
+    : ui.section === 'repairSummary'
+      ? renderRepairSummary()
+      : renderMonths();
   applyMonthSelectionClasses();
   applyRepairScheduleSelectionClasses();
   renderOpenModals();
@@ -1005,6 +1015,204 @@ function renderRepairSchedule(){
           <tr>${headerCells}</tr>
         </thead>
         <tbody>${bodyHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+function repairSummaryDefaultTypes(){
+  const schedule = normalizeRepairSchedule();
+  const codes = [];
+  const seen = new Set();
+  const add = (value) => {
+    const code = normalizeRepairCode(value || '');
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    codes.push(code);
+  };
+  add('КР');
+  (schedule.columns || []).forEach((col) => add(col && col.code));
+  return codes;
+}
+function repairSummaryNormalizeState(){
+  if (!ui.repairSummary || typeof ui.repairSummary !== 'object') {
+    ui.repairSummary = { locomotive: '', dateFrom: '', dateTo: '', types: [] };
+  }
+  const defaults = repairSummaryDefaultTypes();
+  const currentTypes = Array.isArray(ui.repairSummary.types) ? ui.repairSummary.types.map((value) => normalizeRepairCode(value)).filter(Boolean) : [];
+  const allowed = new Set(defaults);
+  let types = currentTypes.filter((value) => allowed.has(value));
+  if (!types.length) types = defaults.slice();
+  ui.repairSummary.types = Array.from(new Set(types));
+  ui.repairSummary.locomotive = String(ui.repairSummary.locomotive ?? '').trim();
+  ui.repairSummary.dateFrom = String(ui.repairSummary.dateFrom ?? '').trim();
+  ui.repairSummary.dateTo = String(ui.repairSummary.dateTo ?? '').trim();
+  return ui.repairSummary;
+}
+function repairSummaryLocomotiveOptions(){
+  const schedule = normalizeRepairSchedule();
+  const seen = new Set();
+  const rows = [];
+  (schedule.objects || []).forEach((row) => {
+    const series = String(row.series ?? '').trim();
+    const number = String(row.number ?? '').trim();
+    if (!series && !number) return;
+    const key = `${series}|${number}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      key,
+      label: [series, number].filter(Boolean).join(' ').trim(),
+    });
+  });
+  rows.sort((a, b) => a.label.localeCompare(b.label, 'ru'));
+  return rows;
+}
+function repairSummaryRowMatchesLoco(row, locoKey){
+  if (!locoKey) return true;
+  const current = `${String(row.series ?? '').trim()}|${String(row.number ?? '').trim()}`;
+  return current === locoKey;
+}
+function repairSummaryDateInRange(dateValue, dateFrom, dateTo){
+  const date = parseRepairDate(dateValue);
+  if (!date) return false;
+  if (dateFrom) {
+    const from = parseRepairDate(dateFrom);
+    if (from && date < from) return false;
+  }
+  if (dateTo) {
+    const to = parseRepairDate(dateTo);
+    if (to && date > to) return false;
+  }
+  return true;
+}
+function collectRepairSummaryRows(){
+  const schedule = normalizeRepairSchedule();
+  const filters = repairSummaryNormalizeState();
+  const selectedTypes = new Set((filters.types || []).map((value) => normalizeRepairCode(value)).filter(Boolean));
+  const rows = [];
+  (schedule.objects || []).forEach((row, rowIndex) => {
+    const series = String(row.series ?? '').trim();
+    const number = String(row.number ?? '').trim();
+    if (!series && !number) return;
+    const locoLabel = [series, number].filter(Boolean).join(' ').trim();
+    const locoKey = `${series}|${number}`;
+    if (!repairSummaryRowMatchesLoco(row, filters.locomotive)) return;
+
+    const pushRow = (repairCode, dateValue, columnIndex, sourceKind) => {
+      const code = normalizeRepairCode(repairCode);
+      const dateText = String(dateValue ?? '').trim();
+      if (!code || !dateText || !selectedTypes.has(code)) return;
+      if (!repairSummaryDateInRange(dateText, filters.dateFrom, filters.dateTo)) return;
+      const parsed = parseRepairDate(dateText);
+      rows.push({
+        rowIndex,
+        locoKey,
+        locoLabel,
+        series,
+        number,
+        repairCode: code,
+        repairDate: dateText,
+        repairDateSort: parsed ? parsed.getTime() : 0,
+        columnIndex,
+        sourceKind,
+      });
+    };
+
+    pushRow('КР', row.kr?.fact || '', -1, 'kr');
+    (schedule.columns || []).forEach((col, cidx) => {
+      pushRow(col && col.code, row.fact?.[cidx] || '', cidx, 'fact');
+    });
+  });
+  rows.sort((a, b) => {
+    if (a.repairDateSort !== b.repairDateSort) return b.repairDateSort - a.repairDateSort;
+    const locoCmp = a.locoLabel.localeCompare(b.locoLabel, 'ru');
+    if (locoCmp !== 0) return locoCmp;
+    const codeCmp = a.repairCode.localeCompare(b.repairCode, 'ru');
+    if (codeCmp !== 0) return codeCmp;
+    return a.columnIndex - b.columnIndex;
+  });
+  return rows;
+}
+function setRepairSummaryFilter(name, value){
+  const state = repairSummaryNormalizeState();
+  state[name] = String(value ?? '').trim();
+  render();
+}
+function toggleRepairSummaryType(code, checked){
+  const state = repairSummaryNormalizeState();
+  const normalized = normalizeRepairCode(code);
+  const current = new Set((state.types || []).map((value) => normalizeRepairCode(value)).filter(Boolean));
+  if (checked) current.add(normalized);
+  else current.delete(normalized);
+  state.types = Array.from(current);
+  render();
+}
+function repairSummaryResetFilters(){
+  const state = repairSummaryNormalizeState();
+  state.locomotive = '';
+  state.dateFrom = '';
+  state.dateTo = '';
+  state.types = repairSummaryDefaultTypes();
+  render();
+}
+function renderRepairSummary(){
+  const schedule = normalizeRepairSchedule();
+  const filters = repairSummaryNormalizeState();
+  const locoOptions = repairSummaryLocomotiveOptions();
+  const typeOptions = repairSummaryDefaultTypes();
+  const rows = collectRepairSummaryRows();
+  const totalFacts = (schedule.objects || []).reduce((acc, row) => {
+    let count = row && row.kr && row.kr.fact ? 1 : 0;
+    count += Array.isArray(row && row.fact) ? row.fact.filter((value, idx) => value && typeOptions.includes(normalizeRepairCode((schedule.columns || [])[idx] && (schedule.columns[idx].code || '')))).length : 0;
+    return acc + count;
+  }, 0);
+  return `
+    <div class="section-head repair-summary-head">
+      <div class="section-title">Сводная таблица ремонтов</div>
+      <div class="repair-summary-counter">Показано: ${rows.length} · всего фактов: ${totalFacts}</div>
+    </div>
+    <div class="repair-summary-note">Берём только значения из факта, план в сводку не попадает.</div>
+    <div class="repair-summary-filters">
+      <label>Локомотив
+        <select id="repairSummaryLoco" style="width:260px" onchange="setRepairSummaryFilter('locomotive', this.value)">
+          <option value="" ${!filters.locomotive ? 'selected' : ''}>Все локомотивы</option>
+          ${locoOptions.map((item) => `<option value="${esc(item.key)}" ${filters.locomotive === item.key ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}
+        </select>
+      </label>
+      <label>С
+        <input id="repairSummaryDateFrom" type="date" style="width:160px" value="${esc(filters.dateFrom)}" onchange="setRepairSummaryFilter('dateFrom', this.value)">
+      </label>
+      <label>По
+        <input id="repairSummaryDateTo" type="date" style="width:160px" value="${esc(filters.dateTo)}" onchange="setRepairSummaryFilter('dateTo', this.value)">
+      </label>
+      <button type="button" onclick="repairSummaryResetFilters()">Сбросить</button>
+    </div>
+    <div class="repair-summary-types">
+      ${typeOptions.map((code) => `<label class="repair-summary-type"><input type="checkbox" ${filters.types.includes(code) ? 'checked' : ''} onchange="toggleRepairSummaryType('${esc(code)}', this.checked)"> <span>${esc(code)}</span></label>`).join('')}
+    </div>
+    <div class="table-wrap repair-summary-wrap">
+      <table class="compact repair-summary-table">
+        <colgroup>
+          <col class="col-loco">
+          <col class="col-repair">
+          <col class="col-date">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Локомотив</th>
+            <th>Вид ремонта</th>
+            <th>Дата факта</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.map((row) => `
+            <tr>
+              <td>${esc(row.locoLabel || '—')}</td>
+              <td>${esc(row.repairCode || '—')}</td>
+              <td>${esc(row.repairDate || '—')}</td>
+            </tr>
+          `).join('') : `<tr><td colspan="3" class="empty-table-cell">Нет ремонтов, подходящих под фильтры</td></tr>`}
+        </tbody>
       </table>
     </div>
   `;
