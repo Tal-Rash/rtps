@@ -33,10 +33,10 @@ body {
 }
 
 .main-area {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .topbar {
@@ -131,17 +131,17 @@ button:disabled {
 }
 
 .table-wrap {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   width: 100%;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
   max-height: none;
-  padding-bottom: 8px;
+  padding-bottom: 28px;
 }
 
 .matrix-table {
