@@ -636,6 +636,11 @@ function setSection(section){
     render();
     return;
   }
+  if (section === 'repairSummary' && ui.section === 'repairSummary' && !ui.modal) {
+    ui.section = 'months';
+    render();
+    return;
+  }
   ui.modal = null;
   ui.section = section;
   if (section !== 'repairSchedule') clearRepairScheduleSelection();
