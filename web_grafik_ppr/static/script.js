@@ -1040,7 +1040,7 @@ function repairSummaryMonthTypes(){
   const codes = [];
   const add = (value) => {
     const code = normalizeRepairCode(value || '');
-    if (!code || seen.has(code)) return;
+    if (!code || seen.has(code) || !/[A-ZА-Я]/u.test(code)) return;
     seen.add(code);
     codes.push(code);
   };
