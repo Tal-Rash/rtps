@@ -25,18 +25,12 @@ body {
 
 .shell {
   max-width: 1700px;
-  min-height: 100vh;
   margin: 0 auto;
-  padding: 18px 18px 36px;
-  display: flex;
-  flex-direction: column;
+  padding: 18px;
 }
 
 .main-area {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  align-items: stretch;
+  width: 100%;
 }
 
 .topbar {
@@ -131,22 +125,13 @@ button:disabled {
 }
 
 .table-wrap {
-  flex: 1 1 auto;
   width: 100%;
-  min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
-  max-height: none;
-  padding-bottom: 48px;
-}
-
-.table-scroll-x {
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
 .matrix-table {
@@ -180,10 +165,6 @@ button:disabled {
 
 .matrix-table tr > *:last-child {
   border-right: 0;
-}
-
-.matrix-table tbody tr:last-child > * {
-  border-bottom: 0;
 }
 
 .matrix-table .col-fio {
