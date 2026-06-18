@@ -124,17 +124,20 @@ button:disabled {
   color: #1d4aa6;
 }
 
-.table-wrap {
-  position: relative;
+.table-frame {
   width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding-bottom: 12px;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow);
-  clip-path: inset(0 round 8px);
+  overflow: hidden;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 12px;
 }
 
 .matrix-table {
