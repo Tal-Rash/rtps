@@ -138,6 +138,7 @@ button:disabled {
   background: #fff;
   box-shadow: var(--shadow);
   max-height: none;
+  padding-bottom: 56px;
 }
 
 .matrix-table {
