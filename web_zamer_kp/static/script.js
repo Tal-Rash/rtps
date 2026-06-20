@@ -1227,7 +1227,7 @@ function renderWearChartControls(){
   const metricSelect = document.getElementById('wearChartMetric');
   const pairLabel = pairSelect?.closest('label');
   if (modeSelect) {
-    const previous = String(modeSelect.value || wearChartMode || 'pair').trim();
+    const previous = String(wearChartMode || modeSelect.value || 'pair').trim();
     modeSelect.value = previous === 'all' ? 'all' : 'pair';
     wearChartMode = modeSelect.value;
   }
@@ -1420,6 +1420,18 @@ function renderWearChart(){
 function refreshWearChart(){
   renderWearChartControls();
   renderWearChart();
+}
+function openWearChartsPage(){
+  const loco = String(document.getElementById('wearLocomotive')?.value || wearSelectedLoco || '').trim();
+  const dateFrom = String(document.getElementById('wearDateFrom')?.value || wearDateFrom || '').trim();
+  const dateTo = String(document.getElementById('wearDateTo')?.value || wearDateTo || '').trim();
+  const mode = wearChartModeValue();
+  const params = new URLSearchParams();
+  if (loco) params.set('locomotive', loco);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  if (mode) params.set('mode', mode);
+  window.location.href = `${API}/wear-charts${params.toString() ? `?${params.toString()}` : ''}`;
 }
 async function exportWearChartPng(){
   const svg = document.getElementById('wearChartSvg');
@@ -2436,8 +2448,8 @@ function restoreChanges(){
   canceledRepairType = '';
 }
 
-document.getElementById('locomotive').addEventListener('change', onLocomotiveCommit);
-document.getElementById('locomotive').addEventListener('keydown', event => {
+document.getElementById('locomotive')?.addEventListener('change', onLocomotiveCommit);
+document.getElementById('locomotive')?.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     hideLocoDropdown();
     return;
@@ -2447,14 +2459,14 @@ document.getElementById('locomotive').addEventListener('keydown', event => {
     onLocomotiveCommit();
   }
 });
-document.getElementById('locomotive').addEventListener('focus', showLocoDropdown);
-document.getElementById('locomotive').addEventListener('click', showLocoDropdown);
-document.getElementById('locomotive').addEventListener('input', event => {
+document.getElementById('locomotive')?.addEventListener('focus', showLocoDropdown);
+document.getElementById('locomotive')?.addEventListener('click', showLocoDropdown);
+document.getElementById('locomotive')?.addEventListener('input', event => {
   locomotiveInputSource = 'typed';
   renderLocoDropdown(event.target.value);
 });
-document.getElementById('locomotive').addEventListener('blur', () => setTimeout(hideLocoDropdown, 150));
-document.getElementById('locomotiveDropdown').addEventListener('mousedown', event => {
+document.getElementById('locomotive')?.addEventListener('blur', () => setTimeout(hideLocoDropdown, 150));
+document.getElementById('locomotiveDropdown')?.addEventListener('mousedown', event => {
   const btn = event.target.closest('button[data-loco]');
   if (!btn) return;
   event.preventDefault();
@@ -2464,10 +2476,10 @@ document.addEventListener('mousedown', event => {
   const picker = event.target.closest?.('.loco-picker');
   if (!picker) hideLocoDropdown();
 });
-document.getElementById('normsModal').addEventListener('mousedown', event => {
+document.getElementById('normsModal')?.addEventListener('mousedown', event => {
   if (event.target.id === 'normsModal') closeNormsDialog();
 });
-document.getElementById('archiveExportModal').addEventListener('mousedown', event => {
+document.getElementById('archiveExportModal')?.addEventListener('mousedown', event => {
   if (event.target.id === 'archiveExportModal') closeArchiveExportDialog();
 });
 document.addEventListener('keydown', event => {
@@ -2478,10 +2490,10 @@ document.addEventListener('keydown', event => {
     closeArchiveExportDialog();
   }
 });
-document.getElementById('measurementDate').addEventListener('change', onDateChange);
-document.getElementById('repairType').addEventListener('change', onRepairChange);
-document.getElementById('kpLocomotive').addEventListener('change', e => loadKpData(e.target.value));
-document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilter);
+document.getElementById('measurementDate')?.addEventListener('change', onDateChange);
+document.getElementById('repairType')?.addEventListener('change', onRepairChange);
+document.getElementById('kpLocomotive')?.addEventListener('change', e => loadKpData(e.target.value));
+document.getElementById('kpSearch')?.addEventListener('input', applyKpSearchFilter);
 document.getElementById('wearLocomotive')?.addEventListener('change', e => loadWearAnalysis(e.target.value));
 document.getElementById('wearDateFrom')?.addEventListener('change', () => loadWearAnalysis());
 document.getElementById('wearDateTo')?.addEventListener('change', () => loadWearAnalysis());
@@ -2499,12 +2511,26 @@ document.getElementById('archiveExcelFile')?.addEventListener('change', event =>
 });
 const saveBtn = document.getElementById('saveBtn');
 if (saveBtn) saveBtn.style.display = CAN_EDIT ? '' : 'none';
-updateHistoryButtons();
-renderWearLocomotiveOptions();
-initialLoadPromise = loadState().catch(error => {
-  console.error(error);
-  setStatus(error?.message || 'Не удалось загрузить данные');
-  return null;
-});
-if (!CAN_EDIT) switchTab('kp');
-loadWearAnalysis().catch(() => undefined);
+if (window.WEAR_DEFAULT_MODE) {
+  wearChartMode = String(window.WEAR_DEFAULT_MODE).trim() === 'all' ? 'all' : 'pair';
+}
+if (window.WEAR_DEFAULT_LOCOMOTIVE) {
+  wearSelectedLoco = String(window.WEAR_DEFAULT_LOCOMOTIVE).trim();
+}
+if (document.getElementById('kpLocomotive') || document.getElementById('wearLocomotive') || document.getElementById('archiveLocomotive')) {
+  updateHistoryButtons();
+}
+if (document.getElementById('wearLocomotive')) {
+  renderWearLocomotiveOptions();
+}
+if (document.getElementById('inputTable')) {
+  initialLoadPromise = loadState().catch(error => {
+    console.error(error);
+    setStatus(error?.message || 'Не удалось загрузить данные');
+    return null;
+  });
+  if (!CAN_EDIT && document.getElementById('tabKp')) switchTab('kp');
+}
+if (document.getElementById('wearChartSvg')) {
+  loadWearAnalysis().catch(() => undefined);
+}

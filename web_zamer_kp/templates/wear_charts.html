@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Графики износа КП {{APP_VERSION}}</title>
+  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
+  <script>
+    var _prefix = "{{APP_PREFIX}}";
+    var _canEdit = "{{CAN_EDIT}}";
+    window.APP_CONFIG = {
+      APP_PREFIX: _prefix,
+      CAN_EDIT: _canEdit === "true"
+    };
+    window.WEAR_CHARTS_PAGE = true;
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Графики износа КП</h1>
+        <div class="muted">Версия {{APP_VERSION}}</div>
+      </div>
+      <div class="actions">
+        <a href="/zamer-kp">В анализ</a>
+        <a href="/">На главную</a>
+      </div>
+    </div>
+
+    <div class="panel active">
+      <div class="wear-controls" style="margin-top:0;">
+        <label>Локомотив
+          <select id="wearLocomotive" style="width:220px"></select>
+        </label>
+        <label>С
+          <input id="wearDateFrom" type="date" style="width:160px" value="{{WEAR_DATE_FROM}}">
+        </label>
+        <label>По
+          <input id="wearDateTo" type="date" style="width:160px" value="{{WEAR_DATE_TO}}">
+        </label>
+        <button id="wearRefreshBtn" type="button" onclick="loadWearAnalysis()">Обновить анализ</button>
+        <button id="wearChartExportBtn" type="button" onclick="exportWearChartPng()">PNG</button>
+        <div id="wearSummary" class="wear-summary"></div>
+      </div>
+      <div class="wear-note">График строится по архиву замеров и позволяет быстро сравнить динамику по всем КП или по одной выбранной КП.</div>
+      <div class="wear-chart-panel">
+        <div class="wear-chart-controls">
+          <label>Режим
+            <select id="wearChartMode" style="width:150px">
+              <option value="pair">Одна КП</option>
+              <option value="all">Все КП</option>
+            </select>
+          </label>
+          <label>КП
+            <select id="wearChartPair" style="width:120px"></select>
+          </label>
+          <label>Показатель
+            <select id="wearChartMetric" style="width:180px"></select>
+          </label>
+          <div class="wear-chart-legend">
+            <span class="wear-legend-item"><i class="wear-legend-line wear-legend-left"></i>Левая сторона</span>
+            <span class="wear-legend-item"><i class="wear-legend-line wear-legend-right"></i>Правая сторона</span>
+          </div>
+        </div>
+        <div class="wear-chart-shell">
+          <svg id="wearChartSvg" class="wear-chart-svg" viewBox="0 0 900 260" preserveAspectRatio="none" aria-label="График износа КП"></svg>
+          <div id="wearChartEmpty" class="wear-chart-empty"></div>
+        </div>
+      </div>
+      <div id="wearStatus" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    window.WEAR_DEFAULT_LOCOMOTIVE = "{{WEAR_LOCOMOTIVE}}";
+    window.WEAR_DEFAULT_MODE = "{{WEAR_CHART_MODE}}";
+  </script>
+  <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
+</body>
+</html>

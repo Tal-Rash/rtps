@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import base64
+import html
 import hashlib
 import hmac
 import io
@@ -32,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "grafik_ppr_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-1.87"
+APP_VERSION = "web-zkp-1.88"
 DB_LOCK = Lock()
 
 INPUT_ROWS = 12
@@ -3073,17 +3074,31 @@ def load_wear_analysis_rows(locomotive: str = "", date_from: str = "", date_to: 
         }
 
 
-def render_page(role: str) -> str:
+def render_page(role: str, template_name: str = "index.html", extra: dict[str, str] | None = None) -> str:
     with DB_LOCK, connect() as conn:
         loco_choices = load_locomotives(conn.cursor())
-    with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
+    with open(ROOT / "templates" / template_name, "r", encoding="utf-8") as f:
         html = f.read()
+    replacements = {
+        "{{APP_PREFIX}}": APP_PREFIX,
+        "{{APP_VERSION}}": APP_VERSION,
+        "{{CAN_EDIT}}": "true" if role in ("edit", "editor", "admin") else "false",
+        "{{TAB_INPUT_STYLE}}": "" if role in ("edit", "editor", "admin") else 'style="display:none"',
+        "{{LOCOMOTIVE_CHOICES}}": json.dumps(loco_choices, ensure_ascii=False),
+    }
+    if extra:
+        replacements.update(extra)
     return (
-        html.replace("{{APP_PREFIX}}", APP_PREFIX)
-        .replace("{{APP_VERSION}}", APP_VERSION)
-        .replace("{{CAN_EDIT}}", "true" if role in ("edit", "editor", "admin") else "false")
-        .replace("{{TAB_INPUT_STYLE}}", "" if role in ("edit", "editor", "admin") else 'style="display:none"')
-        .replace("{{LOCOMOTIVE_CHOICES}}", json.dumps(loco_choices, ensure_ascii=False))
+        html
+        .replace("{{APP_PREFIX}}", replacements["{{APP_PREFIX}}"])
+        .replace("{{APP_VERSION}}", replacements["{{APP_VERSION}}"])
+        .replace("{{CAN_EDIT}}", replacements["{{CAN_EDIT}}"])
+        .replace("{{TAB_INPUT_STYLE}}", replacements["{{TAB_INPUT_STYLE}}"])
+        .replace("{{LOCOMOTIVE_CHOICES}}", replacements["{{LOCOMOTIVE_CHOICES}}"])
+        .replace("{{WEAR_LOCOMOTIVE}}", replacements.get("{{WEAR_LOCOMOTIVE}}", ""))
+        .replace("{{WEAR_DATE_FROM}}", replacements.get("{{WEAR_DATE_FROM}}", ""))
+        .replace("{{WEAR_DATE_TO}}", replacements.get("{{WEAR_DATE_TO}}", ""))
+        .replace("{{WEAR_CHART_MODE}}", replacements.get("{{WEAR_CHART_MODE}}", "pair"))
     )
 
 
@@ -3190,6 +3205,29 @@ async def home_route(request: Request):
         return HTMLResponse(content=html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
         
     html_content = render_page(mod_role)
+    response = HTMLResponse(content=html_content)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+@app.get("/wear-charts", response_class=HTMLResponse)
+async def wear_charts_route(request: Request, locomotive: str = "", date_from: str = "", date_to: str = "", mode: str = "pair"):
+    session = get_current_session_fastapi(request)
+    mod_role = get_mod_role_fastapi(session, "zamer_kp")
+
+    if not session or not mod_role:
+        with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
+            html = f.read().replace("{{APP_PREFIX}}", APP_PREFIX)
+        return HTMLResponse(content=html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
+
+    extra = {
+        "{{WEAR_LOCOMOTIVE}}": html.escape(text(locomotive), quote=True),
+        "{{WEAR_DATE_FROM}}": html.escape(text(date_from), quote=True),
+        "{{WEAR_DATE_TO}}": html.escape(text(date_to), quote=True),
+        "{{WEAR_CHART_MODE}}": "all" if text(mode).strip().lower() == "all" else "pair",
+    }
+    html_content = render_page(mod_role, "wear_charts.html", extra)
     response = HTMLResponse(content=html_content)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
