@@ -2951,6 +2951,23 @@ def load_wear_analysis_rows(locomotive: str = "", date_from: str = "", date_to: 
                 }
             )
 
+        chart_pairs: list[dict[str, object]] = []
+        for pair_number in range(1, wheel_pair_count + 1):
+            points = sessions_by_pair.get(pair_number, [])
+            points.sort(
+                key=lambda item: (
+                    text(item.get("measurement_date")).strip(),
+                    int(item.get("year") or 0),
+                    text(item.get("repair_type")).strip(),
+                )
+            )
+            chart_pairs.append(
+                {
+                    "wheel_pair": pair_number,
+                    "points": points,
+                }
+            )
+
         result_rows: list[dict] = []
         for pair_number in range(1, wheel_pair_count + 1):
             pair_sessions = sessions_by_pair.get(pair_number, [])
@@ -3043,6 +3060,16 @@ def load_wear_analysis_rows(locomotive: str = "", date_from: str = "", date_to: 
             "date_from": date_from,
             "date_to": date_to,
             "rows": result_rows,
+            "chart": {
+                "metrics": [
+                    {
+                        "key": metric["key"],
+                        "label": metric["label"],
+                    }
+                    for metric in WEAR_TREND_METRICS
+                ],
+                "pairs": chart_pairs,
+            },
         }
 
 

@@ -22,6 +22,8 @@ let wearSelectedLoco = '';
 let wearDateFrom = '';
 let wearDateTo = '';
 let wearLoading = false;
+let wearChartPairs = [];
+let wearChartMetrics = [];
 let archiveRows = [];
 let archiveSortDesc = true;
 let archiveSelectedMeasurementKey = null;
@@ -1179,6 +1181,164 @@ function renderWearAnalysisTable(){
     `;
   }).join('');
 }
+function wearChartNumber(value){
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function wearChartMetricLabel(metricKey){
+  const metric = wearChartMetrics.find(item => item && item.key === metricKey);
+  return metric?.label || metricKey || '';
+}
+function wearChartSelectedPair(){
+  const select = document.getElementById('wearChartPair');
+  const current = String(select?.value || '').trim();
+  if (current) return current;
+  if (wearChartPairs.length) return String(wearChartPairs[0].wheel_pair || '').trim();
+  return '';
+}
+function wearChartSelectedMetric(){
+  const select = document.getElementById('wearChartMetric');
+  const current = String(select?.value || '').trim();
+  if (current) return current;
+  if (wearChartMetrics.length) return String(wearChartMetrics[0].key || '').trim();
+  return 'prokat';
+}
+function renderWearChartControls(){
+  const pairSelect = document.getElementById('wearChartPair');
+  const metricSelect = document.getElementById('wearChartMetric');
+  if (pairSelect) {
+    const previous = String(pairSelect.value || '').trim();
+    pairSelect.innerHTML = wearChartPairs.map(item => {
+      const value = String(item.wheel_pair || '').trim();
+      return `<option value="${esc(value)}">КП ${esc(value)}</option>`;
+    }).join('');
+    if (previous && [...pairSelect.options].some(option => option.value === previous)) {
+      pairSelect.value = previous;
+    } else if (pairSelect.options.length) {
+      pairSelect.value = pairSelect.options[0].value;
+    }
+  }
+  if (metricSelect) {
+    const previous = String(metricSelect.value || '').trim();
+    metricSelect.innerHTML = wearChartMetrics.map(item => {
+      const value = String(item.key || '').trim();
+      return `<option value="${esc(value)}">${esc(item.label || value)}</option>`;
+    }).join('');
+    if (previous && [...metricSelect.options].some(option => option.value === previous)) {
+      metricSelect.value = previous;
+    } else if (metricSelect.options.length) {
+      metricSelect.value = metricSelect.options[0].value;
+    }
+  }
+}
+function renderWearChart(){
+  const svg = document.getElementById('wearChartSvg');
+  const empty = document.getElementById('wearChartEmpty');
+  if (!svg || !empty) return;
+  const pairValue = wearChartSelectedPair();
+  const metricKey = wearChartSelectedMetric();
+  const pairData = wearChartPairs.find(item => String(item.wheel_pair || '').trim() === pairValue) || wearChartPairs[0] || null;
+  const points = Array.isArray(pairData?.points) ? pairData.points : [];
+  const metricLabel = wearChartMetricLabel(metricKey);
+  const series = points.map((point, index) => ({
+    index,
+    date: String(point?.measurement_date || '').trim(),
+    dateLabel: formatWearDate(point?.measurement_date),
+    repair: String(point?.repair_type || '').trim(),
+    left: wearChartNumber(point?.metrics?.[metricKey]?.left),
+    right: wearChartNumber(point?.metrics?.[metricKey]?.right),
+  }));
+  const values = [];
+  series.forEach(point => {
+    if (Number.isFinite(point.left)) values.push(point.left);
+    if (Number.isFinite(point.right)) values.push(point.right);
+  });
+  if (!pairData || !series.length || !values.length) {
+    svg.innerHTML = '';
+    empty.textContent = 'Для выбранной КП и показателя пока нет достаточных данных для графика.';
+    return;
+  }
+  const width = 900;
+  const height = 260;
+  const margin = { left: 64, right: 18, top: 30, bottom: 42 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  const pad = Math.max(0.5, (max - min) * 0.12);
+  min -= pad;
+  max += pad;
+  const scaleX = (index) => {
+    if (series.length === 1) return margin.left + plotWidth / 2;
+    return margin.left + (plotWidth * index) / (series.length - 1);
+  };
+  const scaleY = (value) => margin.top + ((max - value) * plotHeight) / (max - min);
+  const linePath = (key) => {
+    const segments = [];
+    let current = [];
+    series.forEach(point => {
+      const value = point[key];
+      if (!Number.isFinite(value)) {
+        if (current.length) {
+          segments.push(current);
+          current = [];
+        }
+        return;
+      }
+      current.push({ x: scaleX(point.index), y: scaleY(value) });
+    });
+    if (current.length) segments.push(current);
+    return segments.map(segment => segment.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' '));
+  };
+  const leftPaths = linePath('left');
+  const rightPaths = linePath('right');
+  const gridLines = [];
+  for (let i = 0; i <= 4; i += 1) {
+    const y = margin.top + (plotHeight * i) / 4;
+    const value = max - ((max - min) * i) / 4;
+    gridLines.push(`<line class="wear-chart-grid" x1="${margin.left}" y1="${y.toFixed(1)}" x2="${width - margin.right}" y2="${y.toFixed(1)}"></line>`);
+    gridLines.push(`<text class="wear-chart-label" x="${margin.left - 10}" y="${(y + 4).toFixed(1)}" text-anchor="end">${esc(wearNumber(value))}</text>`);
+  }
+  const xLabelStep = Math.max(1, Math.ceil(series.length / 6));
+  const xLabels = series.map((point, index) => {
+    if (series.length > 1 && index % xLabelStep !== 0 && index !== series.length - 1) return '';
+    const x = scaleX(index);
+    const y = height - 16;
+    return `<text class="wear-chart-label" x="${x.toFixed(1)}" y="${y}" text-anchor="middle">${esc(point.dateLabel || point.date || '')}</text>`;
+  }).join('');
+  const pointsSvg = (key, cls) => series.map(point => {
+    const value = point[key];
+    if (!Number.isFinite(value)) return '';
+    const cx = scaleX(point.index).toFixed(1);
+    const cy = scaleY(value).toFixed(1);
+    return `<circle class="${cls}" cx="${cx}" cy="${cy}" r="4.4"></circle>`;
+  }).join('');
+  const pathSvg = (paths, cls) => paths.map(d => `<path class="${cls}" d="${d}"></path>`).join('');
+  const firstDate = series[0]?.dateLabel || series[0]?.date || '';
+  const lastDate = series[series.length - 1]?.dateLabel || series[series.length - 1]?.date || '';
+  svg.innerHTML = `
+    <rect x="0" y="0" width="${width}" height="${height}" fill="white"></rect>
+    <text class="wear-chart-title" x="${margin.left}" y="20">${esc(metricLabel)} · КП ${esc(pairValue)} · ${esc(firstDate)}${lastDate && lastDate !== firstDate ? ` — ${esc(lastDate)}` : ''}</text>
+    ${gridLines.join('')}
+    <line class="wear-chart-axis" x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}"></line>
+    <line class="wear-chart-axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}"></line>
+    ${pathSvg(leftPaths, 'wear-chart-series-left')}
+    ${pathSvg(rightPaths, 'wear-chart-series-right')}
+    ${pointsSvg('left', 'wear-chart-dot-left')}
+    ${pointsSvg('right', 'wear-chart-dot-right')}
+    ${xLabels}
+  `;
+  empty.textContent = series.length < 2 ? 'Показан один замер — для линии нужен хотя бы ещё один.' : '';
+}
+function refreshWearChart(){
+  renderWearChartControls();
+  renderWearChart();
+}
 async function loadWearAnalysis(nextLoco = ''){
   const status = document.getElementById('wearStatus');
   const select = document.getElementById('wearLocomotive');
@@ -1214,7 +1374,10 @@ async function loadWearAnalysis(nextLoco = ''){
     wearDateFrom = payload.date_from || dateFrom;
     wearDateTo = payload.date_to || dateTo;
     wearRows = payload.rows || [];
+    wearChartPairs = Array.isArray(payload.chart?.pairs) ? payload.chart.pairs : [];
+    wearChartMetrics = Array.isArray(payload.chart?.metrics) ? payload.chart.metrics : [];
     renderWearLocomotiveOptions();
+    refreshWearChart();
     renderWearAnalysisTable();
     if (status) {
       const countText = payload.series ? `${payload.series} ${payload.locomotive}` : payload.locomotive;
@@ -1223,7 +1386,10 @@ async function loadWearAnalysis(nextLoco = ''){
     }
   } catch (error) {
     wearRows = [];
+    wearChartPairs = [];
+    wearChartMetrics = [];
     renderWearAnalysisTable();
+    refreshWearChart();
     if (status) status.textContent = error.message || 'Не удалось загрузить анализ';
   } finally {
     wearLoading = false;
@@ -2182,6 +2348,8 @@ document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilte
 document.getElementById('wearLocomotive')?.addEventListener('change', e => loadWearAnalysis(e.target.value));
 document.getElementById('wearDateFrom')?.addEventListener('change', () => loadWearAnalysis());
 document.getElementById('wearDateTo')?.addEventListener('change', () => loadWearAnalysis());
+document.getElementById('wearChartPair')?.addEventListener('change', () => renderWearChart());
+document.getElementById('wearChartMetric')?.addEventListener('change', () => renderWearChart());
 document.getElementById('archiveLocomotive')?.addEventListener('change', loadArchive);
 document.getElementById('archiveSearch')?.addEventListener('input', loadArchive);
 document.getElementById('archiveExcelFile')?.addEventListener('change', event => {

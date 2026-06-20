@@ -92,6 +92,25 @@
 .wear-controls label { display:flex; align-items:center; gap:8px; }
     .wear-summary { margin-left:auto; color:var(--muted); font-size:13px; }
     .wear-note { margin:6px 0 8px; color:var(--muted); font-size:13px; line-height:1.4; }
+    .wear-chart-panel { margin:10px 0 12px; padding:12px; border:1px solid var(--line); border-radius:14px; background:linear-gradient(180deg,#fff,#f8fbff); box-shadow:0 8px 20px rgba(16,32,51,.05); }
+    .wear-chart-controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+    .wear-chart-controls label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); }
+    .wear-chart-legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-left:auto; color:var(--muted); font-size:13px; }
+    .wear-legend-item { display:inline-flex; align-items:center; gap:6px; }
+    .wear-legend-line { width:16px; height:0; border-top:3px solid currentColor; display:inline-block; }
+    .wear-legend-left { color:#2f6fed; }
+    .wear-legend-right { color:#e05a47; }
+    .wear-chart-shell { position:relative; min-height:240px; border:1px solid #dfe8f4; border-radius:12px; background:#fff; overflow:hidden; }
+    .wear-chart-svg { display:block; width:100%; height:240px; }
+    .wear-chart-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:13px; pointer-events:none; padding:16px; text-align:center; }
+    .wear-chart-grid { stroke:#edf2f8; stroke-width:1; shape-rendering:crispEdges; }
+    .wear-chart-axis { stroke:#cdd8e6; stroke-width:1.2; shape-rendering:crispEdges; }
+    .wear-chart-series-left { stroke:#2f6fed; fill:none; stroke-width:2.8; }
+    .wear-chart-series-right { stroke:#e05a47; fill:none; stroke-width:2.8; }
+    .wear-chart-dot-left { fill:#fff; stroke:#2f6fed; stroke-width:2.4; }
+    .wear-chart-dot-right { fill:#fff; stroke:#e05a47; stroke-width:2.4; }
+    .wear-chart-label { fill:#5e6f84; font-size:11px; }
+    .wear-chart-title { fill:#102033; font-size:14px; font-weight:700; }
     .wear-table-shell { margin-top:0; padding:0; overflow:auto; max-width:100%; }
     .wear-table th, .wear-table td { font-size:12px; vertical-align:middle; }
     .wear-table th { padding:10px 8px; white-space:normal; }
