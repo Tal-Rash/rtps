@@ -252,12 +252,19 @@
       <div class="wear-note">Тренд считается по архиву замеров: внутри выбранного периода сравниваем первый и последний доступные замеры по каждой КП. Ниже показан график выбранной КП по выбранному показателю.</div>
       <div class="wear-chart-panel">
         <div class="wear-chart-controls">
+          <label>Режим
+            <select id="wearChartMode" style="width:150px">
+              <option value="pair">Одна КП</option>
+              <option value="all">Все КП</option>
+            </select>
+          </label>
           <label>КП
             <select id="wearChartPair" style="width:120px"></select>
           </label>
           <label>Показатель
             <select id="wearChartMetric" style="width:180px"></select>
           </label>
+          <button id="wearChartExportBtn" type="button" onclick="exportWearChartPng()">PNG</button>
           <div class="wear-chart-legend">
             <span class="wear-legend-item"><i class="wear-legend-line wear-legend-left"></i>Левая сторона</span>
             <span class="wear-legend-item"><i class="wear-legend-line wear-legend-right"></i>Правая сторона</span>

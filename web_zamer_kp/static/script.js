@@ -24,6 +24,7 @@ let wearDateTo = '';
 let wearLoading = false;
 let wearChartPairs = [];
 let wearChartMetrics = [];
+let wearChartMode = 'pair';
 let archiveRows = [];
 let archiveSortDesc = true;
 let archiveSelectedMeasurementKey = null;
@@ -1204,9 +1205,33 @@ function wearChartSelectedMetric(){
   if (wearChartMetrics.length) return String(wearChartMetrics[0].key || '').trim();
   return 'prokat';
 }
+function wearChartModeValue(){
+  const select = document.getElementById('wearChartMode');
+  const current = String(select?.value || '').trim();
+  return current === 'all' ? 'all' : 'pair';
+}
+function wearChartMetricWorseWhen(metricKey){
+  return metricKey === 'prokat' ? 'higher' : 'lower';
+}
+function wearChartRepresentativeValue(metricKey, left, right){
+  const hasLeft = Number.isFinite(left);
+  const hasRight = Number.isFinite(right);
+  if (!hasLeft && !hasRight) return null;
+  if (hasLeft && !hasRight) return left;
+  if (!hasLeft && hasRight) return right;
+  return wearChartMetricWorseWhen(metricKey) === 'higher' ? Math.max(left, right) : Math.min(left, right);
+}
 function renderWearChartControls(){
+  const modeSelect = document.getElementById('wearChartMode');
   const pairSelect = document.getElementById('wearChartPair');
   const metricSelect = document.getElementById('wearChartMetric');
+  const pairLabel = pairSelect?.closest('label');
+  if (modeSelect) {
+    const previous = String(modeSelect.value || wearChartMode || 'pair').trim();
+    modeSelect.value = previous === 'all' ? 'all' : 'pair';
+    wearChartMode = modeSelect.value;
+  }
+  if (pairLabel) pairLabel.style.display = wearChartMode === 'all' ? 'none' : '';
   if (pairSelect) {
     const previous = String(pairSelect.value || '').trim();
     pairSelect.innerHTML = wearChartPairs.map(item => {
@@ -1231,39 +1256,97 @@ function renderWearChartControls(){
       metricSelect.value = metricSelect.options[0].value;
     }
   }
+  const legend = document.querySelector('.wear-chart-legend');
+  if (legend) {
+    legend.innerHTML = wearChartMode === 'all'
+      ? wearChartPairs.map((item, index) => {
+          const value = String(item.wheel_pair || '').trim();
+          const colors = ['#2f6fed','#e05a47','#2aa36b','#b26ce0','#f0a23a','#0f9a9a','#9b5cf4','#d84f7a','#4c647f','#7b8fa6','#1f7a3a','#9c4f00'];
+          const color = colors[index % colors.length];
+          return `<span class="wear-legend-item"><i class="wear-legend-line" style="color:${color}"></i>КП ${esc(value)}</span>`;
+        }).join('')
+      : `
+        <span class="wear-legend-item"><i class="wear-legend-line wear-legend-left"></i>Левая сторона</span>
+        <span class="wear-legend-item"><i class="wear-legend-line wear-legend-right"></i>Правая сторона</span>
+      `;
+  }
 }
 function renderWearChart(){
   const svg = document.getElementById('wearChartSvg');
   const empty = document.getElementById('wearChartEmpty');
   if (!svg || !empty) return;
-  const pairValue = wearChartSelectedPair();
   const metricKey = wearChartSelectedMetric();
-  const pairData = wearChartPairs.find(item => String(item.wheel_pair || '').trim() === pairValue) || wearChartPairs[0] || null;
-  const points = Array.isArray(pairData?.points) ? pairData.points : [];
   const metricLabel = wearChartMetricLabel(metricKey);
-  const series = points.map((point, index) => ({
-    index,
-    date: String(point?.measurement_date || '').trim(),
-    dateLabel: formatWearDate(point?.measurement_date),
-    repair: String(point?.repair_type || '').trim(),
-    left: wearChartNumber(point?.metrics?.[metricKey]?.left),
-    right: wearChartNumber(point?.metrics?.[metricKey]?.right),
-  }));
-  const values = [];
-  series.forEach(point => {
-    if (Number.isFinite(point.left)) values.push(point.left);
-    if (Number.isFinite(point.right)) values.push(point.right);
-  });
-  if (!pairData || !series.length || !values.length) {
-    svg.innerHTML = '';
-    empty.textContent = 'Для выбранной КП и показателя пока нет достаточных данных для графика.';
-    return;
-  }
+  const mode = wearChartModeValue();
   const width = 900;
   const height = 260;
   const margin = { left: 64, right: 18, top: 30, bottom: 42 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
+  const colors = ['#2f6fed','#e05a47','#2aa36b','#b26ce0','#f0a23a','#0f9a9a','#9b5cf4','#d84f7a','#4c647f','#7b8fa6','#1f7a3a','#9c4f00'];
+  let chartSeries = [];
+  let axisLabels = [];
+  if (mode === 'all') {
+    const dateSet = new Set();
+    wearChartPairs.forEach(pair => {
+      (pair.points || []).forEach(point => {
+        const date = String(point?.measurement_date || '').trim();
+        if (date) dateSet.add(date);
+      });
+    });
+    axisLabels = [...dateSet].sort();
+    chartSeries = wearChartPairs.map((pair, index) => {
+      const pointMap = new Map();
+      (pair.points || []).forEach(point => {
+        const date = String(point?.measurement_date || '').trim();
+        if (!date) return;
+        pointMap.set(date, {
+          left: wearChartNumber(point?.metrics?.[metricKey]?.left),
+          right: wearChartNumber(point?.metrics?.[metricKey]?.right),
+        });
+      });
+      return {
+        pair: String(pair.wheel_pair || '').trim(),
+        color: colors[index % colors.length],
+        values: axisLabels.map(date => {
+          const current = pointMap.get(date) || {};
+          return wearChartRepresentativeValue(metricKey, current.left, current.right);
+        }),
+      };
+    });
+  } else {
+    const pairValue = wearChartSelectedPair();
+    const pairData = wearChartPairs.find(item => String(item.wheel_pair || '').trim() === pairValue) || wearChartPairs[0] || null;
+    const points = Array.isArray(pairData?.points) ? pairData.points : [];
+    axisLabels = points.map(point => String(point?.measurement_date || '').trim()).filter(Boolean);
+    chartSeries = [
+      {
+        pair: pairValue,
+        color: '#2f6fed',
+        values: points.map(point => wearChartNumber(point?.metrics?.[metricKey]?.left)),
+        side: 'left',
+      },
+      {
+        pair: pairValue,
+        color: '#e05a47',
+        values: points.map(point => wearChartNumber(point?.metrics?.[metricKey]?.right)),
+        side: 'right',
+      },
+    ];
+    if (!pairData || !axisLabels.length) {
+      svg.innerHTML = '';
+      empty.textContent = 'Для выбранной КП и показателя пока нет достаточных данных для графика.';
+      return;
+    }
+  }
+  const values = chartSeries.flatMap(series => (series.values || []).filter(value => Number.isFinite(value)));
+  if (!axisLabels.length || !values.length) {
+    svg.innerHTML = '';
+    empty.textContent = mode === 'all'
+      ? 'Для общего графика пока недостаточно данных.'
+      : 'Для выбранной КП и показателя пока нет достаточных данных для графика.';
+    return;
+  }
   let min = Math.min(...values);
   let max = Math.max(...values);
   if (min === max) {
@@ -1274,15 +1357,14 @@ function renderWearChart(){
   min -= pad;
   max += pad;
   const scaleX = (index) => {
-    if (series.length === 1) return margin.left + plotWidth / 2;
-    return margin.left + (plotWidth * index) / (series.length - 1);
+    if (axisLabels.length === 1) return margin.left + plotWidth / 2;
+    return margin.left + (plotWidth * index) / (axisLabels.length - 1);
   };
   const scaleY = (value) => margin.top + ((max - value) * plotHeight) / (max - min);
-  const linePath = (key) => {
+  const linePath = (series) => {
     const segments = [];
     let current = [];
-    series.forEach(point => {
-      const value = point[key];
+    (series.values || []).forEach((value, index) => {
       if (!Number.isFinite(value)) {
         if (current.length) {
           segments.push(current);
@@ -1290,13 +1372,11 @@ function renderWearChart(){
         }
         return;
       }
-      current.push({ x: scaleX(point.index), y: scaleY(value) });
+      current.push({ x: scaleX(index), y: scaleY(value) });
     });
     if (current.length) segments.push(current);
     return segments.map(segment => segment.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' '));
   };
-  const leftPaths = linePath('left');
-  const rightPaths = linePath('right');
   const gridLines = [];
   for (let i = 0; i <= 4; i += 1) {
     const y = margin.top + (plotHeight * i) / 4;
@@ -1304,40 +1384,97 @@ function renderWearChart(){
     gridLines.push(`<line class="wear-chart-grid" x1="${margin.left}" y1="${y.toFixed(1)}" x2="${width - margin.right}" y2="${y.toFixed(1)}"></line>`);
     gridLines.push(`<text class="wear-chart-label" x="${margin.left - 10}" y="${(y + 4).toFixed(1)}" text-anchor="end">${esc(wearNumber(value))}</text>`);
   }
-  const xLabelStep = Math.max(1, Math.ceil(series.length / 6));
-  const xLabels = series.map((point, index) => {
-    if (series.length > 1 && index % xLabelStep !== 0 && index !== series.length - 1) return '';
+  const xLabelStep = Math.max(1, Math.ceil(axisLabels.length / 6));
+  const xLabels = axisLabels.map((label, index) => {
+    if (axisLabels.length > 1 && index % xLabelStep !== 0 && index !== axisLabels.length - 1) return '';
     const x = scaleX(index);
     const y = height - 16;
-    return `<text class="wear-chart-label" x="${x.toFixed(1)}" y="${y}" text-anchor="middle">${esc(point.dateLabel || point.date || '')}</text>`;
+    return `<text class="wear-chart-label" x="${x.toFixed(1)}" y="${y}" text-anchor="middle">${esc(formatWearDate(label) || label)}</text>`;
   }).join('');
-  const pointsSvg = (key, cls) => series.map(point => {
-    const value = point[key];
+  const pointsSvg = (series) => (series.values || []).map((value, index) => {
     if (!Number.isFinite(value)) return '';
-    const cx = scaleX(point.index).toFixed(1);
+    const cx = scaleX(index).toFixed(1);
     const cy = scaleY(value).toFixed(1);
-    return `<circle class="${cls}" cx="${cx}" cy="${cy}" r="4.4"></circle>`;
+    return `<circle class="wear-chart-dot" cx="${cx}" cy="${cy}" r="4.4" fill="#fff" stroke="${series.color}"></circle>`;
   }).join('');
-  const pathSvg = (paths, cls) => paths.map(d => `<path class="${cls}" d="${d}"></path>`).join('');
-  const firstDate = series[0]?.dateLabel || series[0]?.date || '';
-  const lastDate = series[series.length - 1]?.dateLabel || series[series.length - 1]?.date || '';
+  const pathSvg = (series) => linePath(series).map(d => `<path class="wear-chart-series" stroke="${series.color}" d="${d}"></path>`).join('');
+  const firstDate = axisLabels[0] ? formatWearDate(axisLabels[0]) : '';
+  const lastDate = axisLabels[axisLabels.length - 1] ? formatWearDate(axisLabels[axisLabels.length - 1]) : '';
+  const modeLabel = mode === 'all' ? 'Все КП' : `КП ${esc(wearChartSelectedPair())}`;
   svg.innerHTML = `
     <rect x="0" y="0" width="${width}" height="${height}" fill="white"></rect>
-    <text class="wear-chart-title" x="${margin.left}" y="20">${esc(metricLabel)} · КП ${esc(pairValue)} · ${esc(firstDate)}${lastDate && lastDate !== firstDate ? ` — ${esc(lastDate)}` : ''}</text>
+    <text class="wear-chart-title" x="${margin.left}" y="20">${esc(metricLabel)} · ${esc(modeLabel)} · ${esc(firstDate)}${lastDate && lastDate !== firstDate ? ` — ${esc(lastDate)}` : ''}</text>
     ${gridLines.join('')}
     <line class="wear-chart-axis" x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}"></line>
     <line class="wear-chart-axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}"></line>
-    ${pathSvg(leftPaths, 'wear-chart-series-left')}
-    ${pathSvg(rightPaths, 'wear-chart-series-right')}
-    ${pointsSvg('left', 'wear-chart-dot-left')}
-    ${pointsSvg('right', 'wear-chart-dot-right')}
+    ${chartSeries.map(series => pathSvg(series)).join('')}
+    ${chartSeries.map(series => pointsSvg(series)).join('')}
     ${xLabels}
   `;
-  empty.textContent = series.length < 2 ? 'Показан один замер — для линии нужен хотя бы ещё один.' : '';
+  if (mode === 'all') {
+    empty.textContent = axisLabels.length < 2 ? 'Показан один замер — для линии нужен хотя бы ещё один.' : '';
+  } else {
+    empty.textContent = axisLabels.length < 2 ? 'Показан один замер — для линии нужен хотя бы ещё один.' : '';
+  }
 }
 function refreshWearChart(){
   renderWearChartControls();
   renderWearChart();
+}
+async function exportWearChartPng(){
+  const svg = document.getElementById('wearChartSvg');
+  if (!svg || !svg.innerHTML.trim()) return;
+  const status = document.getElementById('wearStatus');
+  try {
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const markup = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    const viewBox = svg.getAttribute('viewBox') || '0 0 900 260';
+    const parts = viewBox.split(/\s+/).map(Number);
+    const width = Number.isFinite(parts[2]) ? parts[2] : 900;
+    const height = Number.isFinite(parts[3]) ? parts[3] : 260;
+    const scale = 2;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        if (status) status.textContent = 'Не удалось создать PNG';
+        return;
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((pngBlob) => {
+        URL.revokeObjectURL(url);
+        if (!pngBlob) {
+          if (status) status.textContent = 'Не удалось создать PNG';
+          return;
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(pngBlob);
+        a.download = `wear-analysis-${wearSelectedLoco || 'chart'}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        if (status) status.textContent = 'График сохранён в PNG';
+      }, 'image/png');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (status) status.textContent = 'Не удалось создать PNG';
+    };
+    img.src = url;
+  } catch (error) {
+    if (status) status.textContent = error.message || 'Не удалось создать PNG';
+  }
 }
 async function loadWearAnalysis(nextLoco = ''){
   const status = document.getElementById('wearStatus');
@@ -2348,6 +2485,10 @@ document.getElementById('kpSearch').addEventListener('input', applyKpSearchFilte
 document.getElementById('wearLocomotive')?.addEventListener('change', e => loadWearAnalysis(e.target.value));
 document.getElementById('wearDateFrom')?.addEventListener('change', () => loadWearAnalysis());
 document.getElementById('wearDateTo')?.addEventListener('change', () => loadWearAnalysis());
+document.getElementById('wearChartMode')?.addEventListener('change', () => {
+  wearChartMode = wearChartModeValue();
+  refreshWearChart();
+});
 document.getElementById('wearChartPair')?.addEventListener('change', () => renderWearChart());
 document.getElementById('wearChartMetric')?.addEventListener('change', () => renderWearChart());
 document.getElementById('archiveLocomotive')?.addEventListener('change', loadArchive);
