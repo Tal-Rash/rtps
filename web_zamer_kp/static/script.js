@@ -25,6 +25,8 @@ let wearLoading = false;
 let wearChartPairs = [];
 let wearChartMetrics = [];
 let wearChartMode = 'pair';
+let wearChartPairChoice = '';
+let wearChartMetricChoice = '';
 let archiveRows = [];
 let archiveSortDesc = true;
 let archiveSelectedMeasurementKey = null;
@@ -67,6 +69,35 @@ function clampCell(row, col){
     row: Math.max(0, row),
     col: Math.max(0, Math.min(9, col)),
   };
+}
+function readWearPageState(){
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    const raw = sessionStorage.getItem('wear_charts_page_state');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+function writeWearPageState(extra = {}){
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    const payload = {
+      locomotive: String(wearSelectedLoco || '').trim(),
+      dateFrom: String(wearDateFrom || '').trim(),
+      dateTo: String(wearDateTo || '').trim(),
+      mode: wearChartModeValue(),
+      pair: String(wearChartPairChoice || document.getElementById('wearChartPair')?.value || '').trim(),
+      metric: String(wearChartMetricChoice || document.getElementById('wearChartMetric')?.value || '').trim(),
+      ...extra,
+    };
+    sessionStorage.setItem('wear_charts_page_state', JSON.stringify(payload));
+  } catch {
+    // ignore storage errors
+  }
 }
 function getVisibleAxisCount(){
   return getAxisCount(getCurrentLoco());
@@ -1195,6 +1226,7 @@ function wearChartSelectedPair(){
   const select = document.getElementById('wearChartPair');
   const current = String(select?.value || '').trim();
   if (current) return current;
+  if (wearChartPairChoice) return String(wearChartPairChoice).trim();
   if (wearChartPairs.length) return String(wearChartPairs[0].wheel_pair || '').trim();
   return '';
 }
@@ -1202,6 +1234,7 @@ function wearChartSelectedMetric(){
   const select = document.getElementById('wearChartMetric');
   const current = String(select?.value || '').trim();
   if (current) return current;
+  if (wearChartMetricChoice) return String(wearChartMetricChoice).trim();
   if (wearChartMetrics.length) return String(wearChartMetrics[0].key || '').trim();
   return 'prokat';
 }
@@ -1233,7 +1266,7 @@ function renderWearChartControls(){
   }
   if (pairLabel) pairLabel.style.display = wearChartMode === 'all' ? 'none' : '';
   if (pairSelect) {
-    const previous = String(pairSelect.value || '').trim();
+    const previous = String(pairSelect.value || wearChartPairChoice || '').trim();
     pairSelect.innerHTML = wearChartPairs.map(item => {
       const value = String(item.wheel_pair || '').trim();
       return `<option value="${esc(value)}">КП ${esc(value)}</option>`;
@@ -1243,9 +1276,10 @@ function renderWearChartControls(){
     } else if (pairSelect.options.length) {
       pairSelect.value = pairSelect.options[0].value;
     }
+    wearChartPairChoice = String(pairSelect.value || previous || '').trim();
   }
   if (metricSelect) {
-    const previous = String(metricSelect.value || '').trim();
+    const previous = String(metricSelect.value || wearChartMetricChoice || '').trim();
     metricSelect.innerHTML = wearChartMetrics.map(item => {
       const value = String(item.key || '').trim();
       return `<option value="${esc(value)}">${esc(item.label || value)}</option>`;
@@ -1255,6 +1289,7 @@ function renderWearChartControls(){
     } else if (metricSelect.options.length) {
       metricSelect.value = metricSelect.options[0].value;
     }
+    wearChartMetricChoice = String(metricSelect.value || previous || '').trim();
   }
   const legend = document.querySelector('.wear-chart-legend');
   if (legend) {
@@ -1420,12 +1455,20 @@ function renderWearChart(){
 function refreshWearChart(){
   renderWearChartControls();
   renderWearChart();
+  writeWearPageState();
 }
 function openWearChartsPage(){
   const loco = String(document.getElementById('wearLocomotive')?.value || wearSelectedLoco || '').trim();
   const dateFrom = String(document.getElementById('wearDateFrom')?.value || wearDateFrom || '').trim();
   const dateTo = String(document.getElementById('wearDateTo')?.value || wearDateTo || '').trim();
   const mode = wearChartModeValue();
+  wearSelectedLoco = loco;
+  wearDateFrom = dateFrom;
+  wearDateTo = dateTo;
+  wearChartMode = mode;
+  wearChartPairChoice = String(document.getElementById('wearChartPair')?.value || wearChartPairChoice || '').trim();
+  wearChartMetricChoice = String(document.getElementById('wearChartMetric')?.value || wearChartMetricChoice || '').trim();
+  writeWearPageState();
   const params = new URLSearchParams();
   if (loco) params.set('locomotive', loco);
   if (dateFrom) params.set('date_from', dateFrom);
@@ -1528,6 +1571,7 @@ async function loadWearAnalysis(nextLoco = ''){
     renderWearLocomotiveOptions();
     refreshWearChart();
     renderWearAnalysisTable();
+    writeWearPageState();
     if (status) {
       const countText = payload.series ? `${payload.series} ${payload.locomotive}` : payload.locomotive;
       const periodText = (wearDateFrom || wearDateTo) ? ` · период ${wearDateFrom || '...'} — ${wearDateTo || '...'}` : '';
@@ -2499,10 +2543,19 @@ document.getElementById('wearDateFrom')?.addEventListener('change', () => loadWe
 document.getElementById('wearDateTo')?.addEventListener('change', () => loadWearAnalysis());
 document.getElementById('wearChartMode')?.addEventListener('change', () => {
   wearChartMode = wearChartModeValue();
+  writeWearPageState();
   refreshWearChart();
 });
-document.getElementById('wearChartPair')?.addEventListener('change', () => renderWearChart());
-document.getElementById('wearChartMetric')?.addEventListener('change', () => renderWearChart());
+document.getElementById('wearChartPair')?.addEventListener('change', e => {
+  wearChartPairChoice = String(e.target?.value || '').trim();
+  writeWearPageState();
+  renderWearChart();
+});
+document.getElementById('wearChartMetric')?.addEventListener('change', e => {
+  wearChartMetricChoice = String(e.target?.value || '').trim();
+  writeWearPageState();
+  renderWearChart();
+});
 document.getElementById('archiveLocomotive')?.addEventListener('change', loadArchive);
 document.getElementById('archiveSearch')?.addEventListener('input', loadArchive);
 document.getElementById('archiveExcelFile')?.addEventListener('change', event => {
@@ -2516,6 +2569,17 @@ if (window.WEAR_DEFAULT_MODE) {
 }
 if (window.WEAR_DEFAULT_LOCOMOTIVE) {
   wearSelectedLoco = String(window.WEAR_DEFAULT_LOCOMOTIVE).trim();
+}
+{
+  const savedWearState = readWearPageState();
+  if (savedWearState) {
+    if (!wearSelectedLoco && savedWearState.locomotive) wearSelectedLoco = String(savedWearState.locomotive).trim();
+    if (!wearDateFrom && savedWearState.dateFrom) wearDateFrom = String(savedWearState.dateFrom).trim();
+    if (!wearDateTo && savedWearState.dateTo) wearDateTo = String(savedWearState.dateTo).trim();
+    if (savedWearState.mode) wearChartMode = String(savedWearState.mode).trim() === 'all' ? 'all' : wearChartMode;
+    if (savedWearState.pair) wearChartPairChoice = String(savedWearState.pair).trim();
+    if (savedWearState.metric) wearChartMetricChoice = String(savedWearState.metric).trim();
+  }
 }
 if (document.getElementById('kpLocomotive') || document.getElementById('wearLocomotive') || document.getElementById('archiveLocomotive')) {
   updateHistoryButtons();
