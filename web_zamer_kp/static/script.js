@@ -1254,6 +1254,147 @@ function wearChartRepresentativeValue(metricKey, left, right){
   if (!hasLeft && hasRight) return right;
   return wearChartMetricWorseWhen(metricKey) === 'higher' ? Math.max(left, right) : Math.min(left, right);
 }
+function wearChartBuildSvg(points, metricKey, titlePrefix = ''){
+  const width = 900;
+  const height = 240;
+  const margin = { left: 64, right: 18, top: 30, bottom: 42 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const colors = ['#2f6fed', '#e05a47'];
+
+  const axisLabels = points.map(point => String(point?.measurement_date || '').trim()).filter(Boolean);
+  const chartSeries = [
+    {
+      label: 'Левая',
+      color: colors[0],
+      values: points.map(point => wearChartNumber(point?.metrics?.[metricKey]?.left)),
+    },
+    {
+      label: 'Правая',
+      color: colors[1],
+      values: points.map(point => wearChartNumber(point?.metrics?.[metricKey]?.right)),
+    },
+  ];
+  const values = chartSeries.flatMap(series => (series.values || []).filter(value => Number.isFinite(value)));
+  if (!axisLabels.length || !values.length) {
+    return {
+      svg: '',
+      emptyText: 'Для выбранной КП и показателя пока нет достаточных данных для графика.',
+      firstDate: axisLabels[0] ? formatWearDate(axisLabels[0]) : '',
+      lastDate: axisLabels[axisLabels.length - 1] ? formatWearDate(axisLabels[axisLabels.length - 1]) : '',
+    };
+  }
+
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  const pad = Math.max(0.5, (max - min) * 0.12);
+  min -= pad;
+  max += pad;
+  const scaleX = (index) => {
+    if (axisLabels.length === 1) return margin.left + plotWidth / 2;
+    return margin.left + (plotWidth * index) / (axisLabels.length - 1);
+  };
+  const scaleY = (value) => margin.top + ((max - value) * plotHeight) / (max - min);
+  const linePath = (series) => {
+    const segments = [];
+    let current = [];
+    (series.values || []).forEach((value, index) => {
+      if (!Number.isFinite(value)) {
+        if (current.length) {
+          segments.push(current);
+          current = [];
+        }
+        return;
+      }
+      current.push({ x: scaleX(index), y: scaleY(value) });
+    });
+    if (current.length) segments.push(current);
+    return segments.map(segment => segment.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' '));
+  };
+  const gridLines = [];
+  for (let i = 0; i <= 4; i += 1) {
+    const y = margin.top + (plotHeight * i) / 4;
+    const value = max - ((max - min) * i) / 4;
+    gridLines.push(`<line class="wear-chart-grid" x1="${margin.left}" y1="${y.toFixed(1)}" x2="${width - margin.right}" y2="${y.toFixed(1)}"></line>`);
+    gridLines.push(`<text class="wear-chart-label" x="${margin.left - 10}" y="${(y + 4).toFixed(1)}" text-anchor="end">${esc(wearNumber(value))}</text>`);
+  }
+  const xLabelStep = Math.max(1, Math.ceil(axisLabels.length / 6));
+  const xLabels = axisLabels.map((label, index) => {
+    if (axisLabels.length > 1 && index % xLabelStep !== 0 && index !== axisLabels.length - 1) return '';
+    const x = scaleX(index);
+    const y = height - 16;
+    return `<text class="wear-chart-label" x="${x.toFixed(1)}" y="${y}" text-anchor="middle">${esc(formatWearDate(label) || label)}</text>`;
+  }).join('');
+  const pointsSvg = (series) => (series.values || []).map((value, index) => {
+    if (!Number.isFinite(value)) return '';
+    const cx = scaleX(index).toFixed(1);
+    const cy = scaleY(value).toFixed(1);
+    return `<circle class="wear-chart-dot" cx="${cx}" cy="${cy}" r="4.4" fill="#fff" stroke="${series.color}"></circle>`;
+  }).join('');
+  const pathSvg = (series) => linePath(series).map(d => `<path class="wear-chart-series" stroke="${series.color}" d="${d}"></path>`).join('');
+  const firstDate = axisLabels[0] ? formatWearDate(axisLabels[0]) : '';
+  const lastDate = axisLabels[axisLabels.length - 1] ? formatWearDate(axisLabels[axisLabels.length - 1]) : '';
+  const dateLabel = firstDate ? `${firstDate}${lastDate && lastDate !== firstDate ? ` — ${lastDate}` : ''}` : '';
+  const title = [titlePrefix, wearChartMetricLabel(metricKey), dateLabel].filter(Boolean).join(' · ');
+  const emptyText = axisLabels.length < 2 ? 'Показан один замер — для линии нужен хотя бы ещё один.' : '';
+  return {
+    svg: `
+      <svg class="wear-chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${esc(title || 'График износа КП')}">
+        <rect x="0" y="0" width="${width}" height="${height}" fill="white"></rect>
+        <text class="wear-chart-title" x="${margin.left}" y="20">${esc(title || 'График износа КП')}</text>
+        ${gridLines.join('')}
+        <line class="wear-chart-axis" x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}"></line>
+        <line class="wear-chart-axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}"></line>
+        ${chartSeries.map(series => pathSvg(series)).join('')}
+        ${chartSeries.map(series => pointsSvg(series)).join('')}
+        ${xLabels}
+      </svg>
+    `,
+    emptyText,
+    firstDate,
+    lastDate,
+  };
+}
+function renderWearChartsGrid(){
+  const grid = document.getElementById('wearChartsGrid');
+  const empty = document.getElementById('wearChartsEmpty');
+  if (!grid || !empty) return;
+  const metricKey = wearChartSelectedMetric();
+  const metricLabel = wearChartMetricLabel(metricKey);
+  if (!wearChartPairs.length) {
+    grid.innerHTML = '';
+    empty.textContent = 'Нет данных для графиков.';
+    return;
+  }
+  empty.textContent = '';
+  grid.innerHTML = wearChartPairs.map(pair => {
+    const pairValue = String(pair.wheel_pair || '').trim();
+    const points = Array.isArray(pair.points) ? pair.points : [];
+    const chart = wearChartBuildSvg(points, metricKey, `КП ${pairValue || '—'}`);
+    const subtitle = chart.firstDate
+      ? `${metricLabel} · ${chart.firstDate}${chart.lastDate && chart.lastDate !== chart.firstDate ? ` — ${chart.lastDate}` : ''}`
+      : metricLabel;
+    return `
+      <article class="wear-chart-card">
+        <div class="wear-chart-card-head">
+          <div>
+            <div class="wear-chart-card-title">КП ${esc(pairValue || '—')}</div>
+            <div class="wear-chart-card-subtitle">${esc(subtitle)}</div>
+          </div>
+          <div class="wear-chart-card-count">${points.length ? `${points.length} зам.` : 'нет данных'}</div>
+        </div>
+        <div class="wear-chart-shell wear-chart-shell--card">
+          ${chart.svg || ''}
+          <div class="wear-chart-empty">${esc(chart.emptyText || '')}</div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
 function renderWearChartControls(){
   const modeSelect = document.getElementById('wearChartMode');
   const pairSelect = document.getElementById('wearChartPair');
@@ -1454,7 +1595,11 @@ function renderWearChart(){
 }
 function refreshWearChart(){
   renderWearChartControls();
-  renderWearChart();
+  if (document.getElementById('wearChartsGrid')) {
+    renderWearChartsGrid();
+  } else {
+    renderWearChart();
+  }
   writeWearPageState();
 }
 function openWearChartsPage(){
@@ -2595,6 +2740,6 @@ if (document.getElementById('inputTable')) {
   });
   if (!CAN_EDIT && document.getElementById('tabKp')) switchTab('kp');
 }
-if (document.getElementById('wearChartSvg')) {
+if (document.getElementById('wearChartSvg') || document.getElementById('wearChartsGrid')) {
   loadWearAnalysis().catch(() => undefined);
 }

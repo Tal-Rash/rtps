@@ -110,6 +110,14 @@
     .wear-chart-dot { stroke-width:2.4; }
     .wear-chart-label { fill:#5e6f84; font-size:11px; }
     .wear-chart-title { fill:#102033; font-size:14px; font-weight:700; }
+    .wear-charts-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:12px; }
+    .wear-chart-card { display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid #dfe8f4; border-radius:12px; background:#fff; box-shadow:0 4px 12px rgba(16,32,51,.04); }
+    .wear-chart-card-head { display:flex; gap:8px; justify-content:space-between; align-items:flex-start; }
+    .wear-chart-card-title { font-size:15px; font-weight:700; color:#102033; line-height:1.2; }
+    .wear-chart-card-subtitle { margin-top:2px; font-size:12px; color:var(--muted); line-height:1.2; }
+    .wear-chart-card-count { font-size:12px; color:var(--muted); white-space:nowrap; }
+    .wear-chart-shell--card { min-height:220px; }
+    .wear-charts-empty { min-height:24px; margin-top:8px; color:var(--muted); font-size:13px; }
     .wear-table-shell { margin-top:0; padding:0; overflow:auto; max-width:100%; }
     .wear-table th, .wear-table td { font-size:12px; vertical-align:middle; }
     .wear-table th { padding:10px 8px; white-space:normal; }
