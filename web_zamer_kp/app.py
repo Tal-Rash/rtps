@@ -3218,8 +3218,8 @@ async def wear_charts_route(request: Request, locomotive: str = "", date_from: s
 
     if not session or not mod_role:
         with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
-            html = f.read().replace("{{APP_PREFIX}}", APP_PREFIX)
-        return HTMLResponse(content=html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
+            login_html = f.read().replace("{{APP_PREFIX}}", APP_PREFIX)
+        return HTMLResponse(content=login_html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
 
     extra = {
         "{{WEAR_LOCOMOTIVE}}": html.escape(text(locomotive), quote=True),
