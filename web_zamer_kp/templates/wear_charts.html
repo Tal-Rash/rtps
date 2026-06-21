@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Графики износа КП {{APP_VERSION}}</title>
+  <title>Анализ износа КП {{APP_VERSION}}</title>
   <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
   <script>
     var _prefix = "{{APP_PREFIX}}";
@@ -24,7 +24,7 @@
   <div class="wrap">
     <div class="top">
       <div>
-        <h1>Графики износа по КП</h1>
+        <h1>Анализ износа КП</h1>
         <div class="muted">Версия {{APP_VERSION}}</div>
       </div>
       <div class="actions">
@@ -45,17 +45,50 @@
           <input id="wearDateTo" type="date" style="width:160px" value="{{WEAR_DATE_TO}}">
         </label>
         <button id="wearRefreshBtn" type="button" onclick="loadWearAnalysis()">Обновить анализ</button>
+        <button id="wearViewToggleBtn" type="button" onclick="toggleWearView()">Таблица</button>
         <div id="wearSummary" class="wear-summary"></div>
       </div>
-      <div class="wear-note">Каждая колесная пара показана отдельным графиком. Показатель выбирается общий для всех графиков, а период задаётся сверху.</div>
-      <div class="wear-chart-panel">
-        <div class="wear-chart-controls">
-          <label>Показатель
-            <select id="wearChartMetric" style="width:180px"></select>
-          </label>
+      <div class="wear-note">Переключатель показывает либо таблицу по КП, либо отдельные графики по каждой колесной паре. Период задаётся сверху.</div>
+      <div id="wearChartsView">
+        <div class="wear-chart-panel">
+          <div class="wear-chart-controls">
+            <label>Показатель
+              <select id="wearChartMetric" style="width:180px"></select>
+            </label>
+            <button id="wearChartExportBtn" type="button" onclick="exportWearChartPng()">PNG</button>
+          </div>
+          <div id="wearChartsGrid" class="wear-charts-grid" aria-label="Графики по каждой колесной паре"></div>
+          <div id="wearChartsEmpty" class="wear-charts-empty"></div>
         </div>
-        <div id="wearChartsGrid" class="wear-charts-grid" aria-label="Графики по каждой колесной паре"></div>
-        <div id="wearChartsEmpty" class="wear-charts-empty"></div>
+      </div>
+      <div id="wearTableView" class="wear-view-hidden">
+        <div class="table-shell wear-table-shell">
+          <table id="wearTable" class="wear-table" aria-label="Анализ износа колесных пар">
+            <colgroup>
+              <col style="width:86px">
+              <col style="width:180px">
+              <col style="width:150px">
+              <col style="width:150px">
+              <col style="width:150px">
+              <col style="width:150px">
+              <col style="width:150px">
+              <col style="width:190px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>КП</th>
+                <th>Последний замер</th>
+                <th>Статус</th>
+                <th>Прокат</th>
+                <th>Гребень</th>
+                <th>Крутизна</th>
+                <th>Бандаж</th>
+                <th>Диаметр</th>
+              </tr>
+            </thead>
+            <tbody id="wearBody"></tbody>
+          </table>
+        </div>
       </div>
       <div id="wearStatus" class="status"></div>
     </div>

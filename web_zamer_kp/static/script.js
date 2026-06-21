@@ -27,6 +27,7 @@ let wearChartMetrics = [];
 let wearChartMode = 'pair';
 let wearChartPairChoice = '';
 let wearChartMetricChoice = '';
+let wearPageView = 'charts';
 let archiveRows = [];
 let archiveSortDesc = true;
 let archiveSelectedMeasurementKey = null;
@@ -70,6 +71,30 @@ function clampCell(row, col){
     col: Math.max(0, Math.min(9, col)),
   };
 }
+function wearPageViewValue(){
+  return wearPageView === 'table' ? 'table' : 'charts';
+}
+function applyWearPageView(){
+  const chartsView = document.getElementById('wearChartsView');
+  const tableView = document.getElementById('wearTableView');
+  const toggleBtn = document.getElementById('wearViewToggleBtn');
+  const exportBtn = document.getElementById('wearChartExportBtn');
+  const view = wearPageViewValue();
+  if (chartsView) chartsView.classList.toggle('wear-view-hidden', view !== 'charts');
+  if (tableView) tableView.classList.toggle('wear-view-hidden', view !== 'table');
+  if (toggleBtn) toggleBtn.textContent = view === 'charts' ? 'Таблица' : 'График';
+  if (exportBtn) exportBtn.style.display = view === 'charts' ? '' : 'none';
+}
+function setWearPageView(view){
+  wearPageView = String(view).trim() === 'table' ? 'table' : 'charts';
+  applyWearPageView();
+  writeWearPageState();
+}
+function toggleWearView(){
+  setWearPageView(wearPageViewValue() === 'charts' ? 'table' : 'charts');
+  renderWearChartsGrid();
+  renderWearAnalysisTable();
+}
 function readWearPageState(){
   try {
     if (typeof sessionStorage === 'undefined') return null;
@@ -92,6 +117,7 @@ function writeWearPageState(extra = {}){
       mode: wearChartModeValue(),
       pair: String(wearChartPairChoice || document.getElementById('wearChartPair')?.value || '').trim(),
       metric: String(wearChartMetricChoice || document.getElementById('wearChartMetric')?.value || '').trim(),
+      view: wearPageViewValue(),
       ...extra,
     };
     sessionStorage.setItem('wear_charts_page_state', JSON.stringify(payload));
@@ -1595,11 +1621,10 @@ function renderWearChart(){
 }
 function refreshWearChart(){
   renderWearChartControls();
-  if (document.getElementById('wearChartsGrid')) {
-    renderWearChartsGrid();
-  } else {
-    renderWearChart();
-  }
+  if (document.getElementById('wearChartsGrid')) renderWearChartsGrid();
+  if (document.getElementById('wearChartSvg')) renderWearChart();
+  if (document.getElementById('wearBody')) renderWearAnalysisTable();
+  applyWearPageView();
   writeWearPageState();
 }
 function openWearChartsPage(){
@@ -2724,8 +2749,10 @@ if (window.WEAR_DEFAULT_LOCOMOTIVE) {
     if (savedWearState.mode) wearChartMode = String(savedWearState.mode).trim() === 'all' ? 'all' : wearChartMode;
     if (savedWearState.pair) wearChartPairChoice = String(savedWearState.pair).trim();
     if (savedWearState.metric) wearChartMetricChoice = String(savedWearState.metric).trim();
+    if (savedWearState.view) wearPageView = String(savedWearState.view).trim() === 'table' ? 'table' : 'charts';
   }
 }
+applyWearPageView();
 if (document.getElementById('kpLocomotive') || document.getElementById('wearLocomotive') || document.getElementById('archiveLocomotive')) {
   updateHistoryButtons();
 }
