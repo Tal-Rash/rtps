@@ -330,7 +330,7 @@ def load_state(year: int) -> dict:
             employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["exclude_date"]), text(row["milk_note"])])
         inventory_rows = cur.execute(
             """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number, rowid
+            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, rowid
             FROM inventory
             WHERE y=?
             ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid
