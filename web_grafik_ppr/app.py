@@ -1503,7 +1503,8 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     for axle in range(1, 13):
         for c_idx, prefix in col_to_tag_prefix.items():
             # In archive_data, r=2 corresponds to axle 1, r=3 to axle 2, etc.
-            tags[f"[{prefix}_{axle}]"] = measurements.get(axle + 1, {}).get(c_idx, "")
+            measurement_value = s(measurements.get(axle + 1, {}).get(c_idx, "")).strip()
+            tags[f"[{prefix}_{axle}]"] = measurement_value.replace(".", ",")
             
     print(f"DEBUG: ZAMER KP TAGS: { {k: tags[k] for k in tags if 'ПР' in k or 'ТГ' in k} }", flush=True)
 
