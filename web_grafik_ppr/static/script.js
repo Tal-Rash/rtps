@@ -1159,13 +1159,14 @@ function repairSummaryIsNonWorkingDate(date){
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
   const key = repairSummaryDateKey(date);
   if (REPAIR_SUMMARY_FIXED_HOLIDAYS.has(key)) return true;
-  const year = Number(appState.year);
+  const year = date.getFullYear();
   const month = date.getMonth() + 1;
   const day = date.getDate();
-  if (date.getFullYear() === year) {
-    if (hasSystemDate('holiday', month, day)) return true;
-    if (hasSystemDate('transfer', month, day)) return false;
-  }
+  const calendar = appState?.repair_summary?.system_dates_by_year?.[String(year)]
+    || (year === Number(appState.year) ? systemDates() : null);
+  const containsDate = (kind) => (calendar?.[kind] || []).some(([m, d]) => Number(m) === month && Number(d) === day);
+  if (containsDate('holiday')) return true;
+  if (containsDate('transfer')) return true;
   const wd = date.getDay();
   return wd === 0 || wd === 6;
 }

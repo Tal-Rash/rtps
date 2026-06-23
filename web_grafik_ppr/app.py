@@ -42,6 +42,9 @@ FIXED_HOLIDAYS = {
     (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
     (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
 }
+TRANSFER_HOLIDAYS_BY_YEAR = {
+    2025: {(5, 2), (5, 8), (6, 13), (11, 3), (12, 31)},
+}
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
@@ -336,7 +339,7 @@ def month_index(month_name: str) -> int:
 
 
 def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
-    transfer_dates: set[tuple[int, int]] = set()
+    transfer_dates: set[tuple[int, int]] = set(TRANSFER_HOLIDAYS_BY_YEAR.get(year, set()))
     holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
     if not SOURCE_DB.exists():
         return {
@@ -777,11 +780,13 @@ def build_repair_summary_state(cur: sqlite3.Cursor) -> dict:
 
     months_rows: list[dict] = []
     schedule_rows: list[dict] = []
+    system_dates_by_year: dict[str, dict] = {}
     for year in sorted(years):
         try:
             year_state = load_state(year, include_summary=False)
         except Exception:
             continue
+        system_dates_by_year[str(year)] = year_state.get("system_dates") or load_system_dates(year)
         months_rows.extend(_repair_summary_rows_from_month_state(year_state))
         schedule_rows.extend(_repair_summary_rows_from_schedule_state(year_state))
 
@@ -789,6 +794,7 @@ def build_repair_summary_state(cur: sqlite3.Cursor) -> dict:
         "months": _repair_summary_pack(months_rows),
         "schedule": _repair_summary_pack(schedule_rows),
         "kp_measurements": _load_kp_archive_measurements(),
+        "system_dates_by_year": system_dates_by_year,
     }
 
 
