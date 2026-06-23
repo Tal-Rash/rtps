@@ -94,6 +94,16 @@
         <label>Поиск
           <input id="kpSearch" type="text" placeholder="№ КП, ось, диаметр" style="width:260px">
         </label>
+        <label>Версия
+          <select id="kpVersion" style="width:220px" onchange="loadKpVersion(this.value)">
+            <option value="">Текущие данные</option>
+          </select>
+        </label>
+        <label>Действовали до
+          <input id="kpValidTo" type="date" style="width:160px">
+        </label>
+        <button id="kpNewVersionBtn" type="button" onclick="createKpVersion()">Новые данные</button>
+        <button id="kpSaveVersionDateBtn" type="button" onclick="saveKpVersionDate()" style="display:none">Сохранить дату</button>
       </div>
       <div class="kp-note">Памятка: редактирование диаметров колесных центров доступно только при выборе конкретного локомотива.</div>
       <div class="kp-legend">
@@ -373,6 +383,6 @@
   const API = '{{APP_PREFIX}}';
   const LOCOMOTIVE_CHOICES = {{LOCOMOTIVE_CHOICES}};
 </script>
-<script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}-clipboard2"></script>
+<script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}-kp-versions"></script>
 </body>
 </html>

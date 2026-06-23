@@ -14,6 +14,8 @@ let kpAllMode = false;
 let kpSearchText = '';
 let kpLoading = false;
 let kpSelectedStatus = null;
+let kpVersions = [];
+let kpSelectedVersion = null;
 let kpSelectionAnchor = null;
 let kpSelectionFocus = null;
 let kpSuppressFocusSelection = false;
@@ -1147,6 +1149,36 @@ function renderKpStatus(textValue){
   const status = document.getElementById('kpStatus');
   if (status) status.textContent = textValue || '';
 }
+function renderKpVersionControls(){
+  const select = document.getElementById('kpVersion');
+  const dateInput = document.getElementById('kpValidTo');
+  const newBtn = document.getElementById('kpNewVersionBtn');
+  const saveDateBtn = document.getElementById('kpSaveVersionDateBtn');
+  const disabled = kpAllMode || !kpSelectedLoco;
+  if (select) {
+    select.innerHTML = [
+      '<option value="">Текущие данные</option>',
+      ...kpVersions.map((version) => {
+        const label = version.valid_to ? `До ${formatWearDate(version.valid_to)}` : `Версия ${version.id}`;
+        return `<option value="${version.id}">${esc(label)}</option>`;
+      }),
+    ].join('');
+    select.value = kpSelectedVersion ? String(kpSelectedVersion.id) : '';
+    select.disabled = disabled;
+  }
+  if (dateInput) {
+    dateInput.value = kpSelectedVersion?.valid_to || '';
+    dateInput.disabled = disabled;
+  }
+  if (newBtn) {
+    newBtn.style.display = kpSelectedVersion ? 'none' : '';
+    newBtn.disabled = disabled || !CAN_EDIT;
+  }
+  if (saveDateBtn) {
+    saveDateBtn.style.display = kpSelectedVersion ? '' : 'none';
+    saveDateBtn.disabled = disabled || !CAN_EDIT;
+  }
+}
 function renderKpTable(){
   const head = document.getElementById('kpHead');
   const body = document.getElementById('kpBody');
@@ -1166,6 +1198,7 @@ function renderKpTable(){
     clearKpSelection();
     body.innerHTML = `<tr><td colspan="${headers.length}" style="padding:14px;color:var(--muted);">Нет данных</td></tr>`;
     renderKpStatus(kpStatusLabel(null, allMode, 0));
+    renderKpVersionControls();
     return;
   }
 
@@ -1184,8 +1217,7 @@ function renderKpTable(){
     }
     return `
       <tr data-row="${rowIndex}" data-search="${esc(search)}">
-        <td class="readonly">${esc(values[0] ?? '')}</td>
-        ${[1, 2, 3].map(colIndex => `
+        ${[0, 1, 2, 3].map(colIndex => `
           <td data-col="${colIndex}"><input
               value="${esc(fmt(values[colIndex]))}"
               ${editable ? '' : 'readonly'}
@@ -1202,6 +1234,7 @@ function renderKpTable(){
   applyKpSearchFilter();
   renderKpSelectionHighlight();
   renderKpStatus(kpStatusLabel(kpSelectedStatus, allMode, kpRows.length));
+  renderKpVersionControls();
 }
 function renderWearLocomotiveOptions(){
   const select = document.getElementById('wearLocomotive');
@@ -1838,7 +1871,7 @@ function kpCellElement(row, col){
   return document.querySelector(`#kpBody input[data-row="${row}"][data-col="${col}"]`);
 }
 function kpCellInBounds(row, col){
-  return row >= 0 && row < kpRows.length && col >= 1 && col <= 3 && !kpAllMode;
+  return row >= 0 && row < kpRows.length && col >= 0 && col <= 3 && !kpAllMode;
 }
 function clearKpSelection(){
   kpSelectionAnchor = null;
@@ -2025,7 +2058,7 @@ function handleKpKeydown(event, row, col){
     event.preventDefault();
     let nextRow = row;
     let nextCol = col;
-    if (key === 'ArrowLeft' && col > 1) nextCol = col - 1;
+    if (key === 'ArrowLeft' && col > 0) nextCol = col - 1;
     if (key === 'ArrowRight' && col < 3) nextCol = col + 1;
     if (key === 'ArrowUp' && row > 0) nextRow = row - 1;
     if (key === 'ArrowDown' && row < kpRows.length - 1) nextRow = row + 1;
@@ -2035,7 +2068,8 @@ function handleKpKeydown(event, row, col){
 function collectKpRowsFromView(){
   return kpRows.map((row, rowIndex) => {
     if (kpAllMode) return row.values || [];
-    const values = [`${rowIndex + 1}`, '', '', ''];
+    const values = ['', '', '', ''];
+    values[0] = kpCellElement(rowIndex, 0)?.value ?? row.values?.[0] ?? `${rowIndex + 1}`;
     values[1] = kpCellElement(rowIndex, 1)?.value ?? row.values?.[1] ?? '';
     values[2] = kpCellElement(rowIndex, 2)?.value ?? row.values?.[2] ?? '';
     values[3] = kpCellElement(rowIndex, 3)?.value ?? row.values?.[3] ?? '';
@@ -2043,7 +2077,7 @@ function collectKpRowsFromView(){
   });
 }
 async function saveKpDataChanges(){
-  if (!CAN_EDIT || kpAllMode || kpLoading) return false;
+  if (!CAN_EDIT || kpAllMode || kpLoading || kpSelectedVersion) return false;
   const loco = (kpSelectedLoco || '').trim();
   if (!loco || loco === 'Все локомотивы') return false;
   const rows = collectKpRowsFromView();
@@ -2067,6 +2101,8 @@ async function saveKpDataChanges(){
     kpAllMode = !!payload.all_mode;
     kpSelectedStatus = payload.status || null;
     kpRows = payload.rows || [];
+    kpVersions = payload.versions || [];
+    kpSelectedVersion = payload.selected_version || null;
     if (state && kpSelectedLoco && kpSelectedLoco === state.locomotive) {
       state.kp = payload.kp_map || {};
       recalcDiameters();
@@ -2079,18 +2115,31 @@ async function saveKpDataChanges(){
     kpLoading = false;
   }
 }
-async function loadKpData(nextValue){
+function applyKpPayload(payload, fallbackLoco){
+  kpSelectedLoco = payload.selected_locomotive || fallbackLoco || kpSelectedLoco;
+  kpAllMode = !!payload.all_mode;
+  kpSelectedStatus = payload.status || null;
+  kpRows = payload.rows || [];
+  kpVersions = payload.versions || [];
+  kpSelectedVersion = payload.selected_version || null;
+  renderKpLocomotiveOptions();
+  renderKpTable();
+}
+async function loadKpData(nextValue, versionId = null){
   const select = document.getElementById('kpLocomotive');
   const value = String(nextValue ?? select?.value ?? kpSelectedLoco ?? state?.locomotive ?? '').trim();
   if (select && value && select.value !== value) {
     select.value = value;
   }
   kpSelectedLoco = value || (state?.locomotive || '');
+  kpSelectedVersion = versionId ? { id: Number(versionId) } : null;
   clearKpSelection();
   kpLoading = true;
   renderKpStatus('Загрузка КП данных...');
   try {
-    const res = await fetch(`${API}/api/kp-data?locomotive=${encodeURIComponent(kpSelectedLoco)}`, { cache: 'no-store' });
+    const params = new URLSearchParams({ locomotive: kpSelectedLoco });
+    if (versionId) params.set('version_id', String(versionId));
+    const res = await fetch(`${API}/api/kp-data?${params.toString()}`, { cache: 'no-store' });
     if (!res.ok) {
       kpRows = [];
       kpAllMode = false;
@@ -2099,12 +2148,7 @@ async function loadKpData(nextValue){
       return;
     }
     const payload = await res.json();
-    kpSelectedLoco = payload.selected_locomotive || kpSelectedLoco;
-    kpAllMode = !!payload.all_mode;
-    kpSelectedStatus = payload.status || null;
-    kpRows = payload.rows || [];
-    renderKpLocomotiveOptions();
-    renderKpTable();
+    applyKpPayload(payload, kpSelectedLoco);
     renderKpStatus(kpStatusLabel(kpSelectedStatus, kpAllMode, kpRows.length));
   } finally {
     kpLoading = false;
@@ -2828,6 +2872,70 @@ if (window.WEAR_DEFAULT_LOCOMOTIVE) {
     if (savedWearState.pair) wearChartPairChoice = String(savedWearState.pair).trim();
     if (savedWearState.metric) wearChartMetricChoice = String(savedWearState.metric).trim();
     if (savedWearState.view) wearPageView = String(savedWearState.view).trim() === 'table' ? 'table' : 'charts';
+  }
+}
+function loadKpVersion(value){
+  const versionId = String(value || '').trim();
+  loadKpData(kpSelectedLoco, versionId || null);
+}
+async function createKpVersion(){
+  if (!CAN_EDIT || kpAllMode || kpLoading || kpSelectedVersion) return;
+  const dateInput = document.getElementById('kpValidTo');
+  const validTo = String(dateInput?.value || '').trim();
+  if (!validTo) {
+    renderKpStatus('Укажите дату, до которой действовали старые данные');
+    dateInput?.focus();
+    return;
+  }
+  if (!confirm(`Сохранить текущие КП данные в историю до ${formatWearDate(validTo)} и начать ввод новых?`)) return;
+  kpLoading = true;
+  renderKpStatus('Сохранение старых КП данных...');
+  try {
+    const res = await fetch(`${API}/api/kp-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ action: 'new_version', locomotive: kpSelectedLoco, valid_to: validTo }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || payload.error) {
+      renderKpStatus(payload.error || 'Не удалось создать новую версию');
+      return;
+    }
+    applyKpPayload(payload, kpSelectedLoco);
+    renderKpStatus('Старые данные сохранены. Введите новые диаметры.');
+  } finally {
+    kpLoading = false;
+  }
+}
+async function saveKpVersionDate(){
+  if (!CAN_EDIT || !kpSelectedVersion || kpLoading) return;
+  const validTo = String(document.getElementById('kpValidTo')?.value || '').trim();
+  if (!validTo) {
+    renderKpStatus('Укажите дату окончания действия версии');
+    return;
+  }
+  kpLoading = true;
+  renderKpStatus('Сохранение даты...');
+  try {
+    const res = await fetch(`${API}/api/kp-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({
+        action: 'update_version',
+        locomotive: kpSelectedLoco,
+        version_id: kpSelectedVersion.id,
+        valid_to: validTo,
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || payload.error) {
+      renderKpStatus(payload.error || 'Не удалось сохранить дату');
+      return;
+    }
+    applyKpPayload(payload, kpSelectedLoco);
+    renderKpStatus('Дата действия сохранена');
+  } finally {
+    kpLoading = false;
   }
 }
 applyWearPageView();

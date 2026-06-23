@@ -144,6 +144,27 @@ def ensure_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS kp_data_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                locomotive TEXT NOT NULL,
+                valid_to TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS kp_data_version_cells (
+                version_id INT NOT NULL,
+                r INT NOT NULL,
+                c INT NOT NULL,
+                v TEXT,
+                PRIMARY KEY(version_id, r, c)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS archive_data (
                 y INT,
                 measurement_date TEXT,
@@ -664,7 +685,27 @@ def kp_completion_state(cur: sqlite3.Cursor, locomotive: str) -> str | None:
     return "green"
 
 
-def load_kp_view(selected_locomotive: str = "") -> dict:
+def load_kp_versions(cur: sqlite3.Cursor, locomotive: str) -> list[dict]:
+    rows = cur.execute(
+        """
+        SELECT id, valid_to, created_at
+        FROM kp_data_versions
+        WHERE locomotive=?
+        ORDER BY COALESCE(valid_to, '') DESC, id DESC
+        """,
+        (locomotive,),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "valid_to": text(row["valid_to"]).strip(),
+            "created_at": text(row["created_at"]).strip(),
+        }
+        for row in rows
+    ]
+
+
+def load_kp_view(selected_locomotive: str = "", version_id: int | None = None) -> dict:
     selected_locomotive = text(selected_locomotive).strip()
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
@@ -677,6 +718,7 @@ def load_kp_view(selected_locomotive: str = "") -> dict:
         rows: list[dict[str, object]] = []
         axis_count = 0
         status = None
+        selected_version = None
 
         if all_mode:
             all_values = cur.execute(
@@ -693,7 +735,7 @@ def load_kp_view(selected_locomotive: str = "") -> dict:
                 for row_index in range(count):
                     values = [
                         number,
-                        str(row_index + 1),
+                        kp_values.get((number, row_index, 0), str(row_index + 1)),
                         kp_values.get((number, row_index, 1), ""),
                         kp_values.get((number, row_index, 2), ""),
                         kp_values.get((number, row_index, 3), ""),
@@ -711,20 +753,42 @@ def load_kp_view(selected_locomotive: str = "") -> dict:
         else:
             series = series_for_locomotive(cur, selected_locomotive)
             axis_count = locomotive_axis_count(series, selected_locomotive)
-            kp_rows = cur.execute(
-                "SELECT r, c, v FROM kp_data WHERE locomotive=? ORDER BY r, c",
-                (selected_locomotive,),
-            ).fetchall()
-            if not kp_rows:
+            if version_id:
+                version_row = cur.execute(
+                    """
+                    SELECT id, valid_to, created_at
+                    FROM kp_data_versions
+                    WHERE id=? AND locomotive=?
+                    """,
+                    (version_id, selected_locomotive),
+                ).fetchone()
+                if version_row:
+                    selected_version = {
+                        "id": int(version_row["id"]),
+                        "valid_to": text(version_row["valid_to"]).strip(),
+                        "created_at": text(version_row["created_at"]).strip(),
+                    }
+                    kp_rows = cur.execute(
+                        "SELECT r, c, v FROM kp_data_version_cells WHERE version_id=? ORDER BY r, c",
+                        (version_id,),
+                    ).fetchall()
+                else:
+                    kp_rows = []
+            else:
                 kp_rows = cur.execute(
-                    "SELECT r, c, v FROM kp_data WHERE locomotive='' ORDER BY r, c"
+                    "SELECT r, c, v FROM kp_data WHERE locomotive=? ORDER BY r, c",
+                    (selected_locomotive,),
                 ).fetchall()
+                if not kp_rows:
+                    kp_rows = cur.execute(
+                        "SELECT r, c, v FROM kp_data WHERE locomotive='' ORDER BY r, c"
+                    ).fetchall()
             for row in kp_rows:
                 kp_map.setdefault(int(row["r"]), {})[int(row["c"])] = text(row["v"])
 
             for row_index in range(axis_count):
                 values = [
-                    str(row_index + 1),
+                    kp_map.get(row_index, {}).get(0, str(row_index + 1)),
                     kp_map.get(row_index, {}).get(1, ""),
                     kp_map.get(row_index, {}).get(2, ""),
                     kp_map.get(row_index, {}).get(3, ""),
@@ -735,10 +799,10 @@ def load_kp_view(selected_locomotive: str = "") -> dict:
                         "row": row_index,
                         "values": values,
                         "search": " ".join(text(v).strip().lower() for v in values),
-                        "editable": True,
+                        "editable": selected_version is None,
                     }
                 )
-            status = kp_completion_state(cur, selected_locomotive)
+            status = kp_completion_state(cur, selected_locomotive) if selected_version is None else None
 
         return {
             "selected_locomotive": selected_locomotive,
@@ -748,6 +812,8 @@ def load_kp_view(selected_locomotive: str = "") -> dict:
             "rows": rows,
             "kp_map": kp_map,
             "status": status,
+            "versions": load_kp_versions(cur, selected_locomotive) if selected_locomotive and not all_mode else [],
+            "selected_version": selected_version,
         }
 
 
@@ -776,6 +842,71 @@ def save_kp_data(payload: dict) -> dict:
         conn.commit()
 
     return load_kp_view(locomotive)
+
+
+def create_kp_data_version(payload: dict) -> dict:
+    locomotive = text(payload.get("locomotive")).strip()
+    valid_to = text(payload.get("valid_to")).strip()
+    if not locomotive or locomotive == "Все локомотивы":
+        return {"error": "Выберите конкретный локомотив."}, 400
+    try:
+        dt.date.fromisoformat(valid_to)
+    except Exception:
+        return {"error": "Укажите дату, до которой действовали старые данные."}, 400
+
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        current_rows = cur.execute(
+            "SELECT r, c, v FROM kp_data WHERE locomotive=? ORDER BY r, c",
+            (locomotive,),
+        ).fetchall()
+        if not current_rows:
+            return {"error": "Нет текущих данных для сохранения в историю."}, 400
+
+        cur.execute(
+            "INSERT INTO kp_data_versions(locomotive, valid_to, created_at) VALUES(?,?,?)",
+            (locomotive, valid_to, dt.datetime.now().isoformat(timespec="seconds")),
+        )
+        version_id = int(cur.lastrowid)
+        cur.executemany(
+            "INSERT INTO kp_data_version_cells(version_id, r, c, v) VALUES(?,?,?,?)",
+            [
+                (version_id, int(row["r"]), int(row["c"]), text(row["v"]))
+                for row in current_rows
+            ],
+        )
+        cur.execute("DELETE FROM kp_data WHERE locomotive=?", (locomotive,))
+        new_rows = [
+            (locomotive, int(row["r"]), int(row["c"]), text(row["v"]))
+            for row in current_rows
+            if int(row["c"]) in (0, 1) and text(row["v"]).strip()
+        ]
+        cur.executemany(
+            "INSERT INTO kp_data(locomotive, r, c, v) VALUES(?,?,?,?)",
+            new_rows,
+        )
+        conn.commit()
+    return load_kp_view(locomotive)
+
+
+def update_kp_version(payload: dict) -> dict:
+    locomotive = text(payload.get("locomotive")).strip()
+    valid_to = text(payload.get("valid_to")).strip()
+    try:
+        version_id = int(payload.get("version_id"))
+        dt.date.fromisoformat(valid_to)
+    except Exception:
+        return {"error": "Некорректная дата версии КП."}, 400
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE kp_data_versions SET valid_to=? WHERE id=? AND locomotive=?",
+            (valid_to, version_id, locomotive),
+        )
+        if cur.rowcount <= 0:
+            return {"error": "Версия КП не найдена."}, 404
+        conn.commit()
+    return load_kp_view(locomotive, version_id)
 
 
 def save_state(payload: dict, full_name: str = "") -> dict:
@@ -3268,11 +3399,11 @@ async def get_archive(request: Request, locomotive: str = "", search: str = "", 
     return json_response({"rows": rows})
 
 @app.get("/api/kp-data")
-async def get_kp_data(request: Request, locomotive: str = ""):
+async def get_kp_data(request: Request, locomotive: str = "", version_id: int | None = None):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
-    return json_response(load_kp_view(locomotive.strip()))
+    return json_response(load_kp_view(locomotive.strip(), version_id))
 
 @app.get("/api/wear-analysis")
 async def get_wear_analysis(request: Request, locomotive: str = "", date_from: str = "", date_to: str = ""):
@@ -3374,7 +3505,13 @@ async def post_kp_data(request: Request):
         return json_response({"error": "Unauthorized"}, status_code=401)
     try:
         payload = await request.json()
-        result = save_kp_data(payload)
+        action = text(payload.get("action")).strip()
+        if action == "new_version":
+            result = create_kp_data_version(payload)
+        elif action == "update_version":
+            result = update_kp_version(payload)
+        else:
+            result = save_kp_data(payload)
         if isinstance(result, tuple):
             return json_response(result[0], status_code=result[1])
         return json_response(result)
