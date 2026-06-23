@@ -33,9 +33,11 @@ let archiveSortDesc = true;
 let archiveSelectedMeasurementKey = null;
 let selectionAnchor = null;
 let selectionFocus = null;
+let selectionDragging = false;
 let clipboardCache = '';
 let archiveSelectionAnchor = null;
 let archiveSelectionFocus = null;
+let archiveSelectionDragging = false;
 let locomotiveInputSource = 'loaded';
 let initialLoadPromise = null;
 let locomotiveSwitchPromise = null;
@@ -477,20 +479,54 @@ async function copySelectionToClipboard(){
     for (let c = start.col; c <= end.col; c += 1) {
       rowValues.push(cellValue(r, c));
     }
-    lines.push(rowValues.join('\\t'));
+    lines.push(rowValues.join('\t'));
   }
-  await writeClipboardText(lines.join('\\n'));
+  await writeClipboardText(lines.join('\n'));
   setStatus('Скопировано');
+}
+function selectionClipboardText(){
+  const rect = selectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (selectionFocus || selectionAnchor);
+  if (!start || !isCellInBounds(start.row, start.col)) return '';
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const lines = [];
+  for (let r = start.row; r <= end.row; r += 1) {
+    const rowValues = [];
+    for (let c = start.col; c <= end.col; c += 1) {
+      rowValues.push(cellValue(r, c));
+    }
+    lines.push(rowValues.join('\t'));
+  }
+  return lines.join('\n');
+}
+function handleCellCopy(event){
+  const text = selectionClipboardText();
+  if (!text) return;
+  event.preventDefault();
+  event.clipboardData?.setData('text/plain', text);
+  clipboardCache = text;
+  setStatus('Скопировано');
+}
+function handleCellPaste(event, row, col){
+  if (!CAN_EDIT) return;
+  const text = event.clipboardData?.getData('text/plain') || '';
+  if (!text) return;
+  event.preventDefault();
+  const rect = selectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : clampCell(row, col);
+  applyPastedBlock(text, start.row, start.col);
+  focusCell(start.row, start.col);
+  setStatus('Вставлено');
 }
 function applyPastedBlock(text, startRow, startCol){
   if (!CAN_EDIT || !state) return;
-  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  const rows = String(text ?? '').replace(/\r/g, '').split('\n');
   if (rows.length && rows[rows.length - 1] === '') rows.pop();
   if (!rows.length) return;
   let touched = false;
   const axisCount = getVisibleAxisCount();
   for (let i = 0; i < rows.length; i += 1) {
-    const cells = rows[i].split('\\t');
+    const cells = rows[i].split('\t');
     for (let j = 0; j < cells.length; j += 1) {
       const tr = startRow + i;
       const tc = startCol + j;
@@ -679,15 +715,50 @@ async function copyArchiveSelectionToClipboard(){
     for (let c = start.col; c <= end.col; c += 1) {
       rowValues.push(archiveCellValue(r, c));
     }
-    lines.push(rowValues.join('\\t'));
+    lines.push(rowValues.join('\t'));
   }
-  await writeClipboardText(lines.join('\\n'));
+  await writeClipboardText(lines.join('\n'));
   const status = document.getElementById('archiveStatus');
   if (status) status.textContent = 'Скопировано';
 }
+function archiveSelectionClipboardText(){
+  const rect = archiveSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : (archiveSelectionFocus || archiveSelectionAnchor);
+  if (!start || !archiveCellInBounds(start.row, start.col)) return '';
+  const end = rect ? { row: rect.bottom, col: rect.right } : start;
+  const lines = [];
+  for (let r = start.row; r <= end.row; r += 1) {
+    const rowValues = [];
+    for (let c = start.col; c <= end.col; c += 1) {
+      rowValues.push(archiveCellValue(r, c));
+    }
+    lines.push(rowValues.join('\t'));
+  }
+  return lines.join('\n');
+}
+function handleArchiveCellCopy(event){
+  const text = archiveSelectionClipboardText();
+  if (!text) return;
+  event.preventDefault();
+  event.clipboardData?.setData('text/plain', text);
+  clipboardCache = text;
+  const status = document.getElementById('archiveStatus');
+  if (status) status.textContent = 'Скопировано';
+}
+async function handleArchiveCellPaste(event, row, col){
+  if (!CAN_EDIT) return;
+  const text = event.clipboardData?.getData('text/plain') || '';
+  if (!text) return;
+  event.preventDefault();
+  const ok = confirm('Вы уверены, что хотите вставить данные в архив?');
+  if (!ok) return;
+  const rect = archiveSelectionRect();
+  const start = rect ? { row: rect.top, col: rect.left } : { row, col };
+  await applyArchivePastedBlock(text, start.row, start.col);
+}
 async function applyArchivePastedBlock(text, startRow, startCol){
   if (!CAN_EDIT) return false;
-  const rows = String(text ?? '').replace(/\\r/g, '').split('\\n');
+  const rows = String(text ?? '').replace(/\r/g, '').split('\n');
   if (rows.length && rows[rows.length - 1] === '') rows.pop();
   if (!rows.length) return false;
   const changes = [];
@@ -740,10 +811,16 @@ function handleArchiveCellMouseDown(event, row, col){
   } else {
     selectArchiveCell(row, col, false);
   }
+  archiveSelectionDragging = true;
   const target = event.currentTarget;
   if (target) target.focus();
   event.preventDefault();
   return false;
+}
+function handleArchiveCellMouseEnter(event, row, col){
+  if (!CAN_EDIT || !archiveSelectionDragging || !(event.buttons & 1)) return;
+  setArchiveSelectedMeasurement(row);
+  selectArchiveCell(row, col, true);
 }
 function handleArchiveCellFocus(row, col){
   setArchiveSelectedMeasurement(row);
@@ -773,19 +850,9 @@ async function handleArchiveKeydown(event, row, col){
   const key = event.key;
   const ctrlOrMeta = event.ctrlKey || event.metaKey;
   if (ctrlOrMeta && key.toLowerCase() === 'c') {
-    event.preventDefault();
-    await copyArchiveSelectionToClipboard();
     return;
   }
   if (ctrlOrMeta && key.toLowerCase() === 'v') {
-    event.preventDefault();
-    const ok = confirm('Вы уверены, что хотите вставить данные в архив?');
-    if (!ok) return;
-    const text = await readClipboardText();
-    if (!text) return;
-    const rect = archiveSelectionRect();
-    const start = rect ? { row: rect.top, col: rect.left } : { row, col };
-    await applyArchivePastedBlock(text, start.row, start.col);
     return;
   }
   if (key === 'Delete' || key === 'Backspace') {
@@ -2159,9 +2226,12 @@ function renderArchiveTable(){
               data-original="${esc(value)}"
               ${CAN_EDIT ? '' : 'readonly'}
               onmousedown="return handleArchiveCellMouseDown(event, ${rowIndex}, ${index})"
+              onmouseenter="handleArchiveCellMouseEnter(event, ${rowIndex}, ${index})"
               onfocus="handleArchiveCellFocus(${rowIndex}, ${index})"
               onchange="handleArchiveCellChange(${rowIndex}, ${index}, this.value, this)"
               onkeydown="handleArchiveKeydown(event, ${rowIndex}, ${index})"
+              oncopy="handleArchiveCellCopy(event)"
+              onpaste="handleArchiveCellPaste(event, ${rowIndex}, ${index})"
             >
           </td>`;
       }
@@ -2202,9 +2272,12 @@ function renderTable(){
             data-row="${r}"
             data-col="${c}"
             onmousedown="return handleCellMouseDown(event, ${r}, ${c})"
+            onmouseenter="handleCellMouseEnter(event, ${r}, ${c})"
             onfocus="handleCellFocus(${r}, ${c})"
             oninput="handleCellInput(${r}, ${c}, this.value, this)"
             onkeydown="handleKeydown(event, ${r}, ${c})"
+            oncopy="handleCellCopy(event)"
+            onpaste="handleCellPaste(event, ${r}, ${c})"
           >
         </td>`;
     }
@@ -2333,10 +2406,15 @@ function handleCellMouseDown(event, row, col){
   } else {
     selectCell(row, col, false);
   }
+  selectionDragging = true;
   const target = event.currentTarget;
   if (target) target.focus();
   event.preventDefault();
   return false;
+}
+function handleCellMouseEnter(event, row, col){
+  if (!CAN_EDIT || !selectionDragging || !(event.buttons & 1)) return;
+  selectCell(row, col, true);
 }
 function handleCellFocus(row, col){
   if (!selectionAnchor || !selectionFocus || selectionAnchor.row !== row || selectionAnchor.col !== col || selectionFocus.row !== row || selectionFocus.col !== col) {
@@ -2350,13 +2428,9 @@ function handleKeydown(event, row, col){
   const key = event.key;
   const ctrlOrMeta = event.ctrlKey || event.metaKey;
   if (ctrlOrMeta && key.toLowerCase() === 'c') {
-    event.preventDefault();
-    copySelectionToClipboard();
     return;
   }
   if (ctrlOrMeta && key.toLowerCase() === 'v') {
-    event.preventDefault();
-    pasteClipboardIntoSelection(row, col);
     return;
   }
   if (key === 'Delete' || key === 'Backspace') {
@@ -2689,6 +2763,10 @@ document.getElementById('locomotiveDropdown')?.addEventListener('mousedown', eve
 document.addEventListener('mousedown', event => {
   const picker = event.target.closest?.('.loco-picker');
   if (!picker) hideLocoDropdown();
+});
+document.addEventListener('mouseup', () => {
+  selectionDragging = false;
+  archiveSelectionDragging = false;
 });
 document.getElementById('normsModal')?.addEventListener('mousedown', event => {
   if (event.target.id === 'normsModal') closeNormsDialog();
