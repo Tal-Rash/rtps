@@ -41,6 +41,7 @@ const REPAIR_SUMMARY_FIXED_HOLIDAYS = new Set([
   '01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08',
   '02-23', '03-08', '05-01', '05-09', '06-12', '11-04',
 ]);
+const KP_RECHECK_DAYS = 30;
 const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
@@ -869,6 +870,17 @@ function formatRepairDate(date){
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
 }
+function repairDateTime(date){
+  return (date instanceof Date && !Number.isNaN(date.getTime()))
+    ? new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+    : NaN;
+}
+function addRepairDays(date, days){
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + Number(days || 0));
+  return result;
+}
 function addRepairMonths(date, months){
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
   const total = Number(months);
@@ -1591,7 +1603,64 @@ function handleRepairPeriodicityPaste(e){
   markDirty(true);
   render();
 }
+function unitKeyFromCells(cells){
+  const series = String(cells?.[1] ?? '').trim().toUpperCase();
+  const number = String(cells?.[2] ?? '').trim().toUpperCase();
+  return series && number ? `${series}|${number}` : '';
+}
+function latestKpMeasurementByUnit(){
+  const result = new Map();
+  const measurements = appState?.repair_summary?.kp_measurements || [];
+  measurements.forEach((item) => {
+    const number = String(item?.number ?? '').trim().toUpperCase();
+    const date = parseRepairDate(item?.measurementDate);
+    if (!number || !date) return;
+    const time = repairDateTime(date);
+    (appState.months || []).forEach((month) => {
+      [...(month.plan || []), ...(month.fact || [])].forEach((row) => {
+        const cells = row?.cells || [];
+        const rowNumber = String(cells[2] ?? '').trim().toUpperCase();
+        if (rowNumber !== number) return;
+        const key = unitKeyFromCells(cells);
+        if (!key) return;
+        const prev = result.get(key);
+        if (!prev || time > prev.time) result.set(key, { date, time });
+      });
+    });
+  });
+  return result;
+}
+function kpRecheckPlanHighlights(){
+  const latestByUnit = latestKpMeasurementByUnit();
+  const bestByUnit = new Map();
+  (appState.months || []).forEach((month, monthIndex) => {
+    const monthNumber = Number(month?.month || monthIndex + 1);
+    if (!Number.isFinite(monthNumber)) return;
+    (month.plan || []).forEach((row, rowIndex) => {
+      const cells = row?.cells || [];
+      const unitKey = unitKeyFromCells(cells);
+      const latest = latestByUnit.get(unitKey);
+      if (!unitKey || !latest) return;
+      const deadline = addRepairDays(latest.date, KP_RECHECK_DAYS);
+      const deadlineTime = repairDateTime(deadline);
+      if (!Number.isFinite(deadlineTime)) return;
+      for (let col = 4; col < 4 + Number(month.days || 0); col++) {
+        if (!normalizeRepairCode(cells[col])) continue;
+        const day = col - 3;
+        const candidateDate = new Date(Number(appState.year), monthNumber - 1, day);
+        const candidateTime = repairDateTime(candidateDate);
+        if (!Number.isFinite(candidateTime) || candidateTime > deadlineTime) continue;
+        const prev = bestByUnit.get(unitKey);
+        if (!prev || candidateTime > prev.time) {
+          bestByUnit.set(unitKey, { time: candidateTime, monthIndex, rowIndex, col });
+        }
+      }
+    });
+  });
+  return new Set(Array.from(bestByUnit.values()).map((item) => `${item.monthIndex}|${item.rowIndex}|${item.col}`));
+}
 function renderMonthTable(type, title, m, headers){
+  const kpHighlights = type === 'plan' ? kpRecheckPlanHighlights() : new Set();
   const tableRows = m[type].map((row, rIdx) => {
     const rowHtml = [];
     rowHtml.push(`<td class="col-idx"><div class="rownum"><span>${rIdx+1}</span></div></td>`);
@@ -1600,6 +1669,8 @@ function renderMonthTable(type, title, m, headers){
     rowHtml.push(`<td class="col-cat">${catButton(ui.monthIndex, type, rIdx, row.excluded)}</td>`);
     for (let d=0; d<m.days; d++) {
       const cls = dayClass(m.month, d + 1);
+      const colIndex = 4 + d;
+      const isKpHighlight = type === 'plan' && kpHighlights.has(`${ui.monthIndex}|${rIdx}|${colIndex}`);
       const dayFillStyle = cls === 'transfer-col'
         ? 'background-color:#dcf8dc !important;'
         : cls === 'holiday-col'
@@ -1608,12 +1679,14 @@ function renderMonthTable(type, title, m, headers){
       const tdStyle = dayFillStyle ? ` style="${dayFillStyle}"` : '';
       const inputStyle = row.excluded
         ? 'color:#9aa5b1 !important;'
+        : isKpHighlight
+          ? 'background-color:#eadbff !important; color:#102033 !important;'
         : cls === 'transfer-col'
           ? 'background-color:#dcf8dc !important;'
           : cls === 'holiday-col'
             ? 'background-color:#ffdede !important;'
           : '';
-      rowHtml.push(`<td class="col-day ${cls}"${tdStyle}>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+d}`, row.cells[4+d] || '', `cell small center ${cls} day-cell`, ui.monthIndex, type, rIdx, 4+d, inputStyle) }</td>`);
+      rowHtml.push(`<td class="col-day ${cls}${isKpHighlight ? ' kp-recheck-cell' : ''}"${tdStyle}>${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${colIndex}`, row.cells[colIndex] || '', `cell small center ${cls} day-cell${isKpHighlight ? ' kp-recheck-input' : ''}`, ui.monthIndex, type, rIdx, colIndex, inputStyle) }</td>`);
     }
     rowHtml.push(`<td class="col-note">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
     return `<tr class="${row.excluded ? 'excluded-row' : ''}">${rowHtml.join('')}</tr>`;
