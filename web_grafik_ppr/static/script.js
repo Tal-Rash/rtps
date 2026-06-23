@@ -1203,7 +1203,7 @@ function collectRepairSummaryRowsFromSchedule(){
     const pushRow = (repairCode, dateValue, columnIndex, sourceKind) => {
       const code = normalizeRepairCode(repairCode);
       const dateText = String(dateValue ?? '').trim();
-      if (!code || !dateText || !selectedTypes.has(code)) return;
+      if (!code || !dateText || (selectedTypes.size && !selectedTypes.has(code))) return;
       if (!repairSummaryDateInRange(dateText, filters.dateFrom, filters.dateTo)) return;
       const parsed = parseRepairDate(dateText);
       rows.push({
@@ -1246,7 +1246,7 @@ function collectRepairSummaryRowsFromMonths(){
         if (cellIndex < 4) return;
         if (cellIndex >= 4 + month.days) return;
         const code = normalizeRepairCode(value);
-        if (!code || !selectedTypes.has(code)) return;
+        if (!code || (selectedTypes.size && !selectedTypes.has(code))) return;
         const day = cellIndex - 3;
         const date = repairSummaryMonthDate(year, monthNumber, day);
         if (!date) return;
