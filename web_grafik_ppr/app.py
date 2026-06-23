@@ -19,7 +19,7 @@ from pathlib import Path
 from threading import Lock, RLock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-1.0"
+APP_VERSION = "web-gpp-1.1"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -725,6 +725,43 @@ def _repair_summary_pack(rows: list[dict]) -> dict:
     return {"rows": rows, "types": types, "loco_options": locos}
 
 
+def _load_kp_archive_measurements() -> list[dict]:
+    if not SOURCE_DB.exists():
+        return []
+    try:
+        with connect_sqlite(SOURCE_DB) as archive_conn:
+            archive_rows = archive_conn.execute(
+                """
+                SELECT DISTINCT measurement_date, locomotive, repair_type
+                FROM archive_data
+                WHERE TRIM(COALESCE(measurement_date, '')) <> ''
+                  AND TRIM(COALESCE(locomotive, '')) <> ''
+                  AND TRIM(COALESCE(repair_type, '')) <> ''
+                ORDER BY measurement_date
+                """
+            ).fetchall()
+    except Exception:
+        return []
+
+    measurements: list[dict] = []
+    for row in archive_rows:
+        measurement_date = s(row["measurement_date"]).strip()
+        locomotive = s(row["locomotive"]).strip()
+        repair_code = normalize_repair_code(row["repair_type"])
+        try:
+            parsed_date = dt.date.fromisoformat(measurement_date)
+        except Exception:
+            parsed_date = _repair_schedule_parse_date(measurement_date)
+        if not parsed_date or not locomotive or not repair_code:
+            continue
+        measurements.append({
+            "number": locomotive,
+            "repairCode": repair_code,
+            "measurementDate": parsed_date.isoformat(),
+        })
+    return measurements
+
+
 def build_repair_summary_state(cur: sqlite3.Cursor) -> dict:
     years: set[int] = set()
     for table in ("repairs", "repair_schedule"):
@@ -751,6 +788,7 @@ def build_repair_summary_state(cur: sqlite3.Cursor) -> dict:
     return {
         "months": _repair_summary_pack(months_rows),
         "schedule": _repair_summary_pack(schedule_rows),
+        "kp_measurements": _load_kp_archive_measurements(),
     }
 
 

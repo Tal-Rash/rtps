@@ -855,11 +855,12 @@ function repairSeriesKey(value){
 function parseRepairDate(value){
   const text = String(value ?? '').trim();
   if (!text) return null;
-  const match = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (!match) return null;
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
+  const ruMatch = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!ruMatch && !isoMatch) return null;
+  const day = Number(ruMatch ? ruMatch[1] : isoMatch[3]);
+  const month = Number(ruMatch ? ruMatch[2] : isoMatch[2]);
+  const year = Number(ruMatch ? ruMatch[3] : isoMatch[1]);
   const date = new Date(year, month - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
   return date;
@@ -1342,6 +1343,28 @@ function groupRepairSummaryRows(rows){
     return a.columnIndex - b.columnIndex;
   });
 }
+function repairSummaryKpMeasurements(){
+  const values = appState?.repair_summary?.kp_measurements;
+  return Array.isArray(values) ? values : [];
+}
+function repairSummaryKpMeasurementDates(row){
+  const number = String(row?.number ?? '').trim();
+  const repairCode = normalizeRepairCode(row?.repairCode);
+  const dateFrom = parseRepairDate(row?.repairDateFrom || row?.repairDate);
+  const dateTo = parseRepairDate(row?.repairDateTo || row?.repairDate);
+  if (!number || !repairCode || !dateFrom || !dateTo) return [];
+  const dates = repairSummaryKpMeasurements()
+    .filter((item) => {
+      if (String(item?.number ?? '').trim() !== number) return false;
+      if (normalizeRepairCode(item?.repairCode) !== repairCode) return false;
+      const measurementDate = parseRepairDate(item?.measurementDate);
+      return measurementDate && measurementDate >= dateFrom && measurementDate <= dateTo;
+    })
+    .map((item) => parseRepairDate(item.measurementDate))
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+  return Array.from(new Set(dates.map((date) => formatRepairDate(date))));
+}
 function setRepairSummaryFilter(name, value){
   const state = repairSummaryNormalizeState();
   state[name] = String(value ?? '').trim();
@@ -1409,6 +1432,7 @@ function renderRepairSummary(){
           <col class="col-repair">
           <col class="col-date">
           <col class="col-date">
+          <col class="col-kp-measure">
         </colgroup>
         <thead>
           <tr>
@@ -1416,17 +1440,22 @@ function renderRepairSummary(){
             <th>Вид ремонта</th>
             <th>От</th>
             <th>До</th>
+            <th>Замер КП</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.length ? rows.map((row) => `
-            <tr>
-              <td>${esc(row.locoLabel || '—')}</td>
-              <td>${esc(row.repairCode || '—')}</td>
-              <td>${esc(row.repairDateFrom || row.repairDate || '—')}</td>
-              <td>${esc(row.repairDateTo || row.repairDate || '—')}</td>
-            </tr>
-          `).join('') : `<tr><td colspan="4" class="empty-table-cell">Нет ремонтов, подходящих под фильтры</td></tr>`}
+          ${rows.length ? rows.map((row) => {
+            const kpDates = repairSummaryKpMeasurementDates(row);
+            return `
+              <tr>
+                <td>${esc(row.locoLabel || '—')}</td>
+                <td>${esc(row.repairCode || '—')}</td>
+                <td>${esc(row.repairDateFrom || row.repairDate || '—')}</td>
+                <td>${esc(row.repairDateTo || row.repairDate || '—')}</td>
+                <td><span class="kp-measure-status ${kpDates.length ? 'has-measurement' : 'no-measurement'}">${kpDates.length ? `Есть · ${esc(kpDates.join(', '))}` : 'Нет'}</span></td>
+              </tr>
+            `;
+          }).join('') : `<tr><td colspan="5" class="empty-table-cell">Нет ремонтов, подходящих под фильтры</td></tr>`}
         </tbody>
       </table>
     </div>

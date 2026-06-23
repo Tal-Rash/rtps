@@ -478,6 +478,10 @@
     .repair-summary-table .col-loco { width:260px; }
     .repair-summary-table .col-repair { width:160px; }
     .repair-summary-table .col-date { width:160px; }
+    .repair-summary-table .col-kp-measure { width:210px; }
+    .kp-measure-status { display:inline-block; font-weight:700; }
+    .kp-measure-status.has-measurement { color:#17803d; }
+    .kp-measure-status.no-measurement { color:var(--muted); }
     .empty-table-cell { padding:16px !important; text-align:center; color:var(--muted); }
     .repair-periodicity-wrap { width:100%; max-width:100%; margin:0 auto; }
     .repair-periodicity-table { width:100%; min-width:640px; table-layout:fixed; }
