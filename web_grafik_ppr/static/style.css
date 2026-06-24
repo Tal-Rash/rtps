@@ -1,4 +1,4 @@
-:root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:72px; --cat-col-width:100px; --month-row-height:18px; }
+:root { --bg:#f4f7fb; --card:#fff; --line:#d9e2ef; --month-grid:#b8c8df; --text:#102033; --muted:#607086; --accent:#276ef1; --soft:#eaf1ff; --shadow:0 12px 32px rgba(16,32,51,.08); --radius:18px; --meta-col-width:110px; --series-col-width:100px; --number-col-width:72px; --cat-col-width:100px; --month-row-height:18px; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:linear-gradient(180deg,#e8eefb, #f7f9fc 150px) fixed; color:var(--text); }
     .shell { max-width:1700px; margin:0 auto; padding:18px; }
@@ -345,6 +345,8 @@
     .table-wrap > table { border-collapse:separate; border-spacing:0; width:100%; min-width:720px; table-layout:fixed; }
     .table-wrap > table th,
     .table-wrap > table td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:0; background:#fff; vertical-align:middle; }
+    .table-wrap > table.month-table th,
+    .table-wrap > table.month-table td { border-right-color:var(--month-grid); border-bottom-color:var(--month-grid); }
     .table-wrap > table th { position:sticky; top:0; z-index:1; background:linear-gradient(180deg,#f8fbff,#edf4ff); font-size:15px; padding:14px 10px; text-align:center; white-space:nowrap; }
     .table-wrap > table tr > *:last-child { border-right:0; }
     .table-wrap > table tbody tr:last-child > * { border-bottom:0; }
