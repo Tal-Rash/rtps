@@ -29,6 +29,7 @@ AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 DB_LOCK = Lock()
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
 
 MONTHS = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -1255,7 +1256,7 @@ async def home_route(request: Request):
     mod_role = get_mod_role_fastapi(session, "spravochnik") if session else None
     
     if not session or not mod_role:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
         
     auth_badge = "Редактирование" if mod_role in ("edit", "editor", "admin") else "Просмотр"
     html_content = HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", auth_badge).replace("{{CAN_EDIT}}", "true" if mod_role in ("edit", "editor", "admin") else "false")
@@ -1268,11 +1269,11 @@ async def home_route(request: Request):
 
 @app.get("/login")
 async def login_get(request: Request):
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
 
 @app.get("/logout")
 async def logout_route():
-    response = RedirectResponse("/login", status_code=303)
+    response = RedirectResponse(MAIN_LOGIN_URL, status_code=303)
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
     return response
 
@@ -1287,7 +1288,7 @@ async def get_state(request: Request, year: int = None):
 
 @app.post("/login")
 async def login_post(request: Request):
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
 
 @app.post("/api/save")
 async def post_save(request: Request):

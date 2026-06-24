@@ -35,6 +35,7 @@ SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
 APP_VERSION = "web-zkp-1.92"
 DB_LOCK = Lock()
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
 
 INPUT_ROWS = 12
 INPUT_DATA_COLS = 10
@@ -3350,7 +3351,7 @@ async def home_route(request: Request):
     mod_role = get_mod_role_fastapi(session, "zamer_kp")
     
     if not session or not mod_role:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
         
     html_content = render_page(mod_role)
     response = HTMLResponse(content=html_content)
@@ -3365,7 +3366,7 @@ async def wear_charts_route(request: Request, locomotive: str = "", date_from: s
     mod_role = get_mod_role_fastapi(session, "zamer_kp")
 
     if not session or not mod_role:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
 
     extra = {
         "{{WEAR_LOCOMOTIVE}}": html.escape(text(locomotive), quote=True),
@@ -3382,7 +3383,7 @@ async def wear_charts_route(request: Request, locomotive: str = "", date_from: s
 
 @app.get("/logout")
 async def logout_route():
-    resp = RedirectResponse("/login", status_code=303)
+    resp = RedirectResponse(MAIN_LOGIN_URL, status_code=303)
     resp.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
     return resp
 

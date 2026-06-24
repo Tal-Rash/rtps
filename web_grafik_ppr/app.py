@@ -63,6 +63,7 @@ DB_LOCK = RLock()
 SERVER_STARTED_AT = None
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
 
 
 def format_n(value) -> str:
@@ -1979,7 +1980,7 @@ async def home_route(request: Request, year: int = None):
         pass
         
     if AUTH_ENABLED and not mod_role:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
         
     can_edit = mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True
     
@@ -1993,15 +1994,15 @@ async def home_route(request: Request, year: int = None):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, user: str = Form(""), password: str = Form("")):
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
 
 @app.get("/logout")
 async def logout_route():
-    resp = RedirectResponse("/login", status_code=303)
+    resp = RedirectResponse(MAIN_LOGIN_URL, status_code=303)
     resp.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
     return resp
 

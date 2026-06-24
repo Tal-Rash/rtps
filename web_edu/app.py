@@ -29,6 +29,7 @@ SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/edu"
 APP_VERSION = "web-edu-2.2"
 DB_LOCK = Lock()
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
 
 def load_web_secret() -> str:
     if WEB_SECRET_FILE.exists():
@@ -135,7 +136,7 @@ async def prefixed_index_redirect():
 async def index(request: Request):
     session = get_session(request)
     if not session:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
         
     context = {
         "request": request,
