@@ -30,6 +30,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
@@ -225,7 +226,7 @@ async def home_page(request: Request):
         has_access = False
         if role == "admin" or "admin" in mods: has_access = True
         elif f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(","): has_access = True
-        if has_access: return f'<a href="{url}">Открыть модуль →</a>'
+        if has_access: return f'<a href="{MAIN_SITE_URL}{url}">Открыть модуль →</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
     context = {
@@ -437,11 +438,11 @@ async def logs_page(request: Request):
 
 @app.get("/grafik-ppr")
 async def redir_grafik():
-    return RedirectResponse("https://yrtps.ru/grafik-ppr", status_code=303)
+    return RedirectResponse(f"{MAIN_SITE_URL}/grafik-ppr", status_code=303)
 
 @app.get("/zamer-kp")
 async def redir_zamer():
-    return RedirectResponse("https://yrtps.ru/zamer-kp", status_code=303)
+    return RedirectResponse(f"{MAIN_SITE_URL}/zamer-kp", status_code=303)
 
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")

@@ -639,7 +639,7 @@ HTML = """<!doctype html>
       <div class="muted">Нормы времени, сотрудники, локомотивы. База: common_database.db</div>
     </div>
   <div class="actions">
-      <a href="/">На главную</a>
+      <a href="http://yrtps.ru/">На главную</a>
       <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
       <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       <label>Год <select id="year"></select></label>
