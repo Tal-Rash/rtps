@@ -219,6 +219,8 @@ def ensure_db() -> None:
             cur.execute("ALTER TABLE inventory ADD COLUMN eight_digit_number TEXT")
         if "manufacture_year" not in existing_inventory_cols:
             cur.execute("ALTER TABLE inventory ADD COLUMN manufacture_year TEXT")
+        if "service_life" not in existing_inventory_cols:
+            cur.execute("ALTER TABLE inventory ADD COLUMN service_life TEXT")
 
         cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
         cur.executemany(
@@ -463,7 +465,7 @@ def load_locomotives(cur: sqlite3.Cursor) -> list[dict[str, str]]:
 
 def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -> list[dict[str, str]]:
     query = """
-        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year
+        SELECT y, ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(service_life, '') AS service_life
         FROM inventory
         WHERE TRIM(COALESCE(num, '')) <> ''
     """
@@ -523,6 +525,7 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
         section_count = int(row["section_count"] or 0)
         eight_digit_number = text(row["eight_digit_number"]).strip()
         manufacture_year = text(row["manufacture_year"]).strip()
+        service_life = text(row["service_life"]).strip()
         label = f"{series} {number}".strip()
         if inv:
             label = f"{label} (инв. {inv})"
@@ -539,6 +542,7 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
                 "sectionCount": section_count,
                 "eightDigitNumber": eight_digit_number,
                 "manufactureYear": manufacture_year,
+                "serviceLife": service_life,
             }
         )
     return result
@@ -1351,6 +1355,7 @@ def build_phone_reference_payload(selected_numbers: list[str] | None = None) -> 
                     "wheelPairCount": axis_count,
                     "wheelPairs": wheel_pairs,
                     "manufactureYear": text(loco.get("manufactureYear") or loco.get("manufacture_year") or ""),
+                    "serviceLife": text(loco.get("serviceLife") or loco.get("service_life") or ""),
                     "sortOrder": int(loco.get("sortOrder") or 0),
                     "updatedAt": int(loco.get("updatedAt") or 0),
                     "deletedAt": int(loco.get("deletedAt") or 0),
@@ -1499,6 +1504,7 @@ def upsert_inventory_locomotive(
     section_count: int = 0,
     eight_digit_number: str = "",
     manufacture_year: str = "",
+    service_life: str = "",
     sort_order: int = 0,
     updated_at: int | None = None,
     deleted_at: int | None = None,
@@ -1510,6 +1516,7 @@ def upsert_inventory_locomotive(
     inv = text(inv).strip()
     eight_digit_number = text(eight_digit_number).strip()
     manufacture_year = text(manufacture_year).strip()
+    service_life = text(service_life).strip()
     year = dt.date.today().year
     sort_order_value = int(sort_order or 0)
     updated_at = int(updated_at or int(dt.datetime.now().timestamp() * 1000))
@@ -1526,7 +1533,7 @@ def upsert_inventory_locomotive(
         ).fetchone()
         sort_order_value = int(max_row["max_sort_order"] or 0) + 1
     exact = cur.execute(
-        "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(deleted_at, 0) AS deleted_at "
+        "SELECT rowid, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(service_life, '') AS service_life, COALESCE(deleted_at, 0) AS deleted_at "
         "FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? "
         "ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(deleted_at, 0) DESC, y DESC, rowid DESC LIMIT 1",
         (series, locomotive),
@@ -1544,15 +1551,17 @@ def upsert_inventory_locomotive(
             eight_digit_number = text(exact["eight_digit_number"]).strip()
         if not manufacture_year:
             manufacture_year = text(exact["manufacture_year"]).strip()
+        if not service_life:
+            service_life = text(exact["service_life"]).strip()
         if deleted_at is None:
             deleted_at = int(exact["deleted_at"] or 0)
         cur.execute(
             """
             UPDATE inventory
-            SET ser=?, num=?, inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, manufacture_year=?, sort_order=?, updated_at=?, deleted_at=?
+            SET ser=?, num=?, inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, manufacture_year=?, service_life=?, sort_order=?, updated_at=?, deleted_at=?
             WHERE rowid=?
             """,
-            (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, manufacture_year, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
+            (series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, manufacture_year, service_life, sort_order_value, updated_at, int(deleted_at or 0), int(exact["rowid"])),
         )
         cur.execute(
             "DELETE FROM inventory WHERE UPPER(TRIM(COALESCE(ser, ''))) = UPPER(TRIM(?)) AND TRIM(COALESCE(num, ''))=? AND rowid<>?",
@@ -1563,10 +1572,10 @@ def upsert_inventory_locomotive(
         deleted_at = 0
     cur.execute(
         """
-        INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, manufacture_year, sort_order, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, manufacture_year, service_life, sort_order, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, manufacture_year, sort_order_value, updated_at, int(deleted_at or 0)),
+        (year, series, locomotive, inv, wheel_pair_count or None, section_count or None, eight_digit_number, manufacture_year, service_life, sort_order_value, updated_at, int(deleted_at or 0)),
     )
 
     if int(deleted_at or 0) <= 0:
@@ -1580,7 +1589,7 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
     if not loco_number:
         return
     existing = cur.execute(
-        "SELECT inv, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(sort_order, 0) AS sort_order, COALESCE(deleted_at, 0) AS deleted_at "
+        "SELECT inv, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(service_life, '') AS service_life, COALESCE(sort_order, 0) AS sort_order, COALESCE(deleted_at, 0) AS deleted_at "
         "FROM inventory WHERE UPPER(TRIM(COALESCE(num, ''))) = UPPER(TRIM(?)) LIMIT 1",
         (loco_number,),
     ).fetchone()
@@ -1596,6 +1605,7 @@ def ensure_phone_locomotive(cur: sqlite3.Cursor, series: str, loco_number: str, 
             section_count=int(existing["section_count"] or 0),
             eight_digit_number=text(existing["eight_digit_number"]).strip(),
             manufacture_year=text(existing["manufacture_year"]).strip(),
+            service_life=text(existing["service_life"]).strip(),
             sort_order=int(existing["sort_order"] or 0),
             deleted_at=0,
         )
@@ -2373,6 +2383,7 @@ def import_phone_reference_payload(payload: dict) -> dict:
             "deletedAt": parse_excel_int(item.get("deletedAt")) or 0,
             "eightDigitNumber": text(item.get("eightDigitNumber")).strip(),
             "manufactureYear": text(item.get("manufactureYear") or item.get("manufacture_year")).strip(),
+            "serviceLife": text(item.get("serviceLife") or item.get("service_life")).strip(),
             "wheelPairs": item.get("wheelPairs") if isinstance(item.get("wheelPairs"), list) else [],
         }
         current = grouped.get(key)
@@ -2401,6 +2412,7 @@ def import_phone_reference_payload(payload: dict) -> dict:
             deleted_at = int(item["deletedAt"] or 0)
             eight_digit_number = text(item["eightDigitNumber"]).strip()
             manufacture_year = text(item["manufactureYear"]).strip()
+            service_life = text(item["serviceLife"]).strip()
             upsert_inventory_locomotive(
                 cur,
                 series,
@@ -2409,6 +2421,7 @@ def import_phone_reference_payload(payload: dict) -> dict:
                 wheel_pair_count=wheel_pair_count,
                 eight_digit_number=eight_digit_number,
                 manufacture_year=manufacture_year,
+                service_life=service_life,
                 sort_order=sort_order,
                 updated_at=updated_at or None,
                 deleted_at=deleted_at,
