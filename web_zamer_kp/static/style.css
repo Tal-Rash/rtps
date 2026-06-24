@@ -1,4 +1,4 @@
-:root { --line:#d8e0ea; --text:#102033; --muted:#66758a; --blue:#276ef1; --bg:#f5f7fb; --ok:#eef7f0; --warn:#fff8d5; --bad:#ffe5e5; }
+:root { --line:#d8e0ea; --table-grid:#6f87a8; --text:#102033; --muted:#66758a; --blue:#276ef1; --bg:#f5f7fb; --ok:#eef7f0; --warn:#fff8d5; --bad:#ffe5e5; }
     * { box-sizing:border-box; }
     html { overflow-y: scroll; scrollbar-gutter: stable; }
     body { margin:0; font-family:Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
@@ -175,7 +175,7 @@
       outline:none;
     }
     table { border-collapse:collapse; width:max-content; table-layout:fixed; border-radius:18px; overflow:hidden; }
-    th, td { border:1px solid var(--line); padding:0; text-align:center; height:34px; vertical-align:middle; }
+    th, td { border:1px solid var(--table-grid); padding:0; text-align:center; height:34px; vertical-align:middle; }
     thead th { background:#eef3f8; font-weight:700; font-size:14px; line-height:1.1; }
     table thead tr:first-child th:first-child { border-top-left-radius:18px; }
     table thead tr:first-child th:last-child { border-top-right-radius:18px; }
