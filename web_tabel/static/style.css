@@ -2,6 +2,7 @@
   --bg: #f4f7fb;
   --card: #fff;
   --line: #d9e2ef;
+  --tabel-grid: #b8c8df;
   --text: #102033;
   --muted: #607086;
   --accent: #276ef1;
@@ -856,6 +857,16 @@ textarea {
   padding: 0;
   background: #fff;
   vertical-align: middle;
+}
+
+.table-wrap>table.month-table th,
+.table-wrap>table.month-table td,
+#employeesGrid th,
+#employeesGrid td,
+#vacationsGrid th,
+#vacationsGrid td {
+  border-right-color: var(--tabel-grid);
+  border-bottom-color: var(--tabel-grid);
 }
 
 .table-wrap>table th {
