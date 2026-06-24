@@ -28,7 +28,7 @@ AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 ACCESS_STATE_FILE = SHARED_DATA_DIR / "web_access.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
-SESSION_COOKIE = "grafik_ppr_session"
+SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}

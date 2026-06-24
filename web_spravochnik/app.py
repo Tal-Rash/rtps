@@ -22,7 +22,7 @@ from rtps_common import connect_sqlite, module_role, resolve_user_access
 DATA_DIR = ROOT / "data"
 DB_FILE = ROOT.parent / "base" / "common_database.db"
 APP_PREFIX = "/spravochnik"
-SESSION_COOKIE = "grafik_ppr_session"
+SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 SHARED_DATA_DIR = ROOT.parent / "data"
 AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"

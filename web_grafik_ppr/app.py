@@ -61,7 +61,7 @@ ACT_TEMPLATE_NAME = "Акт_шаблон.xlsx"
 
 DB_LOCK = RLock()
 SERVER_STARTED_AT = None
-SESSION_COOKIE = "grafik_ppr_session"
+SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
