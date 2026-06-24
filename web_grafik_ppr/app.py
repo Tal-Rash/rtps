@@ -63,7 +63,7 @@ DB_LOCK = RLock()
 SERVER_STARTED_AT = None
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
 
 def format_n(value) -> str:

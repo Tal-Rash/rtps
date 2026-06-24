@@ -30,7 +30,7 @@ APP_PREFIX = "/tabel"
 APP_VERSION = "web-tabel-1.53"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
 def load_web_secret() -> str:
     if WEB_SECRET_FILE.exists():

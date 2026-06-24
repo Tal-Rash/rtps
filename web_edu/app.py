@@ -29,7 +29,7 @@ SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/edu"
 APP_VERSION = "web-edu-2.2"
 DB_LOCK = Lock()
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
 def load_web_secret() -> str:
     if WEB_SECRET_FILE.exists():

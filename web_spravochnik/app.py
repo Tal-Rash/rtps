@@ -29,7 +29,7 @@ AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 DB_LOCK = Lock()
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "https://yrtps.ru/login")
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
 MONTHS = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
