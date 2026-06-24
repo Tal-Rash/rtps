@@ -80,15 +80,28 @@ templates = Jinja2Templates(directory=str(ROOT / "templates"))
 
 def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     if not value: return None
-    parts = value.split("|")
-    if len(parts) == 5:
-        sec = load_web_secret()
-        raw = "|".join(parts[:4])
-        sig = parts[4]
-        exp_sig = hmac.new(sec.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    for sep in (":", "|"):
+        parts = value.rsplit(sep, 5)
+        if len(parts) == 6:
+            user_id, role, mods, full_name, expiry_text, sig = parts
+            raw = f"{user_id}{sep}{role}{sep}{mods}{sep}{full_name}{sep}{expiry_text}"
+        elif len(parts) == 5:
+            user_id, role, mods, full_name, sig = parts
+            raw = f"{user_id}{sep}{role}{sep}{mods}{sep}{full_name}"
+            expiry_text = "2000000000"
+        elif len(parts) == 4:
+            user_id, role, expiry_text, sig = parts
+            raw = f"{user_id}{sep}{role}{sep}{expiry_text}"
+            mods, full_name = "", user_id
+        else:
+            continue
+        exp_sig = hmac.new(load_web_secret().encode(), raw.encode(), hashlib.sha256).hexdigest()
         import secrets
-        if secrets.compare_digest(sig, exp_sig):
-            return unquote(parts[0]), unquote(parts[1]), unquote(parts[2]), unquote(parts[3])
+        if not secrets.compare_digest(sig, exp_sig):
+            continue
+        if float(expiry_text) < dt.datetime.now().timestamp():
+            return None
+        return unquote(user_id), unquote(role), unquote(mods), unquote(full_name)
     return None
 
 def get_session(request: Request):
