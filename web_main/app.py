@@ -106,6 +106,15 @@ def _cookie_value(user_id: str, role: str, modules: str, full_name: str) -> str:
     sig = hmac.new(sec.encode(), raw.encode(), hashlib.sha256).hexdigest()
     return f"{raw}|{sig}"
 
+def _session_max_age(role: str, modules: str) -> int:
+    tokens = {part.strip() for part in str(modules or "").split(",") if part.strip()}
+    if role == "admin" or "admin" in tokens:
+        return SESSION_TTL_SECONDS
+    now = dt.datetime.now()
+    tomorrow = now.date() + dt.timedelta(days=1)
+    midnight = dt.datetime.combine(tomorrow, dt.time.min)
+    return max(60, int((midnight - now).total_seconds()))
+
 def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     if not value: return None
     import urllib.parse
@@ -273,16 +282,23 @@ async def login_post(request: Request, response: Response, password: str = Form(
             
         cookie_val = _cookie_value(str(user[0]), user[2], user[3] or "", user[1])
         redirect = RedirectResponse("/", status_code=303)
-        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
+        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=_session_max_age(user[2], user[3] or ""), path="/", httponly=True, samesite="lax")
         return redirect
 
     if password in (WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD):
         # Legacy passwords support
         role = "editor" if password == WEB_EDIT_PASSWORD else "viewer"
-        cookie_val = _cookie_value("legacy", role, "zamer_kp,grafik_ppr,spravochnik,tabel", "Старый пароль")
+        full_name = "Старый пароль"
+        role_label = "Редактор" if role == "editor" else "Зритель"
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute(
+                "INSERT INTO login_logs (user_name, login_time) VALUES (?, ?)",
+                (f"{full_name} ({role_label})", dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            )
+        cookie_val = _cookie_value("legacy", role, "zamer_kp,grafik_ppr,spravochnik,tabel", full_name)
         if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
         redirect = RedirectResponse("/", status_code=303)
-        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
+        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=_session_max_age(role, "zamer_kp,grafik_ppr,spravochnik,tabel"), path="/", httponly=True, samesite="lax")
         return redirect
 
     attempts.append(now)
@@ -392,7 +408,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     redirect = RedirectResponse("/users", status_code=303)
     if str(id) == session.get("user_id"):
         cookie_val = _cookie_value(str(id), role, ",".join(modules), full_name)
-        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
+        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=_session_max_age(role, ",".join(modules)), path="/", httponly=True, samesite="lax")
     return redirect
 
 @app.post("/users/delete")
