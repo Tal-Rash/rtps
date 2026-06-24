@@ -2014,9 +2014,12 @@ function tu28CandidatesForMonth(monthIndex){
     for (let col = 4; col < 4 + month.days; col++) {
       const code = normalizeRepairCode(String(cells[col] ?? ''));
       if (['ТО3','ТР1','ТР2','ТР3','СР','КР'].includes(code)) {
+        const range = tu28RepairRange(row, month);
         candidates.push({
           rowIndex,
           date: `${String(col - 3).padStart(2, '0')}.${String(month.month).padStart(2, '0')}.${appState.year}`,
+          dateFrom: range ? formatRepairDate(range.start) : `${String(col - 3).padStart(2, '0')}.${String(month.month).padStart(2, '0')}.${appState.year}`,
+          dateTo: range ? formatRepairDate(range.end) : `${String(col - 3).padStart(2, '0')}.${String(month.month).padStart(2, '0')}.${appState.year}`,
           code: String(cells[col] ?? '').trim().toUpperCase(),
           series: String(cells[1] ?? '').trim(),
           number: String(cells[2] ?? '').trim(),
@@ -2026,6 +2029,14 @@ function tu28CandidatesForMonth(monthIndex){
     }
   });
   return candidates;
+}
+function tu28KpMeasurementDates(candidate){
+  return repairSummaryKpMeasurementDates({
+    number: candidate?.number || '',
+    repairCode: candidate?.code || '',
+    repairDateFrom: candidate?.dateFrom || candidate?.date || '',
+    repairDateTo: candidate?.dateTo || candidate?.date || '',
+  });
 }
 function tu28RepairRange(row, month){
   if (!row || !month) return null;
@@ -2068,15 +2079,19 @@ function renderTu28(){
   if (!candidates.some((x) => x.rowIndex === ui.tu28RowIndex)) {
     ui.tu28RowIndex = candidates.length ? candidates[0].rowIndex : null;
   }
-  const rows = candidates.map((c, idx) => `
-    <tr class="${c.rowIndex === ui.tu28RowIndex ? 'selected-row' : ''}" onclick="selectTu28Row(${c.rowIndex})">
-      <td>${idx + 1}</td>
-      <td>${esc(c.series)}</td>
-      <td>${esc(c.number)}</td>
-      <td>${esc(c.date)}</td>
-      <td>${esc(c.code)}</td>
-    </tr>
-  `).join('');
+  const rows = candidates.map((c, idx) => {
+    const kpDates = tu28KpMeasurementDates(c);
+    return `
+      <tr class="${c.rowIndex === ui.tu28RowIndex ? 'selected-row' : ''}" onclick="selectTu28Row(${c.rowIndex})">
+        <td>${idx + 1}</td>
+        <td>${esc(c.series)}</td>
+        <td>${esc(c.number)}</td>
+        <td>${esc(c.date)}</td>
+        <td>${esc(c.code)}</td>
+        <td><span class="kp-measure-status ${kpDates.length ? 'has-measurement' : 'no-measurement'}">${kpDates.length ? `Есть · ${esc(kpDates.join(', '))}` : 'Нет'}</span></td>
+      </tr>
+    `;
+  }).join('');
   const m = appState.months[ui.tu28MonthIndex];
   const rowObj = m && ui.tu28RowIndex != null ? m.fact[ui.tu28RowIndex] : null;
   const extraList = rowObj && rowObj.tu28_extra ? rowObj.tu28_extra : [];
@@ -2105,6 +2120,7 @@ function renderTu28(){
           <col style="width:120px;">
           <col style="width:120px;">
           <col style="width:130px;">
+          <col style="width:170px;">
         </colgroup>
         <thead>
           <tr>
@@ -2113,9 +2129,10 @@ function renderTu28(){
             <th>Номер</th>
             <th>Дата</th>
             <th>Ремонт</th>
+            <th>Замер КП</th>
           </tr>
         </thead>
-        <tbody>${rows || '<tr><td colspan="5">В месяце нет ремонтов для ТУ-28</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="6">В месяце нет ремонтов для ТУ-28</td></tr>'}</tbody>
       </table>
     </div>
     <div style="margin-top:16px; padding:0 8px; text-align:left; max-width:600px; margin-left:auto; margin-right:auto;">
