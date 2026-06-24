@@ -19,7 +19,7 @@ from pathlib import Path
 from threading import Lock, RLock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-1.2"
+APP_VERSION = "web-gpp-1.3"
 MONTHS_RU = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -1322,6 +1322,78 @@ def get_all_employee_names() -> list[str]:
         return []
 
 
+def _parse_tabel_date(value: str, year: int | None = None) -> dt.date | None:
+    text = s(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return dt.datetime.strptime(text, fmt).date()
+        except Exception:
+            pass
+    parts = text.split(".")
+    if len(parts) == 2 and year:
+        try:
+            return dt.date(int(year), int(parts[1]), int(parts[0]))
+        except Exception:
+            return None
+    return None
+
+
+def get_employee_vacations() -> dict[str, list[dict]]:
+    if not SOURCE_DB.exists():
+        return {}
+    try:
+        with sqlite3.connect(SOURCE_DB) as db:
+            db.row_factory = sqlite3.Row
+            rows = db.execute(
+                """
+                SELECT e.y, e.name, e.full_name, e.tab_num, v.c, v.v
+                FROM employees e
+                JOIN vacations v ON v.y=e.y AND v.tab_num=e.tab_num
+                WHERE TRIM(COALESCE(e.tab_num, '')) <> ''
+                  AND TRIM(COALESCE(v.v, '')) <> ''
+                ORDER BY e.y, e.rowid, v.c
+                """
+            ).fetchall()
+    except Exception:
+        return {}
+
+    grouped: dict[tuple[int, str], dict[int, str]] = {}
+    names: dict[tuple[int, str], set[str]] = {}
+    for row in rows:
+        try:
+            year = int(row["y"])
+            col = int(row["c"])
+        except Exception:
+            continue
+        tab_num = s(row["tab_num"]).strip()
+        if not tab_num:
+            continue
+        key = (year, tab_num)
+        grouped.setdefault(key, {})[col] = s(row["v"]).strip()
+        name_values = {s(row["name"]).strip(), s(row["full_name"]).strip()}
+        names.setdefault(key, set()).update(item for item in name_values if item)
+
+    result: dict[str, list[dict]] = {}
+    for (year, _tab_num), cells in grouped.items():
+        for start_col, end_col in ((1, 2), (5, 6), (9, 10)):
+            start = _parse_tabel_date(cells.get(start_col, ""), year)
+            end = _parse_tabel_date(cells.get(end_col, ""), year)
+            if not start or not end:
+                continue
+            if end < start:
+                start, end = end, start
+            item = {
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "label": f"{start.strftime('%d.%m.%Y')}-{end.strftime('%d.%m.%Y')}",
+            }
+            for name in names.get((year, _tab_num), set()):
+                result.setdefault(name, []).append(item)
+    return result
+
+
 def replace_tags_in_workbook(wb, tags: dict[str, str]) -> None:
     for sheet in wb.worksheets:
         for row in sheet.iter_rows():
@@ -1789,6 +1861,7 @@ def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bo
 def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
+    employee_vacations_json = json.dumps(get_employee_vacations(), ensure_ascii=False).replace("</", "<\\/")
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
     with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
@@ -1796,6 +1869,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     return (
         html_template.replace("{{STATE_JSON}}", state_json)
         .replace("{{EMPLOYEE_NAMES}}", employees_json)
+        .replace("{{EMPLOYEE_VACATIONS}}", employee_vacations_json)
         .replace("{{STARTED_AT}}", started_at)
         .replace("{{APP_VERSION}}", APP_VERSION)
         .replace("{{TOOLBAR}}", toolbar)

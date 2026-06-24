@@ -273,6 +273,8 @@
     #tu28StaffModal .acts-table th,
     #tu28StaffModal .acts-table td { padding:4px 10px; }
     #tu28StaffModal .tu28-staff-select { width:100%; min-width:240px; padding:6px 10px; }
+    #tu28StaffModal .tu28-vacation-row > td { background:#fff1f4; }
+    #tu28StaffModal .tu28-vacation-note { margin-top:4px; color:#b42318; font-weight:700; font-size:13px; text-align:left; }
     .acts-table input[type="checkbox"] { display:block; margin:0 auto; transform:scale(1.15); }
     .acts-table td:nth-child(2) { padding:0; }
     .acts-table .act-start { width:100%; height:100%; min-height:34px; display:flex; align-items:center; justify-content:center; font-size:16px; border:1px solid var(--accent); background:transparent; }

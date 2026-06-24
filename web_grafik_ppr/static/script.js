@@ -1,6 +1,7 @@
 const BOOT_VERSION = window.APP_CONFIG.APP_VERSION;
 let appState = window.APP_CONFIG.STATE_JSON;
 const EMPLOYEE_NAMES = window.APP_CONFIG.EMPLOYEE_NAMES;
+const EMPLOYEE_VACATIONS = window.APP_CONFIG.EMPLOYEE_VACATIONS || {};
 let ui = {
   section: 'months',
   modal: null,
@@ -2026,6 +2027,40 @@ function tu28CandidatesForMonth(monthIndex){
   });
   return candidates;
 }
+function tu28RepairRange(row, month){
+  if (!row || !month) return null;
+  const cells = row.cells || [];
+  const days = [];
+  for (let col = 4; col < 4 + Number(month.days || 0); col++) {
+    const code = normalizeRepairCode(String(cells[col] ?? ''));
+    if (['ТО3','ТР1','ТР2','ТР3','СР','КР'].includes(code)) days.push(col - 3);
+  }
+  if (!days.length) return null;
+  const year = Number(appState.year);
+  const monthNumber = Number(month.month);
+  const start = new Date(year, monthNumber - 1, days[0]);
+  const end = new Date(year, monthNumber - 1, days[days.length - 1]);
+  return { start, end };
+}
+function selectedTu28RepairRange(){
+  const month = tu28Month();
+  const row = month && ui.tu28RowIndex != null ? month.fact?.[ui.tu28RowIndex] : null;
+  return tu28RepairRange(row, month);
+}
+function employeeVacationHit(name, range){
+  const cleanName = String(name || '').trim();
+  if (!cleanName || !range || !range.start || !range.end) return null;
+  const vacations = EMPLOYEE_VACATIONS[cleanName] || [];
+  for (const item of vacations) {
+    const start = parseRepairDate(item.start);
+    const end = parseRepairDate(item.end);
+    if (!start || !end) continue;
+    if (repairDateTime(start) <= repairDateTime(range.end) && repairDateTime(end) >= repairDateTime(range.start)) {
+      return item;
+    }
+  }
+  return null;
+}
 function renderTu28(){
   const month = tu28Month();
   const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
@@ -2108,18 +2143,26 @@ function renderTu28Staff(){
     "Эл. аппаратура, КИП, АЛСН, рация",
     "Тормозное оборудование",
   ];
-  const options = ['<option value=""></option>'].concat(EMPLOYEE_NAMES.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`)).join('');
+  const range = selectedTu28RepairRange();
+  const currentStaff = ui.tu28Staff[ui.tu28RowIndex] || [];
+  const optionHtml = (current) => ['<option value=""></option>'].concat(EMPLOYEE_NAMES.map((name) => {
+    const vacation = employeeVacationHit(name, range);
+    const selected = name === current ? ' selected' : '';
+    const label = vacation ? `${name} - отпуск ${vacation.label || ''}` : name;
+    return `<option value="${esc(name)}"${selected}>${esc(label)}</option>`;
+  })).join('');
   const tableRows = rows.map((label, idx) => {
-    const currentStaff = ui.tu28Staff[ui.tu28RowIndex] || [];
     const current = currentStaff[idx] || '';
+    const vacation = employeeVacationHit(current, range);
     return `
-      <tr>
+      <tr class="${vacation ? 'tu28-vacation-row' : ''}">
         <td>${idx + 1}</td>
         <td>${esc(label)}</td>
         <td>
           <select data-index="${idx}" class="tu28-staff-select">
-            ${options.replace(`value="${esc(current)}"`, `value="${esc(current)}" selected`)}
+            ${optionHtml(current)}
           </select>
+          ${vacation ? `<div class="tu28-vacation-note">Отпуск ${esc(vacation.label || '')}</div>` : ''}
         </td>
       </tr>
     `;
@@ -2203,6 +2246,21 @@ function openTu28Modal(){
   ui.modal = 'tu28';
   render();
 }
+function bindTu28StaffSelects(){
+  const tu28StaffBody = document.getElementById('tu28StaffModalBody');
+  const selects = document.querySelectorAll('.tu28-staff-select');
+  selects.forEach((sel) => {
+    sel.onchange = (e) => {
+      const idx = Number(e.target.dataset.index);
+      if (!ui.tu28Staff[ui.tu28RowIndex]) ui.tu28Staff[ui.tu28RowIndex] = [];
+      ui.tu28Staff[ui.tu28RowIndex][idx] = e.target.value;
+      if (tu28StaffBody) {
+        tu28StaffBody.innerHTML = renderTu28Staff();
+        requestAnimationFrame(bindTu28StaffSelects);
+      }
+    };
+  });
+}
 function renderOpenModals(){
   const normsModal = document.getElementById('normsModal');
   const normsBody = document.getElementById('normsModalBody');
@@ -2258,16 +2316,7 @@ function renderOpenModals(){
       tu28StaffModal.classList.add('visible');
       tu28StaffModal.setAttribute('aria-hidden', 'false');
       tu28StaffBody.innerHTML = renderTu28Staff();
-      requestAnimationFrame(() => {
-        const selects = document.querySelectorAll('.tu28-staff-select');
-        selects.forEach((sel) => {
-          sel.onchange = (e) => {
-            const idx = Number(e.target.dataset.index);
-            if (!ui.tu28Staff[ui.tu28RowIndex]) ui.tu28Staff[ui.tu28RowIndex] = [];
-            ui.tu28Staff[ui.tu28RowIndex][idx] = e.target.value;
-          };
-        });
-      });
+      requestAnimationFrame(bindTu28StaffSelects);
     } else {
       tu28StaffModal.classList.remove('visible');
       tu28StaffModal.setAttribute('aria-hidden', 'true');
