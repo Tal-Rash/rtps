@@ -1775,10 +1775,6 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
                 user_id, role, modules, safe_name, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
                 expiry_text = "2000000000"
-            elif len(parts) == 4:
-                username, role, expiry_text, sig = parts
-                payload = f"{username}{sep}{role}{sep}{expiry_text}"
-                user_id, modules, safe_name = username, "", username
             else:
                 continue
                 
@@ -1983,7 +1979,7 @@ async def home_route(request: Request, year: int = None):
         pass
         
     if AUTH_ENABLED and not mod_role:
-        return HTMLResponse(content="<meta charset='utf-8'>Требуется вход. <a href='/'>Авторизоваться</a>", status_code=401, headers={"WWW-Authenticate": 'Form realm="Grafik PPR"'})
+        return RedirectResponse("/login", status_code=303)
         
     can_edit = mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True
     
@@ -1997,31 +1993,17 @@ async def home_route(request: Request, year: int = None):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
-    if not AUTH_ENABLED:
-        return RedirectResponse(APP_PREFIX, status_code=303)
-    session = get_current_session(request)
-    if session and session[0]:
-        return RedirectResponse(APP_PREFIX, status_code=303)
-    return HTMLResponse(render_login())
+    return RedirectResponse("/login", status_code=303)
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, user: str = Form(""), password: str = Form("")):
-    if not AUTH_ENABLED:
-        return RedirectResponse(APP_PREFIX, status_code=303)
-    username = user.strip()
-    if username == WEB_USER and password == WEB_VIEW_PASSWORD:
-        resp = RedirectResponse(APP_PREFIX, status_code=303)
-        resp.headers["Set-Cookie"] = _login_cookie(username, "view")
-        return resp
-    if username == WEB_USER and password == WEB_EDIT_PASSWORD:
-        resp = RedirectResponse(APP_PREFIX, status_code=303)
-        resp.headers["Set-Cookie"] = _login_cookie(username, "edit")
-        return resp
-    return HTMLResponse(render_login("<p style='text-align:center;color:#b00020;'>Неверный логин или пароль</p>"), status_code=401)
+    return RedirectResponse("/login", status_code=303)
 
 @app.get("/logout")
 async def logout_route():
-    return RedirectResponse("/", status_code=303)
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
+    return resp
 
 @app.get("/api/state")
 async def get_state(year: int = None):

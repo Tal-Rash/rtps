@@ -187,10 +187,6 @@ def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             if len(parts) == 6:
                 user_id, role, modules, safe_name, expiry_text, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
-            elif len(parts) == 4:
-                username, role, expiry_text, sig = parts
-                payload = f"{username}{sep}{role}{sep}{expiry_text}"
-                user_id, modules, safe_name = username, "", username
             else:
                 continue
                 
@@ -1197,10 +1193,6 @@ def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
                 user_id, role, modules, safe_name, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
                 expiry_text = "2000000000"
-            elif len(parts) == 4:
-                username, role, expiry_text, sig = parts
-                payload = f"{username}{sep}{role}{sep}{expiry_text}"
-                user_id, modules, safe_name = username, "", username
             else:
                 continue
                 
@@ -1263,8 +1255,7 @@ async def home_route(request: Request):
     mod_role = get_mod_role_fastapi(session, "spravochnik") if session else None
     
     if not session or not mod_role:
-        html = LOGIN_HTML.replace("{{USER}}", WEB_USER)
-        return HTMLResponse(content=html, headers={"WWW-Authenticate": 'Form realm="Spravochnik"'}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
         
     auth_badge = "Редактирование" if mod_role in ("edit", "editor", "admin") else "Просмотр"
     html_content = HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", auth_badge).replace("{{CAN_EDIT}}", "true" if mod_role in ("edit", "editor", "admin") else "false")
@@ -1277,17 +1268,12 @@ async def home_route(request: Request):
 
 @app.get("/login")
 async def login_get(request: Request):
-    session = get_current_session_fastapi(request)
-    if session:
-        return RedirectResponse("/", status_code=303)
-    html = LOGIN_HTML.replace("{{USER}}", WEB_USER)
-    return HTMLResponse(content=html)
+    return RedirectResponse("/login", status_code=303)
 
 @app.get("/logout")
 async def logout_route():
-    response = HTMLResponse(content='<!doctype html><meta http-equiv="refresh" content="0; url=/spravochnik/">')
+    response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
-    response.headers["Cache-Control"] = "no-store"
     return response
 
 @app.get("/api/state")
@@ -1301,19 +1287,7 @@ async def get_state(request: Request, year: int = None):
 
 @app.post("/login")
 async def login_post(request: Request):
-    form = await request.form()
-    password = form.get("password", "")
-    if password == WEB_EDIT_PASSWORD:
-        expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-        payload = f"{WEB_USER}|edit|{expiry}"
-        sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-        token = f"{payload}|{sig}"
-        response = RedirectResponse("/", status_code=303)
-        response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_TTL_SECONDS, path="/", httponly=True, samesite="lax")
-        return response
-    
-    html = LOGIN_HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", "Неверный логин или пароль")
-    return HTMLResponse(content=html, status_code=401)
+    return RedirectResponse("/login", status_code=303)
 
 @app.post("/api/save")
 async def post_save(request: Request):

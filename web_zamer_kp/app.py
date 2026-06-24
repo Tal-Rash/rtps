@@ -299,10 +299,6 @@ def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             if len(parts) == 6:
                 user_id, role, modules, safe_name, expiry_text, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
-            elif len(parts) == 4:
-                username, role, expiry_text, sig = parts
-                payload = f"{username}{sep}{role}{sep}{expiry_text}"
-                user_id, modules, safe_name = username, "", username
             else:
                 continue
                 
@@ -3294,10 +3290,6 @@ def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
                 user_id, role, modules, safe_name, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
                 expiry_text = "2000000000"
-            elif len(parts) == 4:
-                username, role, expiry_text, sig = parts
-                payload = f"{username}{sep}{role}{sep}{expiry_text}"
-                user_id, modules, safe_name = username, "", username
             else:
                 continue
                 
@@ -3358,9 +3350,7 @@ async def home_route(request: Request):
     mod_role = get_mod_role_fastapi(session, "zamer_kp")
     
     if not session or not mod_role:
-        with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
-            html = f.read().replace("{{APP_PREFIX}}", APP_PREFIX)
-        return HTMLResponse(content=html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
         
     html_content = render_page(mod_role)
     response = HTMLResponse(content=html_content)
@@ -3375,9 +3365,7 @@ async def wear_charts_route(request: Request, locomotive: str = "", date_from: s
     mod_role = get_mod_role_fastapi(session, "zamer_kp")
 
     if not session or not mod_role:
-        with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
-            login_html = f.read().replace("{{APP_PREFIX}}", APP_PREFIX)
-        return HTMLResponse(content=login_html, headers={"WWW-Authenticate": 'Form realm="Zamer KP"'}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
 
     extra = {
         "{{WEAR_LOCOMOTIVE}}": html.escape(text(locomotive), quote=True),
@@ -3394,7 +3382,9 @@ async def wear_charts_route(request: Request, locomotive: str = "", date_from: s
 
 @app.get("/logout")
 async def logout_route():
-    return RedirectResponse("/", status_code=303)
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
+    return resp
 
 @app.get("/api/state")
 async def get_state(request: Request, locomotive: str = ""):

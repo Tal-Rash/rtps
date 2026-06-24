@@ -141,10 +141,6 @@ def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
                 user_id, role, modules, safe_name, sig = parts
                 payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
                 expiry_text = "2000000000"
-            elif len(parts) == 4:
-                username, role, expiry_text, sig = parts
-                payload = f"{username}{sep}{role}{sep}{expiry_text}"
-                user_id, modules, safe_name = username, "", username
             else:
                 continue
                 
@@ -204,7 +200,7 @@ def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
 async def home_route(request: Request):
     session = get_current_session_fastapi(request)
     if not session:
-        return HTMLResponse(content="<meta charset='utf-8'>Требуется вход. <a href='/login'>Авторизоваться</a>", status_code=401)
+        return RedirectResponse("/login", status_code=303)
         
     mod_role = get_mod_role_fastapi(session, "tabel")
     if not mod_role:

@@ -89,10 +89,6 @@ def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             user_id, role, mods, full_name, sig = parts
             raw = f"{user_id}{sep}{role}{sep}{mods}{sep}{full_name}"
             expiry_text = "2000000000"
-        elif len(parts) == 4:
-            user_id, role, expiry_text, sig = parts
-            raw = f"{user_id}{sep}{role}{sep}{expiry_text}"
-            mods, full_name = "", user_id
         else:
             continue
         exp_sig = hmac.new(load_web_secret().encode(), raw.encode(), hashlib.sha256).hexdigest()
