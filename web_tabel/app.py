@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 SESSION_COOKIE = "grafik_ppr_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.52"
+APP_VERSION = "web-tabel-1.53"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 
