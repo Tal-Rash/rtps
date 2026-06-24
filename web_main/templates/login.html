@@ -17,12 +17,13 @@
 </head>
 <body>
   <div class="card" id="login-form">
-    <form method="post" action="/login">
+    <form method="post" action="/login{{ '?next=' ~ NEXT_URL if NEXT_URL else '' }}">
       <h1 style="margin-top:0;">Вход</h1>
       <p class="muted">Введите пароль просмотра или редактирования.</p>
       {% if error_message %}
       <p style="text-align:center;color:#b00020;margin-bottom:12px;">{{ error_message | safe }}</p>
       {% endif %}
+      <input type="hidden" name="next" value="{{ NEXT_URL or '/' }}">
       <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;" required>
       <button type="submit">Войти</button>
     </form>

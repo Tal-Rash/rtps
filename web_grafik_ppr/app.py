@@ -1980,7 +1980,7 @@ async def home_route(request: Request, year: int = None):
         pass
         
     if AUTH_ENABLED and not mod_role:
-        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/grafik-ppr", status_code=303)
         
     can_edit = mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True
     
@@ -1994,11 +1994,11 @@ async def home_route(request: Request, year: int = None):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
-    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+    return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/grafik-ppr", status_code=303)
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, user: str = Form(""), password: str = Form("")):
-    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+    return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/grafik-ppr", status_code=303)
 
 @app.get("/logout")
 async def logout_route():

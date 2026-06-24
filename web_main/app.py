@@ -251,7 +251,10 @@ async def login_page(request: Request):
     session = get_current_session(request)
     if session:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": ""})
+    next_url = request.query_params.get("next", "/").strip()
+    if not next_url.startswith("/"):
+        next_url = "/"
+    return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "NEXT_URL": next_url})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, response: Response, password: str = Form(...)):
@@ -261,7 +264,7 @@ async def login_post(request: Request, response: Response, password: str = Form(
     FAILED_ATTEMPTS[client_ip] = attempts
     
     if len(attempts) >= 15:
-        return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "error_message": "Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки."}, status_code=429)
+        return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "NEXT_URL": next_url, "error_message": "Слишком много неудачных попыток. Доступ заблокирован.<br>Пожалуйста, воспользуйтесь формой 'Запросить доступ / Восстановить пароль' для сброса блокировки."}, status_code=429)
     if len(attempts) >= 10:
         time.sleep(3)
     elif len(attempts) >= 5:
@@ -273,9 +276,13 @@ async def login_post(request: Request, response: Response, password: str = Form(
         cur.execute("SELECT id, full_name, role, allowed_modules FROM users WHERE password=?", (password,))
         user = cur.fetchone()
         
+    next_url = request.query_params.get("next", "/").strip()
+    if not next_url.startswith("/"):
+        next_url = "/"
+
     if user:
         if user[2] == "pending":
-            return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "error_message": "Ваша учетная запись еще не подтверждена администратором."}, status_code=403)
+            return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "NEXT_URL": next_url, "error_message": "Ваша учетная запись еще не подтверждена администратором."}, status_code=403)
         
         if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
         
@@ -283,13 +290,13 @@ async def login_post(request: Request, response: Response, password: str = Form(
             conn.execute("INSERT INTO login_logs (user_name, login_time) VALUES (?, ?)", (user[1], dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             
         cookie_val = _cookie_value(str(user[0]), user[2], user[3] or "", user[1])
-        redirect = RedirectResponse("/", status_code=303)
+        redirect = RedirectResponse(next_url or "/", status_code=303)
         redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=_session_max_age(user[2], user[3] or ""), path="/", httponly=True, samesite="lax")
         return redirect
 
     attempts.append(now)
     FAILED_ATTEMPTS[client_ip] = attempts
-    return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "error_message": "Неверный пароль"}, status_code=401)
+    return templates.TemplateResponse(request=request, name="login.html", context={"request": request, "USER": "", "NEXT_URL": next_url, "error_message": "Неверный пароль"}, status_code=401)
 
 @app.post("/request_access", response_class=HTMLResponse)
 async def request_access(request: Request, full_name: str = Form(...), password: str = Form(...)):

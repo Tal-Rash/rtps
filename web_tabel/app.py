@@ -201,7 +201,7 @@ def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
 async def home_route(request: Request):
     session = get_current_session_fastapi(request)
     if not session:
-        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/tabel", status_code=303)
         
     mod_role = get_mod_role_fastapi(session, "tabel")
     if not mod_role:

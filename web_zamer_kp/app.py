@@ -3351,7 +3351,7 @@ async def home_route(request: Request):
     mod_role = get_mod_role_fastapi(session, "zamer_kp")
     
     if not session or not mod_role:
-        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/zamer-kp", status_code=303)
         
     html_content = render_page(mod_role)
     response = HTMLResponse(content=html_content)
@@ -3366,7 +3366,7 @@ async def wear_charts_route(request: Request, locomotive: str = "", date_from: s
     mod_role = get_mod_role_fastapi(session, "zamer_kp")
 
     if not session or not mod_role:
-        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/zamer-kp/wear-charts", status_code=303)
 
     extra = {
         "{{WEAR_LOCOMOTIVE}}": html.escape(text(locomotive), quote=True),

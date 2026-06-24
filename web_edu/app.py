@@ -136,7 +136,7 @@ async def prefixed_index_redirect():
 async def index(request: Request):
     session = get_session(request)
     if not session:
-        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/edu", status_code=303)
         
     context = {
         "request": request,

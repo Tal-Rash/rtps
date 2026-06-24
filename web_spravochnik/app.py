@@ -1256,7 +1256,7 @@ async def home_route(request: Request):
     mod_role = get_mod_role_fastapi(session, "spravochnik") if session else None
     
     if not session or not mod_role:
-        return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/spravochnik", status_code=303)
         
     auth_badge = "Редактирование" if mod_role in ("edit", "editor", "admin") else "Просмотр"
     html_content = HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", auth_badge).replace("{{CAN_EDIT}}", "true" if mod_role in ("edit", "editor", "admin") else "false")
@@ -1269,7 +1269,7 @@ async def home_route(request: Request):
 
 @app.get("/login")
 async def login_get(request: Request):
-    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+    return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/spravochnik", status_code=303)
 
 @app.get("/logout")
 async def logout_route():
@@ -1288,7 +1288,7 @@ async def get_state(request: Request, year: int = None):
 
 @app.post("/login")
 async def login_post(request: Request):
-    return RedirectResponse(MAIN_LOGIN_URL, status_code=303)
+    return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/spravochnik", status_code=303)
 
 @app.post("/api/save")
 async def post_save(request: Request):
