@@ -28,7 +28,7 @@ def resolve_user_access(
     default_modules: str,
 ) -> tuple[str, str] | None:
     if user_id == "legacy":
-        return default_role, default_modules
+        return None
     try:
         with connect_sqlite(users_db) as conn:
             row = conn.execute(

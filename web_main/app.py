@@ -148,6 +148,8 @@ def get_current_session(request: Request):
             user_id = session[0]
             role = session[1]
             modules = session[2]
+            if user_id == "legacy":
+                return None
             if user_id != "legacy":
                 resolved = resolve_user_access(DB_FILE, user_id, role, modules)
                 if not resolved:
@@ -283,22 +285,6 @@ async def login_post(request: Request, response: Response, password: str = Form(
         cookie_val = _cookie_value(str(user[0]), user[2], user[3] or "", user[1])
         redirect = RedirectResponse("/", status_code=303)
         redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=_session_max_age(user[2], user[3] or ""), path="/", httponly=True, samesite="lax")
-        return redirect
-
-    if password in (WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD):
-        # Legacy passwords support
-        role = "editor" if password == WEB_EDIT_PASSWORD else "viewer"
-        full_name = "Старый пароль"
-        role_label = "Редактор" if role == "editor" else "Зритель"
-        with sqlite3.connect(DB_FILE) as conn:
-            conn.execute(
-                "INSERT INTO login_logs (user_name, login_time) VALUES (?, ?)",
-                (f"{full_name} ({role_label})", dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-            )
-        cookie_val = _cookie_value("legacy", role, "zamer_kp,grafik_ppr,spravochnik,tabel", full_name)
-        if client_ip in FAILED_ATTEMPTS: del FAILED_ATTEMPTS[client_ip]
-        redirect = RedirectResponse("/", status_code=303)
-        redirect.set_cookie(SESSION_COOKIE, cookie_val, max_age=_session_max_age(role, "zamer_kp,grafik_ppr,spravochnik,tabel"), path="/", httponly=True, samesite="lax")
         return redirect
 
     attempts.append(now)
