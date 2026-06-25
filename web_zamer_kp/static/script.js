@@ -1227,6 +1227,7 @@ function renderKpTable(){
               onmousedown="return handleKpCellMouseDown(event, ${rowIndex}, ${colIndex})"
               onchange="handleKpCellChange(${rowIndex}, ${colIndex}, this.value, this)"
               onkeydown="handleKpKeydown(event, ${rowIndex}, ${colIndex})"
+              onpaste="handleKpCellPaste(event, ${rowIndex}, ${colIndex})"
             >
           </td>`).join('')}
       </tr>`;
@@ -1964,23 +1965,39 @@ async function pasteKpClipboard(row, col){
   if (!CAN_EDIT || kpAllMode || kpLoading) return;
   const text = await readClipboardText();
   if (!text) return;
+  await pasteKpMatrix(text, row, col);
+}
+function parseKpClipboardMatrix(text){
+  const lines = String(text ?? '').replace(/\r/g, '').split('\n');
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return lines.map(line => line.split('\t'));
+}
+async function pasteKpMatrix(text, row, col){
+  if (!CAN_EDIT || kpAllMode || kpLoading) return false;
   const rect = kpSelectionRect();
   const start = rect ? { row: rect.top, col: rect.left } : { row, col };
-  const lines = String(text).replace(/\\r/g, '').split('\\n');
-  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  const rows = parseKpClipboardMatrix(text);
+  if (!rows.length) return false;
   let touched = false;
-  for (let r = 0; r < lines.length; r += 1) {
-    const cells = lines[r].split('\\t');
-    for (let c = 0; c < cells.length; c += 1) {
+  for (let r = 0; r < rows.length; r += 1) {
+    for (let c = 0; c < rows[r].length; c += 1) {
       const targetRow = start.row + r;
       const targetCol = start.col + c;
       if (!kpCellInBounds(targetRow, targetCol)) continue;
-      touched = setKpCellValue(targetRow, targetCol, cells[c]) || touched;
+      touched = setKpCellValue(targetRow, targetCol, rows[r][c]) || touched;
     }
   }
-  if (!touched) return;
+  if (!touched) return false;
   focusKpCell(start.row, start.col);
   await saveKpDataChanges();
+  return true;
+}
+async function handleKpCellPaste(event, row, col){
+  if (!CAN_EDIT || kpAllMode || kpLoading) return;
+  const text = event.clipboardData?.getData('text/plain') || await readClipboardText();
+  if (!text) return;
+  event.preventDefault();
+  await pasteKpMatrix(text, row, col);
 }
 async function clearKpSelectedCells(row, col){
   if (!CAN_EDIT || kpAllMode || kpLoading) return;
@@ -2042,11 +2059,6 @@ function handleKpKeydown(event, row, col){
   if (ctrlOrMeta && key.toLowerCase() === 'c') {
     event.preventDefault();
     copyKpSelectionToClipboard();
-    return;
-  }
-  if (ctrlOrMeta && key.toLowerCase() === 'v') {
-    event.preventDefault();
-    pasteKpClipboard(row, col);
     return;
   }
   if (key === 'Delete' || key === 'Backspace') {
