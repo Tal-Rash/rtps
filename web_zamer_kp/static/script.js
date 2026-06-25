@@ -1956,9 +1956,9 @@ async function copyKpSelectionToClipboard(){
     for (let c = start.col; c <= end.col; c += 1) {
       rowValues.push(kpCellValue(r, c));
     }
-    lines.push(rowValues.join('\\t'));
+    lines.push(rowValues.join('\t'));
   }
-  await writeClipboardText(lines.join('\\n'));
+  await writeClipboardText(lines.join('\n'));
   renderKpStatus('Скопировано');
 }
 async function pasteKpClipboard(row, col){
