@@ -2045,6 +2045,84 @@ def archive_export_locomotives(cur: sqlite3.Cursor) -> list[str]:
     return [text(row["locomotive"]).strip() for row in rows if text(row["locomotive"]).strip()]
 
 
+def load_effective_kp_values_for_date(
+    cur: sqlite3.Cursor,
+    locomotive: str,
+    measurement_date: str,
+    cache: dict[tuple[str, str], dict[tuple[int, int], str]] | None = None,
+) -> dict[tuple[int, int], str]:
+    loco = text(locomotive).strip()
+    date_key = text(measurement_date).strip()
+    cache_key = (loco, date_key)
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+
+    kp_values: dict[tuple[int, int], str] = {}
+    if loco:
+        version_row = None
+        if date_key:
+            version_row = cur.execute(
+                """
+                SELECT id
+                FROM kp_data_versions
+                WHERE locomotive=? AND TRIM(COALESCE(valid_to, '')) <> '' AND valid_to >= ?
+                ORDER BY valid_to ASC, id ASC
+                LIMIT 1
+                """,
+                (loco, date_key),
+            ).fetchone()
+
+        if version_row:
+            version_rows = cur.execute(
+                "SELECT r, c, v FROM kp_data_version_cells WHERE version_id=? AND c IN (2, 3) ORDER BY r, c",
+                (int(version_row["id"]),),
+            ).fetchall()
+            for row in version_rows:
+                kp_values[(int(row["r"]), int(row["c"]))] = text(row["v"]).strip()
+
+        current_rows = cur.execute(
+            "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3) ORDER BY r, c",
+            (loco,),
+        ).fetchall()
+        for row in current_rows:
+            kp_values.setdefault((int(row["r"]), int(row["c"])), text(row["v"]).strip())
+
+    if cache is not None:
+        cache[cache_key] = kp_values
+    return kp_values
+
+
+def resolve_archive_diameter_pair(
+    cur: sqlite3.Cursor,
+    locomotive: str,
+    measurement_date: str,
+    pair_row_index: int,
+    values: list[str],
+    kp_cache: dict[tuple[str, str], dict[tuple[int, int], str]] | None = None,
+) -> tuple[str, str, str, str]:
+    bandage_left = values[8] or ""
+    bandage_right = values[9] or ""
+    fallback_left = values[10] or ""
+    fallback_right = values[11] or ""
+    kp_values = load_effective_kp_values_for_date(cur, locomotive, measurement_date, kp_cache)
+
+    resolved_left = fallback_left
+    left_bandage_value = parse_float_value(bandage_left)
+    if left_bandage_value is not None:
+        kp_left = parse_float_value(kp_values.get((pair_row_index, 2), ""))
+        if kp_left is not None:
+            resolved_left = str(int(round(kp_left + left_bandage_value * 2)))
+
+    resolved_right = fallback_right
+    right_bandage_value = parse_float_value(bandage_right)
+    if right_bandage_value is not None:
+        kp_right = parse_float_value(kp_values.get((pair_row_index, 3), ""))
+        if kp_right is not None:
+            resolved_right = str(int(round(kp_right + right_bandage_value * 2)))
+
+    return bandage_left, bandage_right, resolved_left, resolved_right
+
+
 def build_archive_export_rows(selected_locomotives: list[str] | None = None, date_from: str = "", date_to: str = "") -> list[list[str]]:
     locomotives_filter = {text(item).strip() for item in selected_locomotives or [] if text(item).strip()}
     date_from = text(date_from).strip()
@@ -2080,34 +2158,18 @@ def build_archive_export_rows(selected_locomotives: list[str] | None = None, dat
             if 0 <= c < 12:
                 grouped[key][c] = text(row["v"])
 
-        kp_cache: dict[str, dict[tuple[int, int], str]] = {}
+        kp_cache: dict[tuple[str, str], dict[tuple[int, int], str]] = {}
         export_rows: list[list[str]] = []
         for (_, measurement_date, locomotive, repair_type, r), values in sorted(grouped.items()):
             series = series_for_locomotive(cur, locomotive)
-            if locomotive not in kp_cache:
-                kp_rows = cur.execute(
-                    "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3)",
-                    (locomotive,),
-                ).fetchall()
-                kp_cache[locomotive] = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
-
-            kp_values = kp_cache.get(locomotive, {})
-            kp_row_index = r - 1
-            bandage_left = values[8] or ""
-            bandage_right = values[9] or ""
-            diameter_left = values[10] or ""
-            diameter_right = values[11] or ""
-
-            if not diameter_left:
-                kp_left = parse_float_value(kp_values.get((kp_row_index, 2), ""))
-                bandage_left_value = parse_float_value(bandage_left)
-                if kp_left is not None and bandage_left_value is not None:
-                    diameter_left = str(int(round(kp_left + bandage_left_value * 2)))
-            if not diameter_right:
-                kp_right = parse_float_value(kp_values.get((kp_row_index, 3), ""))
-                bandage_right_value = parse_float_value(bandage_right)
-                if kp_right is not None and bandage_right_value is not None:
-                    diameter_right = str(int(round(kp_right + bandage_right_value * 2)))
+            bandage_left, bandage_right, diameter_left, diameter_right = resolve_archive_diameter_pair(
+                cur,
+                locomotive,
+                measurement_date,
+                r - 2,
+                values,
+                kp_cache,
+            )
 
             export_rows.append(
                 [
@@ -2232,7 +2294,7 @@ def phone_archive_export_payload(selected_locomotives: list[str] | None = None, 
         rows = cur.execute(query, params).fetchall()
         grouped: dict[tuple[int, str, str, str], dict[int, list[str]]] = {}
         series_cache: dict[str, str] = {}
-        kp_cache: dict[str, dict[tuple[int, int], str]] = {}
+        kp_cache: dict[tuple[str, str], dict[tuple[int, int], str]] = {}
         for row in rows:
             key = (
                 int(row["y"] or 0),
@@ -2250,31 +2312,18 @@ def phone_archive_export_payload(selected_locomotives: list[str] | None = None, 
                 series = series_for_locomotive(cur, locomotive)
                 series_cache[locomotive] = series
             wheel_pair_count = max(1, locomotive_axis_count(series, locomotive))
-            if locomotive not in kp_cache:
-                kp_rows = cur.execute(
-                    "SELECT r, c, v FROM kp_data WHERE locomotive=? AND c IN (2, 3)",
-                    (locomotive,),
-                ).fetchall()
-                kp_cache[locomotive] = {(int(row["r"]), int(row["c"])): text(row["v"]).strip() for row in kp_rows}
-            kp_values = kp_cache.get(locomotive, {})
             wheel_pairs: list[dict[str, object]] = []
             for row_index in sorted(rows_by_r):
                 row = rows_by_r[row_index]
                 pair_number = parse_excel_int(row[1]) or max(1, row_index - 1)
-                left_band = row[8] or ""
-                right_band = row[9] or ""
-                diameter_left = row[10] or ""
-                diameter_right = row[11] or ""
-                if not diameter_left:
-                    kp_left = parse_float_value(kp_values.get((pair_number - 1, 2), ""))
-                    bandage_left_value = parse_float_value(left_band)
-                    if kp_left is not None and bandage_left_value is not None:
-                        diameter_left = str(int(round(kp_left + bandage_left_value * 2)))
-                if not diameter_right:
-                    kp_right = parse_float_value(kp_values.get((pair_number - 1, 3), ""))
-                    bandage_right_value = parse_float_value(right_band)
-                    if kp_right is not None and bandage_right_value is not None:
-                        diameter_right = str(int(round(kp_right + bandage_right_value * 2)))
+                left_band, right_band, diameter_left, diameter_right = resolve_archive_diameter_pair(
+                    cur,
+                    locomotive,
+                    measurement_date,
+                    pair_number - 1,
+                    row,
+                    kp_cache,
+                )
 
                 wheel_pairs.append(
                     {
@@ -2822,6 +2871,8 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
             if 0 <= c < 12:
                 grouped[key][c] = text(row["v"])
 
+        kp_cache: dict[tuple[str, str], dict[tuple[int, int], str]] = {}
+
         def to_float(v):
             try:
                 return float(text(v).replace(",", "."))
@@ -2859,7 +2910,15 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
             greben_pair = [v for v in [to_float(values[4]), to_float(values[5])] if v is not None]
             krut_pair = [v for v in [to_float(values[6]), to_float(values[7])] if v is not None]
             bandage_pair = [v for v in [to_float(values[8]), to_float(values[9])] if v is not None]
-            diameter_pair = [v for v in [to_float(values[10]), to_float(values[11])] if v is not None]
+            _, _, resolved_left, resolved_right = resolve_archive_diameter_pair(
+                cur,
+                loco,
+                measurement_date,
+                row_index - 2,
+                values,
+                kp_cache,
+            )
+            diameter_pair = [v for v in [to_float(resolved_left), to_float(resolved_right)] if v is not None]
 
             if prokat_pair:
                 current = to_float(stats["max_prokat"])
@@ -2930,6 +2989,14 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
 
             section_value = values[0] or "1"
             stats = stats_by_section.get((year, measurement_date, loco, normalize_repair_type(repair_type), section_value), {})
+            _, _, resolved_left, resolved_right = resolve_archive_diameter_pair(
+                cur,
+                loco,
+                measurement_date,
+                row_index - 2,
+                values,
+                kp_cache,
+            )
             row_values = [
                 date_and_repair,
                 section_value,
@@ -2949,8 +3016,8 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
                 values[7],
                 values[8],
                 values[9],
-                values[10],
-                values[11],
+                resolved_left,
+                resolved_right,
             ]
             archive_rows.append({
                 "values": row_values,
