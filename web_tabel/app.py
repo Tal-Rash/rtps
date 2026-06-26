@@ -546,6 +546,8 @@ async def export_milk(year: int, month: int, type: str):
             return False
         return not is_we
 
+    non_shift_codes = {"", "В", "B", "О", "ДО", "К", "У", "Б", "БН", "ОВ"}
+
     with DB_LOCK, connect() as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -593,17 +595,10 @@ async def export_milk(year: int, month: int, type: str):
                 if "М" in val:
                     count += 1
             else:
-                # For issue_plan and issue_fact, if "М" is explicitly marked, count it!
-                # Even if they put "8М", we should count it as a shift.
-                if "М" in val:
+                if is_workday(year, month, d) and val not in non_shift_codes:
                     count += 1
-                else:
-                    try:
-                        float(val.replace(',', '.'))
-                        count += 1
-                    except ValueError:
-                        if not val and is_workday(year, month, d): 
-                            count += 1
+                elif not val and is_workday(year, month, d):
+                    count += 1
                         
         final_list.append({
             "fio": name,
