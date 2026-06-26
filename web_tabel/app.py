@@ -546,7 +546,7 @@ async def export_milk(year: int, month: int, type: str):
             return False
         return not is_we
 
-    non_shift_codes = {"", "В", "B", "О", "ДО", "К", "У", "Б", "БН", "ОВ"}
+    non_shift_codes = {"В", "B", "О", "ОВ", "А", "У", "Б", "БН"}
     numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
 
     def is_shift_mark(value: str) -> bool:
@@ -606,7 +606,11 @@ async def export_milk(year: int, month: int, type: str):
                 if is_shift_mark(val):
                     count += 1
             else:
-                if is_workday(year, month, d) and is_shift_mark(val):
+                if not is_workday(year, month, d):
+                    continue
+                if not val:
+                    count += 1
+                elif val not in non_shift_codes and is_shift_mark(val):
                     count += 1
                         
         final_list.append({
