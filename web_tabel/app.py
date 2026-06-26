@@ -362,6 +362,7 @@ async def debug_startup(request: Request):
 
 import io
 import base64
+import copy
 from fastapi.responses import FileResponse, StreamingResponse
 from urllib.parse import quote
 
@@ -488,7 +489,6 @@ async def export_summary(year: int, month: int, type: str):
 async def export_milk(year: int, month: int, type: str):
     import urllib.parse
     import tempfile
-    import copy
     import os
     import openpyxl
     type = urllib.parse.unquote(type)
@@ -559,69 +559,95 @@ async def export_milk(year: int, month: int, type: str):
             return False
         return bool(numeric_shift_re.match(val))
 
+    def build_report_rows() -> tuple[list[dict], int]:
+        final_rows: list[dict] = []
+        grand_total = 0
+
+        with DB_LOCK, connect() as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
+            emp_rows = cur.execute(
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid",
+                (year,),
+            ).fetchall()
+
+            m_comp_set = set()
+            m_issue_set = set()
+
+            for r in emp_rows:
+                name = str(r["name"]).upper()
+                if r["milk"]:
+                    m_comp_set.add(name)
+                if r["milk_issue"]:
+                    m_issue_set.add(name)
+
+            ts_rows = cur.execute("SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, m_str)).fetchall()
+            ts_data = {}
+            for r in ts_rows:
+                ts_data.setdefault(str(r["tab_num"]), {})[int(r["c"])] = str(r["v"]).upper()
+
+            def allowed_employee(emp_row):
+                name_up = str(emp_row["name"]).upper()
+                if type == "компенсация":
+                    return name_up in m_comp_set
+                return name_up in m_issue_set
+
+            for emp in emp_rows:
+                if not allowed_employee(emp):
+                    continue
+
+                name = str(emp["name"])
+                tab_num = str(emp["tab_num"])
+                pos = str(emp["pos"])
+                full_name = str(emp["full_name"])
+                milk_note = str(emp["milk_note"])
+                exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
+
+                count = 0
+                missed_days: list[str] = []
+                emp_ts = ts_data.get(tab_num, {})
+
+                for d in range(1, days_cnt + 1):
+                    if exclude_start is not None and d >= exclude_start:
+                        continue
+
+                    val = emp_ts.get(d, "").strip().upper()
+                    if type == "компенсация":
+                        if is_shift_mark(val):
+                            count += 1
+                        elif val:
+                            missed_days.append(f"{d:02d}.{month:02d} {val}")
+                    else:
+                        if not is_workday(year, month, d):
+                            continue
+                        if not val:
+                            count += 1
+                        elif val not in non_shift_codes and is_shift_mark(val):
+                            count += 1
+                        else:
+                            missed_days.append(f"{d:02d}.{month:02d} {val or 'пусто'}")
+
+                final_rows.append({
+                    "fio": name,
+                    "full_name": full_name,
+                    "pos": pos,
+                    "tab": tab_num,
+                    "shifts": count,
+                    "missed_note": "; ".join(missed_days),
+                    "milk_note": milk_note,
+                })
+                grand_total += count
+
+        return final_rows, grand_total
+
     with DB_LOCK, connect() as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-
-        emp_rows = cur.execute("SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid", (year,)).fetchall()
-        
-        m_comp_set = set()
-        m_issue_set = set()
-        
-        for r in emp_rows:
-            name = str(r["name"]).upper()
-            if r["milk"]: m_comp_set.add(name)
-            if r["milk_issue"]: m_issue_set.add(name)
-            
-        ts_rows = cur.execute("SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, m_str)).fetchall()
-        ts_data = {}
-        for r in ts_rows:
-            ts_data.setdefault(str(r["tab_num"]), {})[int(r["c"])] = str(r["v"]).upper()
-            
         norm_row = cur.execute("SELECT v FROM ts_norms_data WHERE y=? AND r=? AND c=2", (year, month - 1)).fetchone()
         work_days_norm = str(norm_row["v"]) if norm_row else "0"
-            
-    final_list = []
-    grand_total = 0
 
-    for emp in emp_rows:
-        name = str(emp["name"])
-        name_up = name.upper()
-        tab_num = str(emp["tab_num"])
-        pos = str(emp["pos"])
-        full_name = str(emp["full_name"])
-        milk_note = str(emp["milk_note"])
-        exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
-        
-        if type == "компенсация" and name_up not in m_comp_set: continue
-        if type in ["план", "факт"] and name_up not in m_issue_set: continue
-        
-        count = 0
-        emp_ts = ts_data.get(tab_num, {})
-        for d in range(1, days_cnt + 1):
-            if exclude_start is not None and d >= exclude_start:
-                continue
-            val = emp_ts.get(d, "").strip().upper()
-            if type == "компенсация":
-                if is_shift_mark(val):
-                    count += 1
-            else:
-                if not is_workday(year, month, d):
-                    continue
-                if not val:
-                    count += 1
-                elif val not in non_shift_codes and is_shift_mark(val):
-                    count += 1
-                        
-        final_list.append({
-            "fio": name,
-            "full_name": full_name,
-            "pos": pos,
-            "tab": tab_num,
-            "shifts": count,
-            "milk_note": milk_note
-        })
-        grand_total += count
+    final_list, grand_total = build_report_rows()
         
     # Load workbook
     wb = openpyxl.load_workbook(template_path)
@@ -669,6 +695,157 @@ async def export_milk(year: int, month: int, type: str):
     wb.save(tmp.name)
     
     return FileResponse(tmp.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"Отчет_Молоко_{type}.xlsx")
+
+
+@app.get("/api/export-milk-details", response_class=HTMLResponse)
+async def export_milk_details(year: int, month: int, type: str):
+    import urllib.parse
+    type = urllib.parse.unquote(type)
+
+    templates = {
+        "компенсация": "Компенсация (План)",
+        "план": "Выдача (План)",
+        "факт": "Выдача (Факт)",
+    }
+    title = templates.get(type, type)
+
+    # Reuse the same calculator as the main milk report.
+    # We inline the computation in a lightweight form so the diagnostics stay self-contained.
+    sys_dates = load_system_dates(year)
+    transfer_dates = sys_dates["transfer"]
+    holiday_dates = sys_dates["holiday"]
+    m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
+    days_cnt = calendar.monthrange(year, month)[1]
+
+    def employee_exclude_start(raw_date: str) -> int | None:
+        raw = text(raw_date).strip()
+        if not raw:
+            return None
+        parts = raw.split("-")
+        if len(parts) != 3:
+            return None
+        try:
+            ex_year = int(parts[0])
+            ex_month = int(parts[1])
+            ex_day = int(parts[2])
+        except Exception:
+            return None
+        if year > ex_year:
+            return 1
+        if year == ex_year and month > ex_month:
+            return 1
+        if year == ex_year and month == ex_month:
+            return ex_day
+        return None
+
+    def is_workday(y, m, d):
+        dt_obj = dt.date(y, m, d)
+        is_we = dt_obj.weekday() >= 5
+        is_hol = (m, d) in holiday_dates
+        is_tr = (m, d) in transfer_dates
+        if is_tr:
+            return True
+        if is_hol:
+            return False
+        return not is_we
+
+    non_shift_codes = {"В", "B", "О", "ОВ", "А", "У", "Б", "БН"}
+    numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
+
+    def is_shift_mark(value: str) -> bool:
+        val = text(value).strip().upper()
+        if not val:
+            return False
+        if "М" in val:
+            return True
+        if val in non_shift_codes:
+            return False
+        return bool(numeric_shift_re.match(val))
+
+    with DB_LOCK, connect() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        emp_rows = cur.execute(
+            "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid",
+            (year,),
+        ).fetchall()
+
+        m_comp_set = {str(r["name"]).upper() for r in emp_rows if r["milk"]}
+        m_issue_set = {str(r["name"]).upper() for r in emp_rows if r["milk_issue"]}
+        ts_rows = cur.execute("SELECT tab_num, c, v FROM timesheet WHERE y=? AND m=?", (year, m_str)).fetchall()
+        ts_data = {}
+        for r in ts_rows:
+            ts_data.setdefault(str(r["tab_num"]), {})[int(r["c"])] = str(r["v"]).upper()
+
+    rows = []
+    for emp in emp_rows:
+        name = str(emp["name"])
+        name_up = name.upper()
+        if type == "компенсация" and name_up not in m_comp_set:
+            continue
+        if type in ("план", "факт") and name_up not in m_issue_set:
+            continue
+
+        tab_num = str(emp["tab_num"])
+        pos = str(emp["pos"])
+        full_name = str(emp["full_name"])
+        exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
+        emp_ts = ts_data.get(tab_num, {})
+        count = 0
+        missed_days: list[str] = []
+
+        for d in range(1, days_cnt + 1):
+            if exclude_start is not None and d >= exclude_start:
+                continue
+            val = emp_ts.get(d, "").strip().upper()
+            if type == "компенсация":
+                if is_shift_mark(val):
+                    count += 1
+                elif val:
+                    missed_days.append(f"{d:02d}.{month:02d} — {val}")
+            else:
+                if not is_workday(year, month, d):
+                    continue
+                if not val:
+                    count += 1
+                elif val not in non_shift_codes and is_shift_mark(val):
+                    count += 1
+                else:
+                    missed_days.append(f"{d:02d}.{month:02d} — {val or 'пусто'}")
+
+        rows.append({
+            "tab": tab_num,
+            "fio": full_name or name,
+            "pos": pos,
+            "shifts": count,
+            "missed": missed_days,
+        })
+
+    html = [f"<html><head><meta charset='utf-8'><title>{title} — {MONTH_NAMES[month]} {year}</title>"]
+    html.append("""
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; color: #1f2937; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      .sub { color: #6b7280; margin-bottom: 16px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #cbd5e1; padding: 8px 10px; vertical-align: top; }
+      th { background: #eef4ff; text-align: left; }
+      tr:nth-child(even) td { background: #fafcff; }
+      .num { text-align: center; white-space: nowrap; }
+      .missed { white-space: pre-wrap; color: #b45309; }
+      .empty { color: #94a3b8; }
+    </style>
+    </head><body>""")
+    html.append(f"<h1>{title} — {MONTH_NAMES[month]} {year}</h1>")
+    html.append("<div class='sub'>Показываем только те дни, которые не были засчитаны как смена. Если строка пустая, для этого сотрудника не найдено неучтённых дней.</div>")
+    html.append("<table><thead><tr><th style='width:50px'>№</th><th>Таб. №</th><th>ФИО</th><th>Профессия</th><th style='width:90px'>Смен</th><th>Не засчитано</th></tr></thead><tbody>")
+    for idx, row in enumerate(rows, 1):
+        missed = "<div class='empty'>нет</div>" if not row["missed"] else "<br>".join(row["missed"])
+        html.append(
+            f"<tr><td class='num'>{idx}</td><td class='num'>{row['tab']}</td><td>{row['fio']}</td><td>{row['pos']}</td><td class='num'>{row['shifts']}</td><td class='missed'>{missed}</td></tr>"
+        )
+    html.append("</tbody></table></body></html>")
+    return HTMLResponse("".join(html))
 
 
 

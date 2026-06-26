@@ -372,6 +372,12 @@ function exportMilk(type) {
   window.open(`${APP_PREFIX}/api/export-milk?year=${year}&month=${month}&type=${type}`, "_blank");
 }
 
+function exportMilkMissed() {
+  const year = document.getElementById("yearInput").value;
+  const month = document.getElementById("monthInput").value;
+  window.open(`${APP_PREFIX}/api/export-milk-details?year=${year}&month=${month}&type=план`, "_blank");
+}
+
 function escapeHtml(str) {
   if (!str) return "";
   return String(str).replace(/[&<>"']/g, function(m) {
