@@ -547,6 +547,17 @@ async def export_milk(year: int, month: int, type: str):
         return not is_we
 
     non_shift_codes = {"", "В", "B", "О", "ДО", "К", "У", "Б", "БН", "ОВ"}
+    numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
+
+    def is_shift_mark(value: str) -> bool:
+        val = text(value).strip().upper()
+        if not val:
+            return False
+        if "М" in val:
+            return True
+        if val in non_shift_codes:
+            return False
+        return bool(numeric_shift_re.match(val))
 
     with DB_LOCK, connect() as conn:
         conn.row_factory = sqlite3.Row
@@ -592,12 +603,10 @@ async def export_milk(year: int, month: int, type: str):
                 continue
             val = emp_ts.get(d, "").strip().upper()
             if type == "компенсация":
-                if "М" in val:
+                if is_shift_mark(val):
                     count += 1
             else:
-                if is_workday(year, month, d) and val not in non_shift_codes:
-                    count += 1
-                elif not val and is_workday(year, month, d):
+                if is_workday(year, month, d) and is_shift_mark(val):
                     count += 1
                         
         final_list.append({
