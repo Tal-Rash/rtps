@@ -548,16 +548,18 @@ async def export_milk(year: int, month: int, type: str):
 
     non_shift_codes = {"В", "B", "О", "ОВ", "А", "У", "Б", "БН"}
     numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
+    spacing_re = __import__("re").compile(r"\s*,\s*")
 
     def is_shift_mark(value: str) -> bool:
         val = text(value).strip().upper()
         if not val:
             return False
-        if "М" in val:
+        compact = spacing_re.sub(",", val).replace(" ", "")
+        if "М" in compact:
             return True
-        if val in non_shift_codes:
+        if compact in non_shift_codes:
             return False
-        return bool(numeric_shift_re.match(val))
+        return bool(numeric_shift_re.match(compact))
 
     def build_report_rows() -> tuple[list[dict], int]:
         final_rows: list[dict] = []
@@ -751,16 +753,18 @@ async def export_milk_details(year: int, month: int, type: str):
 
     non_shift_codes = {"В", "B", "О", "ОВ", "А", "У", "Б", "БН"}
     numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
+    spacing_re = __import__("re").compile(r"\s*,\s*")
 
     def is_shift_mark(value: str) -> bool:
         val = text(value).strip().upper()
         if not val:
             return False
-        if "М" in val:
+        compact = spacing_re.sub(",", val).replace(" ", "")
+        if "М" in compact:
             return True
-        if val in non_shift_codes:
+        if compact in non_shift_codes:
             return False
-        return bool(numeric_shift_re.match(val))
+        return bool(numeric_shift_re.match(compact))
 
     with DB_LOCK, connect() as conn:
         conn.row_factory = sqlite3.Row
