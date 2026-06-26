@@ -41,7 +41,7 @@
               <button onclick="exportMilk('компенсация')">Компенсация (План)</button>
               <button onclick="exportMilk('план')">Выдача (План)</button>
               <button onclick="exportMilk('факт')">Выдача (Факт)</button>
-              <button onclick="exportMilkMissed()">Не засчитанные дни</button>
+              <button type="button" onclick="window.open(`${_prefix}/api/export-milk-details?year=${document.getElementById('yearInput').value}&month=${document.getElementById('monthInput').value}&type=${encodeURIComponent('план')}`, '_blank')">Не засчитанные дни</button>
             </div>
           </div>
           <div class="json-menu">
