@@ -513,12 +513,44 @@ async def export_milk(year: int, month: int, type: str):
     
     m_str = MONTH_NAMES[month] if 1 <= month <= 12 else str(month)
     days_cnt = calendar.monthrange(year, month)[1]
-    
+
+    def employee_exclude_start(raw_date: str) -> int | None:
+        raw = text(raw_date).strip()
+        if not raw:
+            return None
+        parts = raw.split("-")
+        if len(parts) != 3:
+            return None
+        try:
+            ex_year = int(parts[0])
+            ex_month = int(parts[1])
+            ex_day = int(parts[2])
+        except Exception:
+            return None
+        if year > ex_year:
+            return 1
+        if year == ex_year and month > ex_month:
+            return 1
+        if year == ex_year and month == ex_month:
+            return ex_day
+        return None
+
+    def is_workday(y, m, d):
+        dt_obj = dt.date(y, m, d)
+        is_we = dt_obj.weekday() >= 5
+        is_hol = (m, d) in holiday_dates
+        is_tr = (m, d) in transfer_dates
+        if is_tr:
+            return True
+        if is_hol:
+            return False
+        return not is_we
+
     with DB_LOCK, connect() as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        emp_rows = cur.execute("SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note FROM employees WHERE y=? AND name != '' ORDER BY rowid", (year,)).fetchall()
+        emp_rows = cur.execute("SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid", (year,)).fetchall()
         
         m_comp_set = set()
         m_issue_set = set()
@@ -536,15 +568,6 @@ async def export_milk(year: int, month: int, type: str):
         norm_row = cur.execute("SELECT v FROM ts_norms_data WHERE y=? AND r=? AND c=2", (year, month - 1)).fetchone()
         work_days_norm = str(norm_row["v"]) if norm_row else "0"
             
-    def is_workday(y, m, d):
-        dt_obj = dt.date(y, m, d)
-        is_we = dt_obj.weekday() >= 5
-        is_hol = (m, d) in holiday_dates
-        is_tr = (m, d) in transfer_dates
-        if is_tr: return True
-        if is_hol: return False
-        return not is_we
-
     final_list = []
     grand_total = 0
 
@@ -555,6 +578,7 @@ async def export_milk(year: int, month: int, type: str):
         pos = str(emp["pos"])
         full_name = str(emp["full_name"])
         milk_note = str(emp["milk_note"])
+        exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
         
         if type == "компенсация" and name_up not in m_comp_set: continue
         if type in ["план", "факт"] and name_up not in m_issue_set: continue
@@ -562,6 +586,8 @@ async def export_milk(year: int, month: int, type: str):
         count = 0
         emp_ts = ts_data.get(tab_num, {})
         for d in range(1, days_cnt + 1):
+            if exclude_start is not None and d >= exclude_start:
+                continue
             val = emp_ts.get(d, "").strip().upper()
             if type == "компенсация":
                 if "М" in val:
