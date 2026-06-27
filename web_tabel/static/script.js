@@ -31,6 +31,29 @@ function renderMonthButtons() {
   if (strip) strip.innerHTML = html;
 }
 
+function updateMonthNormInfo() {
+  const info = document.getElementById("monthNormInfo");
+  if (!info || !appState) return;
+  const month = parseInt(appState.month, 10);
+  const row = appState.ts_norms_data && appState.ts_norms_data[month - 1] ? appState.ts_norms_data[month - 1] : null;
+  const workDays = row && row[2] ? String(row[2]).trim() : "";
+  const hours40 = row && row[4] ? String(row[4]).trim() : "";
+  const hours36 = row && row[5] ? String(row[5]).trim() : "";
+
+  if (!workDays && !hours40 && !hours36) {
+    info.textContent = "";
+    info.style.display = "none";
+    return;
+  }
+
+  const parts = [];
+  if (workDays) parts.push(workDays);
+  const hoursPart = [hours40, hours36].filter(Boolean).join(" / ");
+  if (hoursPart) parts.push(hoursPart);
+  info.textContent = `Раб. дни: ${parts.join(" ")}`;
+  info.style.display = "inline-flex";
+}
+
 function switchTab(tabId) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -79,10 +102,11 @@ async function loadState() {
       throw new Error("Failed to load");
     }
     appState = await res.json();
-    applyVacations(); // Re-apply vacations to fix old DB state
-    renderMonthButtons();
-    renderTable();
-    markDirty(false);
+  applyVacations(); // Re-apply vacations to fix old DB state
+  renderMonthButtons();
+  updateMonthNormInfo();
+  renderTable();
+  markDirty(false);
   } catch (err) {
     console.error(err);
     alert("Ошибка загрузки данных");
@@ -101,6 +125,7 @@ function renderTable() {
     setTimeout(autoResizeMonthHint, 50);
   }
   updateExportMenu();
+  updateMonthNormInfo();
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
   const days = daysInMonth(year, month);

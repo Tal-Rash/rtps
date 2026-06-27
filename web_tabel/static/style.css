@@ -251,8 +251,22 @@ textarea {
   gap: 2px;
   flex-wrap: nowrap;
   min-width: 0;
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
   overflow: visible;
+}
+
+.month-norm-info {
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #1f3557;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid rgba(39, 110, 241, .35);
+  border-radius: 8px;
+  background: rgba(39, 110, 241, .06);
 }
 
 .months-row .row-actions {
@@ -1470,6 +1484,10 @@ th.col-day {
   .month-strip {
     flex-wrap: wrap;
     overflow: visible;
+  }
+
+  .month-norm-info {
+    white-space: normal;
   }
 
   .month-tools {
