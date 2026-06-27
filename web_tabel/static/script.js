@@ -47,7 +47,7 @@ function updateMonthNormInfo() {
   }
 
   const parts = [];
-  if (workDays) parts.push(workDays);
+  if (workDays) parts.push(`${workDays} дн.`);
   const hoursPart = [hours40, hours36].filter(Boolean).join(" / ");
   if (hoursPart) parts.push(hoursPart);
   info.textContent = `Раб. дни: ${parts.join(" ")}`;
