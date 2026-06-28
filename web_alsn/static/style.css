@@ -96,7 +96,7 @@ button:hover:not(:disabled),
 }
 
 .loc-card {
-  border: 1px solid #2f2f2f;
+  border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
   overflow: hidden;
@@ -109,7 +109,7 @@ button:hover:not(:disabled),
   text-align: center;
   font-weight: 400;
   font-size: 16px;
-  border-bottom: 1px solid #2f2f2f;
+  border-bottom: 1px solid var(--accent);
   background: #fff;
 }
 
@@ -131,7 +131,7 @@ button:hover:not(:disabled),
 
 .device-table th,
 .device-table td {
-  border: 1px solid #2f2f2f;
+  border: 1px solid var(--accent);
   padding: 7px 8px;
 }
 
@@ -165,7 +165,7 @@ button:hover:not(:disabled),
 
 .alsn-table th,
 .alsn-table td {
-  border: 1px solid var(--line);
+  border: 1px solid var(--accent);
   padding: 6px 8px;
   vertical-align: middle;
 }
