@@ -50,6 +50,18 @@ function normalizeWhRow(row) {
   };
 }
 
+function getWarehouseTypeOptions() {
+  const seen = new Set();
+  const options = [];
+  for (const row of appState.warehouse) {
+    const value = String(row?.type ?? "").trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    options.push(value);
+  }
+  return options;
+}
+
 function ensureMinLocomotives(rows, minCount = MIN_LOCOMOTIVES) {
   const normalized = Array.isArray(rows) ? rows.slice() : [];
   while (normalized.length < minCount) {
@@ -263,12 +275,24 @@ function editDeviceCell(rowIdx, deviceIdx, field, el) {
   markDirty(true);
 }
 
+function editDeviceSelect(rowIdx, deviceIdx, field, value) {
+  const row = appState.locomotives[rowIdx];
+  if (!row) return;
+  if (!Array.isArray(row.devices)) row.devices = blankDeviceRows();
+  if (!row.devices[deviceIdx]) row.devices[deviceIdx] = { type: "", number: "" };
+  row.devices[deviceIdx][field] = String(value ?? "");
+  markDirty(true);
+}
+
 function editWarehouseCell(rowIdx, colIdx, el) {
   setWarehouseCellValue(rowIdx, colIdx, el.innerText.trim());
   if (colIdx === 2 || colIdx === 3) {
     const nextValue = recalcWarehouseNextDate(appState.warehouse[rowIdx]);
     const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
     if (nextCell) nextCell.innerText = nextValue;
+  }
+  if (colIdx === 0) {
+    render();
   }
   markDirty(true);
 }
@@ -356,12 +380,19 @@ function handleWarehousePaste(event, rowIdx, colIdx) {
 function render() {
   const locBody = document.getElementById("locBody");
   const whBody = document.getElementById("whBody");
+  const warehouseTypeOptions = getWarehouseTypeOptions();
 
   locBody.innerHTML = appState.locomotives.map((row, idx) => {
     const deviceRows = (row.devices && row.devices.length ? row.devices : blankDeviceRows()).map((device, deviceIdx) => `
       <tr>
         <td>
-          <div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editDeviceCell(${idx}, ${deviceIdx}, 'type', this)"` : ''}>${escapeHtml(device.type)}</div>
+          <select class="device-select" ${CAN_EDIT ? `onchange="editDeviceSelect(${idx}, ${deviceIdx}, 'type', this.value)"` : 'disabled'}>
+            <option value=""></option>
+            ${Array.from(new Set([...(device.type ? [String(device.type).trim()] : []), ...warehouseTypeOptions]))
+              .filter((item, pos, arr) => arr.indexOf(item) === pos)
+              .map((option) => `<option value="${escapeHtml(option)}"${String(device.type ?? "") === option ? " selected" : ""}>${escapeHtml(option)}</option>`)
+              .join("")}
+          </select>
         </td>
         <td>
           <div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editDeviceCell(${idx}, ${deviceIdx}, 'number', this)"` : ''}>${escapeHtml(device.number)}</div>

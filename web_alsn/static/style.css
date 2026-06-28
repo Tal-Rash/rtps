@@ -191,6 +191,19 @@ button:hover:not(:disabled),
   border-radius: 4px;
 }
 
+.device-select {
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
 .device-table .empty-state {
   padding: 12px 8px;
 }
