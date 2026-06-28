@@ -73,7 +73,36 @@ button,
 button:hover:not(:disabled),
 .home-link:hover { background: var(--accent-soft); }
 
-.nav-tab.active { background: var(--accent); color: #fff; }
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+  margin-bottom: -1px;
+  padding-left: 17px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.tab {
+  flex: 0 0 auto;
+  min-height: 46px;
+  background: #fff;
+  border: 1px solid var(--accent);
+  border-bottom-color: var(--accent);
+  padding: 10px 14px;
+  border-radius: 10px 10px 0 0;
+  font-weight: 400;
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 
 .panel {
   width: 100%;

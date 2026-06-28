@@ -21,10 +21,6 @@
       </div>
       <div class="controls">
         <a class="home-link" href="http://yrtps.ru/">На главную</a>
-        <div class="nav">
-          <button id="tabLoc" class="nav-tab active" onclick="setTab('locomotives')">Локомотивы</button>
-          <button id="tabWh" class="nav-tab" onclick="setTab('warehouse')">Склад</button>
-        </div>
         <div class="toolbar">
           <button onclick="addRow()">+ строку</button>
           <button onclick="removeRow()">- строку</button>
@@ -32,6 +28,11 @@
           <button id="saveBtn" style="display:none;" onclick="saveState()">Сохранить</button>
         </div>
       </div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Разделы">
+      <button id="tabLoc" class="tab active" type="button" onclick="setTab('locomotives')">Локомотивы</button>
+      <button id="tabWh" class="tab" type="button" onclick="setTab('warehouse')">Склад</button>
     </div>
 
     <div class="panel">
