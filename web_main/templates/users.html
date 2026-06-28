@@ -77,32 +77,32 @@
           </td>
           <td style="vertical-align:top;">
             <div style="display:flex; flex-direction:column; gap:6px;">
-              <label class="mod-label">ППР: <select form="form_{{ u.id }}" data-field="module_grafik_ppr">
+              <label class="mod-label">ППР: <select form="form_{{ u.id }}" name="module_grafik_ppr">
                 <option value="none" {% if u.g_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.g_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.g_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select></label>
-              <label class="mod-label">Замер: <select form="form_{{ u.id }}" data-field="module_zamer_kp">
+              <label class="mod-label">Замер: <select form="form_{{ u.id }}" name="module_zamer_kp">
                 <option value="none" {% if u.z_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.z_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.z_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select></label>
-              <label class="mod-label">Справ: <select form="form_{{ u.id }}" data-field="module_spravochnik">
+              <label class="mod-label">Справ: <select form="form_{{ u.id }}" name="module_spravochnik">
                 <option value="none" {% if u.s_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.s_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.s_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select></label>
-              <label class="mod-label">Табель: <select form="form_{{ u.id }}" data-field="module_tabel">
+              <label class="mod-label">Табель: <select form="form_{{ u.id }}" name="module_tabel">
                 <option value="none" {% if u.t_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.t_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.t_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select></label>
-              <label class="mod-label">Обучение: <select form="form_{{ u.id }}" data-field="module_edu">
+              <label class="mod-label">Обучение: <select form="form_{{ u.id }}" name="module_edu">
                 <option value="none" {% if u.e_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.e_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.e_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select></label>
-              <label class="mod-label">АЛСН: <select form="form_{{ u.id }}" data-field="module_alsn">
+              <label class="mod-label">АЛСН: <select form="form_{{ u.id }}" name="module_alsn">
                 <option value="none" {% if u.a_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.a_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.a_r == 'edit' %}selected{% endif %}>Редактор</option>
@@ -113,12 +113,6 @@
             <div class="flex">
               <form id="form_{{ u.id }}" method="post" action="/users/update" style="margin:0;">
                 <input type="hidden" name="id" value="{{ u.id }}">
-                <input type="hidden" name="module_grafik_ppr" value="{{ u.g_r }}">
-                <input type="hidden" name="module_zamer_kp" value="{{ u.z_r }}">
-                <input type="hidden" name="module_spravochnik" value="{{ u.s_r }}">
-                <input type="hidden" name="module_tabel" value="{{ u.t_r }}">
-                <input type="hidden" name="module_edu" value="{{ u.e_r }}">
-                <input type="hidden" name="module_alsn" value="{{ u.a_r }}">
                 <button type="submit">Сохранить</button>
               </form>
               <form method="post" action="/users/delete" style="margin:0;">
@@ -135,34 +129,5 @@
     </table>
     </div>
   </div>
-  <script>
-    const MODULE_FIELDS = ["module_grafik_ppr", "module_zamer_kp", "module_spravochnik", "module_tabel", "module_edu", "module_alsn"];
-
-    function syncUserModules(form) {
-      if (!form || !form.id || !form.id.startsWith("form_")) return;
-      for (const field of MODULE_FIELDS) {
-        const select = document.querySelector(`select[form="${form.id}"][data-field="${field}"]`);
-        const hidden = form.querySelector(`input[name="${field}"]`);
-        if (select && hidden) {
-          hidden.value = select.value;
-        }
-      }
-    }
-
-    document.addEventListener("change", (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLSelectElement)) return;
-      const field = target.dataset.field;
-      const formId = target.getAttribute("form");
-      if (!field || !formId) return;
-      syncUserModules(document.getElementById(formId));
-    });
-
-    document.addEventListener("submit", (event) => {
-      const form = event.target;
-      if (!(form instanceof HTMLFormElement)) return;
-      syncUserModules(form);
-    });
-  </script>
 </body>
 </html>

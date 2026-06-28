@@ -409,7 +409,31 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
-        
+
+    posted_fields = set((await request.form()).keys())
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT role, allowed_modules FROM users WHERE id=?", (id,))
+            old_user = cur.fetchone()
+        old_role = old_user[0] if old_user else role
+        old_mods = parse_mods(old_user[1] if old_user else "")
+    except Exception:
+        old_role = role
+        old_mods = {}
+
+    def posted_or_existing(field_name: str, module_name: str, value: str) -> str:
+        if field_name in posted_fields:
+            return value
+        return get_mod_role(old_mods, module_name, old_role)
+
+    module_grafik_ppr = posted_or_existing("module_grafik_ppr", "grafik_ppr", module_grafik_ppr)
+    module_zamer_kp = posted_or_existing("module_zamer_kp", "zamer_kp", module_zamer_kp)
+    module_spravochnik = posted_or_existing("module_spravochnik", "spravochnik", module_spravochnik)
+    module_tabel = posted_or_existing("module_tabel", "tabel", module_tabel)
+    module_edu = posted_or_existing("module_edu", "edu", module_edu)
+    module_alsn = posted_or_existing("module_alsn", "alsn", module_alsn)
+
     modules = []
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
     if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
