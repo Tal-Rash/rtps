@@ -4,6 +4,7 @@ const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
 let appState = { locomotives: [], warehouse: [] };
 let currentTab = "locomotives";
 let isDirty = false;
+const MIN_LOCOMOTIVES = 5;
 
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -36,6 +37,14 @@ function normalizeWhRow(row) {
     quantity: String(row?.quantity ?? ""),
     note: String(row?.note ?? "")
   };
+}
+
+function ensureMinLocomotives(rows, minCount = MIN_LOCOMOTIVES) {
+  const normalized = Array.isArray(rows) ? rows.slice() : [];
+  while (normalized.length < minCount) {
+    normalized.push(blankLoc());
+  }
+  return normalized;
 }
 
 function setTab(tab) {
@@ -73,10 +82,9 @@ async function loadState() {
   try {
     const data = await requestJson(`${APP_PREFIX}/api/state`);
     appState = {
-      locomotives: Array.isArray(data.locomotives) ? data.locomotives.map(normalizeLocRow) : [],
+      locomotives: ensureMinLocomotives(Array.isArray(data.locomotives) ? data.locomotives.map(normalizeLocRow) : []),
       warehouse: Array.isArray(data.warehouse) ? data.warehouse.map(normalizeWhRow) : []
     };
-    if (!appState.locomotives.length) appState.locomotives.push(blankLoc());
     if (!appState.warehouse.length) appState.warehouse.push(blankWh());
     render();
     markDirty(false);
@@ -109,7 +117,8 @@ function addRow() {
 function removeRow() {
   if (!CAN_EDIT) return;
   const rows = getRows();
-  if (rows.length <= 1) return;
+  if (currentTab === "locomotives" && rows.length <= MIN_LOCOMOTIVES) return;
+  if (currentTab === "warehouse" && rows.length <= 1) return;
   rows.pop();
   render();
   markDirty(true);
