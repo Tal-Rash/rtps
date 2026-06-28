@@ -89,6 +89,14 @@ jobs:
 
           systemctl daemon-reload
 
+          # Kill stale manually-started main app processes before systemd starts the fresh one.
+          # Otherwise nginx can keep talking to an old uvicorn on port 8001.
+          if command -v fuser >/dev/null 2>&1; then
+            fuser -k 8001/tcp || true
+          fi
+          pkill -f '/opt/rtps/web_main/app.py' || true
+          systemctl reset-failed web_main.service || true
+
           mapfile -t services < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' deploy/services.txt | tr -d '\r')
           if [ "${#services[@]}" -eq 0 ]; then
             echo "deploy/services.txt is empty" >&2
