@@ -1085,9 +1085,33 @@ function repairSummaryDataset(source){
   if (data && typeof data === 'object') return data;
   return null;
 }
-function repairSummaryKnownTypes(source){
+function repairSummaryKnownTypes(source, locoKey = ''){
   const data = repairSummaryDataset(source);
-  if (data && Array.isArray(data.types) && data.types.length) return data.types.map((value) => normalizeRepairCode(value)).filter(Boolean);
+  const selectedLoco = String(locoKey ?? '').trim();
+  const rows = data && Array.isArray(data.rows) ? data.rows : [];
+  const seen = new Set();
+  const codes = [];
+  const add = (value) => {
+    const code = normalizeRepairCode(value || '');
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    codes.push(code);
+  };
+
+  const filteredRows = selectedLoco
+    ? rows.filter((row) => repairSummaryRowMatchesLoco(row, selectedLoco))
+    : rows;
+
+  if (filteredRows.length) {
+    filteredRows.forEach((row) => add(row?.repairCode));
+    if (codes.length) return codes;
+  }
+
+  if (data && Array.isArray(data.types) && data.types.length) {
+    data.types.forEach((value) => add(value));
+    if (codes.length) return codes;
+  }
+
   return normalizeRepairCode(source) === 'SCHEDULE'
     ? repairSummaryDefaultTypes()
     : repairSummaryMonthTypes();
@@ -1098,12 +1122,12 @@ function repairSummaryNormalizeState(){
   }
   const source = String(ui.repairSummary.source ?? 'months').trim().toLowerCase() === 'schedule' ? 'schedule' : 'months';
   ui.repairSummary.source = source;
-  const defaults = repairSummaryKnownTypes(source);
+  ui.repairSummary.locomotive = String(ui.repairSummary.locomotive ?? '').trim();
+  const defaults = repairSummaryKnownTypes(source, ui.repairSummary.locomotive);
   const currentTypes = Array.isArray(ui.repairSummary.types) ? ui.repairSummary.types.map((value) => normalizeRepairCode(value)).filter(Boolean) : [];
   const allowed = new Set(defaults);
   let types = currentTypes.filter((value) => allowed.has(value));
   ui.repairSummary.types = Array.from(new Set(types));
-  ui.repairSummary.locomotive = String(ui.repairSummary.locomotive ?? '').trim();
   ui.repairSummary.dateFrom = String(ui.repairSummary.dateFrom ?? '').trim();
   ui.repairSummary.dateTo = String(ui.repairSummary.dateTo ?? '').trim();
   return ui.repairSummary;
@@ -1405,7 +1429,7 @@ function repairSummaryResetFilters(){
 function renderRepairSummary(){
   const filters = repairSummaryNormalizeState();
   const locoOptions = repairSummaryLocomotiveOptions();
-  const typeOptions = repairSummaryKnownTypes(filters.source);
+  const typeOptions = repairSummaryKnownTypes(filters.source, filters.locomotive);
   const rawRows = collectRepairSummaryRows();
   const rows = groupRepairSummaryRows(rawRows);
   const totalFacts = rawRows.length;
