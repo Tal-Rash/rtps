@@ -168,6 +168,7 @@ button:hover:not(:disabled),
 .device-table td {
   border: 1px solid var(--accent);
   padding: 5px 6px;
+  font-size: 12px;
 }
 
 .device-table th {
@@ -205,6 +206,7 @@ button:hover:not(:disabled),
   background: transparent;
   color: var(--text);
   font: inherit;
+  font-size: 12px;
   text-align: center;
   appearance: auto;
   -webkit-appearance: auto;
