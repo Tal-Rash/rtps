@@ -3,10 +3,14 @@ Description=RTPS Main web app
 After=network.target
 
 [Service]
+Type=simple
 User=root
 WorkingDirectory=/opt/rtps/web_main
+Environment=WEB_HOST=0.0.0.0
+Environment=WEB_PORT=8001
 ExecStart=/usr/bin/python3 /opt/rtps/web_main/app.py
 Restart=always
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target

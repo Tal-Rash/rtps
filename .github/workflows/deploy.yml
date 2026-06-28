@@ -82,12 +82,21 @@ jobs:
 
           python3 -m pip install openpyxl || pip3 install openpyxl --break-system-packages || true
 
-          for unit in deploy/*.service; do
+          runtime_dir="$(mktemp -d)"
+          python3 deploy/render_runtime.py \
+            --output-dir "$runtime_dir/systemd" \
+            --nginx-file "$runtime_dir/rtps.nginx"
+
+          for unit in "$runtime_dir"/systemd/*.service; do
             [ -e "$unit" ] || continue
             install -m 644 "$unit" "/etc/systemd/system/$(basename "$unit")"
           done
 
+          install -m 644 "$runtime_dir/rtps.nginx" /etc/nginx/sites-enabled/rtps
+
           systemctl daemon-reload
+
+          nginx -t
 
           # Kill stale manually-started main app processes before systemd starts the fresh one.
           # Otherwise nginx can keep talking to an old uvicorn on port 8001.

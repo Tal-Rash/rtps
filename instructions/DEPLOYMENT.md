@@ -81,23 +81,21 @@ Repository path:
 /opt/rtps
 ```
 
-Services restarted by deploy:
+Services restarted by deploy are generated from:
 
 ```text
-rtps.service
-grafik-ppr.service
-spravochnik.service
-zamer-kp.service
-alsn.service
+deploy/modules.json
 ```
 
-The service list lives in:
+`deploy/render_runtime.py` turns that file into the systemd units and nginx config used during deploy.
+
+The human-readable restart order lives in:
 
 ```text
 deploy/services.txt
 ```
 
-Service unit files in `deploy/*.service` are copied to `/etc/systemd/system/` during deploy before the restart step.
+`deploy/*.service` remain as readable templates, but the deploy pipeline now installs the generated units so the port map stays in one place.
 
 nginx is used as the reverse proxy and is reloaded after deployment.
 
@@ -109,9 +107,12 @@ Preserved paths:
 
 ```text
 base/common_database.db
+base/web_users.db
 data
 web_main/data
 web_spravochnik/data
+web_tabel/data
+web_edu/data
 web_alsn/data
 ```
 
@@ -144,8 +145,7 @@ Check VPS state:
 ```bash
 cd /opt/rtps
 git status --short --branch
-systemctl is-active rtps.service grafik-ppr.service spravochnik.service nginx.service
-systemctl is-active rtps.service grafik-ppr.service spravochnik.service zamer-kp.service alsn.service nginx.service
+systemctl is-active web_main.service grafik-ppr.service spravochnik.service zamer-kp.service alsn.service tabel.service edu.service nginx.service
 ```
 
 Check the site:

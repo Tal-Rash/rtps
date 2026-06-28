@@ -1,0 +1,16 @@
+[Unit]
+Description=RTPS Справочник web app
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rtps/web_spravochnik
+Environment=WEB_HOST=0.0.0.0
+Environment=WEB_PORT=8002
+ExecStart=/usr/bin/python3 /opt/rtps/web_spravochnik/app.py
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target

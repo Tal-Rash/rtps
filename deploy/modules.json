@@ -1,0 +1,73 @@
+{
+  "web_main": {
+    "title": "RTPS Main web app",
+    "module_dir": "web_main",
+    "service": "web_main.service",
+    "port": 8001,
+    "route": {
+      "kind": "root",
+      "path": "/"
+    }
+  },
+  "grafik_ppr": {
+    "title": "RTPS График ППР web app",
+    "module_dir": "web_grafik_ppr",
+    "service": "grafik-ppr.service",
+    "port": 8000,
+    "route": {
+      "kind": "prefix",
+      "path": "/grafik-ppr"
+    }
+  },
+  "spravochnik": {
+    "title": "RTPS Справочник web app",
+    "module_dir": "web_spravochnik",
+    "service": "spravochnik.service",
+    "port": 8002,
+    "route": {
+      "kind": "prefix",
+      "path": "/spravochnik"
+    }
+  },
+  "zamer_kp": {
+    "title": "RTPS Замер КП web app",
+    "module_dir": "web_zamer_kp",
+    "service": "zamer-kp.service",
+    "port": 8003,
+    "route": {
+      "kind": "split",
+      "path": "/zamer-kp",
+      "exact_proxy_path": "/zamer-kp"
+    }
+  },
+  "tabel": {
+    "title": "RTPS Tabel web app",
+    "module_dir": "web_tabel",
+    "service": "tabel.service",
+    "port": 8006,
+    "route": {
+      "kind": "prefix",
+      "path": "/tabel"
+    }
+  },
+  "edu": {
+    "title": "RTPS Edu web app",
+    "module_dir": "web_edu",
+    "service": "edu.service",
+    "port": 8007,
+    "route": {
+      "kind": "prefix",
+      "path": "/edu"
+    }
+  },
+  "alsn": {
+    "title": "RTPS ALSN web app",
+    "module_dir": "web_alsn",
+    "service": "alsn.service",
+    "port": 8008,
+    "route": {
+      "kind": "prefix",
+      "path": "/alsn"
+    }
+  }
+}

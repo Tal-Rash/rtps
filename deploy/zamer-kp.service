@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/rtps
+WorkingDirectory=/opt/rtps/web_zamer_kp
 Environment=WEB_HOST=0.0.0.0
 Environment=WEB_PORT=8003
 ExecStart=/usr/bin/python3 /opt/rtps/web_zamer_kp/app.py
