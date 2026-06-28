@@ -112,6 +112,8 @@ ROOT = Path(__file__).parent
 SHARED_DATA_DIR = ROOT.parent / "data"
 
 def load_web_secret() -> str:
+    if WEB_SECRET_FILE.exists():
+        return WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
     return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
 
 WEB_SECRET = load_web_secret()
