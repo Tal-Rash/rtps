@@ -16,7 +16,7 @@ const WAREHOUSE_FIELDS = [
 let warehouseSelected = null;
 let warehouseFilters = {
   type: "",
-  nextDate: "",
+  nextMonth: "",
   location: ""
 };
 
@@ -79,6 +79,24 @@ function getWarehouseLocationOptions() {
   return options;
 }
 
+function getWarehouseNextMonthOptions() {
+  const seen = new Set();
+  const options = [];
+  for (const row of appState.warehouse) {
+    const parsed = parseDateDMY(String(row?.next_verification_date ?? "").trim());
+    if (!parsed) continue;
+    const value = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    const labelRaw = parsed.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+    options.push({
+      value,
+      label: labelRaw.charAt(0).toUpperCase() + labelRaw.slice(1)
+    });
+  }
+  return options.sort((a, b) => a.value.localeCompare(b.value));
+}
+
 function getWarehouseNumberOptions(type, currentNumber = "") {
   const seen = new Set();
   const options = [];
@@ -125,17 +143,14 @@ function recalcWarehouseLocations() {
 function normalizeWarehouseFilters() {
   warehouseFilters = {
     type: String(warehouseFilters?.type ?? ""),
-    nextDate: String(warehouseFilters?.nextDate ?? ""),
+    nextMonth: String(warehouseFilters?.nextMonth ?? ""),
     location: String(warehouseFilters?.location ?? "")
   };
 }
 
-function formatDateISO(date) {
+function formatMonthKey(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-  const year = String(date.getFullYear());
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function warehouseRowMatchesFilters(row) {
@@ -146,19 +161,19 @@ function warehouseRowMatchesFilters(row) {
   const filterLocation = String(warehouseFilters.location ?? "").trim().toLowerCase();
   if (filterType && typeValue !== filterType) return false;
   if (filterLocation && locationValue !== filterLocation) return false;
-  if (warehouseFilters.nextDate) {
+  if (warehouseFilters.nextMonth) {
     const parsed = parseDateDMY(nextValue);
-    if (!parsed || formatDateISO(parsed) !== warehouseFilters.nextDate) return false;
+    if (!parsed || formatMonthKey(parsed) !== warehouseFilters.nextMonth) return false;
   }
   return true;
 }
 
 function syncWarehouseFilterDom() {
   const typeFilter = document.getElementById("warehouseTypeFilter");
-  const nextDateFilter = document.getElementById("warehouseNextDateFilter");
+  const nextDateFilter = document.getElementById("warehouseNextMonthFilter");
   const locationFilter = document.getElementById("warehouseLocationFilter");
   if (typeFilter) typeFilter.value = warehouseFilters.type;
-  if (nextDateFilter) nextDateFilter.value = warehouseFilters.nextDate;
+  if (nextDateFilter) nextDateFilter.value = warehouseFilters.nextMonth;
   if (locationFilter) locationFilter.value = warehouseFilters.location;
 }
 
@@ -188,7 +203,7 @@ function setWarehouseFilter(field, value) {
 }
 
 function clearWarehouseFilters() {
-  warehouseFilters = { type: "", nextDate: "", location: "" };
+  warehouseFilters = { type: "", nextMonth: "", location: "" };
   syncWarehouseFilterDom();
   applyWarehouseFilters();
   render();
@@ -627,8 +642,9 @@ function render() {
     typeFilter.value = currentValue;
   }
 
-  const nextDateFilter = document.getElementById("warehouseNextDateFilter");
-  if (nextDateFilter) nextDateFilter.value = String(warehouseFilters.nextDate ?? "");
+  const nextMonthFilter = document.getElementById("warehouseNextMonthFilter");
+  if (nextMonthFilter) nextMonthFilter.value = String(warehouseFilters.nextMonth ?? "");
+  const nextMonthOptions = getWarehouseNextMonthOptions();
 
   const locationFilter = document.getElementById("warehouseLocationFilter");
   if (locationFilter) {
@@ -640,6 +656,16 @@ function render() {
         .join("")}
     `;
     locationFilter.value = currentLocation;
+  }
+
+  if (nextMonthFilter) {
+    nextMonthFilter.innerHTML = `
+      <option value="">Все месяцы</option>
+      ${nextMonthOptions
+        .map((option) => `<option value="${escapeHtml(option.value)}"${String(warehouseFilters.nextMonth ?? "") === option.value ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+        .join("")}
+    `;
+    nextMonthFilter.value = String(warehouseFilters.nextMonth ?? "");
   }
 
   applyWarehouseFilters();

@@ -51,8 +51,10 @@
               </select>
             </label>
             <label>
-              След. дата проверки
-              <input id="warehouseNextDateFilter" type="date" onchange="setWarehouseFilter('nextDate', this.value)">
+              След. месяц проверки
+              <select id="warehouseNextMonthFilter" onchange="setWarehouseFilter('nextMonth', this.value)">
+                <option value="">Все месяцы</option>
+              </select>
             </label>
             <label>
               Место нахождения
