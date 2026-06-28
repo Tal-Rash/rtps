@@ -214,6 +214,54 @@ button:hover:not(:disabled),
   padding-bottom: 4px;
 }
 
+.warehouse-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.warehouse-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: end;
+}
+
+.warehouse-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.warehouse-filters select,
+.warehouse-filters input {
+  min-width: 170px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--text);
+  background: #fff;
+}
+
+.warehouse-filters button {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
 .alsn-table {
   width: 1130px;
   min-width: 1130px;

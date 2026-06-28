@@ -32,7 +32,7 @@
 
     <div class="tabs" role="tablist" aria-label="Разделы">
       <button id="tabLoc" class="tab active" type="button" onclick="setTab('locomotives')">Локомотивы</button>
-      <button id="tabWh" class="tab" type="button" onclick="setTab('warehouse')">Склад</button>
+      <button id="tabWh" class="tab" type="button" onclick="setTab('warehouse')">Список ПБ</button>
     </div>
 
     <div class="panel">
@@ -41,6 +41,28 @@
       </div>
 
       <div class="tab-content" id="tab-warehouse">
+        <div class="warehouse-head">
+          <div class="section-title">Список ПБ</div>
+          <div class="warehouse-filters">
+            <label>
+              Тип прибора
+              <select id="warehouseTypeFilter" onchange="setWarehouseFilter('type', this.value)">
+                <option value="">Все типы</option>
+              </select>
+            </label>
+            <label>
+              След. дата проверки
+              <input id="warehouseNextDateFilter" type="date" onchange="setWarehouseFilter('nextDate', this.value)">
+            </label>
+            <label>
+              Место нахождения
+              <select id="warehouseLocationFilter" onchange="setWarehouseFilter('location', this.value)">
+                <option value="">Все места</option>
+              </select>
+            </label>
+            <button type="button" onclick="clearWarehouseFilters()">Сбросить</button>
+          </div>
+        </div>
         <div class="table-wrap">
           <table class="alsn-table">
             <colgroup>

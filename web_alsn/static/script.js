@@ -14,6 +14,11 @@ const WAREHOUSE_FIELDS = [
   "location"
 ];
 let warehouseSelected = null;
+let warehouseFilters = {
+  type: "",
+  nextDate: "",
+  location: ""
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -55,6 +60,18 @@ function getWarehouseTypeOptions() {
   const options = [];
   for (const row of appState.warehouse) {
     const value = String(row?.type ?? "").trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    options.push(value);
+  }
+  return options;
+}
+
+function getWarehouseLocationOptions() {
+  const seen = new Set();
+  const options = [];
+  for (const row of appState.warehouse) {
+    const value = String(row?.location ?? "").trim();
     if (!value || seen.has(value)) continue;
     seen.add(value);
     options.push(value);
@@ -105,6 +122,55 @@ function recalcWarehouseLocations() {
   appState.warehouse.forEach((row) => recalcWarehouseLocation(row));
 }
 
+function normalizeWarehouseFilters() {
+  warehouseFilters = {
+    type: String(warehouseFilters?.type ?? ""),
+    nextDate: String(warehouseFilters?.nextDate ?? ""),
+    location: String(warehouseFilters?.location ?? "")
+  };
+}
+
+function formatDateISO(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function warehouseRowMatchesFilters(row) {
+  const typeValue = String(row?.type ?? "").trim();
+  const nextValue = String(row?.next_verification_date ?? "").trim();
+  const locationValue = String(row?.location ?? "").trim();
+  if (warehouseFilters.type && typeValue !== warehouseFilters.type) return false;
+  if (warehouseFilters.location && locationValue !== warehouseFilters.location) return false;
+  if (warehouseFilters.nextDate) {
+    const parsed = parseDateDMY(nextValue);
+    if (!parsed || formatDateISO(parsed) !== warehouseFilters.nextDate) return false;
+  }
+  return true;
+}
+
+function syncWarehouseFilterDom() {
+  const typeFilter = document.getElementById("warehouseTypeFilter");
+  const nextDateFilter = document.getElementById("warehouseNextDateFilter");
+  const locationFilter = document.getElementById("warehouseLocationFilter");
+  if (typeFilter) typeFilter.value = warehouseFilters.type;
+  if (nextDateFilter) nextDateFilter.value = warehouseFilters.nextDate;
+  if (locationFilter) locationFilter.value = warehouseFilters.location;
+}
+
+function setWarehouseFilter(field, value) {
+  warehouseFilters[field] = String(value ?? "");
+  normalizeWarehouseFilters();
+  render();
+}
+
+function clearWarehouseFilters() {
+  warehouseFilters = { type: "", nextDate: "", location: "" };
+  render();
+}
+
 function ensureMinLocomotives(rows, minCount = MIN_LOCOMOTIVES) {
   const normalized = Array.isArray(rows) ? rows.slice() : [];
   while (normalized.length < minCount) {
@@ -119,6 +185,7 @@ function setTab(tab) {
   document.getElementById("tabWh").classList.toggle("active", tab === "warehouse");
   document.getElementById("tab-locomotives").classList.toggle("active", tab === "locomotives");
   document.getElementById("tab-warehouse").classList.toggle("active", tab === "warehouse");
+  syncWarehouseFilterDom();
 }
 
 function escapeHtml(value) {
@@ -154,6 +221,7 @@ async function loadState() {
     if (!appState.warehouse.length) appState.warehouse.push(blankWh());
     appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
     recalcWarehouseLocations();
+    normalizeWarehouseFilters();
     render();
     markDirty(false);
   } catch (err) {
@@ -450,6 +518,10 @@ function render() {
   const locBody = document.getElementById("locBody");
   const whBody = document.getElementById("whBody");
   const warehouseTypeOptions = getWarehouseTypeOptions();
+  const warehouseLocationOptions = getWarehouseLocationOptions();
+
+  normalizeWarehouseFilters();
+  syncWarehouseFilterDom();
 
   locBody.innerHTML = appState.locomotives.map((row, idx) => {
     const deviceRows = (row.devices && row.devices.length ? row.devices : blankDeviceRows()).map((device, deviceIdx) => {
@@ -497,7 +569,11 @@ function render() {
     `;
   }).join("") || `<div class="empty-state">Нет строк</div>`;
 
-  whBody.innerHTML = appState.warehouse.map((row, idx) => `
+  const visibleWarehouseRows = appState.warehouse
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => warehouseRowMatchesFilters(row));
+
+  whBody.innerHTML = visibleWarehouseRows.map(({ row, idx }) => `
     <tr>
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
           data-row="${idx}" data-col="0"
@@ -519,6 +595,33 @@ function render() {
       </td>
     </tr>
   `).join("") || `<tr><td class="empty-state" colspan="6">Нет строк</td></tr>`;
+
+  const typeFilter = document.getElementById("warehouseTypeFilter");
+  if (typeFilter) {
+    const currentValue = String(warehouseFilters.type ?? "");
+    typeFilter.innerHTML = `
+      <option value="">Все типы</option>
+      ${warehouseTypeOptions
+        .map((option) => `<option value="${escapeHtml(option)}"${currentValue === option ? " selected" : ""}>${escapeHtml(option)}</option>`)
+        .join("")}
+    `;
+    typeFilter.value = currentValue;
+  }
+
+  const nextDateFilter = document.getElementById("warehouseNextDateFilter");
+  if (nextDateFilter) nextDateFilter.value = String(warehouseFilters.nextDate ?? "");
+
+  const locationFilter = document.getElementById("warehouseLocationFilter");
+  if (locationFilter) {
+    const currentLocation = String(warehouseFilters.location ?? "");
+    locationFilter.innerHTML = `
+      <option value="">Все места</option>
+      ${warehouseLocationOptions
+        .map((option) => `<option value="${escapeHtml(option)}"${currentLocation === option ? " selected" : ""}>${escapeHtml(option)}</option>`)
+        .join("")}
+    `;
+    locationFilter.value = currentLocation;
+  }
 
   document.getElementById("saveBtn").style.display = CAN_EDIT ? "inline-block" : "none";
 }
