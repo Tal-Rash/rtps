@@ -353,14 +353,15 @@ async def users_page(request: Request):
             cur.execute("SELECT id, full_name, password, role, allowed_modules FROM users ORDER BY id")
             for u in cur.fetchall():
                 mods = parse_mods(u[4] or "")
+                is_admin = u[3] == "admin"
                 users.append({
                     "id": u[0], "full_name": u[1], "password": u[2], "role": u[3],
-                    "g_r": get_mod_role(mods, "grafik_ppr", u[3]),
-                    "z_r": get_mod_role(mods, "zamer_kp", u[3]),
-                    "s_r": get_mod_role(mods, "spravochnik", u[3]),
-                    "t_r": get_mod_role(mods, "tabel", u[3]),
-                    "e_r": get_mod_role(mods, "edu", u[3]),
-                    "a_r": get_mod_role(mods, "alsn", u[3])
+                    "g_r": "edit" if is_admin else get_mod_role(mods, "grafik_ppr", u[3]),
+                    "z_r": "edit" if is_admin else get_mod_role(mods, "zamer_kp", u[3]),
+                    "s_r": "edit" if is_admin else get_mod_role(mods, "spravochnik", u[3]),
+                    "t_r": "edit" if is_admin else get_mod_role(mods, "tabel", u[3]),
+                    "e_r": "edit" if is_admin else get_mod_role(mods, "edu", u[3]),
+                    "a_r": "edit" if is_admin else get_mod_role(mods, "alsn", u[3])
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -380,7 +381,16 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
-    if role == "admin": modules.append("admin")
+    if role == "admin":
+        modules = [
+            "grafik_ppr:edit",
+            "zamer_kp:edit",
+            "spravochnik:edit",
+            "tabel:edit",
+            "edu:edit",
+            "alsn:edit",
+            "admin",
+        ]
     
     try:
         with sqlite3.connect(DB_FILE) as conn:
@@ -402,7 +412,16 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
-    if role == "admin": modules.append("admin")
+    if role == "admin":
+        modules = [
+            "grafik_ppr:edit",
+            "zamer_kp:edit",
+            "spravochnik:edit",
+            "tabel:edit",
+            "edu:edit",
+            "alsn:edit",
+            "admin",
+        ]
     
     try:
         with sqlite3.connect(DB_FILE) as conn:
