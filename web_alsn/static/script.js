@@ -97,6 +97,7 @@ async function loadState() {
       warehouse: Array.isArray(data.warehouse) ? data.warehouse.map(normalizeWhRow) : []
     };
     if (!appState.warehouse.length) appState.warehouse.push(blankWh());
+    appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
     render();
     markDirty(false);
   } catch (err) {
@@ -118,6 +119,54 @@ function blankWh() {
     next_verification_date: "",
     location: ""
   };
+}
+
+function parseDateDMY(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function formatDateDMY(date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear());
+  return `${day}.${month}.${year}`;
+}
+
+function addMonthsToDate(date, months) {
+  const base = new Date(date.getTime());
+  const targetMonth = base.getMonth() + months;
+  const targetYear = base.getFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDay = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+  return new Date(targetYear, normalizedMonth, Math.min(base.getDate(), lastDay));
+}
+
+function recalcWarehouseNextDate(row) {
+  if (!row) return "";
+  const baseDate = parseDateDMY(row.verification_date);
+  const periodicity = Number.parseInt(String(row.periodicity ?? "").trim(), 10);
+  if (!baseDate || !Number.isFinite(periodicity) || periodicity <= 0) {
+    row.next_verification_date = "";
+    return "";
+  }
+  const nextDate = addMonthsToDate(baseDate, periodicity);
+  row.next_verification_date = formatDateDMY(nextDate);
+  return row.next_verification_date;
 }
 
 function warehouseCellText(rowIdx, colIdx) {
@@ -171,6 +220,7 @@ function syncWarehouseFromDom() {
       setWarehouseCellValue(rowIdx, colIdx, cell.innerText.trim());
     }
   });
+  appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
 }
 
 function getRows() {
@@ -215,6 +265,11 @@ function editDeviceCell(rowIdx, deviceIdx, field, el) {
 
 function editWarehouseCell(rowIdx, colIdx, el) {
   setWarehouseCellValue(rowIdx, colIdx, el.innerText.trim());
+  if (colIdx === 2 || colIdx === 3) {
+    const nextValue = recalcWarehouseNextDate(appState.warehouse[rowIdx]);
+    const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
+    if (nextCell) nextCell.innerText = nextValue;
+  }
   markDirty(true);
 }
 
@@ -288,6 +343,7 @@ function handleWarehousePaste(event, rowIdx, colIdx) {
       if (targetColIdx >= WAREHOUSE_FIELDS.length) break;
       setWarehouseCellValue(targetRowIdx, targetColIdx, sourceRow[c].trim());
     }
+    recalcWarehouseNextDate(targetRow);
   }
   render();
   markDirty(true);
@@ -370,6 +426,7 @@ async function saveState() {
   if (!CAN_EDIT) return;
   try {
     if (currentTab === "warehouse") syncWarehouseFromDom();
+    appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
