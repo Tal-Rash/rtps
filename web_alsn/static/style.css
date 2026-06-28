@@ -265,6 +265,7 @@ button:hover:not(:disabled),
 .alsn-table {
   width: 1130px;
   min-width: 1130px;
+  margin: 0 auto;
   border-collapse: collapse;
   table-layout: fixed;
 }
