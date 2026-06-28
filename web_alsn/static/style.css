@@ -202,8 +202,8 @@ button:hover:not(:disabled),
 }
 
 .alsn-table {
-  width: max-content;
-  min-width: 100%;
+  width: 1130px;
+  min-width: 1130px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -230,6 +230,18 @@ button:hover:not(:disabled),
 .alsn-table td {
   background: #fff;
   text-align: center;
+}
+
+.alsn-table tr > *:first-child {
+  border-left: 1px solid var(--accent);
+}
+
+.alsn-table tr > *:last-child {
+  border-right: 1px solid var(--accent);
+}
+
+.alsn-table tbody tr:last-child > * {
+  border-bottom: 1px solid var(--accent);
 }
 
 .warehouse-cell {
