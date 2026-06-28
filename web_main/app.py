@@ -34,9 +34,22 @@ MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
+BUILD_ID = "web-main-alsn-access-2026-06-28-2"
 
 app = FastAPI(title="RTPS Web Main")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
+
+def normalize_admin_modules(modules_str: str) -> str:
+    modules = [m.strip() for m in str(modules_str or "").split(",") if m.strip()]
+    by_name = {m.split(":", 1)[0]: i for i, m in enumerate(modules)}
+    for module_name in ("grafik_ppr", "zamer_kp", "spravochnik", "tabel", "edu", "alsn"):
+        if module_name in by_name:
+            modules[by_name[module_name]] = f"{module_name}:edit"
+        else:
+            modules.append(f"{module_name}:edit")
+    if "admin" not in modules:
+        modules.append("admin")
+    return ",".join(modules)
 
 def load_web_secret() -> str:
     if WEB_SECRET_FILE.exists():
@@ -94,19 +107,18 @@ def init_db() -> None:
             else:
                 cur.execute("SELECT id, allowed_modules FROM users WHERE role='admin'")
                 for user_id, allowed_modules in cur.fetchall():
-                    modules = [m.strip() for m in str(allowed_modules or "").split(",") if m.strip()]
-                    if "alsn" not in {m.split(":", 1)[0] for m in modules}:
-                        modules.append("alsn:edit")
-                    elif "alsn:edit" not in modules and "alsn:view" not in modules:
-                        modules = [
-                            "alsn:edit" if module.split(":", 1)[0] == "alsn" else module
-                            for module in modules
-                        ]
-                    conn.execute("UPDATE users SET allowed_modules=? WHERE id=?", (",".join(modules), user_id))
+                    conn.execute(
+                        "UPDATE users SET allowed_modules=? WHERE id=?",
+                        (normalize_admin_modules(allowed_modules), user_id),
+                    )
     except Exception as e:
         print("Ошибка инициализации БД:", e)
 
 init_db()
+
+@app.get("/_version")
+async def version():
+    return {"app": "web_main", "build": BUILD_ID}
 
 def _cookie_value(user_id: str, role: str, modules: str, full_name: str) -> str:
     import urllib.parse
