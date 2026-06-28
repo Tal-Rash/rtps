@@ -96,8 +96,13 @@ def init_db() -> None:
                 for user_id, allowed_modules in cur.fetchall():
                     modules = [m.strip() for m in str(allowed_modules or "").split(",") if m.strip()]
                     if "alsn" not in {m.split(":", 1)[0] for m in modules}:
-                        modules.append("alsn")
-                        conn.execute("UPDATE users SET allowed_modules=? WHERE id=?", (",".join(modules), user_id))
+                        modules.append("alsn:edit")
+                    elif "alsn:edit" not in modules and "alsn:view" not in modules:
+                        modules = [
+                            "alsn:edit" if module.split(":", 1)[0] == "alsn" else module
+                            for module in modules
+                        ]
+                    conn.execute("UPDATE users SET allowed_modules=? WHERE id=?", (",".join(modules), user_id))
     except Exception as e:
         print("Ошибка инициализации БД:", e)
 
