@@ -91,7 +91,7 @@ button:hover:not(:disabled),
   border: 1px solid var(--accent);
   border-bottom-color: var(--accent);
   padding: 10px 16px;
-  border-radius: 10px 10px 0 0;
+  border-radius: 8px 8px 0 0;
   font-weight: 400;
   cursor: pointer;
   color: var(--accent);
