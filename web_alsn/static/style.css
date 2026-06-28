@@ -118,17 +118,19 @@ button:hover:not(:disabled),
 .tab-content.active { display: block; }
 
 .loc-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(300px, 1fr);
+  display: flex;
+  flex-wrap: nowrap;
   gap: 18px;
   align-items: start;
-  width: max-content;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
   min-width: 100%;
   padding-bottom: 4px;
 }
 
 .loc-card {
+  flex: 0 0 300px;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
