@@ -62,6 +62,23 @@ function getWarehouseTypeOptions() {
   return options;
 }
 
+function getWarehouseNumberOptions(type, currentNumber = "") {
+  const seen = new Set();
+  const options = [];
+  const normalizedType = String(type ?? "").trim().toLowerCase();
+  for (const row of appState.warehouse) {
+    const rowType = String(row?.type ?? "").trim().toLowerCase();
+    const rowNumber = String(row?.number ?? "").trim();
+    if (!rowNumber || seen.has(rowNumber)) continue;
+    if (normalizedType && rowType !== normalizedType) continue;
+    seen.add(rowNumber);
+    options.push(rowNumber);
+  }
+  const selectedNumber = String(currentNumber ?? "").trim();
+  if (selectedNumber && !seen.has(selectedNumber)) options.unshift(selectedNumber);
+  return options;
+}
+
 function warehouseDeviceMatch(row, locomotive) {
   const rowType = String(row?.type ?? "").trim().toLowerCase();
   const rowNumber = String(row?.number ?? "").trim().toLowerCase();
@@ -316,7 +333,17 @@ function editDeviceSelect(rowIdx, deviceIdx, field, value) {
   if (!Array.isArray(row.devices)) row.devices = blankDeviceRows();
   if (!row.devices[deviceIdx]) row.devices[deviceIdx] = { type: "", number: "" };
   row.devices[deviceIdx][field] = String(value ?? "");
+  if (field === "type") {
+    const allowedNumbers = getWarehouseNumberOptions(row.devices[deviceIdx].type);
+    const currentNumber = String(row.devices[deviceIdx].number ?? "").trim();
+    if (currentNumber && !allowedNumbers.includes(currentNumber)) {
+      row.devices[deviceIdx].number = "";
+    }
+  }
   recalcWarehouseLocations();
+  if (field === "type") {
+    render();
+  }
   markDirty(true);
 }
 
@@ -425,7 +452,9 @@ function render() {
   const warehouseTypeOptions = getWarehouseTypeOptions();
 
   locBody.innerHTML = appState.locomotives.map((row, idx) => {
-    const deviceRows = (row.devices && row.devices.length ? row.devices : blankDeviceRows()).map((device, deviceIdx) => `
+    const deviceRows = (row.devices && row.devices.length ? row.devices : blankDeviceRows()).map((device, deviceIdx) => {
+      const numberOptions = getWarehouseNumberOptions(device.type, device.number);
+      return `
       <tr>
         <td>
           <select class="device-select" ${CAN_EDIT ? `onchange="editDeviceSelect(${idx}, ${deviceIdx}, 'type', this.value)"` : 'disabled'}>
@@ -437,10 +466,16 @@ function render() {
           </select>
         </td>
         <td>
-          <div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editDeviceCell(${idx}, ${deviceIdx}, 'number', this)"` : ''}>${escapeHtml(device.number)}</div>
+          <select class="device-select" ${CAN_EDIT ? `onchange="editDeviceSelect(${idx}, ${deviceIdx}, 'number', this.value)"` : 'disabled'}>
+            <option value=""></option>
+            ${numberOptions
+              .map((option) => `<option value="${escapeHtml(option)}"${String(device.number ?? "") === option ? " selected" : ""}>${escapeHtml(option)}</option>`)
+              .join("")}
+          </select>
         </td>
       </tr>
-    `).join("");
+      `;
+    }).join("");
 
     return `
       <article class="loc-card">
