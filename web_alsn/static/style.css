@@ -127,7 +127,6 @@ button:hover:not(:disabled),
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  border-top: 1px solid var(--accent);
 }
 
 .device-table th,
