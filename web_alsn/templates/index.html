@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>АЛСН {{APP_VERSION}}</title>
+  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
+  <script>
+    window.APP_CONFIG = {
+      APP_PREFIX: "{{APP_PREFIX}}",
+      CAN_EDIT: "{{CAN_EDIT}}" === "true"
+    };
+  </script>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="titlebox">
+        <h1>АЛСН</h1>
+        <div class="sub">Модуль {{APP_VERSION}}</div>
+      </div>
+      <div class="controls">
+        <a class="home-link" href="http://yrtps.ru/">На главную</a>
+        <div class="nav">
+          <button id="tabLoc" class="nav-tab active" onclick="setTab('locomotives')">Локомотивы</button>
+          <button id="tabWh" class="nav-tab" onclick="setTab('warehouse')">Склад</button>
+        </div>
+        <div class="toolbar">
+          <button onclick="addRow()">+ строку</button>
+          <button onclick="removeRow()">- строку</button>
+          <button onclick="loadState()">🔄 Обновить</button>
+          <button id="saveBtn" style="display:none;" onclick="saveState()">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="tab-content active" id="tab-locomotives">
+        <div class="table-wrap">
+          <table class="alsn-table">
+            <thead>
+              <tr>
+                <th style="width:56px;">№</th>
+                <th>Серия</th>
+                <th>Номер</th>
+                <th>Инв. №</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody id="locBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-warehouse">
+        <div class="table-wrap">
+          <table class="alsn-table">
+            <thead>
+              <tr>
+                <th style="width:56px;">№</th>
+                <th>Наименование</th>
+                <th style="width:110px;">Ед.</th>
+                <th style="width:120px;">Кол-во</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody id="whBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
+</body>
+</html>

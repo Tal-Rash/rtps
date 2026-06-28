@@ -1,6 +1,7 @@
 grafik-ppr.service
 spravochnik.service
 zamer-kp.service
+alsn.service
 web_main.service
 tabel.service
 edu.service

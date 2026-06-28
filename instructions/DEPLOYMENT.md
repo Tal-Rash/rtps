@@ -88,6 +88,7 @@ rtps.service
 grafik-ppr.service
 spravochnik.service
 zamer-kp.service
+alsn.service
 ```
 
 The service list lives in:
@@ -111,6 +112,7 @@ base/common_database.db
 data
 web_main/data
 web_spravochnik/data
+web_alsn/data
 ```
 
 These files and directories may appear as modified or untracked on the VPS after deployment. That is expected because they are runtime data, not code to overwrite on each deploy.
@@ -143,6 +145,7 @@ Check VPS state:
 cd /opt/rtps
 git status --short --branch
 systemctl is-active rtps.service grafik-ppr.service spravochnik.service nginx.service
+systemctl is-active rtps.service grafik-ppr.service spravochnik.service zamer-kp.service alsn.service nginx.service
 ```
 
 Check the site:

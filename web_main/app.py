@@ -88,7 +88,7 @@ def init_db() -> None:
             if cur.fetchone()[0] == 0:
                 conn.execute(
                     "INSERT INTO users (password, full_name, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,admin")
+                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,edu,alsn,admin")
                 )
                 print("Создан администратор по умолчанию. Пароль: 12345")
     except Exception as e:
@@ -238,6 +238,7 @@ async def home_page(request: Request):
         "LOGS_LINK": logs_link,
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
+        "ALSN_LINK": link_for("alsn", "/alsn"),
         "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik"),
         "TABEL_LINK": link_for("tabel", "/tabel"),
         "EDU_LINK": link_for("edu", "/edu")
