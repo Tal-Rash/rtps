@@ -269,6 +269,19 @@ button:hover:not(:disabled),
   box-shadow: inset 0 0 0 1px rgba(39, 110, 241, .25);
 }
 
+.warehouse-auto {
+  background: #f7fafc;
+  color: var(--text);
+  cursor: default;
+}
+
+.warehouse-auto-value {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .row-num {
   text-align: center;
   font-weight: 700;

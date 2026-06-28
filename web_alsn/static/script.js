@@ -62,6 +62,32 @@ function getWarehouseTypeOptions() {
   return options;
 }
 
+function warehouseDeviceMatch(row, locomotive) {
+  const rowType = String(row?.type ?? "").trim().toLowerCase();
+  const rowNumber = String(row?.number ?? "").trim().toLowerCase();
+  const locoNumber = String(locomotive?.number ?? "").trim();
+  if (!rowNumber || !locoNumber) return false;
+  const devices = Array.isArray(locomotive?.devices) ? locomotive.devices : [];
+  return devices.some((device) => {
+    const deviceType = String(device?.type ?? "").trim().toLowerCase();
+    const deviceNumber = String(device?.number ?? "").trim().toLowerCase();
+    const typeMatches = !rowType || rowType === deviceType;
+    return typeMatches && deviceNumber === rowNumber;
+  });
+}
+
+function recalcWarehouseLocation(row) {
+  if (!row) return "Депо";
+  const matched = appState.locomotives.find((loco) => warehouseDeviceMatch(row, loco));
+  const location = matched && String(matched.number ?? "").trim() ? String(matched.number).trim() : "Депо";
+  row.location = location;
+  return location;
+}
+
+function recalcWarehouseLocations() {
+  appState.warehouse.forEach((row) => recalcWarehouseLocation(row));
+}
+
 function ensureMinLocomotives(rows, minCount = MIN_LOCOMOTIVES) {
   const normalized = Array.isArray(rows) ? rows.slice() : [];
   while (normalized.length < minCount) {
@@ -110,6 +136,7 @@ async function loadState() {
     };
     if (!appState.warehouse.length) appState.warehouse.push(blankWh());
     appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
+    recalcWarehouseLocations();
     render();
     markDirty(false);
   } catch (err) {
@@ -244,6 +271,8 @@ function addRow() {
   if (currentTab === "warehouse") syncWarehouseFromDom();
   const rows = getRows();
   rows.push(currentTab === "locomotives" ? blankLoc() : blankWh());
+  if (currentTab === "locomotives") recalcWarehouseLocations();
+  if (currentTab === "warehouse") recalcWarehouseLocations();
   render();
   markDirty(true);
 }
@@ -255,6 +284,8 @@ function removeRow() {
   if (currentTab === "locomotives" && rows.length <= MIN_LOCOMOTIVES) return;
   if (currentTab === "warehouse" && rows.length <= 1) return;
   rows.pop();
+  if (currentTab === "locomotives") recalcWarehouseLocations();
+  if (currentTab === "warehouse") recalcWarehouseLocations();
   render();
   markDirty(true);
 }
@@ -263,6 +294,9 @@ function editCell(tab, rowIdx, field, el) {
   const rows = tab === "locomotives" ? appState.locomotives : appState.warehouse;
   if (!rows[rowIdx]) return;
   rows[rowIdx][field] = el.innerText.trim();
+  if (tab === "locomotives" && field === "number") {
+    recalcWarehouseLocations();
+  }
   markDirty(true);
 }
 
@@ -272,6 +306,7 @@ function editDeviceCell(rowIdx, deviceIdx, field, el) {
   if (!Array.isArray(row.devices)) row.devices = blankDeviceRows();
   if (!row.devices[deviceIdx]) row.devices[deviceIdx] = { type: "", number: "" };
   row.devices[deviceIdx][field] = el.innerText.trim();
+  recalcWarehouseLocations();
   markDirty(true);
 }
 
@@ -281,6 +316,7 @@ function editDeviceSelect(rowIdx, deviceIdx, field, value) {
   if (!Array.isArray(row.devices)) row.devices = blankDeviceRows();
   if (!row.devices[deviceIdx]) row.devices[deviceIdx] = { type: "", number: "" };
   row.devices[deviceIdx][field] = String(value ?? "");
+  recalcWarehouseLocations();
   markDirty(true);
 }
 
@@ -291,7 +327,8 @@ function editWarehouseCell(rowIdx, colIdx, el) {
     const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
     if (nextCell) nextCell.innerText = nextValue;
   }
-  if (colIdx === 0) {
+  if (colIdx === 0 || colIdx === 1) {
+    recalcWarehouseLocations();
     render();
   }
   markDirty(true);
@@ -327,6 +364,10 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
   else if (key === "ArrowRight" || key === "Tab") {
     event.preventDefault();
     targetCol += 1;
+    if (targetCol >= 5) {
+      targetCol = 0;
+      targetRow += 1;
+    }
   } else if (key === "ArrowUp") targetRow -= 1;
   else if (key === "ArrowDown" || key === "Enter") {
     event.preventDefault();
@@ -338,7 +379,7 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
   event.preventDefault();
   if (targetRow < 0 || targetCol < 0) return;
   if (targetRow >= appState.warehouse.length) return;
-  if (targetCol >= WAREHOUSE_FIELDS.length) return;
+  if (targetCol >= 5) return;
   focusWarehouseCell(targetRow, targetCol, true);
 }
 
@@ -369,6 +410,7 @@ function handleWarehousePaste(event, rowIdx, colIdx) {
     }
     recalcWarehouseNextDate(targetRow);
   }
+  recalcWarehouseLocations();
   render();
   markDirty(true);
   focusWarehouseCell(
@@ -437,9 +479,9 @@ function render() {
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 4 ? " selected" : ""}"
           data-row="${idx}" data-col="4"
           ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 4, this)" onblur="editWarehouseCell(' + idx + ', 4, this)" onclick="handleWarehouseClick(' + idx + ', 4)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 4)" oncopy="handleWarehouseCopy(event, ' + idx + ', 4)" onpaste="handleWarehousePaste(event, ' + idx + ', 4)"' : ''}>${escapeHtml(row.next_verification_date)}</td>
-      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 5 ? " selected" : ""}"
-          data-row="${idx}" data-col="5"
-          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 5, this)" onblur="editWarehouseCell(' + idx + ', 5, this)" onclick="handleWarehouseClick(' + idx + ', 5)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 5)" oncopy="handleWarehouseCopy(event, ' + idx + ', 5)" onpaste="handleWarehousePaste(event, ' + idx + ', 5)"' : ''}>${escapeHtml(row.location)}</td>
+      <td class="warehouse-auto${warehouseSelected?.row === idx && warehouseSelected?.col === 5 ? " selected" : ""}">
+        <div class="warehouse-auto-value">${escapeHtml(row.location || "Депо")}</div>
+      </td>
     </tr>
   `).join("") || `<tr><td class="empty-state" colspan="6">Нет строк</td></tr>`;
 
@@ -456,7 +498,8 @@ function markDirty(dirty) {
 async function saveState() {
   if (!CAN_EDIT) return;
   try {
-    if (currentTab === "warehouse") syncWarehouseFromDom();
+    syncWarehouseFromDom();
+    recalcWarehouseLocations();
     appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
