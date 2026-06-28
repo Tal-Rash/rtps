@@ -127,6 +127,7 @@ button:hover:not(:disabled),
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  border-top: 1px solid var(--accent);
 }
 
 .device-table th,
@@ -143,6 +144,18 @@ button:hover:not(:disabled),
 
 .device-table thead th {
   border-top: 0;
+}
+
+.device-table tr > *:first-child {
+  border-left: 0;
+}
+
+.device-table tr > *:last-child {
+  border-right: 0;
+}
+
+.device-table tbody tr:last-child > * {
+  border-bottom: 0;
 }
 
 .device-table .editable {
