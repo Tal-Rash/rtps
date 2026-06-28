@@ -9,6 +9,8 @@ import secrets
 import sqlite3
 import time
 import sys
+import urllib.error
+import urllib.request
 from http import HTTPStatus
 from pathlib import Path
 import re
@@ -31,6 +33,14 @@ LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
+MODULE_PROXY_TARGETS = {
+    "grafik-ppr": os.environ.get("GRAFIK_PPR_INTERNAL_URL", "http://127.0.0.1:8000"),
+    "zamer-kp": os.environ.get("ZAMER_KP_INTERNAL_URL", "http://127.0.0.1:8003"),
+    "spravochnik": os.environ.get("SPRAVOCHNIK_INTERNAL_URL", "http://127.0.0.1:8002"),
+    "tabel": os.environ.get("TABEL_INTERNAL_URL", "http://127.0.0.1:8006"),
+    "edu": os.environ.get("EDU_INTERNAL_URL", "http://127.0.0.1:8007"),
+    "alsn": os.environ.get("ALSN_INTERNAL_URL", "http://127.0.0.1:8008"),
+}
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
@@ -507,6 +517,70 @@ async def logs_page(request: Request):
         error_message = f"Ошибка БД: {e}"
         
     return templates.TemplateResponse(request=request, name="logs.html", context={"request": request, "logs": logs, "error_message": error_message})
+
+async def proxy_module_request(request: Request, module: str, rest: str = "") -> Response:
+    target_base = MODULE_PROXY_TARGETS.get(module)
+    if not target_base:
+        return Response("Module not found", status_code=404)
+
+    path = f"/{module}"
+    if rest:
+        path += f"/{rest}"
+    query = request.url.query
+    url = f"{target_base}{path}" + (f"?{query}" if query else "")
+    body = await request.body()
+
+    headers = {}
+    for key, value in request.headers.items():
+        lower = key.lower()
+        if lower in {"host", "content-length", "connection", "accept-encoding"}:
+            continue
+        headers[key] = value
+
+    proxied = urllib.request.Request(
+        url,
+        data=body if body else None,
+        headers=headers,
+        method=request.method,
+    )
+    try:
+        with urllib.request.urlopen(proxied, timeout=30) as upstream:
+            content = upstream.read()
+            status_code = upstream.status
+            upstream_headers = dict(upstream.headers.items())
+    except urllib.error.HTTPError as exc:
+        content = exc.read()
+        status_code = exc.code
+        upstream_headers = dict(exc.headers.items())
+    except Exception as exc:
+        return Response(f"Модуль {module} недоступен: {exc}", status_code=502, media_type="text/plain; charset=utf-8")
+
+    excluded = {
+        "connection",
+        "content-length",
+        "transfer-encoding",
+        "content-encoding",
+        "server",
+        "date",
+    }
+    response_headers = {
+        key: value
+        for key, value in upstream_headers.items()
+        if key.lower() not in excluded
+    }
+    return Response(content=content, status_code=status_code, headers=response_headers)
+
+@app.api_route("/{module_name}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+async def proxy_module_root(request: Request, module_name: str):
+    if module_name not in MODULE_PROXY_TARGETS:
+        raise HTTPException(status_code=404)
+    return await proxy_module_request(request, module_name)
+
+@app.api_route("/{module_name}/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+async def proxy_module_path(request: Request, module_name: str, rest: str):
+    if module_name not in MODULE_PROXY_TARGETS:
+        raise HTTPException(status_code=404)
+    return await proxy_module_request(request, module_name, rest)
 
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")
