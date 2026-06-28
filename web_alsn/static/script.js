@@ -5,6 +5,15 @@ let appState = { locomotives: [], warehouse: [] };
 let currentTab = "locomotives";
 let isDirty = false;
 const MIN_LOCOMOTIVES = 5;
+const WAREHOUSE_FIELDS = [
+  "type",
+  "number",
+  "verification_date",
+  "periodicity",
+  "next_verification_date",
+  "location"
+];
+let warehouseSelected = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -111,6 +120,59 @@ function blankWh() {
   };
 }
 
+function warehouseCellText(rowIdx, colIdx) {
+  const row = appState.warehouse[rowIdx];
+  if (!row) return "";
+  const field = WAREHOUSE_FIELDS[colIdx];
+  return field ? String(row[field] ?? "") : "";
+}
+
+function setWarehouseCellValue(rowIdx, colIdx, value) {
+  const row = appState.warehouse[rowIdx];
+  const field = WAREHOUSE_FIELDS[colIdx];
+  if (!row || !field) return;
+  row[field] = String(value ?? "");
+}
+
+function selectWarehouseCell(rowIdx, colIdx) {
+  warehouseSelected = { row: rowIdx, col: colIdx };
+  document.querySelectorAll(".warehouse-cell.selected").forEach((cell) => cell.classList.remove("selected"));
+  const cell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="${colIdx}"]`);
+  if (cell) cell.classList.add("selected");
+}
+
+function focusWarehouseCell(rowIdx, colIdx, selectText = false) {
+  const cell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="${colIdx}"]`);
+  if (!cell) return;
+  cell.focus();
+  selectWarehouseCell(rowIdx, colIdx);
+  if (selectText && typeof document.createRange === "function") {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+}
+
+function parsePasteMatrix(text) {
+  return String(text ?? "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .filter((line, idx, arr) => !(idx === arr.length - 1 && line === ""))
+    .map((line) => line.split("\t"));
+}
+
+function syncWarehouseFromDom() {
+  document.querySelectorAll(".warehouse-cell").forEach((cell) => {
+    const rowIdx = Number(cell.dataset.row);
+    const colIdx = Number(cell.dataset.col);
+    if (Number.isFinite(rowIdx) && Number.isFinite(colIdx)) {
+      setWarehouseCellValue(rowIdx, colIdx, cell.innerText.trim());
+    }
+  });
+}
+
 function getRows() {
   return currentTab === "locomotives" ? appState.locomotives : appState.warehouse;
 }
@@ -147,6 +209,90 @@ function editDeviceCell(rowIdx, deviceIdx, field, el) {
   if (!row.devices[deviceIdx]) row.devices[deviceIdx] = { type: "", number: "" };
   row.devices[deviceIdx][field] = el.innerText.trim();
   markDirty(true);
+}
+
+function editWarehouseCell(rowIdx, colIdx, el) {
+  setWarehouseCellValue(rowIdx, colIdx, el.innerText.trim());
+  markDirty(true);
+}
+
+function handleWarehouseFocus(rowIdx, colIdx, el) {
+  selectWarehouseCell(rowIdx, colIdx);
+  if (!el.innerText.trim() && el.innerText !== "") {
+    el.innerText = "";
+  }
+}
+
+function handleWarehouseClick(rowIdx, colIdx) {
+  selectWarehouseCell(rowIdx, colIdx);
+}
+
+function handleWarehouseKeydown(event, rowIdx, colIdx) {
+  if (!CAN_EDIT) return;
+
+  const key = event.key;
+  if (key === "Delete" || key === "Backspace") {
+    event.preventDefault();
+    const cell = event.currentTarget;
+    cell.innerText = "";
+    setWarehouseCellValue(rowIdx, colIdx, "");
+    markDirty(true);
+    return;
+  }
+
+  let targetRow = rowIdx;
+  let targetCol = colIdx;
+  if (key === "ArrowLeft") targetCol -= 1;
+  else if (key === "ArrowRight" || key === "Tab") {
+    event.preventDefault();
+    targetCol += 1;
+  } else if (key === "ArrowUp") targetRow -= 1;
+  else if (key === "ArrowDown" || key === "Enter") {
+    event.preventDefault();
+    targetRow += 1;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  if (targetRow < 0 || targetCol < 0) return;
+  if (targetRow >= appState.warehouse.length) return;
+  if (targetCol >= WAREHOUSE_FIELDS.length) return;
+  focusWarehouseCell(targetRow, targetCol, true);
+}
+
+function handleWarehouseCopy(event, rowIdx, colIdx) {
+  const text = warehouseCellText(rowIdx, colIdx);
+  if (!text) return;
+  event.clipboardData?.setData("text/plain", text);
+  event.preventDefault();
+}
+
+function handleWarehousePaste(event, rowIdx, colIdx) {
+  if (!CAN_EDIT) return;
+  event.preventDefault();
+  syncWarehouseFromDom();
+  const text = event.clipboardData?.getData("text/plain") || "";
+  const matrix = parsePasteMatrix(text);
+  if (!matrix.length) return;
+
+  for (let r = 0; r < matrix.length; r += 1) {
+    const sourceRow = matrix[r];
+    const targetRowIdx = rowIdx + r;
+    const targetRow = appState.warehouse[targetRowIdx];
+    if (!targetRow) break;
+    for (let c = 0; c < sourceRow.length; c += 1) {
+      const targetColIdx = colIdx + c;
+      if (targetColIdx >= WAREHOUSE_FIELDS.length) break;
+      setWarehouseCellValue(targetRowIdx, targetColIdx, sourceRow[c].trim());
+    }
+  }
+  render();
+  markDirty(true);
+  focusWarehouseCell(
+    Math.min(rowIdx + matrix.length - 1, appState.warehouse.length - 1),
+    Math.min(colIdx + matrix[0].length - 1, WAREHOUSE_FIELDS.length - 1)
+  );
 }
 
 function render() {
@@ -187,12 +333,24 @@ function render() {
 
   whBody.innerHTML = appState.warehouse.map((row, idx) => `
     <tr>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'type', this)"` : ''}>${escapeHtml(row.type)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'number', this)"` : ''}>${escapeHtml(row.number)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'verification_date', this)"` : ''}>${escapeHtml(row.verification_date)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'periodicity', this)"` : ''}>${escapeHtml(row.periodicity)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'next_verification_date', this)"` : ''}>${escapeHtml(row.next_verification_date)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'location', this)"` : ''}>${escapeHtml(row.location)}</div></td>
+      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
+          data-row="${idx}" data-col="0"
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 0, this)" onblur="editWarehouseCell(' + idx + ', 0, this)" onclick="handleWarehouseClick(' + idx + ', 0)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 0)" oncopy="handleWarehouseCopy(event, ' + idx + ', 0)" onpaste="handleWarehousePaste(event, ' + idx + ', 0)"' : ''}>${escapeHtml(row.type)}</td>
+      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 1 ? " selected" : ""}"
+          data-row="${idx}" data-col="1"
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 1, this)" onblur="editWarehouseCell(' + idx + ', 1, this)" onclick="handleWarehouseClick(' + idx + ', 1)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 1)" oncopy="handleWarehouseCopy(event, ' + idx + ', 1)" onpaste="handleWarehousePaste(event, ' + idx + ', 1)"' : ''}>${escapeHtml(row.number)}</td>
+      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 2 ? " selected" : ""}"
+          data-row="${idx}" data-col="2"
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 2, this)" onblur="editWarehouseCell(' + idx + ', 2, this)" onclick="handleWarehouseClick(' + idx + ', 2)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 2)" oncopy="handleWarehouseCopy(event, ' + idx + ', 2)" onpaste="handleWarehousePaste(event, ' + idx + ', 2)"' : ''}>${escapeHtml(row.verification_date)}</td>
+      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 3 ? " selected" : ""}"
+          data-row="${idx}" data-col="3"
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 3, this)" onblur="editWarehouseCell(' + idx + ', 3, this)" onclick="handleWarehouseClick(' + idx + ', 3)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 3)" oncopy="handleWarehouseCopy(event, ' + idx + ', 3)" onpaste="handleWarehousePaste(event, ' + idx + ', 3)"' : ''}>${escapeHtml(row.periodicity)}</td>
+      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 4 ? " selected" : ""}"
+          data-row="${idx}" data-col="4"
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 4, this)" onblur="editWarehouseCell(' + idx + ', 4, this)" onclick="handleWarehouseClick(' + idx + ', 4)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 4)" oncopy="handleWarehouseCopy(event, ' + idx + ', 4)" onpaste="handleWarehousePaste(event, ' + idx + ', 4)"' : ''}>${escapeHtml(row.next_verification_date)}</td>
+      <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 5 ? " selected" : ""}"
+          data-row="${idx}" data-col="5"
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 5, this)" onblur="editWarehouseCell(' + idx + ', 5, this)" onclick="handleWarehouseClick(' + idx + ', 5)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 5)" oncopy="handleWarehouseCopy(event, ' + idx + ', 5)" onpaste="handleWarehousePaste(event, ' + idx + ', 5)"' : ''}>${escapeHtml(row.location)}</td>
     </tr>
   `).join("") || `<tr><td class="empty-state" colspan="6">Нет строк</td></tr>`;
 

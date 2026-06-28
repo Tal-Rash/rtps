@@ -232,6 +232,18 @@ button:hover:not(:disabled),
   text-align: center;
 }
 
+.warehouse-cell {
+  min-width: 0;
+  outline: none;
+  cursor: text;
+}
+
+.warehouse-cell.selected,
+.warehouse-cell:focus {
+  background: #e8f0fe;
+  box-shadow: inset 0 0 0 1px rgba(39, 110, 241, .25);
+}
+
 .row-num {
   text-align: center;
   font-weight: 700;
