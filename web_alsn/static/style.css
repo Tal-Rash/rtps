@@ -88,6 +88,68 @@ button:hover:not(:disabled),
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
+.loc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.loc-card {
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.loc-card-title {
+  grid-column: 1 / -1;
+  padding: 8px 12px;
+  text-align: center;
+  font-weight: 400;
+  font-size: 16px;
+  border-bottom: 1px solid #2f2f2f;
+  background: #fff;
+}
+
+.loc-card-title .editable {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  display: inline;
+}
+
+.device-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.device-table th,
+.device-table td {
+  border: 1px solid #2f2f2f;
+  padding: 7px 8px;
+}
+
+.device-table th {
+  background: #fff;
+  text-align: center;
+  font-size: 13px;
+}
+
+.device-table .editable {
+  min-height: 24px;
+  border-radius: 4px;
+}
+
+.device-table .empty-state {
+  padding: 12px 8px;
+}
+
 .table-wrap {
   width: 100%;
   overflow: auto;

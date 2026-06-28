@@ -105,7 +105,8 @@ def init_db() -> None:
                 series TEXT NOT NULL DEFAULT '',
                 number TEXT NOT NULL DEFAULT '',
                 inventory_num TEXT NOT NULL DEFAULT '',
-                note TEXT NOT NULL DEFAULT ''
+                note TEXT NOT NULL DEFAULT '',
+                devices_json TEXT NOT NULL DEFAULT '[]'
             )
             """
         )
@@ -123,11 +124,16 @@ def init_db() -> None:
         )
 
         cur = conn.cursor()
+        cur.execute("PRAGMA table_info(locomotives)")
+        columns = {str(row[1]) for row in cur.fetchall()}
+        if "devices_json" not in columns:
+            conn.execute("ALTER TABLE locomotives ADD COLUMN devices_json TEXT NOT NULL DEFAULT '[]'")
+
         cur.execute("SELECT COUNT(*) FROM locomotives")
         if int(cur.fetchone()[0] or 0) == 0:
             conn.execute(
-                "INSERT INTO locomotives(sort_order, series, number, inventory_num, note) VALUES(?,?,?,?,?)",
-                (1, "", "", "", ""),
+                "INSERT INTO locomotives(sort_order, series, number, inventory_num, note, devices_json) VALUES(?,?,?,?,?,?)",
+                (1, "", "", "", "", "[]"),
             )
 
         cur.execute("SELECT COUNT(*) FROM warehouse")
@@ -180,8 +186,9 @@ async def api_state(request: Request):
                 "number": row["number"],
                 "inventory_num": row["inventory_num"],
                 "note": row["note"],
+                "devices": _parse_devices_json(row["devices_json"]),
             }
-            for row in cur.execute("SELECT series, number, inventory_num, note FROM locomotives ORDER BY sort_order, id").fetchall()
+            for row in cur.execute("SELECT series, number, inventory_num, note, devices_json FROM locomotives ORDER BY sort_order, id").fetchall()
         ]
         warehouse = [
             {
@@ -208,6 +215,63 @@ def _normalize_rows(rows, fields):
     return normalized
 
 
+def _blank_device_rows(count: int = 5) -> list[dict[str, str]]:
+    return [{"type": "", "number": ""} for _ in range(max(1, count))]
+
+
+def _parse_devices_json(value) -> list[dict[str, str]]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except Exception:
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+    normalized = []
+    for row in parsed:
+        if not isinstance(row, dict):
+            continue
+        normalized.append({
+            "type": str(row.get("type", "") or ""),
+            "number": str(row.get("number", "") or ""),
+        })
+    return normalized or _blank_device_rows()
+
+
+def _normalize_locomotives(rows):
+    normalized = []
+    if not isinstance(rows, list):
+        rows = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        devices = row.get("devices")
+        if not isinstance(devices, list):
+            devices = []
+        normalized.append({
+            "series": str(row.get("series", "") or ""),
+            "number": str(row.get("number", "") or ""),
+            "inventory_num": str(row.get("inventory_num", "") or ""),
+            "note": str(row.get("note", "") or ""),
+            "devices": [
+                {
+                    "type": str(device.get("type", "") or ""),
+                    "number": str(device.get("number", "") or ""),
+                }
+                for device in devices
+                if isinstance(device, dict)
+            ] or _blank_device_rows(),
+        })
+    if not normalized:
+        normalized.append({
+            "series": "",
+            "number": "",
+            "inventory_num": "",
+            "note": "",
+            "devices": _blank_device_rows(),
+        })
+    return normalized
+
+
 @app.post("/api/state")
 @app.post(f"{APP_PREFIX}/api/state", include_in_schema=False)
 async def api_save_state(request: Request):
@@ -216,7 +280,7 @@ async def api_save_state(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     payload = await request.json()
-    locomotives = _normalize_rows(payload.get("locomotives"), ["series", "number", "inventory_num", "note"])
+    locomotives = _normalize_locomotives(payload.get("locomotives"))
     warehouse = _normalize_rows(payload.get("warehouse"), ["item", "unit", "quantity", "note"])
 
     with DB_LOCK, connect_sqlite(DB_FILE) as conn:
@@ -224,8 +288,18 @@ async def api_save_state(request: Request):
         cur.execute("DELETE FROM locomotives")
         cur.execute("DELETE FROM warehouse")
         cur.executemany(
-            "INSERT INTO locomotives(sort_order, series, number, inventory_num, note) VALUES(?,?,?,?,?)",
-            [(idx + 1, row["series"], row["number"], row["inventory_num"], row["note"]) for idx, row in enumerate(locomotives)],
+            "INSERT INTO locomotives(sort_order, series, number, inventory_num, note, devices_json) VALUES(?,?,?,?,?,?)",
+            [
+                (
+                    idx + 1,
+                    row["series"],
+                    row["number"],
+                    row["inventory_num"],
+                    row["note"],
+                    json.dumps(row["devices"], ensure_ascii=False),
+                )
+                for idx, row in enumerate(locomotives)
+            ],
         )
         cur.executemany(
             "INSERT INTO warehouse(sort_order, item, unit, quantity, note) VALUES(?,?,?,?,?)",

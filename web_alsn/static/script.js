@@ -9,6 +9,35 @@ document.addEventListener("DOMContentLoaded", () => {
   loadState();
 });
 
+function blankDeviceRows(count = 5) {
+  return Array.from({ length: Math.max(1, count) }, () => ({ type: "", number: "" }));
+}
+
+function normalizeLocRow(row) {
+  const devices = Array.isArray(row?.devices)
+    ? row.devices.map((device) => ({
+        type: String(device?.type ?? ""),
+        number: String(device?.number ?? "")
+      }))
+    : [];
+  return {
+    series: String(row?.series ?? ""),
+    number: String(row?.number ?? ""),
+    inventory_num: String(row?.inventory_num ?? ""),
+    note: String(row?.note ?? ""),
+    devices: devices.length ? devices : blankDeviceRows()
+  };
+}
+
+function normalizeWhRow(row) {
+  return {
+    item: String(row?.item ?? ""),
+    unit: String(row?.unit ?? ""),
+    quantity: String(row?.quantity ?? ""),
+    note: String(row?.note ?? "")
+  };
+}
+
 function setTab(tab) {
   currentTab = tab;
   document.getElementById("tabLoc").classList.toggle("active", tab === "locomotives");
@@ -44,8 +73,8 @@ async function loadState() {
   try {
     const data = await requestJson(`${APP_PREFIX}/api/state`);
     appState = {
-      locomotives: Array.isArray(data.locomotives) ? data.locomotives : [],
-      warehouse: Array.isArray(data.warehouse) ? data.warehouse : []
+      locomotives: Array.isArray(data.locomotives) ? data.locomotives.map(normalizeLocRow) : [],
+      warehouse: Array.isArray(data.warehouse) ? data.warehouse.map(normalizeWhRow) : []
     };
     if (!appState.locomotives.length) appState.locomotives.push(blankLoc());
     if (!appState.warehouse.length) appState.warehouse.push(blankWh());
@@ -58,7 +87,7 @@ async function loadState() {
 }
 
 function blankLoc() {
-  return { series: "", number: "", inventory_num: "", note: "" };
+  return { series: "", number: "", inventory_num: "", note: "", devices: blankDeviceRows() };
 }
 
 function blankWh() {
@@ -93,19 +122,50 @@ function editCell(tab, rowIdx, field, el) {
   markDirty(true);
 }
 
+function editDeviceCell(rowIdx, deviceIdx, field, el) {
+  const row = appState.locomotives[rowIdx];
+  if (!row) return;
+  if (!Array.isArray(row.devices)) row.devices = blankDeviceRows();
+  if (!row.devices[deviceIdx]) row.devices[deviceIdx] = { type: "", number: "" };
+  row.devices[deviceIdx][field] = el.innerText.trim();
+  markDirty(true);
+}
+
 function render() {
   const locBody = document.getElementById("locBody");
   const whBody = document.getElementById("whBody");
 
-  locBody.innerHTML = appState.locomotives.map((row, idx) => `
-    <tr>
-      <td class="row-num">${idx + 1}</td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'series', this)"` : ''}>${escapeHtml(row.series)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'number', this)"` : ''}>${escapeHtml(row.number)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'inventory_num', this)"` : ''}>${escapeHtml(row.inventory_num)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'note', this)"` : ''}>${escapeHtml(row.note)}</div></td>
-    </tr>
-  `).join("") || `<tr><td class="empty-state" colspan="5">Нет строк</td></tr>`;
+  locBody.innerHTML = appState.locomotives.map((row, idx) => {
+    const deviceRows = (row.devices && row.devices.length ? row.devices : blankDeviceRows()).map((device, deviceIdx) => `
+      <tr>
+        <td>
+          <div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editDeviceCell(${idx}, ${deviceIdx}, 'type', this)"` : ''}>${escapeHtml(device.type)}</div>
+        </td>
+        <td>
+          <div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editDeviceCell(${idx}, ${deviceIdx}, 'number', this)"` : ''}>${escapeHtml(device.number)}</div>
+        </td>
+      </tr>
+    `).join("");
+
+    return `
+      <article class="loc-card">
+        <div class="loc-card-title">
+          <span class="editable" style="display:inline-block; min-width:120px;" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'series', this)"` : ''}>${escapeHtml(row.series || "Локомотив")}</span>
+          <span> № </span>
+          <span class="editable" style="display:inline-block; min-width:70px;" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'number', this)"` : ''}>${escapeHtml(row.number)}</span>
+        </div>
+        <table class="device-table">
+          <thead>
+            <tr>
+              <th>Тип прибора</th>
+              <th>№ прибора</th>
+            </tr>
+          </thead>
+          <tbody>${deviceRows}</tbody>
+        </table>
+      </article>
+    `;
+  }).join("") || `<div class="empty-state">Нет строк</div>`;
 
   whBody.innerHTML = appState.warehouse.map((row, idx) => `
     <tr>
