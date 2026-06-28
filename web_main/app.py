@@ -508,31 +508,6 @@ async def logs_page(request: Request):
         
     return templates.TemplateResponse(request=request, name="logs.html", context={"request": request, "logs": logs, "error_message": error_message})
 
-@app.get("/grafik-ppr")
-async def redir_grafik():
-    return RedirectResponse(f"{MAIN_SITE_URL}/grafik-ppr", status_code=303)
-
-@app.get("/zamer-kp")
-async def redir_zamer():
-    return RedirectResponse(f"{MAIN_SITE_URL}/zamer-kp", status_code=303)
-
-@app.get("/spravochnik")
-async def redir_spravochnik():
-    return RedirectResponse(f"{MAIN_SITE_URL}/spravochnik", status_code=303)
-
-@app.get("/tabel")
-async def redir_tabel():
-    return RedirectResponse(f"{MAIN_SITE_URL}/tabel", status_code=303)
-
-@app.get("/edu")
-async def redir_edu():
-    return RedirectResponse(f"{MAIN_SITE_URL}/edu", status_code=303)
-
-@app.get("/alsn")
-@app.get("/alsn/")
-async def redir_alsn():
-    return RedirectResponse(f"{MAIN_SITE_URL}/alsn", status_code=303)
-
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")
     port = int(os.environ.get("WEB_PORT", "8001"))
