@@ -202,8 +202,8 @@ button:hover:not(:disabled),
 }
 
 .alsn-table {
-  width: 100%;
-  min-width: 960px;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -211,8 +211,10 @@ button:hover:not(:disabled),
 .alsn-table th,
 .alsn-table td {
   border: 1px solid var(--accent);
-  padding: 6px 8px;
+  padding: 8px 10px;
   vertical-align: middle;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .alsn-table th {
@@ -225,7 +227,10 @@ button:hover:not(:disabled),
   text-align: center;
 }
 
-.alsn-table td { background: #fff; }
+.alsn-table td {
+  background: #fff;
+  text-align: center;
+}
 
 .row-num {
   text-align: center;

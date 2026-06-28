@@ -115,10 +115,12 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS warehouse (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sort_order INTEGER NOT NULL,
-                item TEXT NOT NULL DEFAULT '',
-                unit TEXT NOT NULL DEFAULT '',
-                quantity TEXT NOT NULL DEFAULT '',
-                note TEXT NOT NULL DEFAULT ''
+                type TEXT NOT NULL DEFAULT '',
+                number TEXT NOT NULL DEFAULT '',
+                verification_date TEXT NOT NULL DEFAULT '',
+                periodicity TEXT NOT NULL DEFAULT '',
+                next_verification_date TEXT NOT NULL DEFAULT '',
+                location TEXT NOT NULL DEFAULT ''
             )
             """
         )
@@ -128,6 +130,19 @@ def init_db() -> None:
         columns = {str(row[1]) for row in cur.fetchall()}
         if "devices_json" not in columns:
             conn.execute("ALTER TABLE locomotives ADD COLUMN devices_json TEXT NOT NULL DEFAULT '[]'")
+
+        cur.execute("PRAGMA table_info(warehouse)")
+        warehouse_columns = {str(row[1]) for row in cur.fetchall()}
+        for column in [
+            "type",
+            "number",
+            "verification_date",
+            "periodicity",
+            "next_verification_date",
+            "location",
+        ]:
+            if column not in warehouse_columns:
+                conn.execute(f"ALTER TABLE warehouse ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
         cur.execute("SELECT COUNT(*) FROM locomotives")
         if int(cur.fetchone()[0] or 0) == 0:
@@ -139,8 +154,19 @@ def init_db() -> None:
         cur.execute("SELECT COUNT(*) FROM warehouse")
         if int(cur.fetchone()[0] or 0) == 0:
             conn.execute(
-                "INSERT INTO warehouse(sort_order, item, unit, quantity, note) VALUES(?,?,?,?,?)",
-                (1, "", "", "", ""),
+                "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
+                (1, "", "", "", "", "", ""),
+            )
+        elif {"item", "unit", "quantity", "note"} & warehouse_columns:
+            conn.execute(
+                """
+                UPDATE warehouse
+                SET
+                    type = CASE WHEN type = '' AND item <> '' THEN item ELSE type END,
+                    number = CASE WHEN number = '' AND unit <> '' THEN unit ELSE number END,
+                    verification_date = CASE WHEN verification_date = '' AND quantity <> '' THEN quantity ELSE verification_date END,
+                    location = CASE WHEN location = '' AND note <> '' THEN note ELSE location END
+                """
             )
 
 
@@ -192,12 +218,16 @@ async def api_state(request: Request):
         ]
         warehouse = [
             {
-                "item": row["item"],
-                "unit": row["unit"],
-                "quantity": row["quantity"],
-                "note": row["note"],
+                "type": row["type"],
+                "number": row["number"],
+                "verification_date": row["verification_date"],
+                "periodicity": row["periodicity"],
+                "next_verification_date": row["next_verification_date"],
+                "location": row["location"],
             }
-            for row in cur.execute("SELECT item, unit, quantity, note FROM warehouse ORDER BY sort_order, id").fetchall()
+            for row in cur.execute(
+                "SELECT type, number, verification_date, periodicity, next_verification_date, location FROM warehouse ORDER BY sort_order, id"
+            ).fetchall()
         ]
     return {"locomotives": locomotives, "warehouse": warehouse}
 
@@ -212,6 +242,33 @@ def _normalize_rows(rows, fields):
         normalized.append({field: str(row.get(field, "") or "") for field in fields})
     if not normalized:
         normalized.append({field: "" for field in fields})
+    return normalized
+
+
+def _normalize_warehouse_rows(rows):
+    normalized = []
+    if not isinstance(rows, list):
+        rows = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        normalized.append({
+            "type": str(row.get("type", "") or ""),
+            "number": str(row.get("number", "") or ""),
+            "verification_date": str(row.get("verification_date", "") or ""),
+            "periodicity": str(row.get("periodicity", "") or ""),
+            "next_verification_date": str(row.get("next_verification_date", "") or ""),
+            "location": str(row.get("location", "") or ""),
+        })
+    if not normalized:
+        normalized.append({
+            "type": "",
+            "number": "",
+            "verification_date": "",
+            "periodicity": "",
+            "next_verification_date": "",
+            "location": "",
+        })
     return normalized
 
 
@@ -281,7 +338,7 @@ async def api_save_state(request: Request):
 
     payload = await request.json()
     locomotives = _normalize_locomotives(payload.get("locomotives"))
-    warehouse = _normalize_rows(payload.get("warehouse"), ["item", "unit", "quantity", "note"])
+    warehouse = _normalize_warehouse_rows(payload.get("warehouse"))
 
     with DB_LOCK, connect_sqlite(DB_FILE) as conn:
         cur = conn.cursor()
@@ -302,8 +359,19 @@ async def api_save_state(request: Request):
             ],
         )
         cur.executemany(
-            "INSERT INTO warehouse(sort_order, item, unit, quantity, note) VALUES(?,?,?,?,?)",
-            [(idx + 1, row["item"], row["unit"], row["quantity"], row["note"]) for idx, row in enumerate(warehouse)],
+            "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
+            [
+                (
+                    idx + 1,
+                    row["type"],
+                    row["number"],
+                    row["verification_date"],
+                    row["periodicity"],
+                    row["next_verification_date"],
+                    row["location"],
+                )
+                for idx, row in enumerate(warehouse)
+            ],
         )
         conn.commit()
 

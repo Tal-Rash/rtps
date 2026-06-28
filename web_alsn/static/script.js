@@ -32,10 +32,12 @@ function normalizeLocRow(row) {
 
 function normalizeWhRow(row) {
   return {
-    item: String(row?.item ?? ""),
-    unit: String(row?.unit ?? ""),
-    quantity: String(row?.quantity ?? ""),
-    note: String(row?.note ?? "")
+    type: String(row?.type ?? ""),
+    number: String(row?.number ?? ""),
+    verification_date: String(row?.verification_date ?? ""),
+    periodicity: String(row?.periodicity ?? ""),
+    next_verification_date: String(row?.next_verification_date ?? ""),
+    location: String(row?.location ?? "")
   };
 }
 
@@ -99,7 +101,14 @@ function blankLoc() {
 }
 
 function blankWh() {
-  return { item: "", unit: "", quantity: "", note: "" };
+  return {
+    type: "",
+    number: "",
+    verification_date: "",
+    periodicity: "",
+    next_verification_date: "",
+    location: ""
+  };
 }
 
 function getRows() {
@@ -178,13 +187,14 @@ function render() {
 
   whBody.innerHTML = appState.warehouse.map((row, idx) => `
     <tr>
-      <td class="row-num">${idx + 1}</td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'item', this)"` : ''}>${escapeHtml(row.item)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'unit', this)"` : ''}>${escapeHtml(row.unit)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'quantity', this)"` : ''}>${escapeHtml(row.quantity)}</div></td>
-      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'note', this)"` : ''}>${escapeHtml(row.note)}</div></td>
+      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'type', this)"` : ''}>${escapeHtml(row.type)}</div></td>
+      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'number', this)"` : ''}>${escapeHtml(row.number)}</div></td>
+      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'verification_date', this)"` : ''}>${escapeHtml(row.verification_date)}</div></td>
+      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'periodicity', this)"` : ''}>${escapeHtml(row.periodicity)}</div></td>
+      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'next_verification_date', this)"` : ''}>${escapeHtml(row.next_verification_date)}</div></td>
+      <td><div class="editable" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('warehouse', ${idx}, 'location', this)"` : ''}>${escapeHtml(row.location)}</div></td>
     </tr>
-  `).join("") || `<tr><td class="empty-state" colspan="5">Нет строк</td></tr>`;
+  `).join("") || `<tr><td class="empty-state" colspan="6">Нет строк</td></tr>`;
 
   document.getElementById("saveBtn").style.display = CAN_EDIT ? "inline-block" : "none";
 }
