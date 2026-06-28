@@ -141,6 +141,10 @@ button:hover:not(:disabled),
   font-size: 13px;
 }
 
+.device-table thead th {
+  border-top: 0;
+}
+
 .device-table .editable {
   min-height: 24px;
   border-radius: 4px;
