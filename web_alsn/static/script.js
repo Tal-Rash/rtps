@@ -179,6 +179,7 @@ function getRows() {
 
 function addRow() {
   if (!CAN_EDIT) return;
+  if (currentTab === "warehouse") syncWarehouseFromDom();
   const rows = getRows();
   rows.push(currentTab === "locomotives" ? blankLoc() : blankWh());
   render();
@@ -187,6 +188,7 @@ function addRow() {
 
 function removeRow() {
   if (!CAN_EDIT) return;
+  if (currentTab === "warehouse") syncWarehouseFromDom();
   const rows = getRows();
   if (currentTab === "locomotives" && rows.length <= MIN_LOCOMOTIVES) return;
   if (currentTab === "warehouse" && rows.length <= 1) return;
@@ -367,6 +369,7 @@ function markDirty(dirty) {
 async function saveState() {
   if (!CAN_EDIT) return;
   try {
+    if (currentTab === "warehouse") syncWarehouseFromDom();
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
