@@ -91,6 +91,13 @@ def init_db() -> None:
                     ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,edu,alsn,admin")
                 )
                 print("Создан администратор по умолчанию. Пароль: 12345")
+            else:
+                cur.execute("SELECT id, allowed_modules FROM users WHERE role='admin'")
+                for user_id, allowed_modules in cur.fetchall():
+                    modules = [m.strip() for m in str(allowed_modules or "").split(",") if m.strip()]
+                    if "alsn" not in {m.split(":", 1)[0] for m in modules}:
+                        modules.append("alsn")
+                        conn.execute("UPDATE users SET allowed_modules=? WHERE id=?", (",".join(modules), user_id))
     except Exception as e:
         print("Ошибка инициализации БД:", e)
 
@@ -352,7 +359,8 @@ async def users_page(request: Request):
                     "z_r": get_mod_role(mods, "zamer_kp", u[3]),
                     "s_r": get_mod_role(mods, "spravochnik", u[3]),
                     "t_r": get_mod_role(mods, "tabel", u[3]),
-                    "e_r": get_mod_role(mods, "edu", u[3])
+                    "e_r": get_mod_role(mods, "edu", u[3]),
+                    "a_r": get_mod_role(mods, "alsn", u[3])
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -360,7 +368,7 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -371,6 +379,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
+    if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
     if role == "admin": modules.append("admin")
     
     try:
@@ -381,7 +390,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -392,6 +401,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
+    if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
     if role == "admin": modules.append("admin")
     
     try:
