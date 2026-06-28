@@ -139,11 +139,13 @@ function formatDateISO(date) {
 }
 
 function warehouseRowMatchesFilters(row) {
-  const typeValue = String(row?.type ?? "").trim();
+  const typeValue = String(row?.type ?? "").trim().toLowerCase();
   const nextValue = String(row?.next_verification_date ?? "").trim();
-  const locationValue = String(row?.location ?? "").trim();
-  if (warehouseFilters.type && typeValue !== warehouseFilters.type) return false;
-  if (warehouseFilters.location && locationValue !== warehouseFilters.location) return false;
+  const locationValue = String(row?.location ?? "").trim().toLowerCase();
+  const filterType = String(warehouseFilters.type ?? "").trim().toLowerCase();
+  const filterLocation = String(warehouseFilters.location ?? "").trim().toLowerCase();
+  if (filterType && typeValue !== filterType) return false;
+  if (filterLocation && locationValue !== filterLocation) return false;
   if (warehouseFilters.nextDate) {
     const parsed = parseDateDMY(nextValue);
     if (!parsed || formatDateISO(parsed) !== warehouseFilters.nextDate) return false;
@@ -160,14 +162,35 @@ function syncWarehouseFilterDom() {
   if (locationFilter) locationFilter.value = warehouseFilters.location;
 }
 
+function applyWarehouseFilters() {
+  const rows = document.querySelectorAll("#whBody tr[data-warehouse-row]");
+  let visibleCount = 0;
+  rows.forEach((rowEl) => {
+    const row = {
+      type: rowEl.dataset.warehouseType || "",
+      next_verification_date: rowEl.dataset.warehouseNext || "",
+      location: rowEl.dataset.warehouseLocation || ""
+    };
+    const visible = warehouseRowMatchesFilters(row);
+    rowEl.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+  const emptyRow = document.getElementById("whEmptyStateRow");
+  if (emptyRow) emptyRow.hidden = visibleCount > 0;
+}
+
 function setWarehouseFilter(field, value) {
   warehouseFilters[field] = String(value ?? "");
   normalizeWarehouseFilters();
+  syncWarehouseFilterDom();
+  applyWarehouseFilters();
   render();
 }
 
 function clearWarehouseFilters() {
   warehouseFilters = { type: "", nextDate: "", location: "" };
+  syncWarehouseFilterDom();
+  applyWarehouseFilters();
   render();
 }
 
@@ -569,12 +592,8 @@ function render() {
     `;
   }).join("") || `<div class="empty-state">Нет строк</div>`;
 
-  const visibleWarehouseRows = appState.warehouse
-    .map((row, idx) => ({ row, idx }))
-    .filter(({ row }) => warehouseRowMatchesFilters(row));
-
-  whBody.innerHTML = visibleWarehouseRows.map(({ row, idx }) => `
-    <tr>
+  whBody.innerHTML = appState.warehouse.map((row, idx) => `
+    <tr data-warehouse-row="1" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}">
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
           data-row="${idx}" data-col="0"
           ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 0, this)" onblur="editWarehouseCell(' + idx + ', 0, this)" onclick="handleWarehouseClick(' + idx + ', 0)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 0)" oncopy="handleWarehouseCopy(event, ' + idx + ', 0)" onpaste="handleWarehousePaste(event, ' + idx + ', 0)"' : ''}>${escapeHtml(row.type)}</td>
@@ -594,7 +613,7 @@ function render() {
         <div class="warehouse-auto-value">${escapeHtml(row.location || "Депо")}</div>
       </td>
     </tr>
-  `).join("") || `<tr><td class="empty-state" colspan="6">Нет строк</td></tr>`;
+  `).join("") + `<tr id="whEmptyStateRow"><td class="empty-state" colspan="6">Нет строк</td></tr>`;
 
   const typeFilter = document.getElementById("warehouseTypeFilter");
   if (typeFilter) {
@@ -622,6 +641,8 @@ function render() {
     `;
     locationFilter.value = currentLocation;
   }
+
+  applyWarehouseFilters();
 
   document.getElementById("saveBtn").style.display = CAN_EDIT ? "inline-block" : "none";
 }
