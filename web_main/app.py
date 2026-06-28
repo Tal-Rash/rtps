@@ -31,6 +31,11 @@ LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
+GRAFIK_PPR_SITE_URL = os.environ.get("GRAFIK_PPR_SITE_URL", "http://yrtps.ru:8000")
+ZAMER_KP_SITE_URL = os.environ.get("ZAMER_KP_SITE_URL", "http://yrtps.ru:8003")
+SPRAVOCHNIK_SITE_URL = os.environ.get("SPRAVOCHNIK_SITE_URL", "http://yrtps.ru:8002")
+TABEL_SITE_URL = os.environ.get("TABEL_SITE_URL", "http://yrtps.ru:8006")
+EDU_SITE_URL = os.environ.get("EDU_SITE_URL", "http://yrtps.ru:8007")
 ALSN_SITE_URL = os.environ.get("ALSN_SITE_URL", "http://yrtps.ru:8008")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
@@ -252,7 +257,14 @@ async def home_page(request: Request):
         if role == "admin" or "admin" in mods: has_access = True
         elif f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(","): has_access = True
         if has_access:
-            target_base = ALSN_SITE_URL if mod_name == "alsn" else MAIN_SITE_URL
+            target_base = {
+                "grafik_ppr": GRAFIK_PPR_SITE_URL,
+                "zamer_kp": ZAMER_KP_SITE_URL,
+                "spravochnik": SPRAVOCHNIK_SITE_URL,
+                "tabel": TABEL_SITE_URL,
+                "edu": EDU_SITE_URL,
+                "alsn": ALSN_SITE_URL,
+            }.get(mod_name, MAIN_SITE_URL)
             return f'<a href="{target_base}{url}">Открыть модуль →</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
@@ -512,11 +524,23 @@ async def logs_page(request: Request):
 
 @app.get("/grafik-ppr")
 async def redir_grafik():
-    return RedirectResponse(f"{MAIN_SITE_URL}/grafik-ppr", status_code=303)
+    return RedirectResponse(f"{GRAFIK_PPR_SITE_URL}/grafik-ppr", status_code=303)
 
 @app.get("/zamer-kp")
 async def redir_zamer():
-    return RedirectResponse(f"{MAIN_SITE_URL}/zamer-kp", status_code=303)
+    return RedirectResponse(f"{ZAMER_KP_SITE_URL}/zamer-kp", status_code=303)
+
+@app.get("/spravochnik")
+async def redir_spravochnik():
+    return RedirectResponse(f"{SPRAVOCHNIK_SITE_URL}/spravochnik", status_code=303)
+
+@app.get("/tabel")
+async def redir_tabel():
+    return RedirectResponse(f"{TABEL_SITE_URL}/tabel", status_code=303)
+
+@app.get("/edu")
+async def redir_edu():
+    return RedirectResponse(f"{EDU_SITE_URL}/edu", status_code=303)
 
 @app.get("/alsn")
 @app.get("/alsn/")
