@@ -120,7 +120,7 @@ button:hover:not(:disabled),
 .loc-grid {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(340px, 1fr);
+  grid-auto-columns: minmax(300px, 1fr);
   gap: 18px;
   align-items: start;
   width: max-content;
@@ -138,10 +138,10 @@ button:hover:not(:disabled),
 
 .loc-card-title {
   grid-column: 1 / -1;
-  padding: 8px 12px;
+  padding: 6px 10px;
   text-align: center;
   font-weight: 400;
-  font-size: 16px;
+  font-size: 14px;
   border-bottom: 1px solid var(--accent);
   background: #fff;
 }
@@ -165,13 +165,13 @@ button:hover:not(:disabled),
 .device-table th,
 .device-table td {
   border: 1px solid var(--accent);
-  padding: 7px 8px;
+  padding: 5px 6px;
 }
 
 .device-table th {
   background: #fff;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .device-table thead th {
