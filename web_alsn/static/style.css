@@ -82,6 +82,8 @@ button:hover:not(:disabled),
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: thin;
+  position: relative;
+  z-index: 2;
 }
 
 .tab {
@@ -112,6 +114,8 @@ button:hover:not(:disabled),
   box-shadow: var(--shadow);
   overflow: hidden;
   padding: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .tab-content { display: none; }
