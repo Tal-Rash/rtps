@@ -253,7 +253,7 @@ async def home_page(request: Request):
         elif f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(","): has_access = True
         if has_access:
             target_base = ALSN_SITE_URL if mod_name == "alsn" else MAIN_SITE_URL
-            return f'<a href="{target_base}{url}">Открыть модуль →</a>'
+            return f'<a href="{target_base}{url}">Открыть модуль</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
     context = {
