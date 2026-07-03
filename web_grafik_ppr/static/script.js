@@ -1118,7 +1118,7 @@ function repairSummaryKnownTypes(source, locoKey = ''){
 }
 function repairSummaryNormalizeState(){
   if (!ui.repairSummary || typeof ui.repairSummary !== 'object') {
-    ui.repairSummary = { source: 'months', locomotive: '', dateFrom: '', dateTo: '', types: [] };
+    ui.repairSummary = { source: 'months', locomotive: '', dateFrom: '', dateTo: '', types: [], kpMeasurement: 'all' };
   }
   const source = String(ui.repairSummary.source ?? 'months').trim().toLowerCase() === 'schedule' ? 'schedule' : 'months';
   ui.repairSummary.source = source;
@@ -1130,6 +1130,8 @@ function repairSummaryNormalizeState(){
   ui.repairSummary.types = Array.from(new Set(types));
   ui.repairSummary.dateFrom = String(ui.repairSummary.dateFrom ?? '').trim();
   ui.repairSummary.dateTo = String(ui.repairSummary.dateTo ?? '').trim();
+  const kpMeasurement = String(ui.repairSummary.kpMeasurement ?? 'all').trim().toLowerCase();
+  ui.repairSummary.kpMeasurement = kpMeasurement === 'has' || kpMeasurement === 'none' ? kpMeasurement : 'all';
   return ui.repairSummary;
 }
 function repairSummaryLocomotiveOptions(){
@@ -1424,6 +1426,7 @@ function repairSummaryResetFilters(){
   state.dateFrom = '';
   state.dateTo = '';
   state.types = [];
+  state.kpMeasurement = 'all';
   render();
 }
 function renderRepairSummary(){
@@ -1431,7 +1434,13 @@ function renderRepairSummary(){
   const locoOptions = repairSummaryLocomotiveOptions();
   const typeOptions = repairSummaryKnownTypes(filters.source, filters.locomotive);
   const rawRows = collectRepairSummaryRows();
-  const rows = groupRepairSummaryRows(rawRows);
+  const groupedRows = groupRepairSummaryRows(rawRows);
+  const rows = groupedRows.filter((row) => {
+    const hasKp = repairSummaryKpMeasurementDates(row).length > 0;
+    if (filters.kpMeasurement === 'has') return hasKp;
+    if (filters.kpMeasurement === 'none') return !hasKp;
+    return true;
+  });
   const totalFacts = rawRows.length;
   return `
     <div class="section-head repair-summary-head">
@@ -1457,6 +1466,13 @@ function renderRepairSummary(){
       </label>
       <label>По
         <input id="repairSummaryDateTo" type="date" style="width:160px" value="${esc(filters.dateTo)}" onchange="setRepairSummaryFilter('dateTo', this.value)">
+      </label>
+      <label>Замер КП
+        <select id="repairSummaryKpMeasurement" style="width:160px" onchange="setRepairSummaryFilter('kpMeasurement', this.value)">
+          <option value="all" ${filters.kpMeasurement === 'all' ? 'selected' : ''}>Все</option>
+          <option value="has" ${filters.kpMeasurement === 'has' ? 'selected' : ''}>Есть</option>
+          <option value="none" ${filters.kpMeasurement === 'none' ? 'selected' : ''}>Нет</option>
+        </select>
       </label>
       <button type="button" onclick="repairSummaryResetFilters()">Сбросить</button>
     </div>
