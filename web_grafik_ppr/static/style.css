@@ -476,6 +476,13 @@
       padding:10px 12px;
       box-sizing:border-box;
       line-height:1.1;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:#fff;
+      font:inherit;
+      color:inherit;
+      appearance:auto;
+      -webkit-appearance:auto;
     }
     .repair-summary-types { display:flex; flex-wrap:wrap; gap:8px 12px; margin-bottom:12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
     .repair-summary-type { display:inline-flex; align-items:center; gap:6px; font-weight:700; user-select:none; }
