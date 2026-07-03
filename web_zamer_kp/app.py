@@ -48,7 +48,7 @@ DEFAULT_NORMS = [
     ("min_greben", "Толщина гребня", "меньше или равно", "26", "25"),
     ("min_krut", "Крутизна гребня", "меньше или равно", "7", "6"),
     ("min_bandage_thickness", "Толщина бандажа", "меньше или равно", "", ""),
-    ("max_diameter_diff", "Разница диаметров", "больше или равно", "", ""),
+    ("max_diameter_diff", "Наибольшая разница диаметров бандажей в комплекте, мм", "больше или равно", "", ""),
     ("prokat_6_count", "Число КП с прокатом 6 мм и более", "больше или равно", "", ""),
 ]
 ARCHIVE_EXCEL_HEADERS = [
@@ -2907,6 +2907,8 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
                     "min_greben": "",
                     "min_krut": "",
                     "min_bandage_thickness": "",
+                    "min_diameter": "",
+                    "max_diameter": "",
                     "max_diameter_diff": "",
                     "prokat_6_count": "0",
                     "bandage_limit_count": "0",
@@ -2940,10 +2942,17 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
             if bandage_pair:
                 current = to_float(stats["min_bandage_thickness"])
                 stats["min_bandage_thickness"] = fmt_num(min(bandage_pair)) if current is None else fmt_num(min([current, *bandage_pair]))
-            if len(diameter_pair) >= 2:
-                diff = max(diameter_pair) - min(diameter_pair)
-                current = to_float(stats["max_diameter_diff"])
-                stats["max_diameter_diff"] = fmt_num(diff) if current is None else fmt_num(max([current, diff]))
+            if diameter_pair:
+                current_min = to_float(stats["min_diameter"])
+                current_max = to_float(stats["max_diameter"])
+                pair_min = min(diameter_pair)
+                pair_max = max(diameter_pair)
+                stats["min_diameter"] = fmt_num(pair_min) if current_min is None else fmt_num(min([current_min, *diameter_pair]))
+                stats["max_diameter"] = fmt_num(pair_max) if current_max is None else fmt_num(max([current_max, *diameter_pair]))
+                min_diameter = to_float(stats["min_diameter"])
+                max_diameter = to_float(stats["max_diameter"])
+                if min_diameter is not None and max_diameter is not None:
+                    stats["max_diameter_diff"] = fmt_num(max_diameter - min_diameter)
             if bandage_pair:
                 check_text = normalize_text(loco)
                 is_limit = False
