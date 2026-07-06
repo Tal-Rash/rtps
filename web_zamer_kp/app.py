@@ -530,8 +530,6 @@ def load_inventory_records(cur: sqlite3.Cursor, include_deleted: bool = False) -
         manufacture_year = text(row["manufacture_year"]).strip()
         service_life = text(row["service_life"]).strip()
         label = f"{series} {number}".strip()
-        if inv:
-            label = f"{label} (инв. {inv})"
         result.append(
             {
                 "series": series,
