@@ -1057,7 +1057,11 @@ function renderLocoDropdown(filterText = '', open = true){
     return;
   }
   dropdown.innerHTML = filtered
-    .map(item => `<button type="button" data-loco="${esc(item.number)}">${esc(item.number)}</button>`)
+    .map(item => {
+      const number = String(item.number || '').trim();
+      const label = String(item.label || number || '').trim();
+      return `<button type="button" data-loco="${esc(number)}">${esc(label)}</button>`;
+    })
     .join('');
   dropdown.classList.toggle('open', !!open);
 }
@@ -1109,7 +1113,11 @@ function renderArchiveLocomotives(){
   if (!select) return;
   select.innerHTML = items.length
     ? ['<option value="">Все локомотивы</option>']
-        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
+        .concat(items.map(x => {
+          const number = String(x.number || '').trim();
+          const label = String(x.label || number || '').trim();
+          return `<option value="${esc(number)}">${esc(label)}</option>`;
+        }))
         .join('')
     : '<option value="">Нет локомотивов в справочнике</option>';
   if (current && items.some(x => x.number === current)) {
@@ -1133,7 +1141,11 @@ function renderKpLocomotiveOptions(){
   const current = select.value || kpSelectedLoco || state?.locomotive || '';
   select.innerHTML = items.length
     ? ['<option value="">Выберите локомотив</option>', '<option value="Все локомотивы">Все локомотивы</option>']
-        .concat(items.map(x => `<option value="${esc(x.number)}">${esc(x.number)}</option>`))
+        .concat(items.map(x => {
+          const number = String(x.number || '').trim();
+          const label = String(x.label || number || '').trim();
+          return `<option value="${esc(number)}">${esc(label)}</option>`;
+        }))
         .join('')
     : '<option value="">Нет локомотивов в справочнике</option>';
   if (current && (current === 'Все локомотивы' || items.some(x => x.number === current))) {
