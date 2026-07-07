@@ -960,6 +960,9 @@ function setActiveTab(tab){
   if (panelWear) panelWear.classList.toggle('active', tab === 'wear');
 }
 async function switchTab(tab){
+  if (typeof clearArchiveSelection === 'function') clearArchiveSelection();
+  if (typeof clearKpSelection === 'function') clearKpSelection();
+  if (typeof clearSelection === 'function') clearSelection();
   setActiveTab(tab);
   if (tab === 'kp') {
     renderKpLocomotiveOptions();
@@ -2928,9 +2931,14 @@ if (document.getElementById('wearChartSvg') || document.getElementById('wearChar
 
 document.addEventListener('mousedown', (event) => {
   const target = event.target;
-  if (target.closest('table')) return;
-  if (target.closest('button')) return;
+  // Do not clear if clicking on a table cell (th or td)
+  if (target.closest('td') || target.closest('th')) return;
+  // Do not clear if clicking on scrollbars (the scrollable containers)
+  if (target.classList.contains('archive-body-shell') || target.classList.contains('table-container') || target.classList.contains('kp-body-shell')) return;
+  // Do not clear if clicking on interactive elements
+  if (target.closest('button') && !target.classList.contains('tab-btn')) return; 
   if (target.closest('input') || target.closest('select')) return;
+  
   if (typeof clearArchiveSelection === 'function') clearArchiveSelection();
   if (typeof clearKpSelection === 'function') clearKpSelection();
   if (typeof clearSelection === 'function') clearSelection();
