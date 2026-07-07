@@ -1243,8 +1243,7 @@ function renderWearLocomotiveOptions(){
   const current = String(wearSelectedLoco || state?.locomotive || kpSelectedLoco || '').trim();
   const options = (LOCOMOTIVE_CHOICES || []).map(item => {
     const number = String(item.number || '').trim();
-    const label = String(item.label || number || '').trim();
-    return `<option value="${esc(number)}">${esc(label)}</option>`;
+    return `<option value="${esc(number)}">${esc(number)}</option>`;
   }).join('');
   select.innerHTML = options || '<option value="">Нет локомотивов</option>';
   if (current && [...select.options].some(option => option.value === current)) {
