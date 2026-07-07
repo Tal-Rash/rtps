@@ -395,3 +395,19 @@
 
 #normsBody tr.drag-over { border-top: 2px solid #2f6fed; background-color: #f0f4f8; }
 #normsBody tr.dragging { opacity: 0.5; }
+
+.archive-table-shell {
+  
+  
+}
+.archive-table-shell::-webkit-scrollbar {
+  width: 0;
+  height: 10px;
+}
+.archive-table-shell::-webkit-scrollbar-track {
+  background: transparent;
+}
+.archive-table-shell::-webkit-scrollbar-thumb {
+  background-color: rgba(47, 111, 237, 0.3);
+  border-radius: 10px;
+}
