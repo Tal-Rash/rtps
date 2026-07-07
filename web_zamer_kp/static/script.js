@@ -224,7 +224,15 @@ function renderNormsTable(){
   const body = document.getElementById('normsBody');
   if (!body) return;
   body.innerHTML = normsRows.map((row, index) => `
-    <tr data-index="${index}">
+    <tr 
+      data-index="${index}"
+      draggable="${CAN_EDIT ? 'true' : 'false'}"
+      ondragstart="handleNormsDragStart(event, ${index})"
+      ondragover="handleNormsDragOver(event)"
+      ondragleave="handleNormsDragLeave(event)"
+      ondrop="handleNormsDrop(event, ${index})"
+      ondragend="handleNormsDragEnd(event)"
+    >
       <td>
         <input
           value="${esc(row.label)}"
@@ -243,6 +251,36 @@ function renderNormsTable(){
       <td><input value="${esc(fmt(row.red_value))}" data-field="red_value" data-index="${index}" ${CAN_EDIT ? '' : 'readonly'}></td>
     </tr>
   `).join('');
+}
+
+let normsDragIndex = null;
+function handleNormsDragStart(e, index) {
+  if (!CAN_EDIT) return;
+  normsDragIndex = index;
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.classList.add('dragging');
+}
+function handleNormsDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const tr = e.target.closest('tr');
+  if (tr) tr.classList.add('drag-over');
+}
+function handleNormsDragLeave(e) {
+  const tr = e.target.closest('tr');
+  if (tr) tr.classList.remove('drag-over');
+}
+function handleNormsDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('#normsBody tr').forEach(tr => tr.classList.remove('drag-over'));
+}
+function handleNormsDrop(e, index) {
+  e.preventDefault();
+  handleNormsDragEnd(e);
+  if (normsDragIndex === null || normsDragIndex === index || !CAN_EDIT) return;
+  const moved = normsRows.splice(normsDragIndex, 1)[0];
+  normsRows.splice(index, 0, moved);
+  renderNormsTable();
 }
 async function openNormsDialog(){
   const modal = document.getElementById('normsModal');

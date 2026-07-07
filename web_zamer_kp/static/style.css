@@ -386,3 +386,6 @@
       .actions, .filters { margin-top:10px; }
       table { min-width: 980px; }
     }
+
+#normsBody tr.drag-over { border-top: 2px solid #2f6fed; background-color: #f0f4f8; }
+#normsBody tr.dragging { opacity: 0.5; }
