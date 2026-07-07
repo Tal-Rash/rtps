@@ -137,7 +137,7 @@ function isCellInBounds(row, col){
 function clearSelection(){
   selectionAnchor = null;
   selectionFocus = null;
-  document.querySelectorAll('#inputBody td.measure-cell.selected').forEach(td => td.classList.remove('selected'));
+  renderSelectionHighlight();
 }
 function selectionRect(){
   if (!selectionAnchor || !selectionFocus) return null;
@@ -663,7 +663,7 @@ function archiveCellInBounds(row, col){
 function clearArchiveSelection(){
   archiveSelectionAnchor = null;
   archiveSelectionFocus = null;
-  document.querySelectorAll('#archiveBody td.selected').forEach(td => td.classList.remove('selected'));
+  renderArchiveSelectionHighlight();
 }
 function archiveSelectionRect(){
   if (!archiveSelectionAnchor || !archiveSelectionFocus) return null;
@@ -1896,7 +1896,7 @@ function kpCellInBounds(row, col){
 function clearKpSelection(){
   kpSelectionAnchor = null;
   kpSelectionFocus = null;
-  document.querySelectorAll('#kpBody td.selected').forEach(td => td.classList.remove('selected'));
+  renderKpSelectionHighlight();
 }
 function kpSelectionRect(){
   if (!kpSelectionAnchor || !kpSelectionFocus) return null;
