@@ -2236,8 +2236,9 @@ function renderArchiveTable(){
         return `<td class="summary-merged archive-sticky-col${isLast ? ' section-last' : ''}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 10) {
-        return `
-          <td class="measure-cell archive-raw" data-col="${index}"><input
+      const cls = index <= 17 ? measurementClass(index - 10, value) : '';
+      return `
+      <td class="measure-cell archive-raw ${cls}" data-col="${index}"><input
               value="${esc(fmt(value))}"
               data-row="${rowIndex}"
               data-col="${index}"
