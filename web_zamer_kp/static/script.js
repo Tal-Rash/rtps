@@ -2925,3 +2925,13 @@ if (document.getElementById('inputTable')) {
 if (document.getElementById('wearChartSvg') || document.getElementById('wearChartsGrid')) {
   loadWearAnalysis().catch(() => undefined);
 }
+
+document.addEventListener('mousedown', (event) => {
+  const target = event.target;
+  if (target.closest('table')) return;
+  if (target.closest('button')) return;
+  if (target.closest('input') || target.closest('select')) return;
+  if (typeof clearArchiveSelection === 'function') clearArchiveSelection();
+  if (typeof clearKpSelection === 'function') clearKpSelection();
+  if (typeof clearSelection === 'function') clearSelection();
+});
