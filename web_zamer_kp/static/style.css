@@ -41,7 +41,8 @@
     .archive-controls label { display:flex; align-items:center; gap:8px; }
     .archive-controls input { width:240px; }
     .input-locomotive-filter { display:flex; align-items:center; gap:8px; }
-    .table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:0; overflow:hidden; width:max-content; margin:16px auto 0; }
+    .table-shell table { border-style: hidden; }
+.table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:0; overflow:hidden; width:max-content; margin:16px auto 0; }
     .archive-table-shell {
       margin-top:0;
       padding:10px 0 0;
@@ -54,7 +55,7 @@
     .archive-head-shell {
       border-radius:0;
       overflow:hidden;
-      border:0;
+      border:0; border-bottom: 1px solid var(--table-grid);
       background:#fff;
     }
     .archive-body-shell {
