@@ -1056,18 +1056,6 @@ function parsePositiveInt(value){
   const n = parseInt(String(value ?? '').trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
-    const defaultSections = wheelPairCount <= 6 ? 1 : 3;
-    const sectionText = prompt(`Сколько секций у локомотива ${loco}?`, String(defaultSections));
-    if (sectionText === null) return null;
-    const sectionCount = parsePositiveInt(sectionText);
-    if (!sectionCount || sectionCount > wheelPairCount) {
-      alert('Число секций должно быть положительным и не больше числа колесных пар.');
-      continue;
-    }
-    return { wheel_pair_count: wheelPairCount, section_count: sectionCount };
-  }
-  return null;
-}
 function renderArchiveLocomotives(){
   const select = document.getElementById('archiveLocomotive');
   const items = LOCOMOTIVE_CHOICES || [];
