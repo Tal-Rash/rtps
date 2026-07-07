@@ -44,34 +44,39 @@
     #inputTable, .kp-table, .wear-table { border-style: hidden; }
 .table-shell { background:#fff; border:1px solid #2f6fed; border-radius:18px; padding:0; overflow:hidden; width:max-content; margin:16px auto 0; }
     .archive-table-shell {
-      margin-top:0;
-      padding:10px 0 0;
-      justify-content:flex-start;
-      display:block;
-      overflow:visible;
-      border:0;
-      background:transparent;
-    }
+  margin-top:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  overflow:auto;
+  border:1px solid #2f6fed;
+  background:#fff;
+  border-radius:18px;
+  width:100%;
+  max-height:calc(100vh - 340px);
+}
+.archive-table-shell table {
+  border-style: hidden;
+}
     .archive-head-shell {
-      border-radius:0;
-      overflow:hidden;
-      border:0; border-bottom: 1px solid var(--table-grid);
-      background:#fff;
-    }
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-radius: 0;
+  overflow: visible;
+  border: 0;
+  border-bottom: 1px solid var(--table-grid);
+  background: #fff;
+  flex-shrink: 0;
+}
     .archive-body-shell {
-      max-height:calc(100vh - 340px);
-      overflow-y:auto;
-      overflow-x:hidden;
-      border:0;
-      border-radius:0;
-      background:#fff;
-      scrollbar-width:none;
-      -ms-overflow-style:none;
-    }
-    .archive-body-shell::-webkit-scrollbar {
-      width:0;
-      height:0;
-    }
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+    
     .kp-shell { margin-top:12px; }
     .kp-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
     .kp-note { margin:6px 0 8px; color:var(--muted); font-size:13px; line-height:1.4; }
