@@ -663,7 +663,9 @@ function archiveCellInBounds(row, col){
 function clearArchiveSelection(){
   archiveSelectionAnchor = null;
   archiveSelectionFocus = null;
+  archiveSelectedMeasurementKey = null;
   renderArchiveSelectionHighlight();
+  renderArchiveMeasurementSelection();
 }
 function archiveSelectionRect(){
   if (!archiveSelectionAnchor || !archiveSelectionFocus) return null;
