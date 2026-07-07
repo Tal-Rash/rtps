@@ -31,10 +31,7 @@
     <div id="panelInput" class="panel active">
       <div class="filters" style="margin-top:0;">
         <label class="input-locomotive-filter">Локомотив
-          <div class="loco-picker">
-            <input id="locomotive" type="text" autocomplete="off" aria-autocomplete="list" style="width:220px">
-            <div id="locomotiveDropdown" class="loco-dropdown" role="listbox" aria-label="Список локомотивов"></div>
-          </div>
+          <select id="locomotive" style="width:220px" onchange="onLocomotiveCommit()"></select>
         </label>
         <label>Дата замера
           <input id="measurementDate" type="date" style="width:150px">

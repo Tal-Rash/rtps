@@ -40,7 +40,6 @@ let clipboardCache = '';
 let archiveSelectionAnchor = null;
 let archiveSelectionFocus = null;
 let archiveSelectionDragging = false;
-let locomotiveInputSource = 'loaded';
 let initialLoadPromise = null;
 let locomotiveSwitchPromise = null;
 let normsRows = [];
@@ -1035,69 +1034,28 @@ function measurementClass(col, value){
   return '';
 }
 function renderLocoOptions(){
-  const input = document.getElementById('locomotive');
-  const items = state?.locomotives || [];
-  const choices = LOCOMOTIVE_CHOICES || [];
-  if (!input) return;
-  if (state?.locomotive && (items.some(x => x.number === state.locomotive) || choices.some(x => x.number === state.locomotive))) {
-    input.value = state.locomotive;
-  } else if (choices.length && !input.value) {
-    input.value = choices[0].number;
-  }
-  renderLocoDropdown('', false);
-  renderMeta();
-}
-function renderLocoDropdown(filterText = '', open = true){
-  const dropdown = document.getElementById('locomotiveDropdown');
+  const select = document.getElementById('locomotive');
   const items = (LOCOMOTIVE_CHOICES && LOCOMOTIVE_CHOICES.length ? LOCOMOTIVE_CHOICES : (state?.locomotives || []));
-  if (!dropdown) return;
-  const textValue = String(filterText || '').trim().toLowerCase();
-  const filtered = textValue
-    ? items.filter(item => String(item.number || '').toLowerCase().includes(textValue) || String(item.label || '').toLowerCase().includes(textValue))
-    : items;
-  if (!filtered.length) {
-    dropdown.innerHTML = '<button type="button" disabled>Нет совпадений</button>';
-    dropdown.classList.toggle('open', !!open);
-    return;
+  if (!select) return;
+  const current = select.value || state?.locomotive || '';
+  select.innerHTML = items.length
+    ? items.map(x => {
+        const number = String(x.number || '').trim();
+        const label = String(x.label || number || '').trim();
+        return `<option value="${esc(number)}">${esc(label)}</option>`;
+      }).join('')
+    : '<option value="">Нет локомотивов</option>';
+  if (current && items.some(x => x.number === current)) {
+    select.value = current;
+  } else if (items.length) {
+    select.value = items[0].number;
   }
-  dropdown.innerHTML = filtered
-    .map(item => {
-      const number = String(item.number || '').trim();
-      const label = String(item.label || number || '').trim();
-      return `<button type="button" data-loco="${esc(number)}">${esc(label)}</button>`;
-    })
-    .join('');
-  dropdown.classList.toggle('open', !!open);
-}
-function hideLocoDropdown(){
-  const dropdown = document.getElementById('locomotiveDropdown');
-  if (dropdown) dropdown.classList.remove('open');
-}
-function showLocoDropdown(){
-  renderLocoDropdown('', true);
-}
-function chooseLoco(value){
-  const input = document.getElementById('locomotive');
-  if (!input) return;
-  locomotiveInputSource = 'picked';
-  input.value = value;
-  hideLocoDropdown();
-  onLocomotiveCommit();
+  renderMeta();
 }
 function parsePositiveInt(value){
   const n = parseInt(String(value ?? '').trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
-async function promptManualLocoCounts(loco){
-  const fallbackWheelPairs = 12;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const wheelPairText = prompt(`Локомотив ${loco} не найден в справочнике.\nСколько у него колесных пар?`, String(fallbackWheelPairs));
-    if (wheelPairText === null) return null;
-    const wheelPairCount = parsePositiveInt(wheelPairText);
-    if (!wheelPairCount) {
-      alert('Введите положительное число колесных пар.');
-      continue;
-    }
     const defaultSections = wheelPairCount <= 6 ? 1 : 3;
     const sectionText = prompt(`Сколько секций у локомотива ${loco}?`, String(defaultSections));
     if (sectionText === null) return null;
@@ -2569,7 +2527,6 @@ async function loadState(nextLocomotive, preloadedState = null, manualConfig = n
     loaded = await res.json();
   }
   state = loaded;
-  locomotiveInputSource = 'loaded';
   state.locomotives = state.locomotives && state.locomotives.length ? state.locomotives : (LOCOMOTIVE_CHOICES || []);
   savedState = cloneState(state);
   canceledState = null;
@@ -2613,9 +2570,7 @@ async function switchLocomotive(next){
     return;
   }
   if (next === current) {
-    locomotiveInputSource = 'loaded';
     renderMeta();
-    hideLocoDropdown();
     return;
   }
   if (dirty && current) {
@@ -2626,43 +2581,9 @@ async function switchLocomotive(next){
     }
     await saveDraft();
   }
-  if (locomotiveInputSource === 'typed') {
-    const preview = await fetchStatePayload(next);
-    if (!preview) {
-      document.getElementById('locomotive').value = current;
-      setStatus('Не удалось загрузить данные локомотива');
-      return;
-    }
-    if (preview.has_manual_meta) {
-      await loadState(next, preview);
-      return;
-    }
-    const manualConfig = await promptManualLocoCounts(next);
-    if (!manualConfig) {
-      document.getElementById('locomotive').value = current;
-      return;
-    }
-    await loadState(next, preview, manualConfig);
-    return;
-  }
   const known = isKnownLocomotive(next);
   if (!known) {
-    const preview = await fetchStatePayload(next);
-    if (!preview) {
-      document.getElementById('locomotive').value = current;
-      setStatus('Не удалось загрузить данные локомотива');
-      return;
-    }
-    if (!preview.has_manual_meta) {
-      const manualConfig = await promptManualLocoCounts(next);
-      if (!manualConfig) {
-        document.getElementById('locomotive').value = current;
-        return;
-      }
-      await loadState(next, preview, manualConfig);
-      return;
-    }
-    await loadState(next, preview);
+    document.getElementById('locomotive').value = current;
     return;
   }
   await loadState(next);
@@ -2809,33 +2730,6 @@ function restoreChanges(){
 }
 
 document.getElementById('locomotive')?.addEventListener('change', onLocomotiveCommit);
-document.getElementById('locomotive')?.addEventListener('keydown', event => {
-  if (event.key === 'Escape') {
-    hideLocoDropdown();
-    return;
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    onLocomotiveCommit();
-  }
-});
-document.getElementById('locomotive')?.addEventListener('focus', showLocoDropdown);
-document.getElementById('locomotive')?.addEventListener('click', showLocoDropdown);
-document.getElementById('locomotive')?.addEventListener('input', event => {
-  locomotiveInputSource = 'typed';
-  renderLocoDropdown(event.target.value);
-});
-document.getElementById('locomotive')?.addEventListener('blur', () => setTimeout(hideLocoDropdown, 150));
-document.getElementById('locomotiveDropdown')?.addEventListener('mousedown', event => {
-  const btn = event.target.closest('button[data-loco]');
-  if (!btn) return;
-  event.preventDefault();
-  chooseLoco(btn.dataset.loco || '');
-});
-document.addEventListener('mousedown', event => {
-  const picker = event.target.closest?.('.loco-picker');
-  if (!picker) hideLocoDropdown();
-});
 document.addEventListener('mouseup', () => {
   selectionDragging = false;
   archiveSelectionDragging = false;
