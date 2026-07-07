@@ -1033,6 +1033,25 @@ function measurementClass(col, value){
   if (yellow !== null && (less ? val <= yellow : val >= yellow)) return 'warn';
   return '';
 }
+function summaryClass(col, value){
+  const val = n(value);
+  if (val === null) return '';
+  const norm = state?.norms || {};
+  let item = null;
+  if (col === 2) item = norm.max_prokat;
+  if (col === 3) item = norm.min_greben;
+  if (col === 4) item = norm.min_krut;
+  if (col === 5) item = norm.min_bandage_thickness;
+  if (col === 6) item = norm.max_diameter_diff;
+  if (col === 8) item = norm.prokat_6_count;
+  if (!item) return '';
+  const yellow = n(item.yellow_value), red = n(item.red_value);
+  const less = String(item.condition || '').toLowerCase().includes('меньш');
+  if (red !== null && (less ? val <= red : val >= red)) return 'bad';
+  if (yellow !== null && (less ? val <= yellow : val >= yellow)) return 'warn';
+  return '';
+}
+
 function renderLocoOptions(){
   const select = document.getElementById('locomotive');
   const items = (LOCOMOTIVE_CHOICES && LOCOMOTIVE_CHOICES.length ? LOCOMOTIVE_CHOICES : (state?.locomotives || []));
@@ -2233,7 +2252,8 @@ function renderArchiveTable(){
         const span = sectionSpans.get(rowIndex);
         if (!span) return '';
         const isLast = lastSectionStarts.has(rowIndex);
-        return `<td class="summary-merged archive-sticky-col${isLast ? ' section-last' : ''}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
+        const cls = summaryClass(index, value);
+        return `<td class="summary-merged archive-sticky-col${isLast ? ' section-last' : ''} ${cls}" data-col="${index}" rowspan="${span}">${esc(value)}</td>`;
       }
       if (index >= 10) {
       const cls = index <= 17 ? measurementClass(index - 10, value) : '';
