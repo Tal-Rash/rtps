@@ -158,6 +158,10 @@ button:disabled {
   line-height: 1.25;
 }
 
+.matrix-table td {
+  height: 80px;
+}
+
 .matrix-table th {
   position: sticky;
   top: 0;
