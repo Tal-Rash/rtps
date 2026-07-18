@@ -1398,7 +1398,11 @@ function repairSummaryKpMeasurementDates(row){
       if (String(item?.number ?? '').trim() !== number) return false;
       if (normalizeRepairCode(item?.repairCode) !== repairCode) return false;
       const measurementDate = parseRepairDate(item?.measurementDate);
-      return measurementDate && measurementDate >= dateFrom && measurementDate <= dateTo;
+      if (!measurementDate) return false;
+      const diffStart = measurementDate - dateFrom;
+      const diffEnd = measurementDate - dateTo;
+      const tolerance = 15 * 24 * 60 * 60 * 1000; // 15 дней
+      return diffStart >= -tolerance && diffEnd <= tolerance;
     })
     .map((item) => parseRepairDate(item.measurementDate))
     .filter(Boolean)
