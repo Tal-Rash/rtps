@@ -1390,10 +1390,50 @@ def get_employee_vacations() -> dict[str, list[dict]]:
             item = {
                 "start": start.isoformat(),
                 "end": end.isoformat(),
-                "label": f"{start.strftime('%d.%m.%Y')}-{end.strftime('%d.%m.%Y')}",
+                "label": f"Отпуск {start.strftime('%d.%m.%Y')}-{end.strftime('%d.%m.%Y')}",
             }
             for name in names.get((year, _tab_num), set()):
                 result.setdefault(name, []).append(item)
+
+    try:
+        with sqlite3.connect(SOURCE_DB) as db:
+            db.row_factory = sqlite3.Row
+            ts_rows = db.execute(
+                """
+                SELECT e.y, e.name, e.full_name, t.m, t.c, t.v
+                FROM employees e
+                JOIN timesheet t ON t.y=e.y AND t.tab_num=e.tab_num
+                WHERE TRIM(COALESCE(e.tab_num, '')) <> ''
+                  AND TRIM(COALESCE(t.v, '')) <> ''
+                """
+            ).fetchall()
+            for row in ts_rows:
+                try:
+                    year = int(row["y"])
+                    day = int(row["c"])
+                    month_name = s(row["m"]).strip()
+                except Exception:
+                    continue
+                v = s(row["v"]).strip()
+                if not v or any(char.isdigit() for char in v):
+                    continue
+                try:
+                    month_index = MONTHS_RU.index(month_name) + 1
+                    date_obj = dt.date(year, month_index, day)
+                except ValueError:
+                    continue
+                item = {
+                    "start": date_obj.isoformat(),
+                    "end": date_obj.isoformat(),
+                    "label": f"Отсутствует: {v} ({date_obj.strftime('%d.%m.%Y')})",
+                }
+                name_values = {s(row["name"]).strip(), s(row["full_name"]).strip()}
+                for name in name_values:
+                    if name:
+                        result.setdefault(name, []).append(item)
+    except Exception as e:
+        print("Error fetching timesheet for vacations:", e)
+
     return result
 
 
