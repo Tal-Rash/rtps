@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import datetime as dt
 import json
@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.54"
+APP_VERSION = "web-tabel-1.55"
 DB_LOCK = Lock()
 COMMON_DB_FILE = DB_FILE
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
@@ -205,7 +205,7 @@ async def home_route(request: Request):
         
     mod_role = get_mod_role_fastapi(session, "tabel")
     if not mod_role:
-        return HTMLResponse(content="<meta charset='utf-8'>РЈ РІР°СЃ РЅРµС‚ РїСЂР°РІ РґР»СЏ РґРѕСЃС‚СѓРїР° Рє СЌС‚РѕРјСѓ РјРѕРґСѓР»СЋ. РћР±СЂР°С‚РёС‚РµСЃСЊ Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ. <a href='/'>Р’РµСЂРЅСѓС‚СЊСЃСЏ РІ РіР»Р°РІРЅРѕРµ РјРµРЅСЋ</a>", status_code=403)
+        return HTMLResponse(content="<meta charset='utf-8'>У вас нет прав для доступа к этому модулю. Обратитесь к администратору. <a href='/'>Вернуться в главное меню</a>", status_code=403)
         
     can_edit = mod_role in ("edit", "editor", "admin")
     
@@ -219,7 +219,7 @@ async def home_route(request: Request):
     response = HTMLResponse(content=html)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
-MONTH_NAMES = ["", "РЇРЅРІР°СЂСЊ", "Р¤РµРІСЂР°Р»СЊ", "РњР°СЂС‚", "РђРїСЂРµР»СЊ", "РњР°Р№", "РСЋРЅСЊ", "РСЋР»СЊ", "РђРІРіСѓСЃС‚", "РЎРµРЅС‚СЏР±СЂСЊ", "РћРєС‚СЏР±СЂСЊ", "РќРѕСЏР±СЂСЊ", "Р”РµРєР°Р±СЂСЊ"]
+MONTH_NAMES = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
 
 FIXED_HOLIDAYS = {
@@ -276,7 +276,7 @@ def load_state(year: int, month: int) -> dict:
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
 
-        # РђРІС‚РѕРјР°С‚РёС‡РµСЃРєР°СЏ РјРёРіСЂР°С†РёСЏ: РґРѕР±Р°РІР»СЏРµРј РєРѕР»РѕРЅРєСѓ exclude_date, РµСЃР»Рё РµС‘ РЅРµС‚ РЅР° СЃРµСЂРІРµСЂРµ
+        # Автоматическая миграция: добавляем колонку exclude_date, если её нет на сервере
         try:
             cur.execute("SELECT exclude_date FROM employees LIMIT 1")
         except sqlite3.OperationalError:
@@ -379,11 +379,11 @@ async def export_summary(year: int, month: int, type: str):
         title = type.split(":", 1)[1].strip()
     else:
         code_map = {
-            "РћС‚РїСѓСЃРєР°": ["Рћ"],
-            "РћС‚РїСѓСЃРєР° РІРЅРµРїР»Р°РЅРѕРІС‹Рµ": ["РћР’"],
-            "РћС‚РїСѓСЃРє Р±/СЃ": ["Р”Рћ"],
-            "РЈС‡РµР±РЅС‹Р№ РѕС‚РїСѓСЃРє": ["РЈ"],
-            "Р‘РѕР»СЊРЅРёС‡РЅС‹Р№": ["Р‘"]
+            "Отпуска": ["О"],
+            "Отпуска внеплановые": ["ОВ"],
+            "Отпуск б/с": ["ДО"],
+            "Учебный отпуск": ["У"],
+            "Больничный": ["Б"]
         }
         codes = code_map.get(type, [type])
         title = type
@@ -400,7 +400,7 @@ async def export_summary(year: int, month: int, type: str):
         holiday_set = set(sys_dates.get("holiday", []))
         transfer_set = set(sys_dates.get("transfer", []))
         
-        monthsNames = ["РЇРЅРІР°СЂСЊ", "Р¤РµРІСЂР°Р»СЊ", "РњР°СЂС‚", "РђРїСЂРµР»СЊ", "РњР°Р№", "РСЋРЅСЊ", "РСЋР»СЊ", "РђРІРіСѓСЃС‚", "РЎРµРЅС‚СЏР±СЂСЊ", "РћРєС‚СЏР±СЂСЊ", "РќРѕСЏР±СЂСЊ", "Р”РµРєР°Р±СЂСЊ"]
+        monthsNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
         month_map = {name: i+1 for i, name in enumerate(monthsNames)}
         
         if codes == ["WORK_WEEKEND"]:
@@ -412,7 +412,7 @@ async def export_summary(year: int, month: int, type: str):
             """, (year,)).fetchall()
             
             from datetime import date
-            ignore_codes = {"Р’", "B", "Рћ", "Р”Рћ", "Рљ", "РЈ", "Р‘", "Р‘Рќ", "РћР’"}
+            ignore_codes = {"В", "B", "О", "ДО", "К", "У", "Б", "БН", "ОВ"}
             
             for row in ts_rows:
                 name = row["name"]
@@ -452,7 +452,7 @@ async def export_summary(year: int, month: int, type: str):
                 m_str = row["m"]
                 d = row["c"]
                 
-                if v in ("Рћ", "РћР’"):
+                if v in ("О", "ОВ"):
                     m_int = month_map.get(m_str)
                     if m_int and (m_int, int(d)) in holiday_set:
                         continue
@@ -463,7 +463,7 @@ async def export_summary(year: int, month: int, type: str):
     total = sum(result.values())
     
     html = f"""
-    <html><head><meta charset="utf-8"><title>РЎРІРѕРґРєР°: {title}</title>
+    <html><head><meta charset="utf-8"><title>Сводка: {title}</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; }}
         table {{ border-collapse: collapse; width: 600px; margin-top: 20px; }}
@@ -473,15 +473,15 @@ async def export_summary(year: int, month: int, type: str):
         .right {{ text-align: right; font-weight: bold; }}
     </style>
     </head><body>
-    <h2 class="center">{title} Р·Р° {year} РіРѕРґ</h2>
-    <div class="center" style="color: #666;">РљРѕРґС‹: {', '.join(codes)}</div>
+    <h2 class="center">{title} за {year} год</h2>
+    <div class="center" style="color: #666;">Коды: {', '.join(codes)}</div>
     <table>
-        <tr><th style="width: 50px;">в„–</th><th>Р¤РРћ</th><th style="width: 100px;">Р”РЅРµР№</th></tr>
+        <tr><th style="width: 50px;">№</th><th>ФИО</th><th style="width: 100px;">Дней</th></tr>
     """
     for idx, emp in enumerate(employees, 1):
         html += f"<tr><td class='center'>{idx}</td><td>{emp}</td><td class='center'>{result[emp]}</td></tr>"
         
-    html += f"<tr><td colspan='2' class='right'>РС‚РѕРіРѕ:</td><td class='center'><b>{total}</b></td></tr>"
+    html += f"<tr><td colspan='2' class='right'>Итого:</td><td class='center'><b>{total}</b></td></tr>"
     html += "</table></body></html>"
     return HTMLResponse(content=html)
 
@@ -494,9 +494,9 @@ async def export_milk(year: int, month: int, type: str):
     type = urllib.parse.unquote(type)
     
     templates = {
-        "РєРѕРјРїРµРЅСЃР°С†РёСЏ": "РњРѕР»РѕРєРѕ_РєРѕРјРї_С€Р°Р±Р»РѕРЅ.xlsx",
-        "РїР»Р°РЅ": "РњРѕР»РѕРєРѕ_РїР»Р°РЅ_С€Р°Р±Р»РѕРЅ.xlsx",
-        "С„Р°РєС‚": "РњРѕР»РѕРєРѕ_С„Р°РєС‚_С€Р°Р±Р»РѕРЅ.xlsx"
+        "компенсация": "Молоко_комп_шаблон.xlsx",
+        "план": "Молоко_план_шаблон.xlsx",
+        "факт": "Молоко_факт_шаблон.xlsx"
     }
     
     template_name = templates.get(type)
@@ -546,7 +546,7 @@ async def export_milk(year: int, month: int, type: str):
             return False
         return not is_we
 
-    non_shift_codes = {"Р’", "B", "Рћ", "РћР’", "Рђ", "РЈ", "Р‘", "Р‘Рќ"}
+    non_shift_codes = {"В", "B", "О", "ОВ", "А", "У", "Б", "БН"}
     numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
     spacing_re = __import__("re").compile(r"\s*,\s*")
 
@@ -555,7 +555,7 @@ async def export_milk(year: int, month: int, type: str):
         if not val:
             return False
         compact = spacing_re.sub(",", val).replace(" ", "")
-        if "Рњ" in compact:
+        if "М" in compact:
             return True
         if compact in non_shift_codes:
             return False
@@ -591,7 +591,7 @@ async def export_milk(year: int, month: int, type: str):
 
             def allowed_employee(emp_row):
                 name_up = str(emp_row["name"]).upper()
-                if type == "РєРѕРјРїРµРЅСЃР°С†РёСЏ":
+                if type == "компенсация":
                     return name_up in m_comp_set
                 return name_up in m_issue_set
 
@@ -615,7 +615,7 @@ async def export_milk(year: int, month: int, type: str):
                         continue
 
                     val = emp_ts.get(d, "").strip().upper()
-                    if type == "РєРѕРјРїРµРЅСЃР°С†РёСЏ":
+                    if type == "компенсация":
                         if is_shift_mark(val):
                             count += 1
                         elif val:
@@ -628,7 +628,7 @@ async def export_milk(year: int, month: int, type: str):
                         elif val not in non_shift_codes and is_shift_mark(val):
                             count += 1
                         else:
-                            missed_days.append(f"{d:02d}.{month:02d} {val or 'РїСѓСЃС‚Рѕ'}")
+                            missed_days.append(f"{d:02d}.{month:02d} {val or 'пусто'}")
 
                 final_rows.append({
                     "fio": name,
@@ -659,15 +659,15 @@ async def export_milk(year: int, month: int, type: str):
     for row in ws.iter_rows():
         for cell in row:
             if cell.value and isinstance(cell.value, str):
-                cell.value = cell.value.replace("[РњР•РЎРЇР¦]", m_str).replace("[Р“РћР”]", str(year)).replace("[РќРћР РњРђ_Р”РќР•Р™]", work_days_norm).replace("[РРўРћР“Рћ]", str(grand_total))
+                cell.value = cell.value.replace("[МЕСЯЦ]", m_str).replace("[ГОД]", str(year)).replace("[НОРМА_ДНЕЙ]", work_days_norm).replace("[ИТОГО]", str(grand_total))
                 if row_tpl is None and any(tag in cell.value for tag in [
-                    "[в„–]",
-                    "[Р¤РРћ]",
-                    "[Р¤РРћ_РџРћР›РќРћР•]",
-                    "[Р”РћР›Р–РќРћРЎРўР¬]",
-                    "[РўРђР‘]",
-                    "[РЎРњР•РќР«]",
-                    "[РњРћР›РћРљРћ_РџР РРњ]"
+                    "[№]",
+                    "[ФИО]",
+                    "[ФИО_ПОЛНОЕ]",
+                    "[ДОЛЖНОСТЬ]",
+                    "[ТАБ]",
+                    "[СМЕНЫ]",
+                    "[МОЛОКО_ПРИМ]"
                 ]):
                     row_tpl = cell.row
 
@@ -689,14 +689,14 @@ async def export_milk(year: int, month: int, type: str):
                         cell.alignment = copy.copy(src.alignment)
                 v = tpl_vals.get(c_idx)
                 if v and isinstance(v, str):
-                    v = v.replace("[в„–]", str(i+1)).replace("[Р¤РРћ]", data["fio"]).replace("[Р¤РРћ_РџРћР›РќРћР•]", data["full_name"]).replace("[Р”РћР›Р–РќРћРЎРўР¬]", data["pos"]).replace("[РўРђР‘]", data["tab"]).replace("[РЎРњР•РќР«]", str(data["shifts"])).replace("[РњРћР›РћРљРћ_РџР РРњ]", data["milk_note"])
+                    v = v.replace("[№]", str(i+1)).replace("[ФИО]", data["fio"]).replace("[ФИО_ПОЛНОЕ]", data["full_name"]).replace("[ДОЛЖНОСТЬ]", data["pos"]).replace("[ТАБ]", data["tab"]).replace("[СМЕНЫ]", str(data["shifts"])).replace("[МОЛОКО_ПРИМ]", data["milk_note"])
                     cell.value = int(v) if str(v).isdigit() else v
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     tmp.close()
     wb.save(tmp.name)
     
-    return FileResponse(tmp.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"РћС‚С‡РµС‚_РњРѕР»РѕРєРѕ_{type}.xlsx")
+    return FileResponse(tmp.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"Отчет_Молоко_{type}.xlsx")
 
 
 @app.get("/api/export-milk-details", response_class=HTMLResponse)
@@ -705,9 +705,9 @@ async def export_milk_details(year: int, month: int, type: str):
     type = urllib.parse.unquote(type)
 
     templates = {
-        "РєРѕРјРїРµРЅСЃР°С†РёСЏ": "РљРѕРјРїРµРЅСЃР°С†РёСЏ (РџР»Р°РЅ)",
-        "РїР»Р°РЅ": "Р’С‹РґР°С‡Р° (РџР»Р°РЅ)",
-        "С„Р°РєС‚": "Р’С‹РґР°С‡Р° (Р¤Р°РєС‚)",
+        "компенсация": "Компенсация (План)",
+        "план": "Выдача (План)",
+        "факт": "Выдача (Факт)",
     }
     title = templates.get(type, type)
 
@@ -751,7 +751,7 @@ async def export_milk_details(year: int, month: int, type: str):
             return False
         return not is_we
 
-    non_shift_codes = {"Р’", "B", "Рћ", "РћР’", "Рђ", "РЈ", "Р‘", "Р‘Рќ"}
+    non_shift_codes = {"В", "B", "О", "ОВ", "А", "У", "Б", "БН"}
     numeric_shift_re = __import__("re").compile(r"^\d+(?:[.,]\d+)?$")
     spacing_re = __import__("re").compile(r"\s*,\s*")
 
@@ -760,7 +760,7 @@ async def export_milk_details(year: int, month: int, type: str):
         if not val:
             return False
         compact = spacing_re.sub(",", val).replace(" ", "")
-        if "Рњ" in compact:
+        if "М" in compact:
             return True
         if compact in non_shift_codes:
             return False
@@ -785,9 +785,9 @@ async def export_milk_details(year: int, month: int, type: str):
     for emp in emp_rows:
         name = str(emp["name"])
         name_up = name.upper()
-        if type == "РєРѕРјРїРµРЅСЃР°С†РёСЏ" and name_up not in m_comp_set:
+        if type == "компенсация" and name_up not in m_comp_set:
             continue
-        if type in ("РїР»Р°РЅ", "С„Р°РєС‚") and name_up not in m_issue_set:
+        if type in ("план", "факт") and name_up not in m_issue_set:
             continue
 
         tab_num = str(emp["tab_num"])
@@ -802,11 +802,11 @@ async def export_milk_details(year: int, month: int, type: str):
             if exclude_start is not None and d >= exclude_start:
                 continue
             val = emp_ts.get(d, "").strip().upper()
-            if type == "РєРѕРјРїРµРЅСЃР°С†РёСЏ":
+            if type == "компенсация":
                 if is_shift_mark(val):
                     count += 1
                 elif val:
-                    missed_days.append(f"{d:02d}.{month:02d} вЂ” {val}")
+                    missed_days.append(f"{d:02d}.{month:02d} — {val}")
             else:
                 if not is_workday(year, month, d):
                     continue
@@ -815,7 +815,7 @@ async def export_milk_details(year: int, month: int, type: str):
                 elif val not in non_shift_codes and is_shift_mark(val):
                     count += 1
                 else:
-                    missed_days.append(f"{d:02d}.{month:02d} вЂ” {val or 'РїСѓСЃС‚Рѕ'}")
+                    missed_days.append(f"{d:02d}.{month:02d} — {val or 'пусто'}")
 
         rows.append({
             "tab": tab_num,
@@ -825,7 +825,7 @@ async def export_milk_details(year: int, month: int, type: str):
             "missed": missed_days,
         })
 
-    html = [f"<html><head><meta charset='utf-8'><title>{title} вЂ” {MONTH_NAMES[month]} {year}</title>"]
+    html = [f"<html><head><meta charset='utf-8'><title>{title} — {MONTH_NAMES[month]} {year}</title>"]
     html.append("""
     <style>
       body { font-family: Arial, sans-serif; margin: 20px; color: #1f2937; }
@@ -840,11 +840,11 @@ async def export_milk_details(year: int, month: int, type: str):
       .empty { color: #94a3b8; }
     </style>
     </head><body>""")
-    html.append(f"<h1>{title} вЂ” {MONTH_NAMES[month]} {year}</h1>")
-    html.append("<div class='sub'>РџРѕРєР°Р·С‹РІР°РµРј С‚РѕР»СЊРєРѕ С‚Рµ РґРЅРё, РєРѕС‚РѕСЂС‹Рµ РЅРµ Р±С‹Р»Рё Р·Р°СЃС‡РёС‚Р°РЅС‹ РєР°Рє СЃРјРµРЅР°. Р•СЃР»Рё СЃС‚СЂРѕРєР° РїСѓСЃС‚Р°СЏ, РґР»СЏ СЌС‚РѕРіРѕ СЃРѕС‚СЂСѓРґРЅРёРєР° РЅРµ РЅР°Р№РґРµРЅРѕ РЅРµСѓС‡С‚С‘РЅРЅС‹С… РґРЅРµР№.</div>")
-    html.append("<table><thead><tr><th style='width:50px'>в„–</th><th>РўР°Р±. в„–</th><th>Р¤РРћ</th><th>РџСЂРѕС„РµСЃСЃРёСЏ</th><th style='width:90px'>РЎРјРµРЅ</th><th>РќРµ Р·Р°СЃС‡РёС‚Р°РЅРѕ</th></tr></thead><tbody>")
+    html.append(f"<h1>{title} — {MONTH_NAMES[month]} {year}</h1>")
+    html.append("<div class='sub'>Показываем только те дни, которые не были засчитаны как смена. Если строка пустая, для этого сотрудника не найдено неучтённых дней.</div>")
+    html.append("<table><thead><tr><th style='width:50px'>№</th><th>Таб. №</th><th>ФИО</th><th>Профессия</th><th style='width:90px'>Смен</th><th>Не засчитано</th></tr></thead><tbody>")
     for idx, row in enumerate(rows, 1):
-        missed = "<div class='empty'>РЅРµС‚</div>" if not row["missed"] else "<br>".join(row["missed"])
+        missed = "<div class='empty'>нет</div>" if not row["missed"] else "<br>".join(row["missed"])
         html.append(
             f"<tr><td class='num'>{idx}</td><td class='num'>{row['tab']}</td><td>{row['fio']}</td><td>{row['pos']}</td><td class='num'>{row['shifts']}</td><td class='missed'>{missed}</td></tr>"
         )
@@ -878,28 +878,28 @@ async def export_sick_email(emp: str, type: str, start: str, end: str, email: st
     <body>
         <table>
             <tr>
-                <td style="width: 40%;">РўР°Р±РµР»СЊРЅС‹Р№ РЅРѕРјРµСЂ</td>
+                <td style="width: 40%;">Табельный номер</td>
                 <td style="width: 60%;">{tab_num}</td>
             </tr>
             <tr>
-                <td>Р¤РРћ СЃРѕС‚СЂСѓРґРЅРёРєР°</td>
+                <td>ФИО сотрудника</td>
                 <td>{emp}</td>
             </tr>
             <tr>
-                <td>РўРёРї РѕРїРµСЂР°С†РёРё</td>
+                <td>Тип операции</td>
                 <td>{type}</td>
             </tr>
             <tr>
-                <td style="padding-left: 20px;">Р”Р°С‚Р° РЅР°С‡Р°Р»Р°</td>
+                <td style="padding-left: 20px;">Дата начала</td>
                 <td>{start}</td>
             </tr>
             <tr>
-                <td style="padding-left: 20px;">Р”Р°С‚Р° РѕРєРѕРЅС‡Р°РЅРёСЏ</td>
+                <td style="padding-left: 20px;">Дата окончания</td>
                 <td>{end}</td>
             </tr>
             <tr>
-                <td>РЎС‚СЂСѓРєС‚СѓСЂРЅРѕРµ РїРѕРґСЂР°Р·РґРµР»РµРЅРёРµ</td>
-                <td>3040 Р СѓРґРЅРёРє РўР°Р№РјС‹СЂСЃРєРёР№</td>
+                <td>Структурное подразделение</td>
+                <td>3040 Рудник Таймырский</td>
             </tr>
         </table>
         <br>
