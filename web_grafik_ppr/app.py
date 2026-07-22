@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import calendar
 import datetime as dt
@@ -19,25 +19,25 @@ from pathlib import Path
 from threading import Lock, RLock
 from urllib.parse import parse_qs, quote, urlparse
 
-APP_VERSION = "web-gpp-1.7"
+APP_VERSION = "web-gpp-1.8"
 MONTHS_RU = [
-    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+    "РЇРЅРІР°СЂСЊ", "Р¤РµРІСЂР°Р»СЊ", "РњР°СЂС‚", "РђРїСЂРµР»СЊ", "РњР°Р№", "РСЋРЅСЊ",
+    "РСЋР»СЊ", "РђРІРіСѓСЃС‚", "РЎРµРЅС‚СЏР±СЂСЊ", "РћРєС‚СЏР±СЂСЊ", "РќРѕСЏР±СЂСЊ", "Р”РµРєР°Р±СЂСЊ",
 ]
-TEM_NORM_ROWS = ["ТО2", "ТО3", "ТР1", "ТР2", "ТР3", "СР", "КР"]
-AGR_NORM_ROWS = ["ТО", "ТР", "КР"]
+TEM_NORM_ROWS = ["РўРћ2", "РўРћ3", "РўР 1", "РўР 2", "РўР 3", "РЎР ", "РљР "]
+AGR_NORM_ROWS = ["РўРћ", "РўР ", "РљР "]
 REPAIR_SCHEDULE_COLUMN_CODES = [
-    "ТР1", "ТР2", "ТР1", "ТР3", "ТР1", "ТР2", "ТР1", "СР",
-    "ТР1", "ТР2", "ТР1", "ТР3", "ТР1", "ТР2", "ТР1", "КР",
+    "РўР 1", "РўР 2", "РўР 1", "РўР 3", "РўР 1", "РўР 2", "РўР 1", "РЎР ",
+    "РўР 1", "РўР 2", "РўР 1", "РўР 3", "РўР 1", "РўР 2", "РўР 1", "РљР ",
 ]
-REPORT_TEMPLATE_NAME = "Отчет_шаблон.xlsx"
-TU28_TEMPLATE_NAME = "ТУ-28_шаблон.xlsx"
+REPORT_TEMPLATE_NAME = "РћС‚С‡РµС‚_С€Р°Р±Р»РѕРЅ.xlsx"
+TU28_TEMPLATE_NAME = "РўРЈ-28_С€Р°Р±Р»РѕРЅ.xlsx"
 MONTH_DAY_LIMIT_FOR_REPORT = 25
-TEP_REPORT_FACTORS = {"ТО2": 1, "ТО3": 2, "ТР1": 5, "ТР2": 10, "ТР3": 15}
-AGR_REPORT_FACTORS = {"ТО": 1, "ТР": 5}
-TEP_HOUR_FACTORS = {"ТО2": 1, "ТО3": 2, "ТР1": 5, "ТР2": 10, "ТР3": 15}
-AGR_HOUR_FACTORS = {"ТО": 1, "ТР": 5}
-TU28_REPAIR_CODES = {"ТО3", "ТР1", "ТР2", "ТР3", "СР", "КР"}
+TEP_REPORT_FACTORS = {"РўРћ2": 1, "РўРћ3": 2, "РўР 1": 5, "РўР 2": 10, "РўР 3": 15}
+AGR_REPORT_FACTORS = {"РўРћ": 1, "РўР ": 5}
+TEP_HOUR_FACTORS = {"РўРћ2": 1, "РўРћ3": 2, "РўР 1": 5, "РўР 2": 10, "РўР 3": 15}
+AGR_HOUR_FACTORS = {"РўРћ": 1, "РўР ": 5}
+TU28_REPAIR_CODES = {"РўРћ3", "РўР 1", "РўР 2", "РўР 3", "РЎР ", "РљР "}
 FIXED_HOLIDAYS = {
     (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
     (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
@@ -56,8 +56,8 @@ SHARED_DATA_DIR = ROOT.parent / "data"
 AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 SOURCE_DB = ROOT.parent / "base" / "common_database.db"
-SOURCE_DIR = ROOT.parent / "src" / "График ППР"
-ACT_TEMPLATE_NAME = "Акт_шаблон.xlsx"
+SOURCE_DIR = ROOT.parent / "src" / "Р“СЂР°С„РёРє РџРџР "
+ACT_TEMPLATE_NAME = "РђРєС‚_С€Р°Р±Р»РѕРЅ.xlsx"
 
 DB_LOCK = RLock()
 SERVER_STARTED_AT = None
@@ -177,7 +177,7 @@ def default_repair_schedule_state() -> dict:
     return {
         "columns": columns,
         "periodicity": {
-            "series": ["ТЭМ-2УМ", "ТЭМ-2", ""],
+            "series": ["РўР­Рњ-2РЈРњ", "РўР­Рњ-2", ""],
             "values": [["", "", "", "", ""] for _ in range(3)],
         },
         "objects": [
@@ -256,7 +256,7 @@ def _repair_schedule_period_row(periodicity: dict, series_name: str) -> list:
 
 def _repair_schedule_period_months(periodicity: dict, code: str, series_name: str) -> float:
     row = _repair_schedule_period_row(periodicity, series_name)
-    index_map = {"ТР1": 0, "ТР2": 1, "ТР3": 2, "СР": 3, "КР": 4}
+    index_map = {"РўР 1": 0, "РўР 2": 1, "РўР 3": 2, "РЎР ": 3, "РљР ": 4}
     idx = index_map.get(normalize_repair_code(code))
     if idx is None or idx >= len(row):
         return 0.0
@@ -269,15 +269,15 @@ def _repair_schedule_period_months(periodicity: dict, code: str, series_name: st
 
 def _repair_schedule_code_factor(code: str) -> float:
     normalized = normalize_repair_code(code)
-    if normalized == "ТР1":
+    if normalized == "РўР 1":
         return 1.0
-    if normalized == "ТР2":
+    if normalized == "РўР 2":
         return 0.5
-    if normalized == "ТР3":
+    if normalized == "РўР 3":
         return 0.25
-    if normalized == "СР":
+    if normalized == "РЎР ":
         return 0.125
-    if normalized == "КР":
+    if normalized == "РљР ":
         return 1.0
     return 0.0
 
@@ -326,11 +326,11 @@ def s(value) -> str:
 def normalize_repair_code(value: str) -> str:
     text = s(value).strip().upper().replace(" ", "").replace("-", "")
     latin_map = str.maketrans({
-        "A": "А", "B": "В", "C": "С", "E": "Е", "H": "Н", "K": "К",
-        "M": "М", "O": "О", "P": "Р", "T": "Т", "X": "Х", "Y": "У",
+        "A": "Рђ", "B": "Р’", "C": "РЎ", "E": "Р•", "H": "Рќ", "K": "Рљ",
+        "M": "Рњ", "O": "Рћ", "P": "Р ", "T": "Рў", "X": "РҐ", "Y": "РЈ",
     })
     text = text.translate(latin_map)
-    if any("А" <= c <= "Я" for c in text):
+    if any("Рђ" <= c <= "РЇ" for c in text):
         return text
     if any(c.isdigit() for c in text):
         return "".join(filter(str.isdigit, text))
@@ -644,7 +644,7 @@ def _repair_summary_rows_from_month_state(state: dict) -> list[dict]:
                 if cell_index < 4 or cell_index >= 4 + month_days:
                     continue
                 code = normalize_repair_code(value)
-                if not code or not any("А" <= ch <= "Я" for ch in code):
+                if not code or not any("Рђ" <= ch <= "РЇ" for ch in code):
                     continue
                 day = cell_index - 3
                 try:
@@ -681,7 +681,7 @@ def _repair_summary_rows_from_schedule_state(state: dict) -> list[dict]:
         def push_row(repair_code: str, date_value, column_index: int, source_kind: str):
             code = normalize_repair_code(repair_code)
             date_text = s(date_value).strip()
-            if not code or not date_text or not any("А" <= ch <= "Я" for ch in code):
+            if not code or not date_text or not any("Рђ" <= ch <= "РЇ" for ch in code):
                 return
             parsed = _repair_schedule_parse_date(date_text)
             if not parsed:
@@ -699,7 +699,7 @@ def _repair_summary_rows_from_schedule_state(state: dict) -> list[dict]:
                 "sourceKind": source_kind,
             })
 
-        push_row("КР", (row.get("kr") or {}).get("fact", ""), -1, "kr")
+        push_row("РљР ", (row.get("kr") or {}).get("fact", ""), -1, "kr")
         for cidx, col in enumerate(columns):
             push_row((col or {}).get("code", ""), (row.get("fact") or [])[cidx] if cidx < len(row.get("fact") or []) else "", cidx, "fact")
     return rows
@@ -719,7 +719,7 @@ def _repair_summary_pack(rows: list[dict]) -> dict:
     seen_locos: set[str] = set()
     for row in rows:
         code = s(row.get("repairCode")).strip()
-        if code and any("А" <= ch <= "Я" for ch in code) and code not in seen_types:
+        if code and any("Рђ" <= ch <= "РЇ" for ch in code) and code not in seen_types:
             seen_types.add(code)
             types.append(code)
         loco_key = s(row.get("locoKey")).strip()
@@ -805,7 +805,7 @@ def find_act_template_path() -> Path | None:
     candidates = [
         ROOT / ACT_TEMPLATE_NAME,
         SOURCE_DIR / ACT_TEMPLATE_NAME,
-        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / ACT_TEMPLATE_NAME,
+        ROOT.parent / "dist" / "Р РўРџРЎ" / "_internal" / "Р“СЂР°С„РёРє РџРџР " / ACT_TEMPLATE_NAME,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -817,7 +817,7 @@ def find_report_template_path() -> Path | None:
     candidates = [
         ROOT / REPORT_TEMPLATE_NAME,
         SOURCE_DIR / REPORT_TEMPLATE_NAME,
-        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / REPORT_TEMPLATE_NAME,
+        ROOT.parent / "dist" / "Р РўРџРЎ" / "_internal" / "Р“СЂР°С„РёРє РџРџР " / REPORT_TEMPLATE_NAME,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -829,7 +829,7 @@ def find_tu28_template_path() -> Path | None:
     candidates = [
         ROOT / TU28_TEMPLATE_NAME,
         SOURCE_DIR / TU28_TEMPLATE_NAME,
-        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / TU28_TEMPLATE_NAME,
+        ROOT.parent / "dist" / "Р РўРџРЎ" / "_internal" / "Р“СЂР°С„РёРє РџРџР " / TU28_TEMPLATE_NAME,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -946,12 +946,12 @@ def collect_row_notes(row: dict, unplanned_starts: list[tuple[int, int]], number
     cells = row.get("cells") or []
     note = s(cells[-1]).strip() if cells else ""
     has_unplanned = bool(unplanned_starts)
-    is_auto_act_note = note.startswith("Акт № ") and "-" in note
+    is_auto_act_note = note.startswith("РђРєС‚ в„– ") and "-" in note
     if note and not is_auto_act_note:
         row_notes.append(note)
     if has_unplanned:
         for day, month in unplanned_starts:
-            auto_note = f"Акт № {day:02d}-{month:02d}-{number}"
+            auto_note = f"РђРєС‚ в„– {day:02d}-{month:02d}-{number}"
             if auto_note not in row_notes:
                 row_notes.append(auto_note)
     if not row_notes and note and is_auto_act_note:
@@ -974,14 +974,14 @@ def collect_report_act_notes_for_category(state: dict, month_index: int, table_t
         number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
         if not series or not number:
             continue
-        row_category = "agr" if "ПЭ" in series else "tep"
+        row_category = "agr" if "РџР­" in series else "tep"
         if row_category != category:
             continue
         key = report_unit_key(row)
         if not key:
             continue
         for day, month_num in collect_unplanned_starts_across_months(year, months, month_index, table_type, key):
-            note = f"Акт № {day:02d}-{month_num:02d}-{number}"
+            note = f"РђРєС‚ в„– {day:02d}-{month_num:02d}-{number}"
             if note not in notes:
                 notes.append(note)
     return notes
@@ -1026,7 +1026,7 @@ def process_report_row(
     number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
     if not series:
         return
-    category = "agr" if "ПЭ" in series else "tep"
+    category = "agr" if "РџР­" in series else "tep"
     acc.units[table_type][category] += 1
     state = {"last_is_num": False, "unplanned_starts": []}
     if prev_row is not None and prev_m is not None:
@@ -1086,7 +1086,7 @@ def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
 
     months = state.get("months", []) or []
     if not (0 <= m_idx < len(months)):
-        raise ValueError("Не найден месяц отчета")
+        raise ValueError("РќРµ РЅР°Р№РґРµРЅ РјРµСЃСЏС† РѕС‚С‡РµС‚Р°")
     curr_month = months[m_idx]
     prev_month = months[m_idx - 1] if prev_month_name and m_idx - 1 >= 0 else None
     prev_rows_by_unit = build_rows_by_unit(prev_month, "plan") if prev_month else {}
@@ -1175,43 +1175,43 @@ def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, 
     sum_f = sum(tep_fact.values()) + f_tep_ub + sum(agr_fact.values()) + f_agr_ub
 
     return {
-        "[МЕСЯЦ]": month_name,
-        "[ГОД]": str(data["y"]),
-        "[ПЛАН_ТЕП_ПАРК]": format_n(data["tp"]),
-        "[ФАКТ_ТЕП_ПАРК]": format_n(data["tf"]),
-        "[ПРИМ_ТЕП_ПАРК]": saved_notes.get("tep_park", ""),
-        "[ПЛАН_ТЕП_ТО2]": format_n(tep_plan["ТО2"]),
-        "[ФАКТ_ТЕП_ТО2]": format_n(tep_fact["ТО2"]),
-        "[ПРИМ_ТЕП_ТО2]": saved_notes.get("tep_ТО2", ""),
-        "[ПЛАН_ТЕП_ТО3]": format_n(tep_plan["ТО3"]),
-        "[ФАКТ_ТЕП_ТО3]": format_n(tep_fact["ТО3"]),
-        "[ПРИМ_ТЕП_ТО3]": saved_notes.get("tep_ТО3", ""),
-        "[ПЛАН_ТЕП_ТР1]": format_n(tep_plan["ТР1"]),
-        "[ФАКТ_ТЕП_ТР1]": format_n(tep_fact["ТР1"]),
-        "[ПРИМ_ТЕП_ТР1]": saved_notes.get("tep_ТР1", ""),
-        "[ПЛАН_ТЕП_ТР2]": format_n(tep_plan["ТР2"]),
-        "[ФАКТ_ТЕП_ТР2]": format_n(tep_fact["ТР2"]),
-        "[ПРИМ_ТЕП_ТР2]": saved_notes.get("tep_ТР2", ""),
-        "[ПЛАН_ТЕП_ТР3]": format_n(tep_plan["ТР3"]),
-        "[ФАКТ_ТЕП_ТР3]": format_n(tep_fact["ТР3"]),
-        "[ПРИМ_ТЕП_ТР3]": saved_notes.get("tep_ТР3", ""),
-        "[ПЛАН_ТЕП_НЕПЛАН]": format_n(p_tep_ub),
-        "[ФАКТ_ТЕП_НЕПЛАН]": format_n(f_tep_ub),
-        "[ПРИМ_ТЕП_НЕПЛАН]": merge_notes(saved_notes.get("tep_ТР_unplan", ""), "\n".join(data["notes"]["fact"]["tep"])),
-        "[ПЛАН_АГР_ПАРК]": format_n(data["ap"]),
-        "[ФАКТ_АГР_ПАРК]": format_n(data["af"]),
-        "[ПРИМ_АГР_ПАРК]": saved_notes.get("agr_park", ""),
-        "[ПЛАН_АГР_ТО]": format_n(agr_plan["ТО"]),
-        "[ФАКТ_АГР_ТО]": format_n(agr_fact["ТО"]),
-        "[ПРИМ_АГР_ТО]": saved_notes.get("agr_ТО", ""),
-        "[ПЛАН_АГР_ТР]": format_n(agr_plan["ТР"]),
-        "[ФАКТ_АГР_ТР]": format_n(agr_fact["ТР"]),
-        "[ПРИМ_АГР_ТР]": saved_notes.get("agr_ТР", ""),
-        "[ПЛАН_АГР_НЕПЛАН]": format_n(p_agr_ub),
-        "[ФАКТ_АГР_НЕПЛАН]": format_n(f_agr_ub),
-        "[ПРИМ_АГР_НЕПЛАН]": merge_notes(saved_notes.get("agr_ТР_unplan", ""), "\n".join(data["notes"]["fact"]["agr"])),
-        "[ПЛАН_СУММА]": format_n(sum_p),
-        "[ФАКТ_СУММА]": format_n(sum_f),
+        "[РњР•РЎРЇР¦]": month_name,
+        "[Р“РћР”]": str(data["y"]),
+        "[РџР›РђРќ_РўР•Рџ_РџРђР Рљ]": format_n(data["tp"]),
+        "[Р¤РђРљРў_РўР•Рџ_РџРђР Рљ]": format_n(data["tf"]),
+        "[РџР РРњ_РўР•Рџ_РџРђР Рљ]": saved_notes.get("tep_park", ""),
+        "[РџР›РђРќ_РўР•Рџ_РўРћ2]": format_n(tep_plan["РўРћ2"]),
+        "[Р¤РђРљРў_РўР•Рџ_РўРћ2]": format_n(tep_fact["РўРћ2"]),
+        "[РџР РРњ_РўР•Рџ_РўРћ2]": saved_notes.get("tep_РўРћ2", ""),
+        "[РџР›РђРќ_РўР•Рџ_РўРћ3]": format_n(tep_plan["РўРћ3"]),
+        "[Р¤РђРљРў_РўР•Рџ_РўРћ3]": format_n(tep_fact["РўРћ3"]),
+        "[РџР РРњ_РўР•Рџ_РўРћ3]": saved_notes.get("tep_РўРћ3", ""),
+        "[РџР›РђРќ_РўР•Рџ_РўР 1]": format_n(tep_plan["РўР 1"]),
+        "[Р¤РђРљРў_РўР•Рџ_РўР 1]": format_n(tep_fact["РўР 1"]),
+        "[РџР РРњ_РўР•Рџ_РўР 1]": saved_notes.get("tep_РўР 1", ""),
+        "[РџР›РђРќ_РўР•Рџ_РўР 2]": format_n(tep_plan["РўР 2"]),
+        "[Р¤РђРљРў_РўР•Рџ_РўР 2]": format_n(tep_fact["РўР 2"]),
+        "[РџР РРњ_РўР•Рџ_РўР 2]": saved_notes.get("tep_РўР 2", ""),
+        "[РџР›РђРќ_РўР•Рџ_РўР 3]": format_n(tep_plan["РўР 3"]),
+        "[Р¤РђРљРў_РўР•Рџ_РўР 3]": format_n(tep_fact["РўР 3"]),
+        "[РџР РРњ_РўР•Рџ_РўР 3]": saved_notes.get("tep_РўР 3", ""),
+        "[РџР›РђРќ_РўР•Рџ_РќР•РџР›РђРќ]": format_n(p_tep_ub),
+        "[Р¤РђРљРў_РўР•Рџ_РќР•РџР›РђРќ]": format_n(f_tep_ub),
+        "[РџР РРњ_РўР•Рџ_РќР•РџР›РђРќ]": merge_notes(saved_notes.get("tep_РўР _unplan", ""), "\n".join(data["notes"]["fact"]["tep"])),
+        "[РџР›РђРќ_РђР“Р _РџРђР Рљ]": format_n(data["ap"]),
+        "[Р¤РђРљРў_РђР“Р _РџРђР Рљ]": format_n(data["af"]),
+        "[РџР РРњ_РђР“Р _РџРђР Рљ]": saved_notes.get("agr_park", ""),
+        "[РџР›РђРќ_РђР“Р _РўРћ]": format_n(agr_plan["РўРћ"]),
+        "[Р¤РђРљРў_РђР“Р _РўРћ]": format_n(agr_fact["РўРћ"]),
+        "[РџР РРњ_РђР“Р _РўРћ]": saved_notes.get("agr_РўРћ", ""),
+        "[РџР›РђРќ_РђР“Р _РўР ]": format_n(agr_plan["РўР "]),
+        "[Р¤РђРљРў_РђР“Р _РўР ]": format_n(agr_fact["РўР "]),
+        "[РџР РРњ_РђР“Р _РўР ]": saved_notes.get("agr_РўР ", ""),
+        "[РџР›РђРќ_РђР“Р _РќР•РџР›РђРќ]": format_n(p_agr_ub),
+        "[Р¤РђРљРў_РђР“Р _РќР•РџР›РђРќ]": format_n(f_agr_ub),
+        "[РџР РРњ_РђР“Р _РќР•РџР›РђРќ]": merge_notes(saved_notes.get("agr_РўР _unplan", ""), "\n".join(data["notes"]["fact"]["agr"])),
+        "[РџР›РђРќ_РЎРЈРњРњРђ]": format_n(sum_p),
+        "[Р¤РђРљРў_РЎРЈРњРњРђ]": format_n(sum_f),
     }
 
 
@@ -1238,17 +1238,17 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
     tep_notes = "\n".join(data["notes"]["fact"]["tep"])
     agr_notes = "\n".join(data["notes"]["fact"]["agr"])
     rows = [
-        {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nТЕПЛОВОЗЫ МАНЕВРОВЫЕ", "plan": format_n(data["tp"]), "fact": format_n(data["tf"]), "note_key": "tep_park", "note": saved_notes.get("tep_park", "")},
-        {"kind": "row", "key": "tep_ТО2", "label": "ТО2", "plan": count("plan", "tep", "ТО2", 1), "fact": count("fact", "tep", "ТО2", 1), "note": saved_notes.get("tep_ТО2", "")},
-        {"kind": "row", "key": "tep_ТО3", "label": "ТО3", "plan": count("plan", "tep", "ТО3", 2), "fact": count("fact", "tep", "ТО3", 2), "note": saved_notes.get("tep_ТО3", "")},
-        {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
-        {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
-        {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
-        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": merge_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
-        {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
-        {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
-        {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
-        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": merge_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
+        {"kind": "group", "label": "РљРѕР»-РІРѕ С‚РµС….РёСЃРїСЂ. Р»РѕРєРѕРјРѕС‚РёРІРѕРІ\nРўР•РџР›РћР’РћР—Р« РњРђРќР•Р’Р РћР’Р«Р•", "plan": format_n(data["tp"]), "fact": format_n(data["tf"]), "note_key": "tep_park", "note": saved_notes.get("tep_park", "")},
+        {"kind": "row", "key": "tep_РўРћ2", "label": "РўРћ2", "plan": count("plan", "tep", "РўРћ2", 1), "fact": count("fact", "tep", "РўРћ2", 1), "note": saved_notes.get("tep_РўРћ2", "")},
+        {"kind": "row", "key": "tep_РўРћ3", "label": "РўРћ3", "plan": count("plan", "tep", "РўРћ3", 2), "fact": count("fact", "tep", "РўРћ3", 2), "note": saved_notes.get("tep_РўРћ3", "")},
+        {"kind": "row", "key": "tep_РўР 1", "label": "РўР 1", "plan": count("plan", "tep", "РўР 1", 5), "fact": count("fact", "tep", "РўР 1", 5), "note": saved_notes.get("tep_РўР 1", "")},
+        {"kind": "row", "key": "tep_РўР 2", "label": "РўР 2", "plan": count("plan", "tep", "РўР 2", 10), "fact": count("fact", "tep", "РўР 2", 10), "note": saved_notes.get("tep_РўР 2", "")},
+        {"kind": "row", "key": "tep_РўР 3", "label": "РўР 3", "plan": count("plan", "tep", "РўР 3", 15), "fact": count("fact", "tep", "РўР 3", 15), "note": saved_notes.get("tep_РўР 3", "")},
+        {"kind": "row", "key": "tep_РўР _unplan", "label": "РўР  (С‚РµРєСѓС‰РёР№ СЂРµРјРѕРЅС‚)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": merge_notes(saved_notes.get("tep_РўР _unplan", ""), tep_notes)},
+        {"kind": "group", "label": "РљРѕР»-РІРѕ С‚РµС….РёСЃРїСЂ. Р»РѕРєРѕРјРѕС‚РёРІРѕРІ\nРђР“Р Р•Р“РђРўР« РўРЇР“РћР’Р«Р•", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
+        {"kind": "row", "key": "agr_РўРћ", "label": "РўРћ", "plan": count("plan", "agr", "РўРћ", 1), "fact": count("fact", "agr", "РўРћ", 1), "note": saved_notes.get("agr_РўРћ", "")},
+        {"kind": "row", "key": "agr_РўР ", "label": "РўР ", "plan": count("plan", "agr", "РўР ", 5), "fact": count("fact", "agr", "РўР ", 5), "note": saved_notes.get("agr_РўР ", "")},
+        {"kind": "row", "key": "agr_РўР _unplan", "label": "РўР  (С‚РµРєСѓС‰РёР№ СЂРµРјРѕРЅС‚)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": merge_notes(saved_notes.get("agr_РўР _unplan", ""), agr_notes)},
     ]
     return {"month": month_name, "year": data["y"], "rows": rows}
 
@@ -1258,7 +1258,7 @@ def build_report_workbook(year: int, month_name: str, state: dict | None = None)
         from openpyxl import Workbook, load_workbook
         from openpyxl.styles import Alignment, Font
     except ImportError as exc:
-        raise RuntimeError("На сервере не установлен openpyxl") from exc
+        raise RuntimeError("РќР° СЃРµСЂРІРµСЂРµ РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ openpyxl") from exc
 
     state = state or load_state(year)
     data = calculate_report_data_from_state(state, month_name)
@@ -1272,7 +1272,7 @@ def build_report_workbook(year: int, month_name: str, state: dict | None = None)
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "Отчет"
+        ws.title = "РћС‚С‡РµС‚"
         for idx, (k, v) in enumerate(tags.items(), start=1):
             ws[f"A{idx}"] = k
             ws[f"B{idx}"] = v
@@ -1284,7 +1284,7 @@ def build_report_workbook(year: int, month_name: str, state: dict | None = None)
 
     out = BytesIO()
     wb.save(out)
-    return out.getvalue(), f"Отчет_{month_name}_{year}.xlsx"
+    return out.getvalue(), f"РћС‚С‡РµС‚_{month_name}_{year}.xlsx"
 
 
 def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
@@ -1390,7 +1390,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
             item = {
                 "start": start.isoformat(),
                 "end": end.isoformat(),
-                "label": f"Отпуск {start.strftime('%d.%m.%Y')}-{end.strftime('%d.%m.%Y')}",
+                "label": f"РћС‚РїСѓСЃРє {start.strftime('%d.%m.%Y')}-{end.strftime('%d.%m.%Y')}",
             }
             for name in names.get((year, _tab_num), set()):
                 result.setdefault(name, []).append(item)
@@ -1425,7 +1425,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                 item = {
                     "start": date_obj.isoformat(),
                     "end": date_obj.isoformat(),
-                    "label": f"Отсутствует: {v} ({date_obj.strftime('%d.%m.%Y')})",
+                    "label": f"РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚: {v} ({date_obj.strftime('%d.%m.%Y')})",
                 }
                 name_values = {s(row["name"]).strip(), s(row["full_name"]).strip()}
                 for name in name_values:
@@ -1454,36 +1454,36 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
         from openpyxl import Workbook, load_workbook
         from openpyxl.styles import Alignment, Font
     except ImportError as exc:
-        raise RuntimeError("На сервере не установлен openpyxl") from exc
+        raise RuntimeError("РќР° СЃРµСЂРІРµСЂРµ РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ openpyxl") from exc
 
-    clean_act_num = act.replace("Акт № ", "").strip()
+    clean_act_num = act.replace("РђРєС‚ в„– ", "").strip()
     parts = clean_act_num.split("-")
     if len(parts) != 3:
-        raise ValueError("Не удалось распознать формат акта")
+        raise ValueError("РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїРѕР·РЅР°С‚СЊ С„РѕСЂРјР°С‚ Р°РєС‚Р°")
 
     d_act, m_act, num_act = parts
     months_ru = {
-        "01": "января", "02": "февраля", "03": "марта",
-        "04": "апреля", "05": "мая", "06": "июня",
-        "07": "июля", "08": "августа", "09": "сентября",
-        "10": "октября", "11": "ноября", "12": "декабря",
+        "01": "СЏРЅРІР°СЂСЏ", "02": "С„РµРІСЂР°Р»СЏ", "03": "РјР°СЂС‚Р°",
+        "04": "Р°РїСЂРµР»СЏ", "05": "РјР°СЏ", "06": "РёСЋРЅСЏ",
+        "07": "РёСЋР»СЏ", "08": "Р°РІРіСѓСЃС‚Р°", "09": "СЃРµРЅС‚СЏР±СЂСЏ",
+        "10": "РѕРєС‚СЏР±СЂСЏ", "11": "РЅРѕСЏР±СЂСЏ", "12": "РґРµРєР°Р±СЂСЏ",
     }
-    date_str = f"{d_act} {months_ru.get(m_act, 'января')} {year} г."
+    date_str = f"{d_act} {months_ru.get(m_act, 'СЏРЅРІР°СЂСЏ')} {year} Рі."
     ser, inv = get_act_inventory_item(year, num_act)
-    if "ПЭ" in ser.upper():
-        eq_type = "Тяговый агрегат"
+    if "РџР­" in ser.upper():
+        eq_type = "РўСЏРіРѕРІС‹Р№ Р°РіСЂРµРіР°С‚"
     elif ser:
-        eq_type = "Тепловоз маневровый"
+        eq_type = "РўРµРїР»РѕРІРѕР· РјР°РЅРµРІСЂРѕРІС‹Р№"
     else:
         eq_type = ""
 
     tags = {
-        "[АКТ]": clean_act_num, "[Акт]": clean_act_num, "[акт]": clean_act_num,
-        "[ДАТА]": date_str, "[Дата]": date_str,
-        "[НОМЕР]": num_act, "[Номер]": num_act,
-        "[АГРЕГАТ]": eq_type, "[Агрегат]": eq_type,
-        "[СЕРИЯ]": ser, "[Серия]": ser,
-        "[ИНВ]": inv, "[Инв]": inv,
+        "[РђРљРў]": clean_act_num, "[РђРєС‚]": clean_act_num, "[Р°РєС‚]": clean_act_num,
+        "[Р”РђРўРђ]": date_str, "[Р”Р°С‚Р°]": date_str,
+        "[РќРћРњР•Р ]": num_act, "[РќРѕРјРµСЂ]": num_act,
+        "[РђР“Р Р•Р“РђРў]": eq_type, "[РђРіСЂРµРіР°С‚]": eq_type,
+        "[РЎР•Р РРЇ]": ser, "[РЎРµСЂРёСЏ]": ser,
+        "[РРќР’]": inv, "[РРЅРІ]": inv,
     }
 
     template_path = find_act_template_path()
@@ -1493,16 +1493,16 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "Акт"
-        ws["A1"] = "Акт"
+        ws.title = "РђРєС‚"
+        ws["A1"] = "РђРєС‚"
         ws["B1"] = clean_act_num
-        ws["A2"] = "Дата"
+        ws["A2"] = "Р”Р°С‚Р°"
         ws["B2"] = date_str
-        ws["A3"] = "Серия"
+        ws["A3"] = "РЎРµСЂРёСЏ"
         ws["B3"] = ser
-        ws["A4"] = "Инвентарный номер"
+        ws["A4"] = "РРЅРІРµРЅС‚Р°СЂРЅС‹Р№ РЅРѕРјРµСЂ"
         ws["B4"] = inv
-        ws["A5"] = "Тип"
+        ws["A5"] = "РўРёРї"
         ws["B5"] = eq_type
         for cell in ws[1]:
             cell.font = Font(bold=True)
@@ -1512,7 +1512,7 @@ def build_act_workbook(year: int, act: str) -> tuple[bytes, str]:
 
     out = BytesIO()
     wb.save(out)
-    return out.getvalue(), f"Акт_{clean_act_num}.xlsx"
+    return out.getvalue(), f"РђРєС‚_{clean_act_num}.xlsx"
 
 
 def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: list[str] | None = None, state: dict | None = None, extra_repairs: list[str] | None = None) -> tuple[bytes, str]:
@@ -1520,21 +1520,21 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         from openpyxl import Workbook, load_workbook
         from openpyxl.styles import Alignment, Font
     except ImportError as exc:
-        raise RuntimeError("На сервере не установлен openpyxl") from exc
+        raise RuntimeError("РќР° СЃРµСЂРІРµСЂРµ РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ openpyxl") from exc
 
     state = state or load_state(year)
     month = next((m for m in state.get("months", []) if s(m.get("name")) == month_name), None)
     if not month:
-        raise ValueError("Не удалось найти месяц")
+        raise ValueError("РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё РјРµСЃСЏС†")
     fact_rows = month.get("fact") or []
     if row_idx < 0 or row_idx >= len(fact_rows):
-        raise ValueError("Не удалось найти строку ремонта")
+        raise ValueError("РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё СЃС‚СЂРѕРєСѓ СЂРµРјРѕРЅС‚Р°")
     row = fact_rows[row_idx]
     cells = row.get("cells") or []
     series = s(cells[1]).strip()
     number = s(cells[2]).strip()
     if not number:
-        raise ValueError("Не удалось определить номер")
+        raise ValueError("РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ РЅРѕРјРµСЂ")
 
     repair_code = ""
     repair_days = []
@@ -1545,12 +1545,12 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                 repair_code = s(cells[col]).strip().upper()
             repair_days.append(col - 3)
     if not repair_days:
-        raise ValueError("В выбранной строке не найден ремонт для ТУ-28")
+        raise ValueError("Р’ РІС‹Р±СЂР°РЅРЅРѕР№ СЃС‚СЂРѕРєРµ РЅРµ РЅР°Р№РґРµРЅ СЂРµРјРѕРЅС‚ РґР»СЏ РўРЈ-28")
 
-    if "ПЭ" in series.upper():
-        eq_type = "Тяговый агрегат"
+    if "РџР­" in series.upper():
+        eq_type = "РўСЏРіРѕРІС‹Р№ Р°РіСЂРµРіР°С‚"
     elif series:
-        eq_type = "Тепловоз маневровый"
+        eq_type = "РўРµРїР»РѕРІРѕР· РјР°РЅРµРІСЂРѕРІС‹Р№"
     else:
         eq_type = ""
 
@@ -1600,26 +1600,26 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         except Exception as e:
             print("Error reading Zamer KP archive db:", e, flush=True)
     tags = {
-        "[СЕРИЯ]": series,
-        "[НОМЕР]": number,
-        "[ДАТА]": date_str,
-        "[ВИД]": repair_code,
-        "[АГРЕГАТ]": eq_type,
-        "[ДИЗЕЛЬ]": "",
-        "[ЭКИПАЖ 1]": "",
-        "[ЭКИПАЖ 2]": "",
-        "[АКБ]": "",
-        "[ЭЛМАШ]": "",
-        "[ЭЛАП]": "",
-        "[ТОРМОЗ]": "",
+        "[РЎР•Р РРЇ]": series,
+        "[РќРћРњР•Р ]": number,
+        "[Р”РђРўРђ]": date_str,
+        "[Р’РР”]": repair_code,
+        "[РђР“Р Р•Р“РђРў]": eq_type,
+        "[Р”РР—Р•Р›Р¬]": "",
+        "[Р­РљРРџРђР– 1]": "",
+        "[Р­РљРРџРђР– 2]": "",
+        "[РђРљР‘]": "",
+        "[Р­Р›РњРђРЁ]": "",
+        "[Р­Р›РђРџ]": "",
+        "[РўРћР РњРћР—]": "",
     }
 
     col_to_tag_prefix = {
-        2: "ПР_Л", 3: "ПР_П",
-        4: "ТГ_Л", 5: "ТГ_П",
-        6: "КР_Л", 7: "КР_П",
-        8: "ТБ_Л", 9: "ТБ_П",
-        10: "ДБ_Л", 11: "ДБ_П"
+        2: "РџР _Р›", 3: "РџР _Рџ",
+        4: "РўР“_Р›", 5: "РўР“_Рџ",
+        6: "РљР _Р›", 7: "РљР _Рџ",
+        8: "РўР‘_Р›", 9: "РўР‘_Рџ",
+        10: "Р”Р‘_Р›", 11: "Р”Р‘_Рџ"
     }
     for axle in range(1, 13):
         for c_idx, prefix in col_to_tag_prefix.items():
@@ -1627,16 +1627,16 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
             measurement_value = s(measurements.get(axle + 1, {}).get(c_idx, "")).strip()
             tags[f"[{prefix}_{axle}]"] = measurement_value.replace(".", ",")
             
-    print(f"DEBUG: ZAMER KP TAGS: { {k: tags[k] for k in tags if 'ПР' in k or 'ТГ' in k} }", flush=True)
+    print(f"DEBUG: ZAMER KP TAGS: { {k: tags[k] for k in tags if 'РџР ' in k or 'РўР“' in k} }", flush=True)
 
     components = [
-        "ДИЗЕЛЬ",
-        "ЭКИПАЖ 1",
-        "ЭКИПАЖ 2",
-        "АКБ",
-        "ЭЛМАШ",
-        "ЭЛАП",
-        "ТОРМОЗ",
+        "Р”РР—Р•Р›Р¬",
+        "Р­РљРРџРђР– 1",
+        "Р­РљРРџРђР– 2",
+        "РђРљР‘",
+        "Р­Р›РњРђРЁ",
+        "Р­Р›РђРџ",
+        "РўРћР РњРћР—",
     ]
     for idx, name in enumerate(staff_list or []):
         if idx >= len(components):
@@ -1646,15 +1646,15 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     extra_repairs = extra_repairs or []
     print(f"DEBUG: build_tu28_workbook received extra_repairs={extra_repairs}", flush=True)
     for i in range(1, 21):
-        tags[f"[ДОП_РЕМОНТ_{i}]"] = ""
-        tags[f"[ДОП_НОМЕР_{i}]"] = ""
+        tags[f"[Р”РћРџ_Р Р•РњРћРќРў_{i}]"] = ""
+        tags[f"[Р”РћРџ_РќРћРњР•Р _{i}]"] = ""
     for i, extra in enumerate(extra_repairs, start=1):
         if i <= 20:
             val = str(extra).strip()
             if val:
-                tags[f"[ДОП_РЕМОНТ_{i}]"] = val
-                tags[f"[ДОП_НОМЕР_{i}]"] = str(i)
-    print(f"DEBUG: tags built: {[k for k in tags.keys() if 'ДОП' in k and tags[k]]}", flush=True)
+                tags[f"[Р”РћРџ_Р Р•РњРћРќРў_{i}]"] = val
+                tags[f"[Р”РћРџ_РќРћРњР•Р _{i}]"] = str(i)
+    print(f"DEBUG: tags built: {[k for k in tags.keys() if 'Р”РћРџ' in k and tags[k]]}", flush=True)
 
     template_path = find_tu28_template_path()
     if template_path:
@@ -1663,7 +1663,7 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "ТУ-28"
+        ws.title = "РўРЈ-28"
         for idx, (k, v) in enumerate(tags.items(), start=1):
             ws[f"A{idx}"] = k
             ws[f"B{idx}"] = v
@@ -1675,7 +1675,7 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
 
     out = BytesIO()
     wb.save(out)
-    return out.getvalue(), f"ТУ-28_{month_name}_{year}.xlsx"
+    return out.getvalue(), f"РўРЈ-28_{month_name}_{year}.xlsx"
 
 
 def content_disposition_attachment(filename: str) -> str:
@@ -1893,7 +1893,7 @@ def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bo
     handler.send_header("Content-Type", "text/plain; charset=utf-8")
     handler.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
     handler.end_headers()
-    handler.wfile.write("Требуется вход".encode("utf-8"))
+    handler.wfile.write("РўСЂРµР±СѓРµС‚СЃСЏ РІС…РѕРґ".encode("utf-8"))
     return False
 
 
@@ -1901,7 +1901,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
     employee_vacations_json = json.dumps(get_employee_vacations(), ensure_ascii=False).replace("</", "<\\/")
-    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
+    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "РЅРµРёР·РІРµСЃС‚РЅРѕ"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
     with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
         html_template = f.read()
@@ -1939,14 +1939,14 @@ def render_login(extra: str = "") -> str:
 
 EDIT_TOOLBAR = """
       <div class="toolbar">
-        <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
-        <button onclick="openReport()">Отчет</button>
-        <button id="saveButton" onclick="saveState()">Сохранить</button>
+        <label>Р“РѕРґ <select id="yearInput" onchange="loadYearFromInput()"></select></label>
+        <button onclick="openReport()">РћС‚С‡РµС‚</button>
+        <button id="saveButton" onclick="saveState()">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
         <div class="json-menu" id="jsonMenuWrap">
           <button type="button" onclick="toggleJsonMenu(event)">JSON</button>
           <div class="json-menu-panel" id="jsonMenuPanel" aria-hidden="true">
-            <button type="button" onclick="downloadJson(); closeJsonMenu()">Экспорт JSON</button>
-            <button type="button" onclick="triggerImportJson()">Импорт JSON</button>
+            <button type="button" onclick="downloadJson(); closeJsonMenu()">Р­РєСЃРїРѕСЂС‚ JSON</button>
+            <button type="button" onclick="triggerImportJson()">РРјРїРѕСЂС‚ JSON</button>
           </div>
         </div>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
@@ -1955,8 +1955,8 @@ EDIT_TOOLBAR = """
 
 READONLY_TOOLBAR = """
       <div class="toolbar">
-        <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
-        <button onclick="openReport()">Отчет</button>
+        <label>Р“РѕРґ <select id="yearInput" onchange="loadYearFromInput()"></select></label>
+        <button onclick="openReport()">РћС‚С‡РµС‚</button>
       </div>
 """
 
@@ -2164,11 +2164,11 @@ async def export_tu28(request: Request):
     month = str(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
     row_raw = payload.get("row", None)
     if row_raw in (None, ""):
-        return json_response({"error": "В месяце нет ремонтов для ТУ-28"}, status_code=400)
+        return json_response({"error": "Р’ РјРµСЃСЏС†Рµ РЅРµС‚ СЂРµРјРѕРЅС‚РѕРІ РґР»СЏ РўРЈ-28"}, status_code=400)
     try:
         row_idx = int(row_raw)
     except Exception:
-        return json_response({"error": "Не удалось определить строку ремонта"}, status_code=400)
+        return json_response({"error": "РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ СЃС‚СЂРѕРєСѓ СЂРµРјРѕРЅС‚Р°"}, status_code=400)
     
     staff_list = payload.get("staff") or []
     if not isinstance(staff_list, list): staff_list = []
@@ -2193,7 +2193,7 @@ def main() -> None:
     host = os.environ.get("WEB_HOST", "127.0.0.1")
     port = int(os.environ.get("WEB_PORT", "8000"))
     url = f"http://{host}:{port}/grafik-ppr"
-    print(f"График ППР web ready (FastAPI): {url} | started at {SERVER_STARTED_AT:%H:%M:%S %d.%m.%Y}")
+    print(f"Р“СЂР°С„РёРє РџРџР  web ready (FastAPI): {url} | started at {SERVER_STARTED_AT:%H:%M:%S %d.%m.%Y}")
     if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
         import threading, webbrowser
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
