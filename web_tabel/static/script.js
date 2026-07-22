@@ -880,12 +880,14 @@ document.addEventListener('paste', function(e) {
 
 document.addEventListener('focusin', function(e) {
   if (e.target && e.target.classList && e.target.classList.contains('cell')) {
-    e.target.classList.add('active-cell');
+    const td = e.target.closest('td');
+    if (td) td.classList.add('active-td');
   }
 });
 
 document.addEventListener('focusout', function(e) {
   if (e.target && e.target.classList && e.target.classList.contains('cell')) {
-    e.target.classList.remove('active-cell');
+    const td = e.target.closest('td');
+    if (td) td.classList.remove('active-td');
   }
 });

@@ -1537,14 +1537,13 @@ td.bg-milk .cell.day-cell::selection {
 }
 
 /* Стиль выделения ячейки как в Excel */
-.cell:focus, .cell.active-cell {
-  outline: none !important;
-  box-shadow: none !important;
-  background-color: var(--accent) !important;
-  color: white !important;
-  caret-color: white !important;
+td.active-td {
+  box-shadow: inset 0 0 0 2px var(--accent) !important;
   position: relative !important;
   z-index: 10 !important;
+}
+.cell:focus {
+  outline: none !important;
 }
 .table-wrap>table thead th.transfer-col {
   background: #dcf8dc !important;
@@ -1744,14 +1743,13 @@ td.bg-work-weekend .cell.day-cell::selection {
 }
 
 /* Стиль выделения ячейки как в Excel */
-.cell:focus, .cell.active-cell {
-  outline: none !important;
-  box-shadow: none !important;
-  background-color: var(--accent) !important;
-  color: white !important;
-  caret-color: white !important;
+td.active-td {
+  box-shadow: inset 0 0 0 2px var(--accent) !important;
   position: relative !important;
   z-index: 10 !important;
+}
+.cell:focus {
+  outline: none !important;
 }
 
 /* Выделенные ячейки при мультиселекте */
