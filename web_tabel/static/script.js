@@ -878,3 +878,14 @@ document.addEventListener('paste', function(e) {
   }
 });
 
+document.addEventListener('focusin', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('cell')) {
+    e.target.classList.add('active-cell');
+  }
+});
+
+document.addEventListener('focusout', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('cell')) {
+    e.target.classList.remove('active-cell');
+  }
+});
