@@ -460,9 +460,18 @@ function handleGridPaste(e){
   e.preventDefault();
   pasteGridSelectionText(info.grid, target, text);
 }
+function moveGridCell(current, dx, dy, grid){
+  const row = parseInt(current.dataset.row, 10);
+  const col = parseInt(current.dataset.col, 10);
+  const next = document.querySelector(`input[data-grid="${grid}"][data-row="${row + dy}"][data-col="${col + dx}"]`);
+  if (next) next.focus();
+}
 function handleGridKeydown(e){
   const info = getGridCellInfo(e.target);
   if (!info) return;
+  const keys = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter','Delete','Backspace'];
+  if (!keys.includes(e.key)) return;
+
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     const sel = info.grid === 'repair-schedule' ? getRepairScheduleSelection() : getRepairPeriodicitySelection();
@@ -473,11 +482,32 @@ function handleGridKeydown(e){
       e.target.value = '';
       setPath(e.target.dataset.path, '');
     }
-    if (info.grid === 'repair-schedule') {
-      updateRepairScheduleDerivedValues();
-    }
+    if (info.grid === 'repair-schedule') updateRepairScheduleDerivedValues();
     markDirty(true);
     render();
+    return;
+  }
+
+  let shouldMove = false;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
+    shouldMove = true;
+  } else if (e.key === 'ArrowLeft') {
+    if (e.target.selectionStart === 0) shouldMove = true;
+  } else if (e.key === 'ArrowRight') {
+    if (e.target.selectionEnd === e.target.value.length) shouldMove = true;
+  }
+
+  if (shouldMove) {
+    const step = e.key === 'ArrowLeft' ? [-1,0] : (e.key === 'ArrowRight' || e.key === 'Enter') ? [1,0] : e.key === 'ArrowUp' ? [0,-1] : [0,1];
+    e.preventDefault();
+    if (info.grid === 'repair-schedule') {
+      ui.repairScheduleSelection = null;
+      applyRepairScheduleSelectionClasses();
+    } else {
+      ui.repairPeriodicitySelection = null;
+      applyRepairPeriodicitySelectionClasses();
+    }
+    moveGridCell(e.target, step[0], step[1], info.grid);
   }
 }
 function getSelectedMonthSelection(){
@@ -619,10 +649,21 @@ function handleMonthKeydown(e){
     setPath(e.target.dataset.path, '');
     return;
   }
-  const step = e.key === 'ArrowLeft' ? [-1,0] : e.key === 'ArrowRight' ? [1,0] : e.key === 'ArrowUp' ? [0,-1] : e.key === 'ArrowDown' ? [0,1] : [0,1];
-  e.preventDefault();
-  clearMonthSelection();
-  moveCell(e.target, step[0], step[1]);
+  let shouldMove = false;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
+    shouldMove = true;
+  } else if (e.key === 'ArrowLeft') {
+    if (e.target.selectionStart === 0) shouldMove = true;
+  } else if (e.key === 'ArrowRight') {
+    if (e.target.selectionEnd === e.target.value.length) shouldMove = true;
+  }
+
+  if (shouldMove) {
+    const step = e.key === 'ArrowLeft' ? [-1,0] : (e.key === 'ArrowRight' || e.key === 'Enter') ? [1,0] : e.key === 'ArrowUp' ? [0,-1] : [0,1];
+    e.preventDefault();
+    clearMonthSelection();
+    moveCell(e.target, step[0], step[1]);
+  }
 }
 function bindNav(){
   document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id || ui.modal===s.id ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
@@ -2718,3 +2759,18 @@ savedAppState = cloneState(appState);
 savedMonthsState = cloneState(appState.months);
 updateHistoryButtons();
 render();
+
+document.addEventListener('focusin', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('cell')) {
+    const td = e.target.closest('td');
+    if (td) td.classList.add('active-td');
+  }
+});
+
+document.addEventListener('focusout', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('cell')) {
+    const td = e.target.closest('td');
+    if (td) td.classList.remove('active-td');
+  }
+});
+

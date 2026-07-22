@@ -381,9 +381,9 @@
       position:relative;
       z-index:3;
     }
-    .table-wrap table td:has(> .cell:focus),
-    .table-wrap table td.transfer-col:has(> .cell.day-cell:focus),
-    .table-wrap table td.holiday-col:has(> .cell.day-cell:focus) {
+    .table-wrap table td.active-td,
+    .table-wrap table td.transfer-col.active-td,
+    .table-wrap table td.holiday-col.active-td {
       background-color: var(--accent) !important;
     }
     .table-wrap table td > .cell:focus,
