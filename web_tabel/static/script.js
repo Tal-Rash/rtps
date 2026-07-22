@@ -269,10 +269,11 @@ function renderTabelBody() {
       if (cleanVal === "В" || cleanVal === "B") {
         extraStyle = ' style="color: rgba(16, 32, 51, 0.2) !important;"';
       } else if (tdClass.includes("bg-work-weekend")) {
-        extraTdStyle = ' style="background-color: #B3E5FC !important; color: #102033 !important;"';
-        extraStyle = ' style="background-color: #B3E5FC !important; color: #102033 !important;"';
+        extraTdStyle = ' style="background-color: #B3E5FC !important;"';
+        extraStyle = '';
       }
       
+
       bHTML += `<td class="${tdClass}"${extraTdStyle}><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
     }
     
