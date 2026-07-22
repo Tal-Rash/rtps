@@ -547,3 +547,9 @@ html body .table-wrap table td.holiday-col.active-td .cell.day-cell {
   caret-color: white !important;
 }
 
+
+/* Fix for excluded rows covering active cell background */
+html body .table-wrap table tr.excluded-row > td.active-td {
+  box-shadow: none !important;
+  background-color: var(--accent) !important;
+}

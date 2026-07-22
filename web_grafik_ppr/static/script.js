@@ -1758,7 +1758,7 @@ function renderMonthTable(type, title, m, headers){
       const cls = dayClass(m.month, d + 1);
       const colIndex = 4 + d;
       const isKpHighlight = type === 'plan' && kpHighlights.has(`${ui.monthIndex}|${rIdx}|${colIndex}`);
-      const inputStyle = row.excluded ? 'color:#9aa5b1 !important;' : '';
+      const inputStyle = row.excluded ? 'color:#9aa5b1;' : '';
       rowHtml.push(`<td class="col-day ${cls}${isKpHighlight ? ' kp-recheck-cell' : ''}">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${colIndex}`, row.cells[colIndex] || '', `cell small center ${cls} day-cell${isKpHighlight ? ' kp-recheck-input' : ''}`, ui.monthIndex, type, rIdx, colIndex, inputStyle) }</td>`);
     }
     rowHtml.push(`<td class="col-note">${cell(`months.${ui.monthIndex}.${type}.${rIdx}.cells.${4+m.days}`, row.cells[4+m.days] || '', 'cell', ui.monthIndex, type, rIdx, 4+m.days) }</td>`);
