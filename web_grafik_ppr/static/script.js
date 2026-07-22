@@ -621,6 +621,7 @@ function handleMonthKeydown(e){
   }
   const step = e.key === 'ArrowLeft' ? [-1,0] : e.key === 'ArrowRight' ? [1,0] : e.key === 'ArrowUp' ? [0,-1] : e.key === 'ArrowDown' ? [0,1] : [0,1];
   e.preventDefault();
+  clearMonthSelection();
   moveCell(e.target, step[0], step[1]);
 }
 function bindNav(){

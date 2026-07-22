@@ -381,15 +381,17 @@
       position:relative;
       z-index:3;
     }
+    .table-wrap table td:has(> .cell:focus),
+    .table-wrap table td:has(> .cell.day-cell:focus) {
+      background-color: var(--accent) !important;
+    }
     .table-wrap table td > .cell:focus,
     .table-wrap table td > .cell.day-cell:focus {
-      background-color: var(--accent) !important;
       color: white !important;
       caret-color: white !important;
       outline: none !important;
       box-shadow: none !important;
-      position: relative !important;
-      z-index: 10 !important;
+      background-color: transparent !important;
     }
     .cell.cat-toggle {
       display:block;
