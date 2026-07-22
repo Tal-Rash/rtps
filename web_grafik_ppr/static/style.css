@@ -381,6 +381,16 @@
       position:relative;
       z-index:3;
     }
+    .table-wrap table td > .cell:focus,
+    .table-wrap table td > .cell.day-cell:focus {
+      background-color: var(--accent) !important;
+      color: white !important;
+      caret-color: white !important;
+      outline: none !important;
+      box-shadow: none !important;
+      position: relative !important;
+      z-index: 10 !important;
+    }
     .cell.cat-toggle {
       display:block;
       box-sizing:border-box;
