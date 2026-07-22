@@ -807,6 +807,7 @@ document.addEventListener('keydown', function(e) {
     targetCell.focus();
     const range = document.createRange();
     range.selectNodeContents(targetCell);
+    range.collapse(false);
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
