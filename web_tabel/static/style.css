@@ -1786,3 +1786,17 @@ td.bg-holiday .cell.day-cell.light-v,
 table td .cell.day-cell.light-v {
   color: #a0a0a0 !important;
 }
+
+/* Ultimate specificity overrides for web_tabel */
+html body .table-wrap table td.multi-selected .cell.day-cell,
+html body .table-wrap table td.multi-selected .cell {
+  background-color: rgba(39, 110, 241, 0.15) !important;
+}
+
+html body .table-wrap table td.active-td .cell.day-cell,
+html body .table-wrap table td.active-td .cell {
+  background-color: var(--accent) !important;
+  color: white !important;
+  caret-color: white !important;
+}
+
