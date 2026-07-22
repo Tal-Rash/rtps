@@ -602,10 +602,6 @@ function applyVacations() {
           changed = true;
         }
       } else {
-        if (currVal === "О") {
-          appState.timesheet[tabNum][d] = "";
-          changed = true;
-        }
         
         // Auto-fill "В" for empty rest days
         if (isRestDay && (!appState.timesheet[tabNum][d] || appState.timesheet[tabNum][d] === "")) {
