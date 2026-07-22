@@ -198,7 +198,7 @@ function setMonthSelection(anchor, focus){
 function applyMonthSelectionClasses(){
   document.querySelectorAll('input.selected-cell').forEach((el) => {
     el.classList.remove('selected-cell');
-    el.style.boxShadow = '';
+    el.style.removeProperty('box-shadow');
   });
   if (ui.section !== 'months' || !ui.monthSelection) return;
   const sel = ui.monthSelection;
@@ -291,7 +291,7 @@ function clearRepairPeriodicitySelection(){
 function applyGridSelectionClasses(grid, selection){
   document.querySelectorAll(`input.selected-cell[data-grid="${grid}"]`).forEach((el) => {
     el.classList.remove('selected-cell');
-    el.style.boxShadow = '';
+    el.style.removeProperty('box-shadow');
   });
   if (!selection) return;
   document.querySelectorAll(`input[data-grid="${grid}"]`).forEach((el) => {

@@ -692,7 +692,7 @@ document.addEventListener('mouseup', function(e) {
 function clearSelection() {
   currentSelectedCells.forEach(c => {
     c.classList.remove('multi-selected');
-    c.style.boxShadow = '';
+    c.style.removeProperty('box-shadow');
   });
   currentSelectedCells.clear();
 }

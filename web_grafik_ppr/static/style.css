@@ -382,11 +382,14 @@
       z-index:3;
     }
     .table-wrap table td:has(> .cell:focus),
-    .table-wrap table td:has(> .cell.day-cell:focus) {
+    .table-wrap table td.transfer-col:has(> .cell.day-cell:focus),
+    .table-wrap table td.holiday-col:has(> .cell.day-cell:focus) {
       background-color: var(--accent) !important;
     }
     .table-wrap table td > .cell:focus,
-    .table-wrap table td > .cell.day-cell:focus {
+    .table-wrap table td > .cell.day-cell:focus,
+    .table-wrap table td.transfer-col > .cell.day-cell:focus,
+    .table-wrap table td.holiday-col > .cell.day-cell:focus {
       color: white !important;
       caret-color: white !important;
       outline: none !important;
