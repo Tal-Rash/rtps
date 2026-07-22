@@ -1537,7 +1537,9 @@ td.bg-milk .cell.day-cell::selection {
 }
 
 /* Стиль выделения ячейки как в Excel */
-td.active-td, td.active-td .cell {
+.table-wrap table td.active-td, 
+.table-wrap table td.active-td .cell.day-cell,
+.table-wrap table td.active-td .cell {
   outline: none !important;
   background-color: var(--accent) !important;
   color: white !important;
@@ -1746,7 +1748,9 @@ td.bg-work-weekend .cell.day-cell::selection {
 }
 
 /* Стиль выделения ячейки как в Excel */
-td.active-td, td.active-td .cell {
+.table-wrap table td.active-td, 
+.table-wrap table td.active-td .cell.day-cell,
+.table-wrap table td.active-td .cell {
   outline: none !important;
   background-color: var(--accent) !important;
   color: white !important;
