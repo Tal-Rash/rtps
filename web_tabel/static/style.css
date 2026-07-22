@@ -1538,7 +1538,8 @@ td.bg-milk .cell.day-cell::selection {
 
 /* Стиль выделения ячейки как в Excel */
 td.active-td {
-  box-shadow: inset 0 0 0 2px var(--accent) !important;
+  outline: 2px solid var(--accent) !important;
+  outline-offset: -2px !important;
   position: relative !important;
   z-index: 10 !important;
 }
@@ -1744,7 +1745,8 @@ td.bg-work-weekend .cell.day-cell::selection {
 
 /* Стиль выделения ячейки как в Excel */
 td.active-td {
-  box-shadow: inset 0 0 0 2px var(--accent) !important;
+  outline: 2px solid var(--accent) !important;
+  outline-offset: -2px !important;
   position: relative !important;
   z-index: 10 !important;
 }
