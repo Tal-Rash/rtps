@@ -1020,8 +1020,9 @@ td.transfer-col .cell.day-cell.selected-cell,
 td.holiday-col .cell.day-cell.selected-cell {
   background: #e8f0fe !important;
   outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
   position: relative;
-  z-index: 3;
+  z-index: 10;
 }
 
 .cell.cat-toggle {
