@@ -790,13 +790,29 @@ document.addEventListener('keydown', function(e) {
     if (targetRow) targetCell = targetRow.querySelectorAll('td')[colIndex]?.querySelector('.cell');
   } else if (e.key === 'ArrowRight') {
     const sel = window.getSelection();
-    if (sel.focusOffset === cell.innerText.length || cell.innerText.length === 0) {
+    let isAtEnd = cell.innerText.length === 0;
+    if (sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const preCaretRange = range.cloneRange();
+      preCaretRange.selectNodeContents(cell);
+      preCaretRange.setEnd(range.endContainer, range.endOffset);
+      if (preCaretRange.toString().length === cell.textContent.length) isAtEnd = true;
+    }
+    if (isAtEnd) {
       e.preventDefault();
       targetCell = allCellsInRow[colIndex + 1]?.querySelector('.cell');
     }
   } else if (e.key === 'ArrowLeft') {
     const sel = window.getSelection();
-    if (sel.focusOffset === 0 || cell.innerText.length === 0) {
+    let isAtStart = cell.innerText.length === 0;
+    if (sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const preCaretRange = range.cloneRange();
+      preCaretRange.selectNodeContents(cell);
+      preCaretRange.setEnd(range.startContainer, range.startOffset);
+      if (preCaretRange.toString().length === 0) isAtStart = true;
+    }
+    if (isAtStart) {
       e.preventDefault();
       targetCell = allCellsInRow[colIndex - 1]?.querySelector('.cell');
     }
