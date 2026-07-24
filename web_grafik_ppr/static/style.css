@@ -562,16 +562,12 @@ html body .table-wrap table tr.excluded-row > td.active-td {
   background-color: var(--accent) !important;
 }
 
-.report-table tbody tr:hover td, .report-table tbody tr:hover th { background:#f5f8ff !important; }
-.report-table tbody tr.excluded-row:hover td, .report-table tbody tr.excluded-row:hover th { background:#ebf0f8 !important; }
-.report-table tbody tr.group-row:hover td, .report-table tbody tr.group-row:hover th { background:#ebebeb !important; }
+.report-table tbody tr:hover td:not(.active-td), .report-table tbody tr:hover th:not(.active-td) { background:#f5f8ff !important; }
+.report-table tbody tr.excluded-row:hover td:not(.active-td), .report-table tbody tr.excluded-row:hover th:not(.active-td) { background:#ebf0f8 !important; }
+.report-table tbody tr.group-row:hover td:not(.active-td), .report-table tbody tr.group-row:hover th:not(.active-td) { background:#ebebeb !important; }
 
-.report-table td:focus-within {
-    background: #276ef1 !important;
-    color: #fff !important;
-}
-.report-table td:focus-within textarea.report-note {
-    background: transparent !important;
-    color: #fff !important;
-    outline: none !important;
+html body .table-wrap table td.active-td,
+html body .table-wrap table td.active-td:hover {
+  background-color: var(--accent) !important;
+  color: white !important;
 }
