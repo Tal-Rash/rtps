@@ -379,7 +379,7 @@ async def export_summary(year: int, month: int, type: str):
         title = type.split(":", 1)[1].strip()
     else:
         code_map = {
-            "Отпуска": ["О"],
+            "Отпуска": ["О", "ОВ"],
             "Отпуска внеплановые": ["ОВ"],
             "Отпуск б/с": ["ДО"],
             "Учебный отпуск": ["У"],
@@ -446,6 +446,45 @@ async def export_summary(year: int, month: int, type: str):
             """
             ts_rows = cur.execute(query, [year] + codes).fetchall()
             
+            vacation_days = {}
+            if "О" in codes or "ОВ" in codes:
+                vac_rows = cur.execute("SELECT e.name, v.c, v.v as val FROM vacations v JOIN employees e ON v.tab_num = e.tab_num AND v.y = e.y WHERE v.y=?", (year,)).fetchall()
+                emp_vacs = {}
+                for r in vac_rows:
+                    emp_vacs.setdefault(r["name"], {})[int(r["c"])] = r["val"]
+                
+                import datetime as dt
+                def parse_vacation_date(date_str, default_year):
+                    if not date_str: return None
+                    s = str(date_str).strip()
+                    if "." in s:
+                        p = s.split(".")
+                        try:
+                            if len(p) == 2: return dt.date(default_year, int(p[1]), int(p[0]))
+                            elif len(p) == 3:
+                                y = int(p[2])
+                                if y < 100: y += 2000
+                                return dt.date(y, int(p[1]), int(p[0]))
+                        except Exception: pass
+                    return None
+
+                for name, vac_data in emp_vacs.items():
+                    vacation_days[name] = set()
+                    for pair in [(1,2), (5,6), (9,10)]:
+                        s_str = vac_data.get(pair[0])
+                        e_str = vac_data.get(pair[1])
+                        try:
+                            s_date = parse_vacation_date(s_str, year)
+                            e_date = parse_vacation_date(e_str, year)
+                            if s_date and e_date and e_date >= s_date:
+                                curr = s_date
+                                while curr <= e_date:
+                                    if curr.year == year:
+                                        vacation_days[name].add((curr.month, curr.day))
+                                    curr += dt.timedelta(days=1)
+                        except Exception:
+                            pass
+            
             for row in ts_rows:
                 name = row["name"]
                 v = row["v"]
@@ -454,11 +493,22 @@ async def export_summary(year: int, month: int, type: str):
                 
                 if v in ("О", "ОВ"):
                     m_int = month_map.get(m_str)
-                    if m_int and (m_int, int(d)) in holiday_set:
-                        continue
+                    if m_int:
+                        if name not in vacation_days:
+                            vacation_days[name] = set()
+                        vacation_days[name].add((m_int, int(d)))
+                else:
+                    if name in result:
+                        result[name] += 1
                         
-                if name in result:
-                    result[name] += 1
+            if "О" in codes or "ОВ" in codes:
+                for name, days_set in vacation_days.items():
+                    valid_days = 0
+                    for m_int, d_int in days_set:
+                        if (m_int, d_int) not in holiday_set:
+                            valid_days += 1
+                    if name in result:
+                        result[name] += valid_days
                     
     total = sum(result.values())
     
