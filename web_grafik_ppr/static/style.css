@@ -177,7 +177,7 @@
       background:#f3f5f8 !important;
       box-shadow:inset 0 0 0 9999px #f3f5f8 !important;
     }
-    .report-wrap { padding:0 !important; background:#fff; }
+    .report-wrap { padding:0 !important; background:#fff; overflow-x:hidden; }
     #reportModal .modal-head,
     #normsModal .modal-head,
     #actsModal .modal-head {
@@ -553,3 +553,7 @@ html body .table-wrap table tr.excluded-row > td.active-td {
   box-shadow: none !important;
   background-color: var(--accent) !important;
 }
+
+.report-table tbody tr:hover td, .report-table tbody tr:hover th { background:#f5f8ff !important; }
+.report-table tbody tr.excluded-row:hover td, .report-table tbody tr.excluded-row:hover th { background:#ebf0f8 !important; }
+.report-table tbody tr.group-row:hover td, .report-table tbody tr.group-row:hover th { background:#ebebeb !important; }
