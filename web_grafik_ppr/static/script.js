@@ -2747,14 +2747,14 @@ updateHistoryButtons();
 render();
 
 document.addEventListener('focusin', function(e) {
-  if (e.target && e.target.classList && e.target.classList.contains('cell')) {
+  if (e.target && e.target.classList && (e.target.classList.contains('cell') || e.target.classList.contains('report-note'))) {
     const td = e.target.closest('td');
     if (td) td.classList.add('active-td');
   }
 });
 
 document.addEventListener('focusout', function(e) {
-  if (e.target && e.target.classList && e.target.classList.contains('cell')) {
+  if (e.target && e.target.classList && (e.target.classList.contains('cell') || e.target.classList.contains('report-note'))) {
     const td = e.target.closest('td');
     if (td) td.classList.remove('active-td');
   }
