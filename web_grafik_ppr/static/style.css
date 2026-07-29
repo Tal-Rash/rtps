@@ -444,11 +444,6 @@
     td.holiday-col .cell.small { padding:0; height:var(--month-row-height); line-height:var(--month-row-height); }
     td.transfer-col .cell.day-cell { background:#dcf8dc !important; color:#102033 !important; }
     td.holiday-col .cell.day-cell { background:#ffdede !important; color:#102033 !important; }
-    td.transfer-col .cell.day-cell:not([value=""]),
-    td.holiday-col .cell.day-cell:not([value=""]) {
-      background: #ffffff !important;
-      color: #000000 !important;
-    }
     td.transfer-col .cell.day-cell::selection,
     td.holiday-col .cell.day-cell::selection { background:rgba(16,32,51,.15); }
     .col-idx { width:36px; }

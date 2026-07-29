@@ -49,45 +49,57 @@
 
     <div class="grid">
       <div class="card">
+        {% if not HIDE_CARD_TEXT %}
         <div>
           <h2>График ППР</h2>
           <p>Планирование и контроль ремонтов.</p>
         </div>
+        {% endif %}
         {{ GRAFIK_PPR_LINK | safe }}
       </div>
       <div class="card">
+        {% if not HIDE_CARD_TEXT %}
         <div>
           <h2>Замер КП</h2>
           <p>Учет и анализ состояния колесных пар.</p>
         </div>
+        {% endif %}
         {{ ZAMER_KP_LINK | safe }}
       </div>
       <div class="card">
+        {% if not HIDE_CARD_TEXT %}
         <div>
           <h2>Табель учета</h2>
           <p>Контроль рабочего времени сотрудников.</p>
         </div>
+        {% endif %}
         {{ TABEL_LINK | safe }}
       </div>
       <div class="card">
+        {% if not HIDE_CARD_TEXT %}
         <div>
           <h2>АЛСН</h2>
           <p>Мониторинг и учет АЛСН.</p>
         </div>
+        {% endif %}
         {{ ALSN_LINK | safe }}
       </div>
       <div class="card">
+        {% if not HIDE_CARD_TEXT %}
         <div>
           <h2>Обучение</h2>
           <p>Контроль обучения сотрудников.</p>
         </div>
+        {% endif %}
         {{ EDU_LINK | safe }}
       </div>
       <div class="card">
+        {% if not HIDE_CARD_TEXT %}
         <div>
           <h2>Справочник</h2>
           <p>Базы данных.</p>
         </div>
+        {% endif %}
         {{ SPRAVOCHNIK_LINK | safe }}
       </div>
     </div>

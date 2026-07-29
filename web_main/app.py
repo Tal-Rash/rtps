@@ -263,6 +263,7 @@ async def home_page(request: Request):
         "USERS_LINK": users_link,
         "PENDING_USERS_COUNT": pending_users_count,
         "LOGS_LINK": logs_link,
+        "HIDE_CARD_TEXT": "hide_card_text" in session["modules"],
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "ALSN_LINK": link_for("alsn", "/alsn"),
@@ -381,7 +382,8 @@ async def users_page(request: Request):
                     "s_r": "edit" if is_admin else get_mod_role(mods, "spravochnik", u[3]),
                     "t_r": "edit" if is_admin else get_mod_role(mods, "tabel", u[3]),
                     "e_r": "edit" if is_admin else get_mod_role(mods, "edu", u[3]),
-                    "a_r": "edit" if is_admin else get_mod_role(mods, "alsn", u[3])
+                    "a_r": "edit" if is_admin else get_mod_role(mods, "alsn", u[3]),
+                    "h_t": "yes" if "hide_card_text" in mods else "no"
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -389,7 +391,7 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), hide_card_text: str = Form("no")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -401,6 +403,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
+    if hide_card_text == "yes": modules.append("hide_card_text:yes")
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -420,7 +423,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), hide_card_text: str = Form("no")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -448,6 +451,9 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     module_tabel = posted_or_existing("module_tabel", "tabel", module_tabel)
     module_edu = posted_or_existing("module_edu", "edu", module_edu)
     module_alsn = posted_or_existing("module_alsn", "alsn", module_alsn)
+    
+    if "hide_card_text" not in posted_fields:
+        hide_card_text = "yes" if "hide_card_text" in old_mods else "no"
 
     modules = []
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
@@ -456,6 +462,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
+    if hide_card_text == "yes": modules.append("hide_card_text:yes")
     if role == "admin":
         modules = [
             "grafik_ppr:edit",

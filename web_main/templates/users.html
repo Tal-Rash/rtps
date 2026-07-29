@@ -49,6 +49,7 @@
           <label class="mod-label" style="cursor:pointer; margin:0;">Табель: <select name="module_tabel" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">Обучение: <select name="module_edu" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">АЛСН: <select name="module_alsn" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
+          <label class="mod-label" style="cursor:pointer; margin:0; border-left:1px solid #d9e2ef; padding-left:12px;">Скрыть текст плашек: <select name="hide_card_text" style="padding:6px;"><option value="no">Нет</option><option value="yes">Да</option></select></label>
         </div>
         <button type="submit" style="align-self:flex-start; padding:10px 24px;">Добавить пользователя</button>
       </div>
@@ -106,6 +107,10 @@
                 <option value="none" {% if u.a_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.a_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.a_r == 'edit' %}selected{% endif %}>Редактор</option>
+              </select></label>
+              <label class="mod-label" style="border-top:1px solid #d9e2ef; padding-top:6px;">Скрыть текст плашек: <select form="form_{{ u.id }}" name="hide_card_text">
+                <option value="no" {% if u.h_t == 'no' %}selected{% endif %}>Нет</option>
+                <option value="yes" {% if u.h_t == 'yes' %}selected{% endif %}>Да</option>
               </select></label>
             </div>
           </td>
