@@ -263,7 +263,12 @@ async def home_page(request: Request):
         "USERS_LINK": users_link,
         "PENDING_USERS_COUNT": pending_users_count,
         "LOGS_LINK": logs_link,
-        "HIDE_CARD_TEXT": "hide_card_text" in session["modules"],
+        "HIDE_GRAFIK_PPR": "hide_grafik_ppr:yes" in session["modules"],
+        "HIDE_ZAMER_KP": "hide_zamer_kp:yes" in session["modules"],
+        "HIDE_SPRAVOCHNIK": "hide_spravochnik:yes" in session["modules"],
+        "HIDE_TABEL": "hide_tabel:yes" in session["modules"],
+        "HIDE_EDU": "hide_edu:yes" in session["modules"],
+        "HIDE_ALSN": "hide_alsn:yes" in session["modules"],
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "ALSN_LINK": link_for("alsn", "/alsn"),
@@ -383,7 +388,12 @@ async def users_page(request: Request):
                     "t_r": "edit" if is_admin else get_mod_role(mods, "tabel", u[3]),
                     "e_r": "edit" if is_admin else get_mod_role(mods, "edu", u[3]),
                     "a_r": "edit" if is_admin else get_mod_role(mods, "alsn", u[3]),
-                    "h_t": "yes" if "hide_card_text" in mods else "no"
+                    "h_g": "checked" if "hide_grafik_ppr:yes" in (u[4] or "") else "",
+                    "h_z": "checked" if "hide_zamer_kp:yes" in (u[4] or "") else "",
+                    "h_s": "checked" if "hide_spravochnik:yes" in (u[4] or "") else "",
+                    "h_t": "checked" if "hide_tabel:yes" in (u[4] or "") else "",
+                    "h_e": "checked" if "hide_edu:yes" in (u[4] or "") else "",
+                    "h_a": "checked" if "hide_alsn:yes" in (u[4] or "") else ""
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -391,11 +401,13 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), hide_card_text: str = Form("no")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
         
+    form = await request.form()
+    
     modules = []
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
     if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
@@ -403,7 +415,13 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
-    if hide_card_text == "yes": modules.append("hide_card_text:yes")
+    
+    if form.get("hide_grafik_ppr") == "yes": modules.append("hide_grafik_ppr:yes")
+    if form.get("hide_zamer_kp") == "yes": modules.append("hide_zamer_kp:yes")
+    if form.get("hide_spravochnik") == "yes": modules.append("hide_spravochnik:yes")
+    if form.get("hide_tabel") == "yes": modules.append("hide_tabel:yes")
+    if form.get("hide_edu") == "yes": modules.append("hide_edu:yes")
+    if form.get("hide_alsn") == "yes": modules.append("hide_alsn:yes")
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -423,12 +441,13 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), hide_card_text: str = Form("no")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
 
-    posted_fields = set((await request.form()).keys())
+    form = await request.form()
+    posted_fields = set(form.keys())
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cur = conn.cursor()
@@ -436,9 +455,11 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
             old_user = cur.fetchone()
         old_role = old_user[0] if old_user else role
         old_mods = parse_mods(old_user[1] if old_user else "")
+        old_mods_raw = old_user[1] if old_user else ""
     except Exception:
         old_role = role
         old_mods = {}
+        old_mods_raw = ""
 
     def posted_or_existing(field_name: str, module_name: str, value: str) -> str:
         if field_name in posted_fields:
@@ -452,8 +473,17 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     module_edu = posted_or_existing("module_edu", "edu", module_edu)
     module_alsn = posted_or_existing("module_alsn", "alsn", module_alsn)
     
-    if "hide_card_text" not in posted_fields:
-        hide_card_text = "yes" if "hide_card_text" in old_mods else "no"
+    def posted_or_existing_hide(field_name: str) -> bool:
+        if field_name in posted_fields:
+            return form.get(field_name) == "yes"
+        return f"{field_name}:yes" in old_mods_raw
+
+    hide_grafik_ppr = posted_or_existing_hide("hide_grafik_ppr")
+    hide_zamer_kp = posted_or_existing_hide("hide_zamer_kp")
+    hide_spravochnik = posted_or_existing_hide("hide_spravochnik")
+    hide_tabel = posted_or_existing_hide("hide_tabel")
+    hide_edu = posted_or_existing_hide("hide_edu")
+    hide_alsn = posted_or_existing_hide("hide_alsn")
 
     modules = []
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
@@ -462,7 +492,14 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
-    if hide_card_text == "yes": modules.append("hide_card_text:yes")
+    
+    if hide_grafik_ppr: modules.append("hide_grafik_ppr:yes")
+    if hide_zamer_kp: modules.append("hide_zamer_kp:yes")
+    if hide_spravochnik: modules.append("hide_spravochnik:yes")
+    if hide_tabel: modules.append("hide_tabel:yes")
+    if hide_edu: modules.append("hide_edu:yes")
+    if hide_alsn: modules.append("hide_alsn:yes")
+    
     if role == "admin":
         modules = [
             "grafik_ppr:edit",

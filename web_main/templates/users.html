@@ -43,13 +43,12 @@
         </div>
         <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; border:1px solid #e2e8f0; padding:12px 16px; border-radius:8px; background:#fff;">
           <div style="font-weight:600; font-size:14px; margin-right:8px; color:#475569;">Доступ:</div>
-          <label class="mod-label" style="cursor:pointer; margin:0;">ППР: <select name="module_grafik_ppr" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label class="mod-label" style="cursor:pointer; margin:0;">Замер: <select name="module_zamer_kp" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label class="mod-label" style="cursor:pointer; margin:0;">Справ: <select name="module_spravochnik" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label class="mod-label" style="cursor:pointer; margin:0;">Табель: <select name="module_tabel" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label class="mod-label" style="cursor:pointer; margin:0;">Обучение: <select name="module_edu" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label class="mod-label" style="cursor:pointer; margin:0;">АЛСН: <select name="module_alsn" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select></label>
-          <label class="mod-label" style="cursor:pointer; margin:0; border-left:1px solid #d9e2ef; padding-left:12px;">Скрыть текст плашек: <select name="hide_card_text" style="padding:6px;"><option value="no">Нет</option><option value="yes">Да</option></select></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">ППР: <div style="display:flex; gap:6px; align-items:center;"><select name="module_grafik_ppr" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_grafik_ppr" value="yes" title="Скрыть текст на карточке"></div></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Замер: <div style="display:flex; gap:6px; align-items:center;"><select name="module_zamer_kp" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_zamer_kp" value="yes" title="Скрыть текст на карточке"></div></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Справ: <div style="display:flex; gap:6px; align-items:center;"><select name="module_spravochnik" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_spravochnik" value="yes" title="Скрыть текст на карточке"></div></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Табель: <div style="display:flex; gap:6px; align-items:center;"><select name="module_tabel" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_tabel" value="yes" title="Скрыть текст на карточке"></div></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">Обучение: <div style="display:flex; gap:6px; align-items:center;"><select name="module_edu" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_edu" value="yes" title="Скрыть текст на карточке"></div></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">АЛСН: <div style="display:flex; gap:6px; align-items:center;"><select name="module_alsn" style="padding:6px;"><option value="none">Нет доступа</option><option value="view">Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_alsn" value="yes" title="Скрыть текст на карточке"></div></label>
         </div>
         <button type="submit" style="align-self:flex-start; padding:10px 24px;">Добавить пользователя</button>
       </div>
@@ -78,40 +77,36 @@
           </td>
           <td style="vertical-align:top;">
             <div style="display:flex; flex-direction:column; gap:6px;">
-              <label class="mod-label">ППР: <select form="form_{{ u.id }}" name="module_grafik_ppr">
+              <label class="mod-label">ППР: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_grafik_ppr">
                 <option value="none" {% if u.g_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.g_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.g_r == 'edit' %}selected{% endif %}>Редактор</option>
-              </select></label>
-              <label class="mod-label">Замер: <select form="form_{{ u.id }}" name="module_zamer_kp">
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_grafik_ppr" value="yes" title="Скрыть текст на карточке" {{ u.h_g }}></div></label>
+              <label class="mod-label">Замер: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_zamer_kp">
                 <option value="none" {% if u.z_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.z_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.z_r == 'edit' %}selected{% endif %}>Редактор</option>
-              </select></label>
-              <label class="mod-label">Справ: <select form="form_{{ u.id }}" name="module_spravochnik">
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_zamer_kp" value="yes" title="Скрыть текст на карточке" {{ u.h_z }}></div></label>
+              <label class="mod-label">Справ: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_spravochnik">
                 <option value="none" {% if u.s_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.s_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.s_r == 'edit' %}selected{% endif %}>Редактор</option>
-              </select></label>
-              <label class="mod-label">Табель: <select form="form_{{ u.id }}" name="module_tabel">
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_spravochnik" value="yes" title="Скрыть текст на карточке" {{ u.h_s }}></div></label>
+              <label class="mod-label">Табель: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_tabel">
                 <option value="none" {% if u.t_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.t_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.t_r == 'edit' %}selected{% endif %}>Редактор</option>
-              </select></label>
-              <label class="mod-label">Обучение: <select form="form_{{ u.id }}" name="module_edu">
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_tabel" value="yes" title="Скрыть текст на карточке" {{ u.h_t }}></div></label>
+              <label class="mod-label">Обучение: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_edu">
                 <option value="none" {% if u.e_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.e_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.e_r == 'edit' %}selected{% endif %}>Редактор</option>
-              </select></label>
-              <label class="mod-label">АЛСН: <select form="form_{{ u.id }}" name="module_alsn">
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_edu" value="yes" title="Скрыть текст на карточке" {{ u.h_e }}></div></label>
+              <label class="mod-label">АЛСН: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_alsn">
                 <option value="none" {% if u.a_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.a_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.a_r == 'edit' %}selected{% endif %}>Редактор</option>
-              </select></label>
-              <label class="mod-label" style="border-top:1px solid #d9e2ef; padding-top:6px;">Скрыть текст плашек: <select form="form_{{ u.id }}" name="hide_card_text">
-                <option value="no" {% if u.h_t == 'no' %}selected{% endif %}>Нет</option>
-                <option value="yes" {% if u.h_t == 'yes' %}selected{% endif %}>Да</option>
-              </select></label>
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_alsn" value="yes" title="Скрыть текст на карточке" {{ u.h_a }}></div></label>
             </div>
           </td>
           <td>
