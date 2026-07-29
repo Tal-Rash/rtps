@@ -35,7 +35,8 @@
       <h1 style="margin-top:0; text-align:center;">Запрос доступа</h1>
       <p class="muted" style="text-align:center;">Введите ФИО и желаемый пароль. Если вы забыли пароль, введите новое значение — доступ будет временно приостановлен до одобрения администратором.</p>
       <input name="full_name" type="text" placeholder="Иванов И. И." style="margin-bottom:12px;" required>
-      <input name="password" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required pattern="(?=.*[a-zA-Zа-яА-ЯёЁ])(?=.*[A-ZА-ЯЁ]).{8,}" title="Пароль должен быть не короче 8 символов, содержать буквы и хотя бы одну заглавную букву.">
+      <input name="password" id="pwd" type="text" placeholder="Новый пароль" style="margin-bottom:12px;" required pattern="(?=.*[a-zA-Zа-яА-ЯёЁ])(?=.*[A-ZА-ЯЁ]).{8,}" title="Пароль должен быть не короче 8 символов, содержать буквы и хотя бы одну заглавную букву." oninput="document.getElementById('pwd_confirm').setCustomValidity(this.value != document.getElementById('pwd_confirm').value ? 'Пароли не совпадают' : '')">
+      <input name="password_confirm" id="pwd_confirm" type="text" placeholder="Повторите пароль" style="margin-bottom:12px;" required oninput="this.setCustomValidity(this.value != document.getElementById('pwd').value ? 'Пароли не совпадают' : '')">
       <button type="submit">Запросить доступ</button>
     </form>
     <a class="toggle-link" onclick="document.getElementById('request-form').style.display='none'; document.getElementById('login-form').style.display='block';">Вернуться ко входу</a>
