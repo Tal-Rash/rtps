@@ -622,6 +622,7 @@ function handleGridInput(el){
   if (el.dataset.month !== undefined) setLastCell(el);
   const value = String(el.value ?? '').toUpperCase();
   if (el.value !== value) el.value = value;
+  el.setAttribute('value', value);
   setPath(el.dataset.path, value);
   if (String(el.dataset.path || '').startsWith('repair_schedule.')) {
     updateRepairScheduleDerivedValues();
