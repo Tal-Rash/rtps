@@ -245,13 +245,14 @@ async def home_page(request: Request):
         users_link = f'<a class="badge badge-users" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом{pending_badge}</a>'
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
         
-    def link_for(mod_name, url):
+    def has_access_to(mod_name):
         mods = session["modules"]
         role = session["role"]
-        has_access = False
-        if role == "admin" or "admin" in mods: has_access = True
-        elif f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(","): has_access = True
-        if has_access:
+        if role == "admin" or "admin" in mods: return True
+        return f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(",")
+
+    def link_for(mod_name, url):
+        if has_access_to(mod_name):
             target_base = ALSN_SITE_URL if mod_name == "alsn" else MAIN_SITE_URL
             return f'<a href="{target_base}{url}">Открыть модуль</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
@@ -263,12 +264,12 @@ async def home_page(request: Request):
         "USERS_LINK": users_link,
         "PENDING_USERS_COUNT": pending_users_count,
         "LOGS_LINK": logs_link,
-        "HIDE_GRAFIK_PPR": "hide_grafik_ppr:yes" in session["modules"],
-        "HIDE_ZAMER_KP": "hide_zamer_kp:yes" in session["modules"],
-        "HIDE_SPRAVOCHNIK": "hide_spravochnik:yes" in session["modules"],
-        "HIDE_TABEL": "hide_tabel:yes" in session["modules"],
-        "HIDE_EDU": "hide_edu:yes" in session["modules"],
-        "HIDE_ALSN": "hide_alsn:yes" in session["modules"],
+        "HIDE_GRAFIK_PPR": ("hide_grafik_ppr:yes" in session["modules"]) or not has_access_to("grafik_ppr"),
+        "HIDE_ZAMER_KP": ("hide_zamer_kp:yes" in session["modules"]) or not has_access_to("zamer_kp"),
+        "HIDE_SPRAVOCHNIK": ("hide_spravochnik:yes" in session["modules"]) or not has_access_to("spravochnik"),
+        "HIDE_TABEL": ("hide_tabel:yes" in session["modules"]) or not has_access_to("tabel"),
+        "HIDE_EDU": ("hide_edu:yes" in session["modules"]) or not has_access_to("edu"),
+        "HIDE_ALSN": ("hide_alsn:yes" in session["modules"]) or not has_access_to("alsn"),
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "ALSN_LINK": link_for("alsn", "/alsn"),
