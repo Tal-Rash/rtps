@@ -475,6 +475,8 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     module_alsn = posted_or_existing("module_alsn", "alsn", module_alsn)
     
     def posted_or_existing_hide(field_name: str) -> bool:
+        if "is_full_update" in posted_fields:
+            return form.get(field_name) == "yes"
         if field_name in posted_fields:
             return form.get(field_name) == "yes"
         return f"{field_name}:yes" in old_mods_raw
