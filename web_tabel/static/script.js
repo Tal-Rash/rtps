@@ -248,12 +248,14 @@ function renderTabelBody() {
       
       const cleanVal = String(val).trim().toUpperCase();
       
-      if (cleanVal === "О" || cleanVal === "ДО" || cleanVal === "ОВ" || cleanVal === "А") {
+      if (cleanVal === "О" || cleanVal === "ДО" || cleanVal === "ОВ") {
         tdClass += " bg-vacation";
       } else if (cleanVal === "К" || cleanVal === "У") {
         tdClass += " bg-trip";
       } else if (cleanVal === "Б" || cleanVal === "БН") {
         tdClass += " bg-ill";
+      } else if (cleanVal === "А") {
+        tdClass += " bg-absence";
       } else if ((isWeekend || isH || isT) && cleanVal !== "" && cleanVal !== "В" && cleanVal !== "B") {
         tdClass += " bg-work-weekend";
       } else if (isH) {

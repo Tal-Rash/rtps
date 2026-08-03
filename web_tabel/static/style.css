@@ -1328,6 +1328,7 @@ td.bg-holiday, td.bg-holiday .cell.day-cell { background: #FFCCCC !important; co
 td.bg-vacation, td.bg-vacation .cell.day-cell { background: #FFFF99 !important; color: #102033 !important; }
 td.bg-trip, td.bg-trip .cell.day-cell { background: #E1BEE7 !important; color: #102033 !important; }
 td.bg-ill, td.bg-ill .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
+td.bg-absence, td.bg-absence .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
 td.bg-milk, td.bg-milk .cell.day-cell { background: #B3E5FC !important; color: #102033 !important; }
 
 th.bg-weekend { background: #CCFFCC !important; }
@@ -1522,6 +1523,7 @@ td.bg-holiday, td.bg-holiday .cell.day-cell { background: #FFCCCC !important; co
 td.bg-vacation, td.bg-vacation .cell.day-cell { background: #FFFF99 !important; color: #102033 !important; }
 td.bg-trip, td.bg-trip .cell.day-cell { background: #E1BEE7 !important; color: #102033 !important; }
 td.bg-ill, td.bg-ill .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
+td.bg-absence, td.bg-absence .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
 td.bg-milk, td.bg-milk .cell.day-cell { background: #B3E5FC !important; color: #102033 !important; }
 
 th.bg-weekend { background: #CCFFCC !important; }
@@ -1731,6 +1733,7 @@ td.bg-holiday, td.bg-holiday .cell.day-cell { background: #FFCCCC !important; co
 td.bg-vacation, td.bg-vacation .cell.day-cell { background: #FFFF99 !important; color: #102033 !important; }
 td.bg-trip, td.bg-trip .cell.day-cell { background: #E1BEE7 !important; color: #102033 !important; }
 td.bg-ill, td.bg-ill .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
+td.bg-absence, td.bg-absence .cell.day-cell { background: #FF9999 !important; color: #102033 !important; }
 td.bg-milk, td.bg-milk .cell.day-cell { background: #B3E5FC !important; color: #102033 !important; }
 td.bg-work-weekend, td.bg-work-weekend .cell.day-cell { background: #B3E5FC !important; color: #102033 !important; }
 
