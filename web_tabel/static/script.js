@@ -248,7 +248,7 @@ function renderTabelBody() {
       
       const cleanVal = String(val).trim().toUpperCase();
       
-      if (cleanVal === "О" || cleanVal === "ДО") {
+      if (cleanVal === "О" || cleanVal === "ДО" || cleanVal === "ОВ" || cleanVal === "А") {
         tdClass += " bg-vacation";
       } else if (cleanVal === "К" || cleanVal === "У") {
         tdClass += " bg-trip";
