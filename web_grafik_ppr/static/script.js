@@ -363,9 +363,11 @@ function clearGridSelectionValues(grid, selection){
   let changed = false;
   for (let row = selection.startRow; row <= selection.endRow; row++) {
     for (let col = selection.startCol; col <= selection.endCol; col++) {
-      if (writeGridCellValue(grid, row, col, '')) {
-        changed = true;
-      }
+      try {
+        if (writeGridCellValue(grid, row, col, '')) {
+          changed = true;
+        }
+      } catch(e) { console.error('Error clearing grid cell', e); }
     }
   }
   return changed;
@@ -477,12 +479,11 @@ function handleGridKeydown(e){
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     const sel = info.grid === 'repair-schedule' ? getRepairScheduleSelection() : getRepairPeriodicitySelection();
-    const selected = sel && info.row >= sel.startRow && info.row <= sel.endRow && info.col >= sel.startCol && info.col <= sel.endCol;
-    if (selected) {
+    if (sel) {
       clearGridSelectionValues(info.grid, sel);
     } else {
       e.target.value = '';
-      setPath(e.target.dataset.path, '');
+      if (e.target.dataset.path) setPath(e.target.dataset.path, '');
     }
     if (info.grid === 'repair-schedule') updateRepairScheduleDerivedValues();
     markDirty(true);
@@ -543,9 +544,11 @@ function clearMonthSelectionValues(sel) {
   let changed = false;
   for (let row = sel.startRow; row <= sel.endRow; row++) {
     for (let col = sel.startCol; col <= sel.endCol; col++) {
-      if (writeMonthCellValue(sel.monthIndex, sel.table, row, col, '')) {
-        changed = true;
-      }
+      try {
+        if (writeMonthCellValue(sel.monthIndex, sel.table, row, col, '')) {
+          changed = true;
+        }
+      } catch(e) { console.error('Error clearing month cell', e); }
     }
   }
   return changed;
@@ -661,16 +664,14 @@ function handleMonthKeydown(e){
   if (e.key === 'Delete' || e.key === 'Backspace'){
     e.preventDefault();
     const sel = getSelectedMonthSelection();
-    const info = getMonthCellInfo(e.target);
-    const selected = sel && info && sel.monthIndex === info.monthIndex && sel.table === info.table &&
-                     info.row >= sel.startRow && info.row <= sel.endRow &&
-                     info.col >= sel.startCol && info.col <= sel.endCol;
-    if (selected) {
+    if (sel) {
       clearMonthSelectionValues(sel);
     } else {
       e.target.value = '';
-      setPath(e.target.dataset.path, '');
+      if (e.target.dataset.path) setPath(e.target.dataset.path, '');
     }
+    markDirty(true);
+    render();
     return;
   }
   let shouldMove = false;
