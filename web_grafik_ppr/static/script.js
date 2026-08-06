@@ -363,7 +363,9 @@ function clearGridSelectionValues(grid, selection){
   let changed = false;
   for (let row = selection.startRow; row <= selection.endRow; row++) {
     for (let col = selection.startCol; col <= selection.endCol; col++) {
-      changed = writeGridCellValue(grid, row, col, '') || changed;
+      if (writeGridCellValue(grid, row, col, '')) {
+        changed = true;
+      }
     }
   }
   return changed;
@@ -541,7 +543,9 @@ function clearMonthSelectionValues(sel) {
   let changed = false;
   for (let row = sel.startRow; row <= sel.endRow; row++) {
     for (let col = sel.startCol; col <= sel.endCol; col++) {
-      changed = writeMonthCellValue(sel.monthIndex, sel.table, row, col, '') || changed;
+      if (writeMonthCellValue(sel.monthIndex, sel.table, row, col, '')) {
+        changed = true;
+      }
     }
   }
   return changed;
@@ -619,6 +623,7 @@ document.addEventListener('click', event => {
 });
 function setPath(path, value){
   if (!CAN_EDIT) return;
+  if (!path) return;
   if (typeof value === 'string') value = value.toUpperCase();
   const p = path.split('.');
   let o = appState;
