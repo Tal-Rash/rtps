@@ -536,6 +536,16 @@ function writeMonthCellValue(monthIndex, table, row, col, value){
   setPath(cell.dataset.path, normalized);
   return true;
 }
+function clearMonthSelectionValues(sel) {
+  if (!sel) return false;
+  let changed = false;
+  for (let row = sel.startRow; row <= sel.endRow; row++) {
+    for (let col = sel.startCol; col <= sel.endCol; col++) {
+      changed = writeMonthCellValue(sel.monthIndex, sel.table, row, col, '') || changed;
+    }
+  }
+  return changed;
+}
 function pasteMonthSelectionText(target, text){
   if (!CAN_EDIT) return;
   const info = getMonthCellInfo(target);
@@ -645,8 +655,17 @@ function handleMonthKeydown(e){
   if (!keys.includes(e.key)) return;
   if (e.key === 'Delete' || e.key === 'Backspace'){
     e.preventDefault();
-    e.target.value = '';
-    setPath(e.target.dataset.path, '');
+    const sel = getSelectedMonthSelection();
+    const info = getMonthCellInfo(e.target);
+    const selected = sel && info && sel.monthIndex === info.monthIndex && sel.table === info.table &&
+                     info.row >= sel.startRow && info.row <= sel.endRow &&
+                     info.col >= sel.startCol && info.col <= sel.endCol;
+    if (selected) {
+      clearMonthSelectionValues(sel);
+    } else {
+      e.target.value = '';
+      setPath(e.target.dataset.path, '');
+    }
     return;
   }
   let shouldMove = false;
