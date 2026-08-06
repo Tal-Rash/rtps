@@ -180,6 +180,11 @@ function selectionBounds(a, b){
     endCol: Math.max(a.col, b.col),
   };
 }
+function focusCell(target){
+  if (target && typeof target.focus === 'function') {
+    try { target.focus(); } catch(e) {}
+  }
+}
 function clearMonthSelection(){
   ui.monthSelection = null;
   applyMonthSelectionClasses();
