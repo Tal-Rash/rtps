@@ -611,6 +611,45 @@ function handleMonthPaste(e){
 }
 document.addEventListener('mouseup', endMonthSelection, true);
 document.addEventListener('mouseup', endGridSelection, true);
+document.addEventListener('mousemove', event => {
+  if (ui.draggingSelection && ui.section === 'months') {
+    const rawTarget = document.elementFromPoint(event.clientX, event.clientY);
+    const target = rawTarget ? (rawTarget.closest ? rawTarget.closest('input') : rawTarget) : null;
+    if (target) {
+      const info = getMonthCellInfo(target);
+      if (info && ui.monthSelection && ui.monthSelection.anchor) {
+        const anchor = ui.monthSelection.anchor;
+        if (anchor.monthIndex === info.monthIndex && anchor.table === info.table) {
+          setMonthSelection(anchor, info);
+        }
+      }
+    }
+  }
+  if (ui.repairScheduleDragging) {
+    const rawTarget = document.elementFromPoint(event.clientX, event.clientY);
+    const target = rawTarget ? (rawTarget.closest ? rawTarget.closest('input') : rawTarget) : null;
+    if (target) {
+      const info = getGridCellInfo(target);
+      const sel = ui.repairScheduleSelection;
+      if (info && info.grid === 'repair-schedule' && sel && sel.anchor) {
+        const next = { row: info.row, col: info.col };
+        setRepairScheduleSelection(sel.anchor, next);
+      }
+    }
+  }
+  if (ui.repairPeriodicityDragging) {
+    const rawTarget = document.elementFromPoint(event.clientX, event.clientY);
+    const target = rawTarget ? (rawTarget.closest ? rawTarget.closest('input') : rawTarget) : null;
+    if (target) {
+      const info = getGridCellInfo(target);
+      const sel = ui.repairPeriodicitySelection;
+      if (info && info.grid === 'repair-periodicity' && sel && sel.anchor) {
+        const next = { row: info.row, col: info.col };
+        setRepairPeriodicitySelection(sel.anchor, next);
+      }
+    }
+  }
+});
 document.addEventListener('copy', handleMonthCopy, true);
 document.addEventListener('copy', handleGridCopy, true);
 document.addEventListener('paste', handleMonthPaste, true);
