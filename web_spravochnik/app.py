@@ -959,7 +959,7 @@ async function purgeSelectedInventory(row){
   if (!confirm('Удалить окончательно выбранный локомотив?')) return;
   const target = targetRow;
   const year = Number(document.getElementById('year').value);
-  const res = await fetch(${API}/api/purge_inventory_row, {
+  const res = await fetch(`${API}/api/purge_inventory_row`, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({year, ser: target[0], num: target[1]})
