@@ -45,6 +45,10 @@
           <div class="section-title">Список ПБ</div>
           <div class="warehouse-filters">
             <label>
+              Номер
+              <input type="text" id="warehouseNumberFilter" placeholder="Поиск..." style="width: 80px;" oninput="setWarehouseFilter('number', this.value)">
+            </label>
+            <label>
               Тип прибора
               <select id="warehouseTypeFilter" onchange="setWarehouseFilter('type', this.value)">
                 <option value="">Все типы</option>

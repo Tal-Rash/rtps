@@ -17,7 +17,8 @@ let warehouseSelected = null;
 let warehouseFilters = {
   type: "",
   nextMonth: "",
-  location: ""
+  location: "",
+  number: ""
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -144,7 +145,8 @@ function normalizeWarehouseFilters() {
   warehouseFilters = {
     type: String(warehouseFilters?.type ?? ""),
     nextMonth: String(warehouseFilters?.nextMonth ?? ""),
-    location: String(warehouseFilters?.location ?? "")
+    location: String(warehouseFilters?.location ?? ""),
+    number: String(warehouseFilters?.number ?? "")
   };
 }
 
@@ -157,8 +159,12 @@ function warehouseRowMatchesFilters(row) {
   const typeValue = String(row?.type ?? "").trim().toLowerCase();
   const nextValue = String(row?.next_verification_date ?? "").trim();
   const locationValue = String(row?.location ?? "").trim().toLowerCase();
+  const numberValue = String(row?.number ?? "").trim().toLowerCase();
   const filterType = String(warehouseFilters.type ?? "").trim().toLowerCase();
   const filterLocation = String(warehouseFilters.location ?? "").trim().toLowerCase();
+  const filterNumber = String(warehouseFilters.number ?? "").trim().toLowerCase();
+  
+  if (filterNumber && !numberValue.includes(filterNumber)) return false;
   if (filterType && typeValue !== filterType) return false;
   if (filterLocation && locationValue !== filterLocation) return false;
   if (warehouseFilters.nextMonth) {
@@ -172,9 +178,11 @@ function syncWarehouseFilterDom() {
   const typeFilter = document.getElementById("warehouseTypeFilter");
   const nextDateFilter = document.getElementById("warehouseNextMonthFilter");
   const locationFilter = document.getElementById("warehouseLocationFilter");
+  const numberFilter = document.getElementById("warehouseNumberFilter");
   if (typeFilter) typeFilter.value = warehouseFilters.type;
   if (nextDateFilter) nextDateFilter.value = warehouseFilters.nextMonth;
   if (locationFilter) locationFilter.value = warehouseFilters.location;
+  if (numberFilter) numberFilter.value = warehouseFilters.number;
 }
 
 function applyWarehouseFilters() {
@@ -184,7 +192,8 @@ function applyWarehouseFilters() {
     const row = {
       type: rowEl.dataset.warehouseType || "",
       next_verification_date: rowEl.dataset.warehouseNext || "",
-      location: rowEl.dataset.warehouseLocation || ""
+      location: rowEl.dataset.warehouseLocation || "",
+      number: rowEl.dataset.warehouseNumber || ""
     };
     const visible = warehouseRowMatchesFilters(row);
     rowEl.hidden = !visible;
@@ -203,7 +212,7 @@ function setWarehouseFilter(field, value) {
 }
 
 function clearWarehouseFilters() {
-  warehouseFilters = { type: "", nextMonth: "", location: "" };
+  warehouseFilters = { type: "", nextMonth: "", location: "", number: "" };
   syncWarehouseFilterDom();
   applyWarehouseFilters();
   render();
@@ -608,7 +617,7 @@ function render() {
   }).join("") || `<div class="empty-state">Нет строк</div>`;
 
   whBody.innerHTML = appState.warehouse.map((row, idx) => `
-    <tr data-warehouse-row="1" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}">
+    <tr data-warehouse-row="1" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}" data-warehouse-number="${escapeHtml(row.number)}">
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
           data-row="${idx}" data-col="0"
           ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 0, this)" onblur="editWarehouseCell(' + idx + ', 0, this)" onclick="handleWarehouseClick(' + idx + ', 0)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 0)" oncopy="handleWarehouseCopy(event, ' + idx + ', 0)" onpaste="handleWarehousePaste(event, ' + idx + ', 0)"' : ''}>${escapeHtml(row.type)}</td>
