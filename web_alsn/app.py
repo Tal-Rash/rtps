@@ -28,7 +28,7 @@ WEB_SECRET_FILE = ROOT.parent / "data" / "web_secret.txt"
 LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/alsn"
-APP_VERSION = "web-alsn-1.0"
+APP_VERSION = "web-alsn-1.1"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
