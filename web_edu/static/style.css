@@ -236,11 +236,13 @@ button:disabled {
 .matrix-table .col-training {
   width: 120px;
   min-width: 120px;
+  cursor: text;
 }
 
 .matrix-table .col-training-first {
   width: 140px;
   min-width: 140px;
+  cursor: text;
 }
 
 .matrix-table .cell {
@@ -313,8 +315,11 @@ button:disabled {
 }
 
 .cell:focus {
-  background: #d9ecff;
-  border-radius: 4px;
+  /* removed inner focus styles */
+}
+
+td:has(.cell:focus) {
+  background: #d9ecff !important;
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 

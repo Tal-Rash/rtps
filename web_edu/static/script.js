@@ -26,6 +26,19 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btnCategorySettings")?.remove();
     document.getElementById("btnSettings")?.remove();
   }
+
+  const eduTable = document.getElementById("eduTable");
+  if (eduTable) {
+    eduTable.addEventListener("click", (e) => {
+      const td = e.target.closest("td.col-training");
+      if (td) {
+        const cell = td.querySelector(".cell[contenteditable='true']");
+        if (cell && !window.getSelection().toString()) {
+          cell.focus();
+        }
+      }
+    });
+  }
 });
 
 function escapeHtml(value) {
