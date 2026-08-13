@@ -166,6 +166,7 @@ function renderTable() {
     eHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'tab_num', this)">${escapeHtml(emp.tab_num)}</div></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk', this)" ${emp.milk ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><input type="checkbox" onchange="empEdited(${r}, 'milk_issue', this)" ${emp.milk_issue ? 'checked' : ''} ${CAN_EDIT ? '' : 'disabled'}></td>`;
+    eHTML += `<td><input type="date" onchange="empEdited(${r}, 'hire_date', this)" value="${emp.hire_date || ''}" ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><input type="date" onchange="empEdited(${r}, 'exclude_date', this)" value="${emp.exclude_date || ''}" ${CAN_EDIT ? '' : 'disabled'}></td>`;
     eHTML += `<td><div class="cell" style="text-align: left;" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="empEdited(${r}, 'milk_note', this)">${escapeHtml(emp.milk_note)}</div></td>`;
     eHTML += `</tr>`;
@@ -224,7 +225,23 @@ function renderTabelBody() {
       }
     }
     
-    const trClass = isFullyExcluded ? "excluded" : "";
+    let isFullyBeforeHire = false;
+    let hireDayStart = null;
+    if (emp.hire_date) {
+      const parts = emp.hire_date.split('-');
+      if (parts.length === 3) {
+        const hY = parseInt(parts[0]);
+        const hM = parseInt(parts[1]);
+        const hD = parseInt(parts[2]);
+        if (year < hY || (year === hY && month < hM)) {
+          isFullyBeforeHire = true;
+        } else if (year === hY && month === hM) {
+          hireDayStart = hD;
+        }
+      }
+    }
+    
+    const trClass = (isFullyExcluded || isFullyBeforeHire) ? "excluded" : "";
     bHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${rIndex})" ondragover="rowDragOver(event, ${rIndex})" ondrop="rowDrop(event, ${rIndex})">`;
     bHTML += `<td class="col-idx"><div class="rownum"><span>${rIndex + 1}</span></div></td>`;
     bHTML += `<td class="col-pos"><div class="cell" style="text-align: left;">${escapeHtml(emp.pos)}</div></td>`;
@@ -235,7 +252,7 @@ function renderTabelBody() {
     
     for (let d = 1; d <= days; d++) {
       const val = rowData[d] || "";
-      let isCellExcluded = isFullyExcluded || (excludeDayStart && d >= excludeDayStart);
+      let isCellExcluded = isFullyExcluded || (excludeDayStart && d >= excludeDayStart) || isFullyBeforeHire || (hireDayStart && d < hireDayStart);
       const isWeekend = [0, 6].includes(new Date(year, month - 1, d).getDay());
       let tdClass = "col-day";
       if (isCellExcluded) tdClass += " excluded";
@@ -301,10 +318,10 @@ function dataEdited(r, c, el) {
 }
 
 function empEdited(r, field, el) {
-  if (!appState.employees[r]) appState.employees[r] = {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:"", exclude_date:""};
+  if (!appState.employees[r]) appState.employees[r] = {pos:"", name:"", full_name:"", tab_num:"", milk:0, milk_issue:0, milk_note:"", hire_date:"", exclude_date:""};
   if (field === 'milk' || field === 'milk_issue' || field === 'is_excluded') {
     appState.employees[r][field] = el.checked ? 1 : 0;
-  } else if (field === 'exclude_date') {
+  } else if (field === 'exclude_date' || field === 'hire_date') {
     appState.employees[r][field] = el.value;
     renderTabelBody();
   } else {

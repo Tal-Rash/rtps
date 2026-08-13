@@ -285,11 +285,16 @@ def load_state(year: int, month: int) -> dict:
                 conn.commit()
             except Exception:
                 pass
+            try:
+                cur.execute("ALTER TABLE employees ADD COLUMN hire_date TEXT DEFAULT ''")
+                conn.commit()
+            except Exception:
+                pass
         
         employees = []
         try:
             emp_rows = cur.execute(
-                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded, exclude_date FROM employees WHERE y=? ORDER BY rowid", (year,)
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded, hire_date, exclude_date FROM employees WHERE y=? ORDER BY rowid", (year,)
             ).fetchall()
             for r in emp_rows:
                 employees.append({
@@ -301,6 +306,7 @@ def load_state(year: int, month: int) -> dict:
                     "full_name": text(r["full_name"]),
                     "milk_note": text(r["milk_note"]),
                     "is_excluded": int(dict(r).get("is_excluded", 0) or 0),
+                    "hire_date": text(dict(r).get("hire_date", "")),
                     "exclude_date": text(dict(r).get("exclude_date", ""))
                 })
         except Exception:
@@ -585,6 +591,27 @@ async def export_milk(year: int, month: int, type: str):
             return ex_day
         return None
 
+    def employee_hire_start(raw_date: str) -> int | None:
+        raw = text(raw_date).strip()
+        if not raw:
+            return None
+        parts = raw.split("-")
+        if len(parts) != 3:
+            return None
+        try:
+            h_year = int(parts[0])
+            h_month = int(parts[1])
+            h_day = int(parts[2])
+        except Exception:
+            return None
+        if year < h_year:
+            return 32
+        if year == h_year and month < h_month:
+            return 32
+        if year == h_year and month == h_month:
+            return h_day
+        return None
+
     def is_workday(y, m, d):
         dt_obj = dt.date(y, m, d)
         is_we = dt_obj.weekday() >= 5
@@ -620,7 +647,7 @@ async def export_milk(year: int, month: int, type: str):
             cur = conn.cursor()
 
             emp_rows = cur.execute(
-                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid",
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, hire_date, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid",
                 (year,),
             ).fetchall()
 
@@ -655,6 +682,7 @@ async def export_milk(year: int, month: int, type: str):
                 full_name = str(emp["full_name"])
                 milk_note = str(emp["milk_note"])
                 exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
+                hire_start = employee_hire_start(emp["hire_date"] if "hire_date" in emp.keys() else "")
 
                 count = 0
                 missed_days: list[str] = []
@@ -662,6 +690,8 @@ async def export_milk(year: int, month: int, type: str):
 
                 for d in range(1, days_cnt + 1):
                     if exclude_start is not None and d >= exclude_start:
+                        continue
+                    if hire_start is not None and d < hire_start:
                         continue
 
                     val = emp_ts.get(d, "").strip().upper()
@@ -790,6 +820,27 @@ async def export_milk_details(year: int, month: int, type: str):
             return ex_day
         return None
 
+    def employee_hire_start(raw_date: str) -> int | None:
+        raw = text(raw_date).strip()
+        if not raw:
+            return None
+        parts = raw.split("-")
+        if len(parts) != 3:
+            return None
+        try:
+            h_year = int(parts[0])
+            h_month = int(parts[1])
+            h_day = int(parts[2])
+        except Exception:
+            return None
+        if year < h_year:
+            return 32
+        if year == h_year and month < h_month:
+            return 32
+        if year == h_year and month == h_month:
+            return h_day
+        return None
+
     def is_workday(y, m, d):
         dt_obj = dt.date(y, m, d)
         is_we = dt_obj.weekday() >= 5
@@ -820,7 +871,7 @@ async def export_milk_details(year: int, month: int, type: str):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         emp_rows = cur.execute(
-            "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid",
+            "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, hire_date, exclude_date FROM employees WHERE y=? AND name != '' ORDER BY rowid",
             (year,),
         ).fetchall()
 
@@ -844,12 +895,15 @@ async def export_milk_details(year: int, month: int, type: str):
         pos = str(emp["pos"])
         full_name = str(emp["full_name"])
         exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
+        hire_start = employee_hire_start(emp["hire_date"] if "hire_date" in emp.keys() else "")
         emp_ts = ts_data.get(tab_num, {})
         count = 0
         missed_days: list[str] = []
 
         for d in range(1, days_cnt + 1):
             if exclude_start is not None and d >= exclude_start:
+                continue
+            if hire_start is not None and d < hire_start:
                 continue
             val = emp_ts.get(d, "").strip().upper()
             if type == "компенсация":
@@ -1029,8 +1083,8 @@ async def api_save_state(request: Request):
                 insert_emp = []
                 for r, emp in enumerate(employees):
                     insert_emp.append((year, emp.get("pos",""), emp.get("name",""), emp.get("tab_num",""), 
-                                       emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note",""), emp.get("exclude_date","")))
-                cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note, exclude_date) VALUES(?,?,?,?,?,?,?,?,?)", insert_emp)
+                                       emp.get("milk",0), emp.get("milk_issue",0), emp.get("full_name",""), emp.get("milk_note",""), emp.get("hire_date",""), emp.get("exclude_date","")))
+                cur.executemany("INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note, hire_date, exclude_date) VALUES(?,?,?,?,?,?,?,?,?,?)", insert_emp)
 
             if vacations is not None:
                 cur.execute("DELETE FROM vacations WHERE y=?", (year,))
