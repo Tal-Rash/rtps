@@ -180,7 +180,7 @@ function renderMatrix() {
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
       const trainingClass = cIdx === 0 ? "col-training col-training-first" : "col-training";
       bHTML += `<td class="${cellClass} ${trainingClass}">
-        <div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}">${escapeHtml(cellText)}</div>
+        <div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}" data-original="${escapeHtml(cellText)}">${escapeHtml(cellText)}</div>
         ${autoText}
       </td>`;
     });
@@ -402,8 +402,13 @@ async function saveCellValue(rIdx, cIdx, rawText) {
 
 async function onCellBlur(e) {
   const cell = e.target;
+  const newText = String(cell.innerText || "").trim();
+  const oldText = String(cell.dataset.original || "").trim();
+  if (newText === oldText) return;
+
   try {
-    await saveCellValue(Number(cell.dataset.row), Number(cell.dataset.col), cell.innerText);
+    await saveCellValue(Number(cell.dataset.row), Number(cell.dataset.col), newText);
+    cell.dataset.original = newText;
     renderMatrix();
   } catch (err) {
     console.error(err);
