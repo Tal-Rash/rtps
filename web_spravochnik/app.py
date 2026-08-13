@@ -803,15 +803,16 @@ function renderTable(name, rows, editableRows){
   let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + '<thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[8] || 0) > 0;
-    const draggable = name === 'inventory' && CAN_EDIT
-      ? ' draggable="true" ondragstart="dragStartRow(event, ' + r + ')" ondragover="dragOverRow(event, ' + r + ')" ondrop="dropRow(event, ' + r + ')" ondragend="dragEndRow(event)"'
+    const isDraggable = (name === 'inventory' || name === 'employees') && CAN_EDIT;
+    const draggable = isDraggable
+      ? ` draggable="true" ondragstart="dragStartRow(event, '${name}', ${r})" ondragover="dragOverRow(event, '${name}', ${r})" ondrop="dropRow(event, '${name}', ${r})" ondragend="dragEndRow(event)"`
       : '';
-    const isSelected = name === 'inventory' && selected.inventory === r;
+    const isSelected = selected[name] === r;
     const rowClass = [
       isDeleted ? 'deleted-row' : '',
       isSelected ? 'selected-row' : '',
     ].filter(Boolean).join(' ');
-    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${draggable}><td>${r + 1}</td>`;
+    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${draggable}><td style="${isDraggable ? 'cursor:grab;' : ''}">${r + 1}</td>`;
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
@@ -849,6 +850,7 @@ function renderTable(name, rows, editableRows){
 }
 
 let selected = {employees: -1, inventory: -1};
+let draggedTable = '';
 let draggedRowIndex = -1;
 function selectRow(name, row){
   selected[name] = row;
@@ -957,7 +959,7 @@ async function purgeSelectedInventory(row){
   if (!confirm('Удалить окончательно выбранный локомотив?')) return;
   const target = targetRow;
   const year = Number(document.getElementById('year').value);
-  const res = await fetch(`${API}/api/purge_inventory_row`, {
+  const res = await fetch(${API}/api/purge_inventory_row, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({year, ser: target[0], num: target[1]})
@@ -975,37 +977,41 @@ async function purgeSelectedInventory(row){
   updateSaveButton();
   return;
 }
-function dragStartRow(event, row){
+function dragStartRow(event, name, row){
   if (!CAN_EDIT) return;
-  if ((state.inventory[row] && Number(state.inventory[row][8] || 0) > 0)) {
+  if (name === 'inventory' && state.inventory[row] && Number(state.inventory[row][8] || 0) > 0) {
     event.preventDefault();
     return;
   }
+  draggedTable = name;
   draggedRowIndex = row;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', String(row));
 }
-function dragOverRow(event, row){
+function dragOverRow(event, name, row){
   if (!CAN_EDIT) return;
-  if (draggedRowIndex < 0 || draggedRowIndex === row) return;
+  if (draggedTable !== name || draggedRowIndex < 0 || draggedRowIndex === row) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
 }
-function dropRow(event, row){
+function dropRow(event, name, row){
   if (!CAN_EDIT) return;
   event.preventDefault();
   const from = draggedRowIndex;
-  if (from < 0 || from === row) return;
-  const rows = state.inventory;
+  if (draggedTable !== name || from < 0 || from === row) return;
+  const rows = state[name];
+  if (!rows) return;
   const [moved] = rows.splice(from, 1);
   rows.splice(row, 0, moved);
-  selected.inventory = row;
+  selected[name] = row;
   draggedRowIndex = -1;
-  renderTable('inventory', rows, true);
+  draggedTable = '';
+  renderTable(name, rows, true);
   updateSaveButton();
 }
 function dragEndRow(){
   draggedRowIndex = -1;
+  draggedTable = '';
 }
 async function saveAll(){
   if (!CAN_EDIT) return;
