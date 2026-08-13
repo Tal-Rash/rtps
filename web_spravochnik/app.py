@@ -645,7 +645,7 @@ HTML = """<!doctype html>
   <div class="top">
     <div>
       <h1>Справочник</h1>
-      <div class="muted">Нормы времени, сотрудники, локомотивы. База: common_database.db</div>
+      <div class="muted"></div>
     </div>
   <div class="actions">
       <a href="http://yrtps.ru/">На главную</a>

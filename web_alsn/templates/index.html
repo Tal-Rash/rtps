@@ -3,12 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>АЛСН {{APP_VERSION}}</title>
+  <title>АЛСН</title>
   <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
   <script>
+    var _prefix = "{{APP_PREFIX}}";
+    var _canEdit = "{{CAN_EDIT}}";
     window.APP_CONFIG = {
-      APP_PREFIX: "{{APP_PREFIX}}",
-      CAN_EDIT: "{{CAN_EDIT}}" === "true"
+      APP_PREFIX: _prefix,
+      CAN_EDIT: _canEdit === "true"
     };
   </script>
 </head>
@@ -17,7 +19,7 @@
     <div class="topbar">
       <div class="titlebox">
         <h1>АЛСН</h1>
-        <div class="sub">Модуль {{APP_VERSION}}</div>
+        <div class="sub"></div>
       </div>
       <div class="controls">
         <a class="home-link" href="http://yrtps.ru/">На главную</a>
