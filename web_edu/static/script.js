@@ -25,6 +25,9 @@ window.addEventListener("DOMContentLoaded", () => {
   if (!CAN_EDIT) {
     document.getElementById("btnCategorySettings")?.remove();
     document.getElementById("btnSettings")?.remove();
+  } else {
+    const saveBtn = document.getElementById("saveBtn");
+    if (saveBtn) saveBtn.style.display = "";
   }
 
   const eduTable = document.getElementById("eduTable");
@@ -578,3 +581,15 @@ document.addEventListener("copy", (e) => {
     (e.clipboardData || window.clipboardData).setData("text/plain", text);
   }
 });
+
+function forceSave() {
+  const active = document.activeElement;
+  if (active && active.classList.contains("cell")) {
+    active.blur();
+  }
+  const btn = document.getElementById("saveBtn");
+  if (btn) {
+    btn.textContent = "Сохранено!";
+    setTimeout(() => { btn.textContent = "Сохранить"; }, 2000);
+  }
+}

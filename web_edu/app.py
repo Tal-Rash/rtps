@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/edu"
-APP_VERSION = "web-edu-2.5"
+APP_VERSION = "web-edu-2.6"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
