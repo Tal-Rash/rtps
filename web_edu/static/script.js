@@ -551,3 +551,17 @@ document.addEventListener("paste", async (e) => {
     renderMatrix();
   }
 });
+
+document.addEventListener("copy", (e) => {
+  const activeEl = document.activeElement;
+  if (!activeEl || !activeEl.classList.contains("cell")) return;
+
+  const selection = window.getSelection().toString();
+  if (selection) return;
+
+  e.preventDefault();
+  const text = String(activeEl.innerText || "").trim();
+  if (text) {
+    (e.clipboardData || window.clipboardData).setData("text/plain", text);
+  }
+});
