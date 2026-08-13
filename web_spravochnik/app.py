@@ -592,7 +592,7 @@ HTML = """<!doctype html>
     body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
     .wrap{padding:16px;max-width:1500px;margin:0 auto}
     .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px 16px;margin-bottom:14px}
-    h1{margin:0;font-size:24px}.muted{color:var(--muted);font-size:13px}
+    h1{margin:0;font-size:22px}.muted{color:var(--muted);font-size:13px}
     .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 13px;background:#fff;color:#1f57d6;font-weight:400;text-decoration:none;font:inherit}
     button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
