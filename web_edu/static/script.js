@@ -268,7 +268,17 @@ function attachCellListeners() {
   document.querySelectorAll(".cell[contenteditable='true']").forEach((cell) => {
     cell.addEventListener("blur", onCellBlur);
     cell.addEventListener("keydown", onCellKeydown);
+    cell.addEventListener("input", onCellInput);
   });
+}
+
+function onCellInput(e) {
+  const btn = document.getElementById("saveBtn");
+  if (btn) {
+    btn.textContent = "Сохранить*";
+    btn.classList.add("btn-primary");
+    btn.classList.remove("btn-outline");
+  }
 }
 
 function attachRowDragListeners() {
@@ -420,16 +430,35 @@ async function onCellBlur(e) {
   const cell = e.target;
   const newText = String(cell.innerText || "").trim();
   const oldText = String(cell.dataset.original || "").trim();
-  if (newText === oldText) return;
+  if (newText === oldText) {
+    resetSaveBtn();
+    return;
+  }
 
   try {
     await saveCellValue(Number(cell.dataset.row), Number(cell.dataset.col), newText);
     cell.dataset.original = newText;
     renderMatrix();
+    resetSaveBtn("Сохранено!");
   } catch (err) {
     console.error(err);
     alert(`Ошибка сохранения: ${err.message}`);
     renderMatrix();
+    resetSaveBtn();
+  }
+}
+
+function resetSaveBtn(text = "Сохранить") {
+  const btn = document.getElementById("saveBtn");
+  if (btn) {
+    btn.textContent = text;
+    btn.classList.remove("btn-primary");
+    btn.classList.add("btn-outline");
+    if (text === "Сохранено!") {
+      setTimeout(() => {
+        if (btn.textContent === "Сохранено!") btn.textContent = "Сохранить";
+      }, 2000);
+    }
   }
 }
 
@@ -586,10 +615,7 @@ function forceSave() {
   const active = document.activeElement;
   if (active && active.classList.contains("cell")) {
     active.blur();
-  }
-  const btn = document.getElementById("saveBtn");
-  if (btn) {
-    btn.textContent = "Сохранено!";
-    setTimeout(() => { btn.textContent = "Сохранить"; }, 2000);
+  } else {
+    resetSaveBtn("Сохранено!");
   }
 }
