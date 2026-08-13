@@ -589,7 +589,7 @@ HTML = """<!doctype html>
   <style>
     :root{--line:#d9e2ef;--text:#102033;--muted:#66758a;--blue:#276ef1;--bg:#f4f7fb}
     *{box-sizing:border-box}
-    body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
     .wrap{padding:16px;max-width:1500px;margin:0 auto}
     .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px 16px;margin-bottom:14px}
     h1{margin:0;font-size:22px}.muted{color:var(--muted);font-size:13px}
@@ -1157,7 +1157,7 @@ LOGIN_HTML = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Вход - Справочник</title>
   <style>
-    body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f7fb;color:#102033}
+    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#f4f7fb;color:#102033}
     .card{max-width:420px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
     input,button{width:100%;padding:12px;border-radius:8px;border:1px solid #d9e2ef;font:inherit}
     button{background:#276ef1;color:#fff;font-weight:400;cursor:pointer;border:0}
