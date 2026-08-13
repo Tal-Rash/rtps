@@ -276,7 +276,7 @@ function onCellInput(e) {
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = "Сохранить*";
-    btn.classList.add("btn-primary");
+    btn.classList.add("dirty");
     btn.classList.remove("btn-outline");
   }
 }
@@ -452,7 +452,7 @@ function resetSaveBtn(text = "Сохранить") {
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = text;
-    btn.classList.remove("btn-primary");
+    btn.classList.remove("dirty");
     btn.classList.add("btn-outline");
     if (text === "Сохранено!") {
       setTimeout(() => {

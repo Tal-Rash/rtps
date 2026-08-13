@@ -518,3 +518,6 @@ td:has(.cell:focus) {
     min-width: 100px;
   }
 }
+
+.toolbar button.dirty { background: var(--accent); border-color: var(--accent); color: #fff; }
+.toolbar button.dirty:hover { background: #1f63df; border-color: #1f63df; }
