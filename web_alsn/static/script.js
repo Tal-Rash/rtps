@@ -196,11 +196,11 @@ function applyWarehouseFilters() {
       number: rowEl.dataset.warehouseNumber || ""
     };
     const visible = warehouseRowMatchesFilters(row);
-    rowEl.hidden = !visible;
+    rowEl.style.display = visible ? "" : "none";
     if (visible) visibleCount += 1;
   });
   const emptyRow = document.getElementById("whEmptyStateRow");
-  if (emptyRow) emptyRow.hidden = visibleCount > 0;
+  if (emptyRow) emptyRow.style.display = visibleCount > 0 ? "none" : "";
 }
 
 function setWarehouseFilter(field, value) {
