@@ -2883,7 +2883,7 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
             except Exception:
                 return None
 
-        def fmt_num(v):
+        def fmt_num(v, is_prokat=False):
             if v is None:
                 return ""
             try:
@@ -2891,8 +2891,23 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
             except Exception:
                 return text(v).strip()
             if value.is_integer():
+                if is_prokat:
+                    return f"{int(value)},0"
                 return str(int(value))
             return str(value).rstrip("0").rstrip(".").replace(".", ",")
+
+        def fmt_raw(v, is_prokat=False):
+            if v is None or text(v).strip() == "":
+                return ""
+            try:
+                value = float(text(v).replace(",", "."))
+            except Exception:
+                return text(v).strip()
+            if value.is_integer():
+                if is_prokat:
+                    return f"{int(value)},0"
+                return str(int(value))
+            return text(v).strip().replace(".", ",")
 
         stats_by_section: dict[tuple[int, str, str, str, str], dict[str, str]] = {}
         for (year, measurement_date, loco, repair_type, row_index), values in grouped.items():
@@ -2928,7 +2943,7 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
 
             if prokat_pair:
                 current = to_float(stats["max_prokat"])
-                stats["max_prokat"] = fmt_num(max(prokat_pair)) if current is None else fmt_num(max([current, *prokat_pair]))
+                stats["max_prokat"] = fmt_num(max(prokat_pair), True) if current is None else fmt_num(max([current, *prokat_pair]), True)
                 if max(prokat_pair) >= 6:
                     stats["prokat_6_count"] = fmt_num((to_float(stats["prokat_6_count"]) or 0) + 1)
             if greben_pair:
@@ -3021,16 +3036,16 @@ def load_archive_rows(locomotive: str = "", search_text: str = "", sort_desc: bo
                 stats.get("bandage_limit_count", "0"),
                 stats.get("prokat_6_count", "0"),
                 values[1],
-                values[2],
-                values[3],
-                values[4],
-                values[5],
-                values[6],
-                values[7],
-                values[8],
-                values[9],
-                resolved_left,
-                resolved_right,
+                fmt_raw(values[2], is_prokat=True),
+                fmt_raw(values[3], is_prokat=True),
+                fmt_raw(values[4]),
+                fmt_raw(values[5]),
+                fmt_raw(values[6]),
+                fmt_raw(values[7]),
+                fmt_raw(values[8]),
+                fmt_raw(values[9]),
+                fmt_raw(resolved_left),
+                fmt_raw(resolved_right),
             ]
             archive_rows.append({
                 "values": row_values,
