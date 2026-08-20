@@ -3118,12 +3118,14 @@ function renderSchedule(grafikState, archiveRows) {
 
   tbody.innerHTML = rows.map(r => {
     const limitStr = r.limitDate ? r.limitDate.toLocaleDateString("ru-RU") : "-";
+    const lastStr = (r.lastDateStr && r.lastDateStr !== 'Нет данных') ? 
+      r.lastDateStr.split('-').reverse().join('.') : r.lastDateStr;
     const isOverdue = r.limitDate ? r.limitDate.getTime() < todayTime : false;
     const bestStr = r.bestRepair ? r.bestRepair.date.toLocaleDateString("ru-RU") + " (" + r.bestRepair.type + ")" : "<span style='color:red'>Нет подходящего ремонта</span>";
     return "<tr " + (isOverdue ? "style='background-color:#ffebee'" : "") + ">" +
       "<td class='cell center'>" + esc(r.series) + "</td>" +
       "<td class='cell center'>" + esc(r.number) + "</td>" +
-      "<td class='cell center'>" + esc(r.lastDateStr) + "</td>" +
+      "<td class='cell center'>" + esc(lastStr) + "</td>" +
       "<td class='cell center'>" + limitStr + "</td>" +
       "<td class='cell center'>" + bestStr + "</td>" +
     "</tr>";
