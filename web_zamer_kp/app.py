@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.17"
+APP_VERSION = "web-zkp-2.18"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3496,6 +3496,219 @@ async def get_archive(request: Request, locomotive: str = "", search: str = "", 
         return Response("Unauthorized", status_code=401)
     rows = load_archive_rows(locomotive.strip(), search.strip(), sort.strip().lower() != "asc")
     return json_response({"rows": rows})
+
+@app.get("/api/export-schedule-email")
+async def export_schedule_email(request: Request):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return Response("Unauthorized", status_code=401)
+        
+    import io
+    import base64
+    import datetime
+    import re
+    from fastapi.responses import StreamingResponse
+    
+    year = datetime.date.today().year
+    
+    with DB_LOCK, connect() as conn:
+        cur = conn.cursor()
+        
+        # 1. Load latest measurements from archive_data
+        archive_rows = cur.execute(
+            "SELECT locomotive, MAX(measurement_date) as last_date FROM archive_data GROUP BY locomotive"
+        ).fetchall()
+        latest_measurements = {}
+        for r in archive_rows:
+            loco = str(r["locomotive"]).strip()
+            last_date = str(r["last_date"]).strip() if r["last_date"] else ""
+            if last_date:
+                latest_measurements[loco] = last_date
+
+        # 2. Load inventory to map number -> series
+        inv_rows = cur.execute(
+            "SELECT ser, num FROM inventory WHERE TRIM(COALESCE(num, '')) <> '' AND COALESCE(deleted_at, 0) = 0"
+        ).fetchall()
+        inventory_map = {}
+        for r in inv_rows:
+            num = str(r["num"]).strip()
+            ser = str(r["ser"]).strip().upper()
+            inventory_map[num] = ser
+
+        # 3. Load plan repairs for this year
+        def normalize_series(s):
+            return re.sub(r'[^a-zA-Z0-9а-яА-Я]', '', s).strip().upper()
+
+        def unit_key_from_cells(s, n):
+            series = normalize_series(s)
+            if not series:
+                series = 'ТЭМ2УМ'
+            num = str(n or '').strip()
+            if not num:
+                return ''
+            return f"{series} №{num}"
+
+        repairs_data = cur.execute(
+            "SELECT m, r, c, v FROM repairs WHERE y=? AND t='plan' ORDER BY m, r, c",
+            (year,)
+        ).fetchall()
+
+        month_rows = {}
+        for row in repairs_data:
+            m = str(row["m"])
+            r = int(row["r"])
+            c = int(row["c"])
+            v = str(row["v"])
+            if m not in month_rows:
+                month_rows[m] = {}
+            if r not in month_rows[m]:
+                month_rows[m][r] = [""] * 35
+            if 0 <= c < 35:
+                month_rows[m][r][c] = v
+
+        MONTHS_RU = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
+        month_num_map = {m: i + 1 for i, m in enumerate(MONTHS_RU)}
+
+        units = {}
+        for m_name, rows_dict in month_rows.items():
+            m_num = month_num_map.get(m_name, 1)
+            for r_idx, cells in rows_dict.items():
+                s_val = cells[1]
+                n_val = cells[2]
+                unit_key = unit_key_from_cells(s_val, n_val)
+                if not unit_key:
+                    continue
+                if unit_key not in units:
+                    units[unit_key] = {"series": s_val or "ТЭМ-2УМ", "number": n_val, "repairs": []}
+                
+                for col in range(4, 35):
+                    cell_val = cells[col]
+                    if cell_val:
+                        repair_type = cell_val.strip().upper()
+                        if repair_type in ('ТО2', 'ТО3', 'ТР1', 'ТР', 'ТР2', 'ТР3', 'СР', 'КР', 'TO2', 'TO3'):
+                            day = col - 3
+                            try:
+                                candidate_date = datetime.date(year, m_num, day)
+                                units[unit_key]["repairs"].append({"date": candidate_date, "type": repair_type})
+                            except ValueError:
+                                pass
+
+        today = datetime.date.today()
+        latest_by_unit = {}
+        for num, last_date_str in latest_measurements.items():
+            ser = inventory_map.get(num, 'ТЭМ-2УМ')
+            uk = unit_key_from_cells(ser, num)
+            try:
+                dt_val = datetime.datetime.strptime(last_date_str, "%Y-%m-%d").date()
+                latest_by_unit[uk] = {"date_str": last_date_str, "date": dt_val}
+            except ValueError:
+                pass
+
+        results = []
+        for unit_key, unit_data in units.items():
+            last_meas = latest_by_unit.get(unit_key)
+            last_date_str = last_meas["date_str"] if last_meas else "Нет данных"
+            limit_date = None
+            if last_meas:
+                limit_date = last_meas["date"] + datetime.timedelta(days=30)
+                
+            best_repair = None
+            if last_meas:
+                best_repair_date = datetime.date(1970, 1, 1)
+                for r in unit_data["repairs"]:
+                    if last_meas["date"] < r["date"] <= limit_date:
+                        if r["date"] > best_repair_date:
+                            best_repair = r
+                            best_repair_date = r["date"]
+            else:
+                best_repair_date = datetime.date(9999, 12, 31)
+                for r in unit_data["repairs"]:
+                    if r["date"] >= today:
+                        if r["date"] < best_repair_date:
+                            best_repair = r
+                            best_repair_date = r["date"]
+
+            results.append({
+                "series": unit_data["series"],
+                "number": unit_data["number"],
+                "last_date_str": last_date_str,
+                "limit_date": limit_date,
+                "best_repair": best_repair
+            })
+
+        sorted_num_list = [str(r["num"]).strip() for r in inv_rows]
+        num_order_map = {num: idx for idx, num in enumerate(sorted_num_list)}
+        results.sort(key=lambda x: num_order_map.get(x["number"], 9999))
+
+    rows_html = []
+    for r in results:
+        lim_str = r["limit_date"].strftime("%d.%m.%Y") if r["limit_date"] else "-"
+        last_str = r["last_date_str"].split('-')[2] + '.' + r["last_date_str"].split('-')[1] + '.' + r["last_date_str"].split('-')[0] if r["last_date_str"] != 'Нет данных' else 'Нет данных'
+        best_str = f"{r['best_repair']['type']} ({r['best_repair']['date'].strftime('%d.%m.%Y')})" if r["best_repair"] else "Нет подходящего ремонта"
+        
+        is_overdue = r["limit_date"] < today if r["limit_date"] else False
+        style = "background-color: #ffebee;" if is_overdue else ""
+        
+        rows_html.append(f"""
+        <tr style="{style}">
+            <td style="border: 1px solid #000000; padding: 6px; text-align: center;">{r["series"]}</td>
+            <td style="border: 1px solid #000000; padding: 6px; text-align: center;">{r["number"]}</td>
+            <td style="border: 1px solid #000000; padding: 6px; text-align: center;">{last_str}</td>
+            <td style="border: 1px solid #000000; padding: 6px; text-align: center;">{lim_str}</td>
+            <td style="border: 1px solid #000000; padding: 6px; text-align: center;">{best_str}</td>
+        </tr>
+        """)
+        
+    html_body = f"""
+    <html>
+    <head>
+    <style>
+        table {{ border-collapse: collapse; width: 650px; font-family: Arial, sans-serif; border: 1px solid #000000; }}
+        th {{ background-color: #f2f2f2; border: 1px solid #000000; padding: 8px; font-size: 13px; font-weight: bold; text-align: center; }}
+        td {{ border: 1px solid #000000; padding: 6px; font-size: 13px; }}
+    </style>
+    </head>
+    <body>
+        <p>Добрый день!</p>
+        <p>Направляю график очередных замеров КП тепловозов:</p>
+        <table>
+            <thead>
+                <tr>
+                    <th style="border: 1px solid #000000; padding: 8px; background-color: #f2f2f2;">Серия</th>
+                    <th style="border: 1px solid #000000; padding: 8px; background-color: #f2f2f2;">Номер</th>
+                    <th style="border: 1px solid #000000; padding: 8px; background-color: #f2f2f2;">Последний замер</th>
+                    <th style="border: 1px solid #000000; padding: 8px; background-color: #f2f2f2;">Крайний срок</th>
+                    <th style="border: 1px solid #000000; padding: 8px; background-color: #f2f2f2;">Следующий по плану</th>
+                </tr>
+            </thead>
+            <tbody>
+                {"".join(rows_html)}
+            </tbody>
+        </table>
+        <br>
+    </body>
+    </html>
+    """
+
+    encoded_subject = base64.b64encode("График замеров КП".encode('utf-8')).decode('utf-8')
+    mime_subject = f"=?utf-8?B?{encoded_subject}?="
+    
+    eml_headers = [
+        "MIME-Version: 1.0",
+        "To: ",
+        f"Subject: {mime_subject}",
+        "X-Unsent: 1",
+        "Content-Type: text/html; charset=utf-8",
+        "Content-Transfer-Encoding: 8bit",
+        "",
+        html_body
+    ]
+    eml_data = "\r\n".join(eml_headers)
+    return StreamingResponse(
+        io.BytesIO(eml_data.encode('utf-8')),
+        media_type="message/rfc822",
+        headers={"Content-Disposition": "attachment; filename=ScheduleKP_Draft.eml"}
+    )
 
 @app.get("/api/kp-data")
 async def get_kp_data(request: Request, locomotive: str = "", version_id: int | None = None):

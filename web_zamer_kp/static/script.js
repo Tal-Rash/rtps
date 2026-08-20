@@ -1,4 +1,3 @@
-
 // Global variables injected from index.html
 const INPUT_ROWS = 12;
 let state = null;
@@ -3142,3 +3141,6 @@ function renderSchedule(grafikState, archiveRows) {
   }).join('');
 }
 
+function sendScheduleEmail() {
+  window.open(`${API}/api/export-schedule-email`, '_blank');
+}
