@@ -3077,3 +3077,4 @@ function renderSchedule(grafikState) {
     "</tr>";
   }).join('');
 }
+
