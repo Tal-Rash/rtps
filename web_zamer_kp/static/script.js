@@ -3040,12 +3040,16 @@ function renderSchedule(grafikState, archiveRows) {
 
   const latestByUnit = latestKpMeasurementByUnit(archiveRows);
   const units = new Map();
+  const excludedUnits = new Set();
   (grafikState.months || []).forEach((month) => {
     const monthNumber = month.month;
     (month.plan || []).forEach((row) => {
       if (!row || !row.cells) return;
       const unitKey = unitKeyFromCells(row.cells[1], row.cells[2]);
       if (!unitKey) return;
+      if (row.excluded) {
+        excludedUnits.add(unitKey);
+      }
       if (!units.has(unitKey)) {
         units.set(unitKey, { series: row.cells[1] || 'ТЭМ-2УМ', number: row.cells[2], repairs: [] });
       }
@@ -3062,6 +3066,10 @@ function renderSchedule(grafikState, archiveRows) {
         }
       }
     });
+  });
+
+  excludedUnits.forEach(unitKey => {
+    units.delete(unitKey);
   });
 
   const todayTime = new Date().setHours(0,0,0,0);

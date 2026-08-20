@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.19"
+APP_VERSION = "web-zkp-2.20"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3562,22 +3562,28 @@ async def export_schedule_email(request: Request, filter: str = "all"):
             if m not in month_rows:
                 month_rows[m] = {}
             if r not in month_rows[m]:
-                month_rows[m][r] = [""] * 35
-            if 0 <= c < 35:
-                month_rows[m][r][c] = v
+                month_rows[m][r] = {"cells": [""] * 35, "excluded": False}
+            if c == -1:
+                month_rows[m][r]["excluded"] = True
+            elif 0 <= c < 35:
+                month_rows[m][r]["cells"][c] = v
 
         MONTHS_RU = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
         month_num_map = {m: i + 1 for i, m in enumerate(MONTHS_RU)}
 
         units = {}
+        excluded_units = set()
         for m_name, rows_dict in month_rows.items():
             m_num = month_num_map.get(m_name, 1)
-            for r_idx, cells in rows_dict.items():
+            for r_idx, row_info in rows_dict.items():
+                cells = row_info["cells"]
                 s_val = cells[1]
                 n_val = cells[2]
                 unit_key = unit_key_from_cells(s_val, n_val)
                 if not unit_key:
                     continue
+                if row_info["excluded"]:
+                    excluded_units.add(unit_key)
                 if unit_key not in units:
                     units[unit_key] = {"series": s_val or "ТЭМ-2УМ", "number": n_val, "repairs": []}
                 
@@ -3592,6 +3598,10 @@ async def export_schedule_email(request: Request, filter: str = "all"):
                                 units[unit_key]["repairs"].append({"date": candidate_date, "type": repair_type})
                             except ValueError:
                                 pass
+
+        for ek in excluded_units:
+            if ek in units:
+                del units[ek]
 
         today = datetime.date.today()
         latest_by_unit = {}
