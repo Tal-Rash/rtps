@@ -1,4 +1,4 @@
-﻿
+
 // Global variables injected from index.html
 const INPUT_ROWS = 12;
 let state = null;
@@ -3103,5 +3103,5 @@ function renderSchedule(grafikState, archiveRows) {
       "<td class='cell center'>" + bestStr + "</td>" +
     "</tr>";
   }).join('');
-}}
+}
 
