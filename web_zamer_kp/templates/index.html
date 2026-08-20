@@ -25,6 +25,7 @@
       <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
       <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
       <button id="tabWear" class="tab" type="button" onclick="switchTab('wear')">Анализ износа</button>
+      <button id="tabSchedule" class="tab" type="button" onclick="switchTab('schedule')">График замеров</button>
     </div>
 
     <div id="panelInput" class="panel active">
@@ -310,6 +311,35 @@
         </table>
       </div>
       <div id="wearStatus" class="status"></div>
+    </div>
+
+    <div id="panelSchedule" class="panel">
+      <div class="wear-controls" style="margin-top:0;">
+        <button id="scheduleRefreshBtn" type="button" onclick="loadSchedule()">Обновить график</button>
+      </div>
+      <div class="wear-note">Даты последнего замера извлекаются из факта ремонтов Графика ППР. Крайний срок = дата последнего замера + 30 дней. Следующий по плану подбирается из графика ППР так, чтобы не превысить крайний срок.</div>
+      <div class="table-shell wear-table-shell" style="padding-top:16px;">
+        <table id="scheduleTable" class="wear-table compact" aria-label="График замеров КП">
+          <colgroup>
+            <col style="width: 15%">
+            <col style="width: 15%">
+            <col style="width: 20%">
+            <col style="width: 20%">
+            <col style="width: 30%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Серия</th>
+              <th>Номер</th>
+              <th>Последний замер</th>
+              <th>Крайний срок</th>
+              <th>Следующий по плану</th>
+            </tr>
+          </thead>
+          <tbody id="scheduleBody"></tbody>
+        </table>
+      </div>
+      <div id="scheduleStatus" class="status"></div>
     </div>
   </div>
 
