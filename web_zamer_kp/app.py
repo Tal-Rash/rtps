@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.23"
+APP_VERSION = "web-zkp-2.24"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3511,19 +3511,10 @@ async def export_schedule_email(request: Request, filter: str = "all"):
     
     year = datetime.date.today().year
     
+    archive_rows = load_archive_rows()
+    
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
-        
-        # 1. Load latest measurements from archive_data
-        archive_rows = cur.execute(
-            "SELECT locomotive, MAX(measurement_date) as last_date FROM archive_data GROUP BY locomotive"
-        ).fetchall()
-        latest_measurements = {}
-        for r in archive_rows:
-            loco = str(r["locomotive"]).strip()
-            last_date = str(r["last_date"]).strip() if r["last_date"] else ""
-            if last_date:
-                latest_measurements[loco] = last_date
 
         # 2. Load inventory to map number -> series
         inv_rows = cur.execute(
@@ -3605,12 +3596,32 @@ async def export_schedule_email(request: Request, filter: str = "all"):
 
         today = datetime.date.today()
         latest_by_unit = {}
-        for num, last_date_str in latest_measurements.items():
-            ser = inventory_map.get(num, 'ТЭМ-2УМ')
-            uk = unit_key_from_cells(ser, num)
+        for m in archive_rows:
+            date_str = m.get("measurement_date")
+            if not date_str:
+                continue
+            raw_loco = str(m.get("locomotive") or "").strip()
+            if not raw_loco:
+                continue
+                
+            series = 'ТЭМ-2УМ'
+            num = raw_loco
+            
+            if '№' in raw_loco:
+                parts = raw_loco.split('№')
+                series = parts[0].strip()
+                num = parts[1].strip()
+            else:
+                series = inventory_map.get(raw_loco, 'ТЭМ-2УМ')
+                
+            uk = unit_key_from_cells(series, num)
+            if not uk:
+                continue
+                
             try:
-                dt_val = datetime.datetime.strptime(last_date_str, "%Y-%m-%d").date()
-                latest_by_unit[uk] = {"date_str": last_date_str, "date": dt_val}
+                dt_val = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+                if uk not in latest_by_unit or dt_val > latest_by_unit[uk]["date"]:
+                    latest_by_unit[uk] = {"date_str": date_str, "date": dt_val}
             except ValueError:
                 pass
 
