@@ -2981,10 +2981,14 @@ function renderSchedule(grafikState, archiveRows) {
   const tbody = document.getElementById('scheduleBody');
   if (!tbody) return;
 
+  function normalizeSeries(s) {
+    return String(s || '').replace(/[^a-zA-Z0-9а-яА-Я]/g, '').trim().toUpperCase();
+  }
+
   function unitKeyFromCells(s, n) {
-    let series = (s || '').trim();
-    if (!series) series = 'ТЭМ-2УМ';
-    const num = (n || '').trim();
+    let series = normalizeSeries(s);
+    if (!series) series = 'ТЭМ2УМ';
+    const num = String(n || '').trim();
     if (!num) return '';
     return series + ' №' + num;
   }
