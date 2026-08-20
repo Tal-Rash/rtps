@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.24"
+APP_VERSION = "web-zkp-2.25"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3539,10 +3539,23 @@ async def export_schedule_email(request: Request, filter: str = "all"):
                 return ''
             return f"{series} №{num}"
 
-        repairs_data = cur.execute(
-            "SELECT m, r, c, v FROM repairs WHERE y=? AND t='plan' ORDER BY m, r, c",
-            (year,)
-        ).fetchall()
+        # Connect to grafik_ppr_web.db to load actual repairs plan and exclusions
+        ppr_db_path = ROOT.parent / "web_grafik_ppr" / "data" / "grafik_ppr_web.db"
+        try:
+            ppr_conn = sqlite3.connect(ppr_db_path)
+            ppr_conn.row_factory = sqlite3.Row
+            ppr_cur = ppr_conn.cursor()
+            repairs_data = ppr_cur.execute(
+                "SELECT m, r, c, v FROM repairs WHERE y=? AND t='plan' ORDER BY m, r, c",
+                (year,)
+            ).fetchall()
+            ppr_conn.close()
+        except Exception:
+            # Fallback to current connection if ppr_db_path does not exist
+            repairs_data = cur.execute(
+                "SELECT m, r, c, v FROM repairs WHERE y=? AND t='plan' ORDER BY m, r, c",
+                (year,)
+            ).fetchall()
 
         month_rows = {}
         for row in repairs_data:
