@@ -1,4 +1,4 @@
-
+﻿
 // Global variables injected from index.html
 const INPUT_ROWS = 12;
 let state = null;
@@ -948,18 +948,22 @@ function setActiveTab(tab){
   const kpTab = document.getElementById('tabKp');
   const archiveTab = document.getElementById('tabArchive');
   const wearTab = document.getElementById('tabWear');
+  const scheduleTab = document.getElementById('tabSchedule');
   const panelInput = document.getElementById('panelInput');
   const panelKp = document.getElementById('panelKp');
   const panelArchive = document.getElementById('panelArchive');
   const panelWear = document.getElementById('panelWear');
+  const panelSchedule = document.getElementById('panelSchedule');
   if (inputTab) inputTab.classList.toggle('active', tab === 'input');
   if (kpTab) kpTab.classList.toggle('active', tab === 'kp');
   if (archiveTab) archiveTab.classList.toggle('active', tab === 'archive');
   if (wearTab) wearTab.classList.toggle('active', tab === 'wear');
+  if (scheduleTab) scheduleTab.classList.toggle('active', tab === 'schedule');
   if (panelInput) panelInput.classList.toggle('active', tab === 'input');
   if (panelKp) panelKp.classList.toggle('active', tab === 'kp');
   if (panelArchive) panelArchive.classList.toggle('active', tab === 'archive');
   if (panelWear) panelWear.classList.toggle('active', tab === 'wear');
+  if (panelSchedule) panelSchedule.classList.toggle('active', tab === 'schedule');
 }
 async function switchTab(tab){
   if (typeof clearArchiveSelection === 'function') clearArchiveSelection();
@@ -982,6 +986,9 @@ async function switchTab(tab){
     await loadWearAnalysis(document.getElementById('wearLocomotive')?.value || wearSelectedLoco || state?.locomotive || kpSelectedLoco || '').catch(error => {
       console.error(error);
     });
+  }
+  if (tab === 'schedule') {
+    await loadSchedule().catch(error => console.error(error));
   }
 }
 function getCurrentLoco(){
