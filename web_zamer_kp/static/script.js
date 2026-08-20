@@ -3054,7 +3054,7 @@ function renderSchedule(grafikState, archiveRows) {
         const cell = row.cells[col];
         if (cell && typeof cell === 'string') {
           const repairType = cell.trim().toUpperCase();
-          if (['ТО3', 'ТР1', 'ТР', 'ТР2', 'ТР3', 'СР', 'КР'].includes(repairType)) {
+          if (['ТО2', 'ТО3', 'ТР1', 'ТР', 'ТР2', 'ТР3', 'СР', 'КР', 'TO2', 'TO3'].includes(repairType)) {
             const day = col - 3;
             const candidateDate = new Date(Number(grafikState.year), monthNumber - 1, day);
             const candidateTime = repairDateTime(candidateDate);
