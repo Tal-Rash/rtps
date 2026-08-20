@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.21"
+APP_VERSION = "web-zkp-2.22"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3684,8 +3684,8 @@ async def export_schedule_email(request: Request, filter: str = "all"):
     </style>
     </head>
     <body>
-        <p>Добрый день!</p>
-        <p>Направляю график очередных замеров КП тепловозов:</p>
+        <p>Добрый день коллеги. Направляю график замеров колесных пар тепловозов.</p>
+        <p>Согласно пункта 4.7 Инструкции по осмотру, освидетельствованию, ремонту и формированию колесных пар локомотивов и моторвагонного подвижного состава железных дорог ОАО «РЖД», утверждённой распоряжением ОАО "РЖД" от 14.04.2025 N 805/р производить замеры колесных пар необходимо не реже 1 раз в 30 суток, совмещая их с ТО-2, ТО-3.</p>
         <table>
             <thead>
                 <tr>
@@ -3701,11 +3701,12 @@ async def export_schedule_email(request: Request, filter: str = "all"):
             </tbody>
         </table>
         <br>
+        <p>Убедительная просьба придерживаться данного графика и ставить локомотивы в депо для проведения замеров.</p>
     </body>
     </html>
     """
 
-    encoded_subject = base64.b64encode("График замеров КП".encode('utf-8')).decode('utf-8')
+    encoded_subject = base64.b64encode("График замеров колесных пар локомотивов".encode('utf-8')).decode('utf-8')
     mime_subject = f"=?utf-8?B?{encoded_subject}?="
     
     eml_headers = [
