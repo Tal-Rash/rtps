@@ -3014,18 +3014,17 @@ function renderSchedule(grafikState) {
   const units = new Map();
   (grafikState.months || []).forEach((month) => {
     const monthNumber = month.month;
-    (month.rows || []).forEach((row) => {
-      const unitKey = unitKeyFromCells(row.series, row.number);
+    (month.plan || []).forEach((row) => {
+      if (!row || !row.cells) return;
+      const unitKey = unitKeyFromCells(row.cells[1], row.cells[2]);
       if (!unitKey) return;
       if (!units.has(unitKey)) {
-        units.set(unitKey, { series: row.series || 'ТЭМ-2УМ', number: row.number, repairs: [] });
+        units.set(unitKey, { series: row.cells[1] || 'ТЭМ-2УМ', number: row.cells[2], repairs: [] });
       }
       for (let col = 4; col <= 34; col++) {
-        const cell = row['col' + col];
-        if (cell && typeof cell === 'object' && cell.v) {
-          const v = typeof cell.v === 'string' ? cell.v.trim().toUpperCase() : '';
-          const p = typeof cell.p === 'string' ? cell.p.trim().toUpperCase() : '';
-          const repairType = v || p;
+        const cell = row.cells[col];
+        if (cell && typeof cell === 'string') {
+          const repairType = cell.trim().toUpperCase();
           if (['ТО3', 'ТР1', 'ТР', 'ТР2', 'ТР3', 'СР', 'КР'].includes(repairType)) {
             const day = col - 3;
             const candidateDate = new Date(Number(grafikState.year), monthNumber - 1, day);
