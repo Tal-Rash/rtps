@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.22"
+APP_VERSION = "web-zkp-2.23"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3711,7 +3711,7 @@ async def export_schedule_email(request: Request, filter: str = "all"):
     
     eml_headers = [
         "MIME-Version: 1.0",
-        "To: ",
+        "To: TerentevPS@kolagmk.ru; TeterinEYu@kolagmk.ru; StankevichMM@kolagmk.ru; GundorovAO@kolagmk.ru",
         f"Subject: {mime_subject}",
         "X-Unsent: 1",
         "Content-Type: text/html; charset=utf-8",
