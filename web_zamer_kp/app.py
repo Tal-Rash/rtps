@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.25"
+APP_VERSION = "web-zkp-2.26"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3569,8 +3569,10 @@ async def export_schedule_email(request: Request, filter: str = "all"):
                 month_rows[m][r] = {"cells": [""] * 35, "excluded": False}
             if c == -1:
                 month_rows[m][r]["excluded"] = True
-            elif 0 <= c < 35:
+            elif 0 <= c <= 2:
                 month_rows[m][r]["cells"][c] = v
+            elif 3 <= c <= 33:
+                month_rows[m][r]["cells"][c + 1] = v
 
         MONTHS_RU = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
         month_num_map = {m: i + 1 for i, m in enumerate(MONTHS_RU)}
