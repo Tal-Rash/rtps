@@ -43,7 +43,7 @@ const REPAIR_SUMMARY_FIXED_HOLIDAYS = new Set([
   '02-23', '03-08', '05-01', '05-09', '06-12', '11-04',
 ]);
 const KP_RECHECK_DAYS = 30;
-const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'},{id:'kpMeasureSchedule',label:'График замеров'}];
+const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
 
@@ -754,11 +754,6 @@ function setSection(section){
     render();
     return;
   }
-  if (section === 'kpMeasureSchedule' && ui.section === 'kpMeasureSchedule' && !ui.modal) {
-    ui.section = 'months';
-    render();
-    return;
-  }
   ui.modal = null;
   ui.section = section;
   if (section !== 'repairSchedule') clearRepairScheduleSelection();
@@ -830,9 +825,7 @@ function renderSafe(){
     ? renderRepairSchedule()
     : ui.section === 'repairSummary'
       ? renderRepairSummary()
-      : ui.section === 'kpMeasureSchedule'
-        ? renderKpMeasureSchedule()
-        : renderMonths();
+      : renderMonths();
   applyMonthSelectionClasses();
   applyRepairScheduleSelectionClasses();
   renderOpenModals();
@@ -1632,123 +1625,6 @@ function renderRepairSummary(){
               </tr>
             `;
           }).join('') : `<tr><td colspan="5" class="empty-table-cell">Нет ремонтов, подходящих под фильтры</td></tr>`}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-function renderKpMeasureSchedule(){
-  const latestByUnit = latestKpMeasurementByUnit();
-  const units = new Map();
-  (appState.months || []).forEach((month) => {
-    [...(month.plan || []), ...(month.fact || [])].forEach((row) => {
-      const cells = row?.cells || [];
-      const key = unitKeyFromCells(cells);
-      if (key && !units.has(key)) {
-        units.set(key, { series: String(cells[1]||'').trim(), number: String(cells[2]||'').trim() });
-      }
-    });
-  });
-
-  const bestByUnit = new Map();
-  (appState.months || []).forEach((month, monthIndex) => {
-    const monthNumber = Number(month?.month || monthIndex + 1);
-    if (!Number.isFinite(monthNumber)) return;
-    (month.plan || []).forEach((row) => {
-      const cells = row?.cells || [];
-      const unitKey = unitKeyFromCells(cells);
-      const latest = latestByUnit.get(unitKey);
-      if (!unitKey || !latest) return;
-      const deadline = addRepairDays(latest.date, KP_RECHECK_DAYS);
-      const deadlineTime = repairDateTime(deadline);
-      if (!Number.isFinite(deadlineTime)) return;
-      
-      for (let col = 4; col < 4 + Number(month.days || 0); col++) {
-        const repairCode = normalizeRepairCode(cells[col]);
-        if (!repairCode) continue;
-        const day = col - 3;
-        const candidateDate = new Date(Number(appState.year), monthNumber - 1, day);
-        const candidateTime = repairDateTime(candidateDate);
-        if (!Number.isFinite(candidateTime) || candidateTime > deadlineTime) continue;
-        const prev = bestByUnit.get(unitKey);
-        if (!prev || candidateTime > prev.time) {
-          bestByUnit.set(unitKey, { time: candidateTime, date: candidateDate, repairCode: cells[col] });
-        }
-      }
-    });
-  });
-
-  const rows = [];
-  units.forEach((unit, key) => {
-    const latest = latestByUnit.get(key);
-    const best = bestByUnit.get(key);
-    
-    let latestStr = '—';
-    let deadlineStr = '—';
-    let deadlineTime = 0;
-    if (latest && latest.date) {
-      latestStr = formatRepairDate(latest.date);
-      const d = addRepairDays(latest.date, KP_RECHECK_DAYS);
-      deadlineStr = formatRepairDate(d);
-      deadlineTime = repairDateTime(d);
-    }
-    
-    let nextStr = '—';
-    if (best && best.date) {
-      nextStr = `${formatRepairDate(best.date)} (${esc(best.repairCode)})`;
-    }
-    
-    rows.push({
-      key,
-      series: unit.series,
-      number: unit.number,
-      latestStr,
-      deadlineStr,
-      nextStr,
-      deadlineTime
-    });
-  });
-
-  rows.sort((a, b) => {
-    if (a.deadlineTime !== b.deadlineTime) return a.deadlineTime - b.deadlineTime;
-    if (a.series !== b.series) return a.series.localeCompare(b.series, 'ru');
-    return a.number.localeCompare(b.number, 'ru');
-  });
-
-  return `
-    <div class="section-head repair-summary-head">
-      <div class="section-title">График замеров КП</div>
-      <div class="repair-summary-counter">Локомотивов: ${rows.length}</div>
-    </div>
-    <div class="repair-summary-note">Даты последнего замера извлекаются из факта ремонтов. Крайний срок = дата последнего замера + ${KP_RECHECK_DAYS} дней. Следующий по плану подбирается из графика ППР так, чтобы не превысить крайний срок.</div>
-    <div class="table-wrap repair-summary-wrap" style="padding-top:16px;">
-      <table class="compact repair-summary-table">
-        <colgroup>
-          <col style="width: 15%">
-          <col style="width: 15%">
-          <col style="width: 20%">
-          <col style="width: 20%">
-          <col style="width: 30%">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Серия</th>
-            <th>Номер</th>
-            <th>Последний замер</th>
-            <th>Крайний срок</th>
-            <th>Следующий по плану</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.length ? rows.map(r => `
-            <tr>
-              <td>${esc(r.series)}</td>
-              <td>${esc(r.number)}</td>
-              <td>${r.latestStr}</td>
-              <td style="${r.deadlineTime && r.deadlineTime < Date.now() ? 'color:#d9534f;font-weight:bold;' : ''}">${r.deadlineStr}</td>
-              <td>${r.nextStr}</td>
-            </tr>
-          `).join('') : `<tr><td colspan="5" class="empty-table-cell">Нет данных</td></tr>`}
         </tbody>
       </table>
     </div>
