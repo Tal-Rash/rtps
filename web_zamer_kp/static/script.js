@@ -3110,10 +3110,20 @@ function renderSchedule(grafikState, archiveRows) {
 
   const rows = [];
   bestByUnit.forEach((data, key) => rows.push(data));
+  
+  const choices = LOCOMOTIVE_CHOICES || state?.locomotives || [];
+  const locoOrderMap = new Map();
+  choices.forEach((x, idx) => {
+    const key = String(x.number || '').trim();
+    if (key && !locoOrderMap.has(key)) {
+      locoOrderMap.set(key, idx);
+    }
+  });
+
   rows.sort((a, b) => {
-    const aTime = a.limitDate ? a.limitDate.getTime() : Infinity;
-    const bTime = b.limitDate ? b.limitDate.getTime() : Infinity;
-    return aTime - bTime;
+    const idxA = locoOrderMap.has(a.number) ? locoOrderMap.get(a.number) : 9999;
+    const idxB = locoOrderMap.has(b.number) ? locoOrderMap.get(b.number) : 9999;
+    return idxA - idxB;
   });
 
   tbody.innerHTML = rows.map(r => {
