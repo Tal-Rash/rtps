@@ -2960,10 +2960,15 @@ async function loadSchedule() {
   if (statusEl) statusEl.textContent = 'Загрузка...';
   if (tbody) tbody.innerHTML = '';
   try {
-    const res = await fetch('/grafik-ppr/api/state');
-    if (!res.ok) throw new Error('Ошибка загрузки графика ППР');
-    const grafikState = await res.json();
-    renderSchedule(grafikState);
+    const [resGrafik, resArchive] = await Promise.all([
+      fetch('/grafik-ppr/api/state'),
+      fetch(`${API}/api/archive?sort=desc`)
+    ]);
+    if (!resGrafik.ok) throw new Error('Ошибка загрузки графика ППР');
+    if (!resArchive.ok) throw new Error('Ошибка загрузки архива замеров');
+    const grafikState = await resGrafik.json();
+    const archiveState = await resArchive.json();
+    renderSchedule(grafikState, archiveState.rows || []);
     if (statusEl) statusEl.textContent = '';
   } catch (err) {
     if (statusEl) statusEl.textContent = err.message;
@@ -2971,7 +2976,7 @@ async function loadSchedule() {
   }
 }
 
-function renderSchedule(grafikState) {
+function renderSchedule(grafikState, archiveRows) {
   const KP_RECHECK_DAYS = 30;
   const tbody = document.getElementById('scheduleBody');
   if (!tbody) return;
@@ -2994,10 +2999,9 @@ function renderSchedule(grafikState) {
     return d;
   }
   
-  function latestKpMeasurementByUnit(appState) {
+  function latestKpMeasurementByUnit(rows) {
     const map = new Map();
-    if (!appState.repair_summary || !appState.repair_summary.kp_measurements) return map;
-    for (const m of appState.repair_summary.kp_measurements) {
+    for (const m of rows) {
       if (!m.measurement_date) continue;
       const unitKey = unitKeyFromCells(m.locomotive?.split('№')[0], m.locomotive?.split('№')[1]);
       if (!unitKey) continue;
@@ -3010,7 +3014,7 @@ function renderSchedule(grafikState) {
     return map;
   }
 
-  const latestByUnit = latestKpMeasurementByUnit(grafikState);
+  const latestByUnit = latestKpMeasurementByUnit(archiveRows);
   const units = new Map();
   (grafikState.months || []).forEach((month) => {
     const monthNumber = month.month;
