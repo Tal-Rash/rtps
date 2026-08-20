@@ -3040,27 +3040,44 @@ function renderSchedule(grafikState, archiveRows) {
     });
   });
 
+  const todayTime = new Date().setHours(0,0,0,0);
   const bestByUnit = new Map();
   units.forEach((unitData, unitKey) => {
     const lastMeas = latestByUnit.get(unitKey);
-    if (!lastMeas) return;
-    const limitDate = new Date(lastMeas.time);
-    limitDate.setDate(limitDate.getDate() + KP_RECHECK_DAYS);
-    const limitTime = limitDate.getTime();
+    
+    let lastDateStr = lastMeas ? lastMeas.dateStr : 'Нет данных';
+    let limitDate = lastMeas ? new Date(lastMeas.time) : null;
+    let limitTime = Infinity;
+    if (limitDate) {
+      limitDate.setDate(limitDate.getDate() + KP_RECHECK_DAYS);
+      limitTime = limitDate.getTime();
+    }
+    
     let bestRepair = null;
     let bestRepairTime = 0;
+    
     for (const r of unitData.repairs) {
-      if (r.time > lastMeas.time && r.time <= limitTime) {
-        if (!bestRepair || r.time > bestRepairTime) {
-          bestRepair = r;
-          bestRepairTime = r.time;
+      if (lastMeas) {
+        if (r.time > lastMeas.time && r.time <= limitTime) {
+          if (!bestRepair || r.time > bestRepairTime) {
+            bestRepair = r;
+            bestRepairTime = r.time;
+          }
+        }
+      } else {
+        if (r.time >= todayTime) {
+           if (!bestRepair || r.time < bestRepairTime) { // earliest future repair
+             bestRepair = r;
+             bestRepairTime = r.time;
+           }
         }
       }
     }
+    
     bestByUnit.set(unitKey, {
       series: unitData.series,
       number: unitData.number,
-      lastDateStr: lastMeas.dateStr,
+      lastDateStr: lastDateStr,
       limitDate: limitDate,
       bestRepair: bestRepair
     });
@@ -3069,22 +3086,22 @@ function renderSchedule(grafikState, archiveRows) {
   const rows = [];
   bestByUnit.forEach((data, key) => rows.push(data));
   rows.sort((a, b) => {
-    return a.limitDate.getTime() - b.limitDate.getTime();
+    const aTime = a.limitDate ? a.limitDate.getTime() : Infinity;
+    const bTime = b.limitDate ? b.limitDate.getTime() : Infinity;
+    return aTime - bTime;
   });
 
-  const todayTime = new Date().setHours(0,0,0,0);
-  
   tbody.innerHTML = rows.map(r => {
-    const limitStr = r.limitDate.toLocaleDateString("ru-RU");
-    const isOverdue = r.limitDate.getTime() < todayTime;
-    const bestStr = r.bestRepair ? r.bestRepair.date.toLocaleDateString("ru-RU") + " (" + r.bestRepair.type + ")" : "<span style='color:red'>Не найден подходящий ремонт</span>";
+    const limitStr = r.limitDate ? r.limitDate.toLocaleDateString("ru-RU") : "-";
+    const isOverdue = r.limitDate ? r.limitDate.getTime() < todayTime : false;
+    const bestStr = r.bestRepair ? r.bestRepair.date.toLocaleDateString("ru-RU") + " (" + r.bestRepair.type + ")" : "<span style='color:red'>Нет подходящего ремонта</span>";
     return "<tr " + (isOverdue ? "style='background-color:#ffebee'" : "") + ">" +
-      "<td>" + esc(r.series) + "</td>" +
-      "<td>" + esc(r.number) + "</td>" +
-      "<td>" + esc(r.lastDateStr) + "</td>" +
-      "<td " + (isOverdue ? "style='color:red; font-weight:bold'" : "") + ">" + limitStr + "</td>" +
-      "<td>" + bestStr + "</td>" +
+      "<td class='cell center'>" + esc(r.series) + "</td>" +
+      "<td class='cell center'>" + esc(r.number) + "</td>" +
+      "<td class='cell center'>" + esc(r.lastDateStr) + "</td>" +
+      "<td class='cell center'>" + limitStr + "</td>" +
+      "<td class='cell center'>" + bestStr + "</td>" +
     "</tr>";
   }).join('');
-}
+}}
 
