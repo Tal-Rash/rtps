@@ -3151,5 +3151,5 @@ function renderSchedule(grafikState, archiveRows) {
 
 function sendScheduleEmail() {
   const filter = document.getElementById('scheduleEmailFilter')?.value || 'all';
-  window.open(`${API}/api/export-schedule-email?filter=${filter}`, '_blank');
+  window.location.href = `${API}/api/export-schedule-email?filter=${filter}`;
 }
