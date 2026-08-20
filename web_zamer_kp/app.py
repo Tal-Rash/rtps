@@ -33,7 +33,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 APP_PREFIX = "/zamer-kp"
-APP_VERSION = "web-zkp-2.18"
+APP_VERSION = "web-zkp-2.19"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
 
@@ -3498,7 +3498,7 @@ async def get_archive(request: Request, locomotive: str = "", search: str = "", 
     return json_response({"rows": rows})
 
 @app.get("/api/export-schedule-email")
-async def export_schedule_email(request: Request):
+async def export_schedule_email(request: Request, filter: str = "all"):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
@@ -3639,6 +3639,11 @@ async def export_schedule_email(request: Request):
         sorted_num_list = [str(r["num"]).strip() for r in inv_rows]
         num_order_map = {num: idx for idx, num in enumerate(sorted_num_list)}
         results.sort(key=lambda x: num_order_map.get(x["number"], 9999))
+        
+        if filter == "tem":
+            results = [r for r in results if str(r["series"]).startswith("ТЭМ") or str(r["series"]).startswith("TEM")]
+        elif filter == "pe2m":
+            results = [r for r in results if "ПЭ" in str(r["series"]) or "PE" in str(r["series"])]
 
     rows_html = []
     for r in results:

@@ -314,9 +314,14 @@
     </div>
 
     <div id="panelSchedule" class="panel">
-      <div class="wear-controls" style="margin-top:0;">
+      <div class="wear-controls" style="margin-top:0; display:flex; align-items:center; gap:8px;">
         <button id="scheduleRefreshBtn" type="button" onclick="loadSchedule()">Обновить график</button>
-        <button id="scheduleSendEmailBtn" type="button" class="btn" style="background:#28a745; color:#fff; border-color:#28a745; margin-left:8px;" onclick="sendScheduleEmail()">Рассылка графика</button>
+        <select id="scheduleEmailFilter" style="height:38px; padding:0 12px; border:1px solid #ced4da; border-radius:10px; font-size:14px; background:#fff; cursor:pointer;">
+          <option value="all">Все локомотивы</option>
+          <option value="tem">Тепловозы ТЭМ</option>
+          <option value="pe2m">Электровозы ПЭ-2М</option>
+        </select>
+        <button id="scheduleSendEmailBtn" type="button" class="btn" style="background:#28a745; color:#fff; border-color:#28a745;" onclick="sendScheduleEmail()">Рассылка графика</button>
       </div>
       <div class="wear-note">Даты последнего замера извлекаются из архива замеров КП. Крайний срок = дата последнего замера + 30 дней. Следующий по плану подбирается из графика ППР так, чтобы не превысить крайний срок.</div>
       <div class="table-shell wear-table-shell" style="padding-top:16px;">
