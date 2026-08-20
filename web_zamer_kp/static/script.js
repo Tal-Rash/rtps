@@ -2999,11 +2999,32 @@ function renderSchedule(grafikState, archiveRows) {
     return d;
   }
   
+  function findSeriesForLoco(number) {
+    const numStr = String(number || '').trim();
+    const choices = LOCOMOTIVE_CHOICES || state?.locomotives || [];
+    const found = choices.find(x => String(x.number || '').trim() === numStr);
+    return found ? found.series : 'ТЭМ-2УМ';
+  }
+
   function latestKpMeasurementByUnit(rows) {
     const map = new Map();
     for (const m of rows) {
       if (!m.measurement_date) continue;
-      const unitKey = unitKeyFromCells(m.locomotive?.split('№')[0], m.locomotive?.split('№')[1]);
+      const rawLoco = String(m.locomotive || '').trim();
+      if (!rawLoco) continue;
+      
+      let series = 'ТЭМ-2УМ';
+      let num = rawLoco;
+      
+      if (rawLoco.includes('№')) {
+        const parts = rawLoco.split('№');
+        series = parts[0].trim();
+        num = parts[1].trim();
+      } else {
+        series = findSeriesForLoco(rawLoco);
+      }
+      
+      const unitKey = unitKeyFromCells(series, num);
       if (!unitKey) continue;
       const t = new Date(m.measurement_date + 'T00:00:00').getTime();
       if (isNaN(t)) continue;
