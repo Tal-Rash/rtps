@@ -776,7 +776,9 @@ async def export_milk(year: int, month: int, type: str):
     tmp.close()
     wb.save(tmp.name)
     
-    return FileResponse(tmp.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=f"Отчет_Молоко_{type}.xlsx")
+    # Формируем имя файла с добавлением названия месяца и года
+    filename_formatted = f"Отчет_Молоко_{type}_{m_str}_{year}.xlsx"
+    return FileResponse(tmp.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=filename_formatted)
 
 
 @app.get("/api/export-milk-details", response_class=HTMLResponse)
