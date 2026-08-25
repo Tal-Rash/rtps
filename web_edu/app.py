@@ -156,24 +156,34 @@ async def api_state(request: Request):
     with DB_LOCK, connect() as conn:
         cur = conn.cursor()
         
-        # Load columns
+        # Загрузка колонок (типов обучения)
         cols = cur.execute("SELECT name, period_months FROM training_columns ORDER BY sort_order").fetchall()
         columns = [{"name": c["name"], "period_months": c["period_months"] or 12} for c in cols]
         
-        # Load active employees (from main DB, like tabel)
+        # Загрузка активных сотрудников (из главной базы, как в табеле)
+        # Исключаем тех, у кого заполнена дата увольнения (уже наступила),
+        # и тех, у кого дата приема на работу еще не наступила.
+        today = dt.date.today().isoformat()
         emp_rows = cur.execute("""
             SELECT e.name, e.tab_num, e.pos, COALESCE(pc.category, 'workers') as category, eo.sort_order AS row_order
             FROM employees e
+            INNER JOIN (
+                SELECT tab_num, MAX(y) as max_y
+                FROM employees
+                GROUP BY tab_num
+            ) latest ON e.tab_num = latest.tab_num AND e.y = latest.max_y
             LEFT JOIN position_categories pc ON e.pos = pc.pos
             LEFT JOIN employee_row_order eo ON e.tab_num = eo.tab_num
             WHERE e.name IS NOT NULL AND e.name != '' 
               AND COALESCE(e.is_excluded, 0) = 0
+              AND (e.exclude_date IS NULL OR e.exclude_date = '' OR e.exclude_date > ?)
+              AND (e.hire_date IS NULL OR e.hire_date = '' OR e.hire_date <= ?)
             GROUP BY e.name, e.tab_num, e.pos
             ORDER BY COALESCE(eo.sort_order, 2147483647), e.pos, e.name
-        """).fetchall()
+        """, (today, today)).fetchall()
         employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"], "category": r["category"], "row_order": r["row_order"]} for r in emp_rows]
         
-        # Load trainings
+        # Загрузка записей об обучении
         t_rows = cur.execute("SELECT tab_num, training_type, last_date, period_months, protocol_num FROM employee_trainings").fetchall()
         
         trainings = {}
