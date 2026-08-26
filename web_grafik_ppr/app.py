@@ -1675,7 +1675,7 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
 
     out = BytesIO()
     wb.save(out)
-    return out.getvalue(), f"ТУ-28_{month_name}_{year}.xlsx"
+    return out.getvalue(), f"ТУ-28_{number}_{month_name}_{year}.xlsx"
 
 
 def content_disposition_attachment(filename: str) -> str:
