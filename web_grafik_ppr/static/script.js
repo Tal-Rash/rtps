@@ -2560,7 +2560,7 @@ function downloadTu28(){
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ТУ-28_${row.number}_${month.name}_${appState.year}.xlsx`;
+    a.download = `ТУ-28_${row.number}_${row.code}_${month.name}_${appState.year}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     closeTu28StaffModal();
