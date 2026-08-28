@@ -684,6 +684,9 @@ async def export_milk(year: int, month: int, type: str):
                 exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
                 hire_start = employee_hire_start(emp["hire_date"] if "hire_date" in emp.keys() else "")
 
+                if exclude_start == 1 or hire_start == 32:
+                    continue
+
                 count = 0
                 missed_days: list[str] = []
                 emp_ts = ts_data.get(tab_num, {})
@@ -898,6 +901,10 @@ async def export_milk_details(year: int, month: int, type: str):
         full_name = str(emp["full_name"])
         exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
         hire_start = employee_hire_start(emp["hire_date"] if "hire_date" in emp.keys() else "")
+        
+        if exclude_start == 1 or hire_start == 32:
+            continue
+            
         emp_ts = ts_data.get(tab_num, {})
         count = 0
         missed_days: list[str] = []

@@ -205,6 +205,7 @@ function renderTabelBody() {
   const days = daysInMonth(year, month);
   const tbody = document.getElementById("tabelBody");
   let bHTML = "";
+  let visibleRowNumber = 1;
   
   appState.employees.forEach((emp, rIndex) => {
     const tabNum = emp.tab_num || `empty_${rIndex}`;
@@ -241,9 +242,13 @@ function renderTabelBody() {
       }
     }
     
-    const trClass = (isFullyExcluded || isFullyBeforeHire) ? "excluded" : "";
+    if (isFullyExcluded || isFullyBeforeHire) {
+      return;
+    }
+    
+    const trClass = "";
     bHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${rIndex})" ondragover="rowDragOver(event, ${rIndex})" ondrop="rowDrop(event, ${rIndex})">`;
-    bHTML += `<td class="col-idx"><div class="rownum"><span>${rIndex + 1}</span></div></td>`;
+    bHTML += `<td class="col-idx"><div class="rownum"><span>${visibleRowNumber++}</span></div></td>`;
     bHTML += `<td class="col-pos"><div class="cell" style="text-align: left;">${escapeHtml(emp.pos)}</div></td>`;
     bHTML += `<td class="col-fio"><div class="cell" style="text-align: left;">${escapeHtml(emp.name || emp.full_name)}</div></td>`;
     bHTML += `<td class="col-tab"><div class="cell center">${escapeHtml(emp.tab_num)}</div></td>`;
