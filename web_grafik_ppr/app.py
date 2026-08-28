@@ -1696,12 +1696,14 @@ def save_state(state: dict) -> dict:
             cur.execute("DELETE FROM repair_schedule WHERE y=?", (year,))
             cur.execute("INSERT OR REPLACE INTO repair_settings VALUES ('last_year', ?)", (str(year),))
 
+            repairs_ins = []
+            tu28_ins = []
             for month in state.get("months", []):
                 month_name = s(month.get("name"))
                 for table_type in ["plan", "fact"]:
                     for r, row in enumerate(month.get(table_type, [])):
                         if row.get("excluded"):
-                            cur.execute("INSERT INTO repairs VALUES (?,?,?,?,?,?)", (year, month_name, table_type, r, -1, "EXC"))
+                            repairs_ins.append((year, month_name, table_type, r, -1, "EXC"))
                         cells = row.get("cells", [])
                         for c, value in enumerate(cells):
                             value = s(value).strip()
@@ -1709,34 +1711,40 @@ def save_state(state: dict) -> dict:
                                 if c == 3:
                                     continue
                                 db_c = 999 if c == len(cells) - 1 else (c - 1 if c >= 4 else c)
-                                cur.execute("INSERT INTO repairs VALUES (?,?,?,?,?,?)", (year, month_name, table_type, r, db_c, value))
+                                repairs_ins.append((year, month_name, table_type, r, db_c, value))
                         if table_type == "fact":
                             if "tu28_extra" in row:
-                                cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(row["tu28_extra"])))
+                                tu28_ins.append((year, month_name, r, "tu28_extra", json.dumps(row["tu28_extra"])))
                             if "tu28_staff" in row:
-                                cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_staff", json.dumps(row["tu28_staff"])))
+                                tu28_ins.append((year, month_name, r, "tu28_staff", json.dumps(row["tu28_staff"])))
                             if "tu28_locked" in row:
-                                cur.execute("INSERT INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_locked", json.dumps(row["tu28_locked"])))
+                                tu28_ins.append((year, month_name, r, "tu28_locked", json.dumps(row["tu28_locked"])))
 
+            cur.executemany("INSERT INTO repairs VALUES (?,?,?,?,?,?)", repairs_ins)
+            cur.executemany("INSERT INTO tu28_data VALUES (?,?,?,?,?)", tu28_ins)
+
+            norms_ins = []
             for cat, rows in state.get("norms", {}).items():
                 for row in rows:
                     k = s(row.get("k")).strip()
                     v = s(row.get("v")).strip()
                     if k or v:
-                        cur.execute("INSERT INTO norms VALUES (?,?,?,?)", (year, cat, k, v))
+                        norms_ins.append((year, cat, k, v))
+            cur.executemany("INSERT INTO norms VALUES (?,?,?,?)", norms_ins)
 
+            acts_ins = []
             for m_name, acts in state.get("acts", {}).items():
                 for act_num, flags in acts.items():
-                    cur.execute(
-                        "INSERT INTO acts_state VALUES (?,?,?,?,?)",
-                        (year, m_name, act_num, 1 if flags.get("is_done") else 0, 1 if flags.get("sap_order_done") else 0),
-                    )
+                    acts_ins.append((year, m_name, act_num, 1 if flags.get("is_done") else 0, 1 if flags.get("sap_order_done") else 0))
+            cur.executemany("INSERT INTO acts_state VALUES (?,?,?,?,?)", acts_ins)
 
+            notes_ins = []
             for m_name, keys in state.get("notes", {}).items():
                 for key, value in keys.items():
                     value = s(value)
                     if value:
-                        cur.execute("INSERT INTO report_notes VALUES (?,?,?,?)", (year, m_name, key, value))
+                        notes_ins.append((year, m_name, key, value))
+            cur.executemany("INSERT INTO report_notes VALUES (?,?,?,?)", notes_ins)
 
             schedule = state.get("repair_schedule", {}) or {}
             if isinstance(schedule, dict):
@@ -1745,15 +1753,19 @@ def save_state(state: dict) -> dict:
             columns = schedule.get("columns", []) if isinstance(schedule, dict) else []
             objects = schedule.get("objects", []) if isinstance(schedule, dict) else []
             periodicity = schedule.get("periodicity", {}) if isinstance(schedule, dict) else {}
+            
+            schedule_ins = []
             for cidx, col in enumerate(columns):
                 value = normalize_repair_code(s((col or {}).get("code")).strip())
                 if value:
-                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, -1, f"col_{cidx}", value))
+                    schedule_ins.append((year, -1, f"col_{cidx}", value))
+            
             series_rows = periodicity.get("series", []) if isinstance(periodicity, dict) else []
             for r, value in enumerate(series_rows):
                 value = s(value).strip()
                 if value:
-                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"periodicity_series_{r}", value))
+                    schedule_ins.append((year, r, f"periodicity_series_{r}", value))
+            
             values_rows = periodicity.get("values", []) if isinstance(periodicity, dict) else []
             for r, row in enumerate(values_rows):
                 if not isinstance(row, list):
@@ -1761,31 +1773,34 @@ def save_state(state: dict) -> dict:
                 for cidx, value in enumerate(row):
                     value = s(value).strip()
                     if value:
-                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"periodicity_value_{r}_{cidx}", value))
+                        schedule_ins.append((year, r, f"periodicity_value_{r}_{cidx}", value))
+                        
             for r, row in enumerate(objects):
                 if not isinstance(row, dict):
                     continue
                 series = s(row.get("series")).strip()
                 number = s(row.get("number")).strip()
                 if series:
-                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "series", series))
+                    schedule_ins.append((year, r, "series", series))
                 if number:
-                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "number", number))
+                    schedule_ins.append((year, r, "number", number))
                 kr = row.get("kr") or {}
                 kr_plan = s(kr.get("plan")).strip()
                 kr_fact = s(kr.get("fact")).strip()
                 if kr_plan:
-                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "kr_plan", kr_plan))
+                    schedule_ins.append((year, r, "kr_plan", kr_plan))
                 if kr_fact:
-                    cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, "kr_fact", kr_fact))
+                    schedule_ins.append((year, r, "kr_fact", kr_fact))
                 for cidx, value in enumerate(row.get("plan", []) or []):
                     value = s(value).strip()
                     if value:
-                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"plan_{cidx}", value))
+                        schedule_ins.append((year, r, f"plan_{cidx}", value))
                 for cidx, value in enumerate(row.get("fact", []) or []):
                     value = s(value).strip()
                     if value:
-                        cur.execute("INSERT INTO repair_schedule VALUES (?,?,?,?)", (year, r, f"fact_{cidx}", value))
+                        schedule_ins.append((year, r, f"fact_{cidx}", value))
+                        
+            cur.executemany("INSERT INTO repair_schedule VALUES (?,?,?,?)", schedule_ins)
 
     return load_state(year)
 
@@ -2007,7 +2022,7 @@ def require_auth_fastapi(request: Request, need_edit: bool = False):
 
 @app.get("/grafik-ppr", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
-async def home_route(request: Request, year: int = None):
+def home_route(request: Request, year: int = None):
     if year is None:
         year = dt.date.today().year
     session = get_current_session(request)
@@ -2035,21 +2050,21 @@ async def home_route(request: Request, year: int = None):
     return response
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_get(request: Request):
+def login_get(request: Request):
     return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/grafik-ppr", status_code=303)
 
 @app.post("/login", response_class=HTMLResponse)
-async def login_post(request: Request, user: str = Form(""), password: str = Form("")):
+def login_post(request: Request, user: str = Form(""), password: str = Form("")):
     return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/grafik-ppr", status_code=303)
 
 @app.get("/logout")
-async def logout_route():
+def logout_route():
     resp = RedirectResponse(MAIN_LOGIN_URL, status_code=303)
     resp.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
     return resp
 
 @app.get("/api/state")
-async def get_state(year: int = None):
+def get_state(year: int = None):
     if year is None: year = dt.date.today().year
     return json_response(load_state(year))
 
@@ -2064,13 +2079,14 @@ async def post_state(request: Request):
     except Exception:
         payload = {}
     try:
-        saved = save_state(payload)
+        import asyncio
+        saved = await asyncio.to_thread(save_state, payload)
     except Exception as exc:
         return json_response({"error": str(exc)}, status_code=400)
     return json_response(saved)
 
 @app.get("/api/export")
-async def export_state(request: Request, year: int = None):
+def export_state(request: Request, year: int = None):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
@@ -2083,7 +2099,7 @@ async def export_state(request: Request, year: int = None):
     )
 
 @app.get("/api/act-export")
-async def export_act(request: Request, year: int = None, month: str = "", act: str = ""):
+def export_act(request: Request, year: int = None, month: str = "", act: str = ""):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
@@ -2099,7 +2115,7 @@ async def export_act(request: Request, year: int = None, month: str = "", act: s
     )
 
 @app.get("/api/report-export")
-async def export_report(request: Request, year: int = None, month: str = ""):
+def export_report(request: Request, year: int = None, month: str = ""):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
@@ -2116,7 +2132,7 @@ async def export_report(request: Request, year: int = None, month: str = ""):
     )
 
 @app.get("/api/report-preview")
-async def preview_report(request: Request, year: int = None, month: str = ""):
+def preview_report(request: Request, year: int = None, month: str = ""):
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return json_response({"error": "Unauthorized"}, status_code=401)
@@ -2140,15 +2156,18 @@ async def post_tu28_extra(request: Request):
     month_name = payload.get("month_name")
     r = payload.get("r")
     extra = payload.get("extra", [])
-    with DB_LOCK, conn() as db:
-        cur = db.cursor()
-        with db:
-            row = cur.execute("SELECT v FROM tu28_data WHERE y=? AND m=? AND r=? AND k='tu28_locked'", (year, month_name, r)).fetchone()
-            is_locked = False
-            if row and row["v"]:
-                is_locked = json.loads(row["v"])
-            if not is_locked:
-                cur.execute("INSERT OR REPLACE INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(extra)))
+    def db_op():
+        with DB_LOCK, conn() as db:
+            cur = db.cursor()
+            with db:
+                row = cur.execute("SELECT v FROM tu28_data WHERE y=? AND m=? AND r=? AND k='tu28_locked'", (year, month_name, r)).fetchone()
+                is_locked = False
+                if row and row["v"]:
+                    is_locked = json.loads(row["v"])
+                if not is_locked:
+                    cur.execute("INSERT OR REPLACE INTO tu28_data VALUES (?,?,?,?,?)", (year, month_name, r, "tu28_extra", json.dumps(extra)))
+    import asyncio
+    await asyncio.to_thread(db_op)
     return json_response({"status": "ok"})
 
 @app.post("/api/tu28-export")
@@ -2176,7 +2195,8 @@ async def export_tu28(request: Request):
     if not isinstance(extra_repairs, list): extra_repairs = []
     
     try:
-        body, filename = build_tu28_workbook(year, month, row_idx, staff_list, extra_repairs=extra_repairs)
+        import asyncio
+        body, filename = await asyncio.to_thread(build_tu28_workbook, year, month, row_idx, staff_list, extra_repairs=extra_repairs)
     except Exception as exc:
         return json_response({"error": str(exc)}, status_code=400)
         

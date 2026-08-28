@@ -1978,12 +1978,12 @@ function rowCellIsNumeric(row, day){
   const numeric = Number(raw.replace(',', '.'));
   return Number.isFinite(numeric);
 }
-function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey){
+function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey, precomputedRowMaps){
   const months = appState.months || [];
   if (!rowKey || !months.length || monthIndex < 0 || monthIndex >= months.length) return [];
   const year = Number(appState.year) || new Date().getFullYear();
   const rowKeyStr = rowKey.join('|');
-  const rowMaps = months.slice(0, monthIndex + 1).map((month) => buildRowsByUnit(month, tableType));
+  const rowMaps = precomputedRowMaps || months.slice(0, monthIndex + 1).map((month) => buildRowsByUnit(month, tableType));
   const currMonth = months[monthIndex];
   const currMonthNum = Number(currMonth.month || monthIndex + 1);
   const prevMonthNum = monthIndex > 0 ? Number(months[monthIndex - 1].month || monthIndex) : null;
@@ -2024,10 +2024,10 @@ function collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey){
   }
   return starts.map((date) => `Акт № ${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(rowKey[1] || '').trim().toUpperCase()}`);
 }
-function collectActNumbersFromRow(currRow, monthIndex, tableType, rowKey){
+function collectActNumbersFromRow(currRow, monthIndex, tableType, rowKey, precomputedRowMaps){
   const cells = currRow && currRow.cells ? currRow.cells : [];
   const note = String(cells[cells.length - 1] ?? '').trim();
-  const candidates = collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey);
+  const candidates = collectUnplannedStartsAcrossMonths(monthIndex, tableType, rowKey, precomputedRowMaps);
   const seen = new Set();
   const result = [];
   const add = (value) => {
@@ -2078,11 +2078,12 @@ function collectActRowsForMonth(monthIndex){
 
   const rows = [];
   const seen = new Set();
+  const precomputedRowMaps = appState.months.slice(0, monthIndex + 1).map((m) => buildRowsByUnit(m, 'fact'));
   (month.fact || []).forEach((row, rowIndex) => {
     if (!row || row.excluded) return;
     const key = reportUnitKey(row);
     if (!key) return;
-    const acts = collectActNumbersFromRow(row, monthIndex, 'fact', key);
+    const acts = collectActNumbersFromRow(row, monthIndex, 'fact', key, precomputedRowMaps);
     acts.forEach((act) => {
       const clean = act.replace(/^Акт №\s*/i, '').trim();
       if (seen.has(clean)) return;
