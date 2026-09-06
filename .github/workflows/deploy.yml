@@ -36,10 +36,6 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" 'bash -se' <<'EOF'
           set -euo pipefail
           
-          echo "=== MY SERVER IP ==="
-          curl -s https://ifconfig.me || curl -s https://api.ipify.org
-          echo ""
-
           cd /opt/rtps
           git config core.sshCommand 'ssh -i /root/.ssh/id_ed25519_github -o IdentitiesOnly=yes -o BatchMode=yes'
 
