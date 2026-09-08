@@ -303,6 +303,16 @@ button.primary:hover, .btn-primary:hover {
     background: var(--accent-soft);
 }
 
+.day-input.selected-cell {
+    background-color: #dbeafe !important;
+    box-shadow: inset 0 0 0 2px #2563eb !important;
+    color: #1e3a8a !important;
+    font-weight: 700 !important;
+    z-index: 5 !important;
+    position: relative;
+    border-radius: 2px;
+}
+
 .day-input:first-child {
     border-right: 1px solid var(--line);
 }

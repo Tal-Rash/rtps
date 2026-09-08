@@ -341,6 +341,152 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Multi-cell Selection and Clear System
+    const selectedInputs = new Set();
+    let isSelecting = false;
+    let selectionAnchorInput = null;
+
+    const clearSelectedBtn = document.getElementById('clearSelectedBtn');
+
+    function updateSelectionUI() {
+        if (!tableBody) return;
+        tableBody.querySelectorAll('.day-input.selected-cell').forEach(el => {
+            el.classList.remove('selected-cell');
+        });
+
+        selectedInputs.forEach(input => {
+            if (input && input.isConnected) {
+                input.classList.add('selected-cell');
+            }
+        });
+
+        if (clearSelectedBtn) {
+            clearSelectedBtn.disabled = selectedInputs.size === 0;
+        }
+    }
+
+    function clearSelectedCells() {
+        let inputsToClear = Array.from(selectedInputs).filter(inp => inp && !inp.readOnly && inp.isConnected);
+        
+        if (inputsToClear.length === 0 && document.activeElement && document.activeElement.classList.contains('day-input') && !document.activeElement.readOnly) {
+            inputsToClear = [document.activeElement];
+        }
+
+        if (inputsToClear.length === 0) return;
+
+        const hasContent = inputsToClear.some(inp => inp.value && inp.value.trim() !== '');
+        if (!hasContent) return;
+
+        pushUndoState();
+
+        const affectedRows = new Set();
+        inputsToClear.forEach(inp => {
+            inp.value = '';
+            const tr = inp.closest('tr[data-emp-id]');
+            if (tr) affectedRows.add(tr);
+        });
+
+        affectedRows.forEach(tr => calculateRow(tr));
+        updateTotals();
+        updateSelectionUI();
+    }
+
+    function selectRangeBetween(startInp, endInp) {
+        if (!startInp || !endInp || !tableBody) return;
+
+        const startTr = startInp.closest('tr[data-emp-id]');
+        const endTr = endInp.closest('tr[data-emp-id]');
+        if (!startTr || !endTr) return;
+
+        const allRows = Array.from(tableBody.querySelectorAll('tr[data-emp-id]'));
+        const r1 = allRows.indexOf(startTr);
+        const r2 = allRows.indexOf(endTr);
+        if (r1 === -1 || r2 === -1) return;
+
+        const minRow = Math.min(r1, r2);
+        const maxRow = Math.max(r1, r2);
+
+        const startRowInputs = Array.from(startTr.querySelectorAll('.day-input:not(.allowed-days-input)'));
+        const c1 = startRowInputs.indexOf(startInp);
+        const endRowInputs = Array.from(endTr.querySelectorAll('.day-input:not(.allowed-days-input)'));
+        const c2 = endRowInputs.indexOf(endInp);
+
+        if (c1 === -1 || c2 === -1) return;
+
+        const minCol = Math.min(c1, c2);
+        const maxCol = Math.max(c1, c2);
+
+        selectedInputs.clear();
+
+        for (let r = minRow; r <= maxRow; r++) {
+            const tr = allRows[r];
+            const rowInputs = Array.from(tr.querySelectorAll('.day-input:not(.allowed-days-input)'));
+            for (let c = minCol; c <= maxCol; c++) {
+                if (rowInputs[c]) {
+                    selectedInputs.add(rowInputs[c]);
+                }
+            }
+        }
+
+        updateSelectionUI();
+    }
+
+    if (tableBody) {
+        tableBody.addEventListener('mousedown', (e) => {
+            if (!e.target.classList.contains('day-input') || e.target.classList.contains('allowed-days-input')) {
+                return;
+            }
+
+            const inp = e.target;
+
+            if (e.shiftKey && selectionAnchorInput) {
+                e.preventDefault();
+                selectRangeBetween(selectionAnchorInput, inp);
+            } else if (e.ctrlKey || e.metaKey) {
+                selectionAnchorInput = inp;
+                if (selectedInputs.has(inp)) {
+                    selectedInputs.delete(inp);
+                } else {
+                    selectedInputs.add(inp);
+                }
+                updateSelectionUI();
+            } else {
+                isSelecting = true;
+                selectionAnchorInput = inp;
+                selectedInputs.clear();
+                selectedInputs.add(inp);
+                updateSelectionUI();
+            }
+        });
+
+        tableBody.addEventListener('mouseover', (e) => {
+            if (!isSelecting || !selectionAnchorInput) return;
+            if (!e.target.classList.contains('day-input') || e.target.classList.contains('allowed-days-input')) return;
+            selectRangeBetween(selectionAnchorInput, e.target);
+        });
+    }
+
+    document.addEventListener('mouseup', () => {
+        isSelecting = false;
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            const isEditingInput = document.activeElement && document.activeElement.classList.contains('day-input');
+            if (selectedInputs.size > 1 || (selectedInputs.size === 1 && isEditingInput)) {
+                e.preventDefault();
+                clearSelectedCells();
+            }
+        } else if (e.key === 'Escape') {
+            selectedInputs.clear();
+            updateSelectionUI();
+        }
+    });
+
+    if (clearSelectedBtn) {
+        clearSelectedBtn.addEventListener('click', clearSelectedCells);
+    }
+
     // Modal Handlers
     function openHolidaysModal() {
         if (!holidaysTableBody) return;
