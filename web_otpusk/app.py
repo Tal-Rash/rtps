@@ -560,6 +560,14 @@ async def get_history_matrix(year: int = 2026):
     result_emp_list = []
 
     for emp in employees:
+        # Исключаем уволенных или еще не принятых на работу сотрудников
+        if is_employee_excluded_for_year(emp, year):
+            continue
+
+        hire_year = extract_year_from_date(emp.get("hire_date"))
+        if hire_year is not None and hire_year > year:
+            continue
+
         emp_name = emp.get("name") or emp.get("full_name") or ""
         emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
