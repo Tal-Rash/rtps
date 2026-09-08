@@ -493,8 +493,8 @@ MONTH_NAMES_RU = {
 }
 
 def get_season(month: int) -> str:
-    """Определяет сезон месяца: лето, зима или демисезон"""
-    if month in (6, 7, 8):
+    """Определяет сезон месяца: лето (Май, Июнь, Июль, Август), зима или демисезон"""
+    if month in (5, 6, 7, 8):
         return "summer"
     elif month in (12, 1, 2):
         return "winter"
