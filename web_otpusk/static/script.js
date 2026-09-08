@@ -411,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const poInput = tr.querySelector('.po-input[data-month="0"]');
 
                 if (cInput && poInput && (!cInput.value || (parseInt(cInput.value) === covStartD && parseInt(poInput.value) === covEndD))) {
-                    cInput.value = covStartD;
+                    cInput.value = String(cov.start).startsWith(janPrefix) ? covStartD : '';
                     poInput.value = covEndD;
                     tr.dataset.carriedOverJan = "true";
                     tr.dataset.carriedOverStartD = covStartD;
@@ -513,6 +513,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
                     currentStart = null;
                     currentStartMonth = null;
+                } else {
+                    vacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
                 }
             }
         }
@@ -669,6 +671,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
                         currentStart = null;
                         currentStartMonth = null;
+                    } else {
+                        vacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
                     }
                 }
             }
@@ -805,6 +809,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
                             currentStart = null;
                             currentStartMonth = null;
+                        } else {
+                            parsedVacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
                         }
                     }
                 }
