@@ -199,6 +199,12 @@
                         <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px;"></span> ⚪ Демисезон</span>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.88rem; font-weight: 500;">
+                            <span>📅 Статистика: с</span>
+                            <select id="historyStartYearSelect" style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; font-weight: 600; cursor: pointer; background: #ffffff;"></select>
+                            <span>по</span>
+                            <select id="historyEndYearSelect" style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; font-weight: 600; cursor: pointer; background: #ffffff;"></select>
+                        </div>
                         <select id="historySortSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.88rem; background: #ffffff; font-weight: 500; cursor: pointer;">
                             <option value="default">↕️ Сортировка: По порядку в списке</option>
                             <option value="summer_rel_desc">🔴 Сначала кто БОЛЬШЕ ходил летом (к остальным месяцам, в %)</option>
@@ -206,7 +212,7 @@
                             <option value="summer_count_desc">🔴 Сначала кто ЧАЩЕ ходил летом (по кол-ву отпусков)</option>
                             <option value="winter_rel_desc">🔵 Сначала кто БОЛЬШЕ ходил зимой (к остальным месяцам, в %)</option>
                         </select>
-                        <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 200px;">
+                        <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 170px;">
                     </div>
                 </div>
                 <div class="table-shell" style="max-height: 70vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px;">

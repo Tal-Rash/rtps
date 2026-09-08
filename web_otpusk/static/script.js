@@ -1557,6 +1557,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const historySortSelect = document.getElementById('historySortSelect');
+    const historyStartYearSelect = document.getElementById('historyStartYearSelect');
+    const historyEndYearSelect = document.getElementById('historyEndYearSelect');
 
     function updateHistoryMatrixView() {
         if (!historyMatrixCache) return;
@@ -1575,6 +1577,62 @@ document.addEventListener('DOMContentLoaded', () => {
         historySortSelect.addEventListener('change', updateHistoryMatrixView);
     }
 
+    if (historyStartYearSelect) {
+        historyStartYearSelect.addEventListener('change', () => {
+            if (historyStartYearSelect && historyEndYearSelect) {
+                if (parseInt(historyStartYearSelect.value) > parseInt(historyEndYearSelect.value)) {
+                    historyEndYearSelect.value = historyStartYearSelect.value;
+                }
+            }
+            updateHistoryMatrixView();
+        });
+    }
+
+    if (historyEndYearSelect) {
+        historyEndYearSelect.addEventListener('change', () => {
+            if (historyStartYearSelect && historyEndYearSelect) {
+                if (parseInt(historyEndYearSelect.value) < parseInt(historyStartYearSelect.value)) {
+                    historyStartYearSelect.value = historyEndYearSelect.value;
+                }
+            }
+            updateHistoryMatrixView();
+        });
+    }
+
+    function populateHistoryYearSelects(years) {
+        if (!historyStartYearSelect || !historyEndYearSelect || !Array.isArray(years) || years.length === 0) return;
+        
+        const curStart = historyStartYearSelect.value;
+        const curEnd = historyEndYearSelect.value;
+
+        historyStartYearSelect.innerHTML = '';
+        historyEndYearSelect.innerHTML = '';
+
+        years.forEach(y => {
+            const opt1 = document.createElement('option');
+            opt1.value = y;
+            opt1.textContent = y;
+            historyStartYearSelect.appendChild(opt1);
+
+            const opt2 = document.createElement('option');
+            opt2.value = y;
+            opt2.textContent = y;
+            historyEndYearSelect.appendChild(opt2);
+        });
+
+        if (curStart && years.includes(parseInt(curStart))) {
+            historyStartYearSelect.value = curStart;
+        } else {
+            historyStartYearSelect.value = years[0];
+        }
+
+        if (curEnd && years.includes(parseInt(curEnd))) {
+            historyEndYearSelect.value = curEnd;
+        } else {
+            historyEndYearSelect.value = years[years.length - 1];
+        }
+    }
+
     function loadHistoryMatrix() {
         if (!historyTableBody) return;
         historyTableBody.innerHTML = '<tr><td colspan="20" style="text-align:center; padding: 20px;">Загрузка истории отпусков...</td></tr>';
@@ -1584,6 +1642,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 historyMatrixCache = data;
+                if (data && data.years) {
+                    populateHistoryYearSelects(data.years);
+                }
                 updateHistoryMatrixView();
             })
             .catch(err => {
@@ -1592,25 +1653,84 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
+    function calcPeriodStats(emp, sY, eY) {
+        let summer_count = 0, summer_days = 0;
+        let winter_count = 0, winter_days = 0;
+        let other_count = 0, other_days = 0;
+
+        const history = emp.history || {};
+        Object.keys(history).forEach(yStr => {
+            const yVal = parseInt(yStr);
+            if (yVal >= sY && yVal <= eY) {
+                const vList = history[yStr] || [];
+                vList.forEach(v => {
+                    const sType = v.season;
+                    const dCnt = parseInt(v.days) || 0;
+                    if (sType === 'summer') {
+                        summer_count++;
+                        summer_days += dCnt;
+                    } else if (sType === 'winter') {
+                        winter_count++;
+                        winter_days += dCnt;
+                    } else {
+                        other_count++;
+                        other_days += dCnt;
+                    }
+                });
+            }
+        });
+
+        const total_vacations = summer_count + winter_count + other_count;
+        const total_days = summer_days + winter_days + other_days;
+
+        const summer_pct = total_days > 0 ? Math.round((summer_days / total_days * 100) * 10) / 10 : 0.0;
+        const winter_pct = total_days > 0 ? Math.round((winter_days / total_days * 100) * 10) / 10 : 0.0;
+        const other_pct = total_days > 0 ? Math.round((other_days / total_days * 100) * 10) / 10 : 0.0;
+
+        let dominant_season = "balanced";
+        if (summer_days > winter_days) dominant_season = "summer";
+        else if (winter_days > summer_days) dominant_season = "winter";
+
+        return {
+            summer_count, summer_days, summer_pct,
+            winter_count, winter_days, winter_pct,
+            other_count, other_days, other_pct,
+            total_count: total_vacations,
+            total_days: total_days,
+            dominant_season
+        };
+    }
+
     function renderHistoryMatrix(data, filterText = '', sortBy = 'default') {
         if (!historyHeaderRow || !historyTableBody) return;
 
         const years = data.years || [];
         const employees = data.employees || [];
 
-        // Generate Header Row
+        const startYear = historyStartYearSelect && historyStartYearSelect.value ? parseInt(historyStartYearSelect.value) : (years[0] || 2024);
+        const endYear = historyEndYearSelect && historyEndYearSelect.value ? parseInt(historyEndYearSelect.value) : (years[years.length - 1] || 2026);
+        const periodText = startYear === endYear ? `${startYear}` : `${startYear}–${endYear}`;
+
+        // Generate Header Row with dynamic period
         let headerHtml = `
             <th class="col-sticky-1" style="width: 240px; min-width: 240px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
             <th class="col-sticky-2" style="width: 75px; min-width: 75px; position: sticky; left: 240px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 4px; text-align: center;">Норма</th>
-            <th style="min-width: 125px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">🔴 Лето (всего)</th>
-            <th style="min-width: 125px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">🔵 Зима (всего)</th>
-            <th style="min-width: 125px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">⚪ Демисезон</th>
+            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">🔴 Лето (${periodText})</th>
+            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">🔵 Зима (${periodText})</th>
+            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">⚪ Демисезон</th>
         `;
 
         years.forEach(y => {
-            headerHtml += `<th style="min-width: 90px; padding: 8px 6px; text-align: center; background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-weight: 700;">${y}</th>`;
+            const isHighlight = y >= startYear && y <= endYear;
+            const bgStyle = isHighlight ? 'background: #e2e8f0; border-bottom: 2px solid #94a3b8;' : 'background: #f1f5f9; border-bottom: 2px solid #cbd5e1;';
+            headerHtml += `<th style="min-width: 90px; padding: 8px 6px; text-align: center; ${bgStyle} font-weight: 700;">${y}</th>`;
         });
         historyHeaderRow.innerHTML = headerHtml;
+
+        // Calculate period statistics for all employees
+        employees.forEach(emp => {
+            emp.periodStats = calcPeriodStats(emp, startYear, endYear);
+        });
 
         // Filter employees if search query present
         const query = filterText.toLowerCase();
@@ -1623,38 +1743,34 @@ document.addEventListener('DOMContentLoaded', () => {
             return name.includes(query) || full.includes(query) || pos.includes(query) || tab.includes(query);
         });
 
-        // Apply Sorting
+        // Apply Sorting based on selected period stats
         if (sortBy === 'summer_rel_desc') {
-            // Сначала кто БОЛЬШЕ ходил летом по отношению к остальным месяцам (% летних отпусков от наивысшего к наименьшему)
             filteredEmployees.sort((a, b) => {
-                const sA = (a.stats && a.stats.summer_pct) || 0;
-                const sB = (b.stats && b.stats.summer_pct) || 0;
+                const sA = (a.periodStats && a.periodStats.summer_pct) || 0;
+                const sB = (b.periodStats && b.periodStats.summer_pct) || 0;
                 if (sB !== sA) return sB - sA;
-                return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
+                return ((b.periodStats && b.periodStats.summer_days) || 0) - ((a.periodStats && a.periodStats.summer_days) || 0);
             });
         } else if (sortBy === 'summer_rel_asc') {
-            // Сначала кто МЕНЬШЕ ходил летом по отношению к остальным месяцам (% летних отпусков от 0% вверх)
             filteredEmployees.sort((a, b) => {
-                const sA = (a.stats && a.stats.summer_pct) || 0;
-                const sB = (b.stats && b.stats.summer_pct) || 0;
+                const sA = (a.periodStats && a.periodStats.summer_pct) || 0;
+                const sB = (b.periodStats && b.periodStats.summer_pct) || 0;
                 if (sA !== sB) return sA - sB;
-                return ((a.stats && a.stats.summer_days) || 0) - ((b.stats && b.stats.summer_days) || 0);
+                return ((a.periodStats && a.periodStats.summer_days) || 0) - ((b.periodStats && b.periodStats.summer_days) || 0);
             });
         } else if (sortBy === 'summer_count_desc') {
-            // Сначала кто ЧАЩЕ ходил летом по количеству раз
             filteredEmployees.sort((a, b) => {
-                const sA = (a.stats && a.stats.summer_count) || 0;
-                const sB = (b.stats && b.stats.summer_count) || 0;
+                const sA = (a.periodStats && a.periodStats.summer_count) || 0;
+                const sB = (b.periodStats && b.periodStats.summer_count) || 0;
                 if (sB !== sA) return sB - sA;
-                return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
+                return ((b.periodStats && b.periodStats.summer_days) || 0) - ((a.periodStats && a.periodStats.summer_days) || 0);
             });
         } else if (sortBy === 'winter_rel_desc') {
-            // Сначала кто БОЛЬШЕ ходил зимой по отношению к остальным месяцам (% зимних отпусков)
             filteredEmployees.sort((a, b) => {
-                const wA = (a.stats && a.stats.winter_pct) || 0;
-                const wB = (b.stats && b.stats.winter_pct) || 0;
+                const wA = (a.periodStats && a.periodStats.winter_pct) || 0;
+                const wB = (b.periodStats && b.periodStats.winter_pct) || 0;
                 if (wB !== wA) return wB - wA;
-                return ((b.stats && b.stats.winter_days) || 0) - ((a.stats && a.stats.winter_days) || 0);
+                return ((b.periodStats && b.periodStats.winter_days) || 0) - ((a.periodStats && a.periodStats.winter_days) || 0);
             });
         }
 
@@ -1670,7 +1786,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const empPos = escapeHtml(emp.position || '');
             const vDays = emp.vacation_days || 52;
             const history = emp.history || {};
-            const stats = emp.stats || {};
+            const stats = emp.periodStats || {};
 
             const sCnt = stats.summer_count || 0;
             const sDays = stats.summer_days || 0;
@@ -1694,13 +1810,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${vDays}
                 </td>
                 <td style="text-align: center; background: #fff5f5; border-right: 1px solid #fee2e2; font-weight: 600;">
-                    ${sCnt > 0 ? `<span style="color: #b71c1c; background: #ffcdd2; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Летних дней: ${sDays} (${sPct}%)">${sCnt} раз (${sPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
+                    ${sCnt > 0 ? `<span style="color: #b71c1c; background: #ffcdd2; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Летних дней за ${periodText}: ${sDays} (${sPct}%)">${sCnt} раз (${sPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
                 </td>
                 <td style="text-align: center; background: #f0f9ff; border-right: 1px solid #e0f2fe; font-weight: 600;">
-                    ${wCnt > 0 ? `<span style="color: #0277bd; background: #bae6fd; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Зимних дней: ${wDays} (${wPct}%)">${wCnt} раз (${wPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
+                    ${wCnt > 0 ? `<span style="color: #0277bd; background: #bae6fd; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Зимних дней за ${periodText}: ${wDays} (${wPct}%)">${wCnt} раз (${wPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
                 </td>
                 <td style="text-align: center; background: #fafafa; border-right: 2px solid #cbd5e1;">
-                    ${oCnt > 0 ? `<span style="color: #334155; font-size: 0.84rem;">${oCnt} раз (${oPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
+                    ${oCnt > 0 ? `<span style="color: #334155; font-size: 0.84rem;" title="Демисезонных дней за ${periodText}: ${oDays} (${oPct}%)">${oCnt} раз (${oPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
                 </td>
             `;
 
