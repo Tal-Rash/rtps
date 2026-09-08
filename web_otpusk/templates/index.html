@@ -199,12 +199,10 @@
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <select id="historySortSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.88rem; background: #ffffff; font-weight: 500; cursor: pointer;">
                             <option value="default">↕️ Сортировка: По порядку в списке</option>
-                            <option value="summer_dom_desc">🔴 Сначала у кого преобладает ЛЕТО над ЗИМОЙ (в %)</option>
-                            <option value="winter_dom_desc">🔵 Сначала у кого преобладает ЗИМА над ЛЕТОМ (в %)</option>
-                            <option value="summer_pct_desc">🔴 По % летних дней (убывание)</option>
-                            <option value="winter_pct_desc">🔵 По % зимних дней (убывание)</option>
-                            <option value="summer_desc">🔴 По кол-ву летних раз (убывание)</option>
-                            <option value="winter_desc">🔵 По кол-ву зимних раз (убывание)</option>
+                            <option value="summer_rel_desc">🔴 Сначала кто БОЛЬШЕ ходил летом (к остальным месяцам, в %)</option>
+                            <option value="summer_rel_asc">⚪ Сначала кто МЕНЬШЕ ходил летом (к остальным месяцам, в %)</option>
+                            <option value="summer_count_desc">🔴 Сначала кто ЧАЩЕ ходил летом (по кол-ву отпусков)</option>
+                            <option value="winter_rel_desc">🔵 Сначала кто БОЛЬШЕ ходил зимой (к остальным месяцам, в %)</option>
                         </select>
                         <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 200px;">
                     </div>

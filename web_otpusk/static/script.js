@@ -1506,47 +1506,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Apply Sorting
-        if (sortBy === 'summer_dom_desc') {
-            // Преобладание лета над зимой в процентном соотношении
-            filteredEmployees.sort((a, b) => {
-                const diffA = ((a.stats && a.stats.summer_pct) || 0) - ((a.stats && a.stats.winter_pct) || 0);
-                const diffB = ((b.stats && b.stats.summer_pct) || 0) - ((b.stats && b.stats.winter_pct) || 0);
-                if (diffB !== diffA) return diffB - diffA;
-                return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
-            });
-        } else if (sortBy === 'winter_dom_desc') {
-            // Преобладание зимы над летом в процентном соотношении
-            filteredEmployees.sort((a, b) => {
-                const diffA = ((a.stats && a.stats.winter_pct) || 0) - ((a.stats && a.stats.summer_pct) || 0);
-                const diffB = ((b.stats && b.stats.winter_pct) || 0) - ((b.stats && b.stats.summer_pct) || 0);
-                if (diffB !== diffA) return diffB - diffA;
-                return ((b.stats && b.stats.winter_days) || 0) - ((a.stats && a.stats.winter_days) || 0);
-            });
-        } else if (sortBy === 'summer_pct_desc') {
+        if (sortBy === 'summer_rel_desc') {
+            // Сначала кто БОЛЬШЕ ходил летом по отношению к остальным месяцам (% летних отпусков от наивысшего к наименьшему)
             filteredEmployees.sort((a, b) => {
                 const sA = (a.stats && a.stats.summer_pct) || 0;
                 const sB = (b.stats && b.stats.summer_pct) || 0;
                 if (sB !== sA) return sB - sA;
                 return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
             });
-        } else if (sortBy === 'winter_pct_desc') {
+        } else if (sortBy === 'summer_rel_asc') {
+            // Сначала кто МЕНЬШЕ ходил летом по отношению к остальным месяцам (% летних отпусков от 0% вверх)
             filteredEmployees.sort((a, b) => {
-                const wA = (a.stats && a.stats.winter_pct) || 0;
-                const wB = (b.stats && b.stats.winter_pct) || 0;
-                if (wB !== wA) return wB - wA;
-                return ((b.stats && b.stats.winter_days) || 0) - ((a.stats && a.stats.winter_days) || 0);
+                const sA = (a.stats && a.stats.summer_pct) || 0;
+                const sB = (b.stats && b.stats.summer_pct) || 0;
+                if (sA !== sB) return sA - sB;
+                return ((a.stats && a.stats.summer_days) || 0) - ((b.stats && b.stats.summer_days) || 0);
             });
-        } else if (sortBy === 'summer_desc') {
+        } else if (sortBy === 'summer_count_desc') {
+            // Сначала кто ЧАЩЕ ходил летом по количеству раз
             filteredEmployees.sort((a, b) => {
                 const sA = (a.stats && a.stats.summer_count) || 0;
                 const sB = (b.stats && b.stats.summer_count) || 0;
                 if (sB !== sA) return sB - sA;
                 return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
             });
-        } else if (sortBy === 'winter_desc') {
+        } else if (sortBy === 'winter_rel_desc') {
+            // Сначала кто БОЛЬШЕ ходил зимой по отношению к остальным месяцам (% зимних отпусков)
             filteredEmployees.sort((a, b) => {
-                const wA = (a.stats && a.stats.winter_count) || 0;
-                const wB = (b.stats && b.stats.winter_count) || 0;
+                const wA = (a.stats && a.stats.winter_pct) || 0;
+                const wB = (b.stats && b.stats.winter_pct) || 0;
                 if (wB !== wA) return wB - wA;
                 return ((b.stats && b.stats.winter_days) || 0) - ((a.stats && a.stats.winter_days) || 0);
             });
