@@ -617,8 +617,8 @@ async def get_history_matrix(year: int = 2026):
             except Exception:
                 y_val = 0
 
-            # Учитываем статистику строго за прошлые года (y_val < year)
-            if y_val > 0 and y_val < year:
+            # Учитываем статистику за все года включительно до просматриваемого года (y_val <= year)
+            if y_val > 0 and y_val <= year:
                 for v in v_list:
                     s_type = v.get("season")
                     d_cnt = int(v.get("days") or 0)
