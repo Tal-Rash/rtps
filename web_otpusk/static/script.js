@@ -403,8 +403,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const eParts = String(cov.end).split('-');
                 if (sParts.length < 3 || eParts.length < 3) return;
 
-                const covStartD = parseInt(sParts[2]);
-                const covEndD = parseInt(eParts[2]);
+                const janPrefix = `${currentYear}-01-`;
+                const covStartD = String(cov.start).startsWith(janPrefix) ? parseInt(sParts[2]) : 1;
+                const covEndD = String(cov.end).startsWith(janPrefix) ? parseInt(eParts[2]) : calendarDaysInMonths[0];
 
                 const cInput = tr.querySelector('.c-input[data-month="0"]');
                 const poInput = tr.querySelector('.po-input[data-month="0"]');
