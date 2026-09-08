@@ -147,6 +147,23 @@ def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
 
     return False
 
+def format_date_to_iso(date_str: str) -> str:
+    if not date_str:
+        return ""
+    date_str = date_str.strip()
+    if "-" in date_str:
+        parts = date_str.split("-")
+        if len(parts) == 3 and len(parts[0]) == 4:
+            return date_str
+    if "." in date_str:
+        parts = date_str.split(".")
+        if len(parts) == 3:
+            d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
+            if len(y) == 2:
+                y = "20" + y
+            return f"{y}-{m}-{d}"
+    return date_str
+
 @app.get("/api/vacations")
 @app.get(f"{APP_PREFIX}/api/vacations")
 async def get_vacations(year: int = 2026):
@@ -207,23 +224,63 @@ async def get_vacations(year: int = 2026):
             if p_row["name"]:
                 prev_saved_vacations[str(p_row["name"])] = p_list
 
+        # Query vacations_archive for current year (year) and previous year (year - 1)
+        archive_rows = cur.execute(
+            "SELECT y, tab_num, name, start_date, end_date, days FROM vacations_archive WHERE y=? OR y=?",
+            (year, year - 1)
+        ).fetchall()
+
+        archive_vacations = {}
+        prev_archive_vacations = {}
+        for a_row in archive_rows:
+            a_dict = dict(a_row)
+            ay = a_dict.get("y")
+            t_num = str(a_dict.get("tab_num") or "")
+            a_name = str(a_dict.get("name") or "")
+            s_iso = format_date_to_iso(a_dict.get("start_date") or "")
+            e_iso = format_date_to_iso(a_dict.get("end_date") or "")
+            days = int(a_dict.get("days") or 0)
+
+            if s_iso and e_iso:
+                item = {"start": s_iso, "end": e_iso, "days": days}
+                target_map = archive_vacations if ay == year else prev_archive_vacations
+                if t_num:
+                    target_map.setdefault(t_num, []).append(item)
+                if a_name:
+                    target_map.setdefault(a_name, []).append(item)
+
     result = []
     jan_prefix = f"{year}-01-"
+    known_keys = set()
+
     for emp in employees:
         if is_employee_excluded_for_year(emp, year):
             continue
 
         emp_name = emp.get("name") or emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
+        if emp_name: known_keys.add(emp_name)
+        if tab_num: known_keys.add(tab_num)
+
         vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        if not vacations:
+            vacations = archive_vacations.get(tab_num) or archive_vacations.get(emp_name) or []
+
         prev_vacs = prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
-        
+        prev_arc_vacs = prev_archive_vacations.get(tab_num) or prev_archive_vacations.get(emp_name) or []
+
+        all_prev_vacs = prev_vacs + prev_arc_vacs
+
         carried_over = []
-        for pv in prev_vacs:
+        seen_cov = set()
+        for pv in all_prev_vacs:
             s_date = str(pv.get("start") or "")
             e_date = str(pv.get("end") or "")
             if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
-                carried_over.append(pv)
+                key = f"{s_date}_{e_date}"
+                if key not in seen_cov:
+                    seen_cov.add(key)
+                    carried_over.append(pv)
 
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
         result.append({
@@ -236,6 +293,32 @@ async def get_vacations(year: int = 2026):
             "vacations": vacations,
             "carried_over_vacations": carried_over
         })
+
+    # Include any archive employees for this year not found in main employee list
+    for a_key, a_vacs in archive_vacations.items():
+        if a_key and a_key not in known_keys:
+            known_keys.add(a_key)
+            carried_over = []
+            seen_cov = set()
+            for pv in prev_archive_vacations.get(a_key, []):
+                s_date = str(pv.get("start") or "")
+                e_date = str(pv.get("end") or "")
+                if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
+                    key = f"{s_date}_{e_date}"
+                    if key not in seen_cov:
+                        seen_cov.add(key)
+                        carried_over.append(pv)
+
+            result.append({
+                "id": len(result) + 1,
+                "tab_num": a_key if a_key.isdigit() else "",
+                "name": a_key if not a_key.isdigit() else "",
+                "full_name": a_key if not a_key.isdigit() else "",
+                "position": "",
+                "vacation_days": 28,
+                "vacations": a_vacs,
+                "carried_over_vacations": carried_over
+            })
 
     if not result:
         mock_file = ROOT / "data" / "mock_data.json"
