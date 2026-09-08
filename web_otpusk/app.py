@@ -110,7 +110,7 @@ async def get_vacations(year: int = 2026):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         emp_rows = cur.execute(
-            "SELECT rowid, pos, name, full_name, tab_num FROM employees WHERE y=? ORDER BY rowid",
+            "SELECT rowid, pos, name, full_name, tab_num, vacation_days FROM employees WHERE y=? ORDER BY rowid",
             (year,)
         ).fetchall()
         employees = [dict(r) for r in emp_rows]
@@ -134,12 +134,14 @@ async def get_vacations(year: int = 2026):
         emp_name = emp.get("name") or emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
         vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
         result.append({
             "id": idx,
             "tab_num": tab_num,
             "name": emp_name,
             "full_name": emp.get("full_name") or emp_name,
             "position": emp.get("pos") or "",
+            "vacation_days": v_days,
             "vacations": vacations
         })
     return result

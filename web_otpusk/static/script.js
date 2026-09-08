@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tdAllowed.style.maxWidth = '100px';
             tdAllowed.innerHTML = `
                 <div class="cell-input-wrapper" style="justify-content: center; height: 100%; display: flex; align-items: center;">
-                    <input type="text" class="day-input allowed-days-input" value="${employee.allowedDays || ''}" placeholder="28" style="width: 80%; height: 40px; font-weight: bold; background: rgba(0,0,0,0.05); border-radius: 6px; color: var(--text-primary);">
+                    <input type="text" class="day-input allowed-days-input" value="${employee.vacation_days ?? employee.allowedDays ?? 28}" placeholder="28" style="width: 80%; height: 40px; font-weight: bold; background: rgba(0,0,0,0.05); border-radius: 6px; color: var(--text-primary);" readonly title="Количество дней положенного отпуска (задается в Справочнике)">
                 </div>
             `;
             tr.appendChild(tdAllowed);
