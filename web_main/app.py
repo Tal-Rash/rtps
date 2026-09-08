@@ -32,6 +32,7 @@ SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
 ALSN_SITE_URL = os.environ.get("ALSN_SITE_URL", "http://yrtps.ru:8008")
+OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru:8085")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
@@ -253,7 +254,7 @@ async def home_page(request: Request):
 
     def link_for(mod_name, url):
         if has_access_to(mod_name):
-            target_base = ALSN_SITE_URL if mod_name == "alsn" else MAIN_SITE_URL
+            target_base = ALSN_SITE_URL if mod_name == "alsn" else (OTPUSK_SITE_URL if mod_name == "otpusk" else MAIN_SITE_URL)
             return f'<a href="{target_base}{url}">Открыть модуль</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
@@ -583,7 +584,7 @@ async def redir_alsn():
 @app.get("/otpusk")
 @app.get("/otpusk/")
 async def redir_otpusk():
-    return RedirectResponse(f"{MAIN_SITE_URL}/otpusk", status_code=303)
+    return RedirectResponse(f"{OTPUSK_SITE_URL}", status_code=303)
 
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")

@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/otpusk", response_class=HTMLResponse)
+@app.get("/otpusk/", response_class=HTMLResponse)
 async def read_root():
     index_file = ROOT / "templates" / "index.html"
     with open(index_file, "r", encoding="utf-8") as f:
