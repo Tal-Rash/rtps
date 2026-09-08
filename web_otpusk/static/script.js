@@ -315,6 +315,215 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Versions Modal elements & handlers
+    const versionsBtn = document.getElementById('versionsBtn');
+    const versionsModal = document.getElementById('versionsModal');
+    const closeVersionsModal = document.getElementById('closeVersionsModal');
+    const cancelVersionsBtn = document.getElementById('cancelVersionsBtn');
+    const versionModalYear = document.getElementById('versionModalYear');
+    const newVersionNameInput = document.getElementById('newVersionNameInput');
+    const createVersionBtn = document.getElementById('createVersionBtn');
+    const versionsTableBody = document.getElementById('versionsTableBody');
+
+    function openVersionsModal() {
+        if (!versionsModal) return;
+        if (versionModalYear) versionModalYear.textContent = currentYear;
+        if (newVersionNameInput) newVersionNameInput.value = '';
+        loadVersionsList();
+        versionsModal.classList.add('active');
+    }
+
+    function closeVersionsModalFn() {
+        if (versionsModal) versionsModal.classList.remove('active');
+    }
+
+    function loadVersionsList() {
+        if (!versionsTableBody) return;
+        versionsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:12px;">Загрузка версий...</td></tr>';
+
+        fetch(`${APP_PREFIX}/api/versions?year=${currentYear}`)
+            .then(res => res.json())
+            .then(versions => {
+                versionsTableBody.innerHTML = '';
+                if (!Array.isArray(versions) || versions.length === 0) {
+                    versionsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:12px; color:var(--muted);">Сохранённых версий пока нет. Вы можете сохранить текущую версию кнопкой выше.</td></tr>';
+                    return;
+                }
+
+                versions.forEach((ver, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${idx + 1}</td>
+                        <td><strong>${escapeHtml(ver.version_name)}</strong></td>
+                        <td style="font-size: 12px; color: var(--muted);">${escapeHtml(ver.created_at)}</td>
+                        <td style="text-align: center;">
+                            <div style="display: flex; gap: 6px; justify-content: center;">
+                                <button type="button" class="btn-load-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; background: #eaf1ff;">📥 Загрузить</button>
+                                <button type="button" class="btn-delete-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">🗑️ Удалить</button>
+                            </div>
+                        </td>
+                    `;
+                    versionsTableBody.appendChild(tr);
+                });
+
+                // Attach click listeners to Load & Delete buttons
+                versionsTableBody.querySelectorAll('.btn-load-version').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const verId = e.target.dataset.id;
+                        const verName = e.target.dataset.name;
+                        if (!confirm(`Загрузить версию "${verName}" и сделать её активной?`)) return;
+
+                        btn.textContent = 'Загрузка...';
+                        fetch(`${APP_PREFIX}/api/versions/${verId}`)
+                            .then(res => res.json())
+                            .then(vData => {
+                                if (vData && Array.isArray(vData.data)) {
+                                    vData.data.forEach(savedEmp => {
+                                        const emp = allData.find(e => String(e.tab_num || e.name) === String(savedEmp.tab_num || savedEmp.name));
+                                        if (emp) {
+                                            emp.vacations = savedEmp.vacations || [];
+                                        }
+                                    });
+
+                                    fetch(`${APP_PREFIX}/api/vacations?year=${currentYear}`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(allData)
+                                    }).then(() => {
+                                        renderTable(allData);
+                                        closeVersionsModalFn();
+                                    });
+                                }
+                            })
+                            .catch(err => {
+                                btn.textContent = 'Ошибка';
+                                console.error(err);
+                            });
+                    });
+                });
+
+                versionsTableBody.querySelectorAll('.btn-delete-version').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const verId = e.target.dataset.id;
+                        const verName = e.target.dataset.name;
+                        if (!confirm(`Удалить версию "${verName}"?`)) return;
+
+                        btn.textContent = 'Удаление...';
+                        fetch(`${APP_PREFIX}/api/versions/${verId}`, { method: 'DELETE' })
+                            .then(res => res.json())
+                            .then(() => loadVersionsList())
+                            .catch(err => console.error(err));
+                    });
+                });
+            })
+            .catch(err => {
+                versionsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:12px; color:#ef4444;">Ошибка при загрузке версий</td></tr>';
+                console.error(err);
+            });
+    }
+
+    if (versionsBtn) versionsBtn.addEventListener('click', openVersionsModal);
+    if (closeVersionsModal) closeVersionsModal.addEventListener('click', closeVersionsModalFn);
+    if (cancelVersionsBtn) cancelVersionsBtn.addEventListener('click', closeVersionsModalFn);
+
+    if (createVersionBtn) {
+        createVersionBtn.addEventListener('click', () => {
+            const vName = newVersionNameInput ? newVersionNameInput.value.trim() : '';
+
+            const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
+            rows.forEach(tr => {
+                const empId = parseInt(tr.dataset.empId);
+                const employee = allData.find(e => e.id === empId);
+                if (employee) {
+                    const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
+                    const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
+                    const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
+
+                    let currentStart = null;
+                    let currentStartMonth = null;
+                    let parsedVacations = [];
+
+                    for (let m = 0; m < 13; m++) {
+                        const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
+                        const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                        if (!cInp || !poInp) continue;
+
+                        const c_val = parseInt(cInp.value);
+                        const po_val = parseInt(poInp.value);
+
+                        if (!isNaN(c_val) && !isNaN(po_val)) {
+                            if (currentStart !== null) {
+                                parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                            }
+                            parsedVacations.push({ startMonth: m, startDay: c_val, endMonth: m, endDay: po_val });
+                            currentStart = null;
+                            currentStartMonth = null;
+                        } else if (!isNaN(c_val)) {
+                            if (currentStart !== null) {
+                                parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                            }
+                            currentStart = c_val;
+                            currentStartMonth = m;
+                        } else if (!isNaN(po_val)) {
+                            if (currentStart !== null) {
+                                parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
+                                currentStart = null;
+                                currentStartMonth = null;
+                            } else {
+                                parsedVacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
+                            }
+                        }
+                    }
+
+                    if (currentStart !== null) {
+                        parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                    }
+
+                    parsedVacations = parsedVacations.filter(vac => {
+                        if (isCarriedOverJan && vac.startMonth === 0 && vac.endMonth === 0 && vac.startDay === carriedStartD && vac.endDay === carriedEndD) {
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    employee.vacations = parsedVacations.map(vac => {
+                        let sYear = vac.startMonth === 12 ? (currentYear + 1) : currentYear;
+                        let realSMonth = vac.startMonth === 12 ? 1 : (vac.startMonth + 1);
+                        let sDay = String(vac.startDay).padStart(2, '0');
+                        let sMonth = String(realSMonth).padStart(2, '0');
+                        let start = `${sYear}-${sMonth}-${sDay}`;
+
+                        let eYear = vac.endMonth === 12 ? (currentYear + 1) : currentYear;
+                        let realEMonth = vac.endMonth === 12 ? 1 : (vac.endMonth + 1);
+                        let eDay = String(vac.endDay).padStart(2, '0');
+                        let eMonth = String(realEMonth).padStart(2, '0');
+                        let end = `${eYear}-${eMonth}-${eDay}`;
+
+                        let totalDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+                        return { start, end, days: totalDays };
+                    });
+                }
+            });
+
+            createVersionBtn.textContent = 'Сохранение версии...';
+            fetch(`${APP_PREFIX}/api/versions?year=${currentYear}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ version_name: vName, data: allData })
+            })
+            .then(res => res.json())
+            .then(() => {
+                createVersionBtn.textContent = '➕ Сохранить текущую версию';
+                if (newVersionNameInput) newVersionNameInput.value = '';
+                loadVersionsList();
+            })
+            .catch(err => {
+                createVersionBtn.textContent = 'Ошибка';
+                console.error(err);
+            });
+        });
+    }
+
     function renderTable(data) {
         if (!tableBody) return;
         tableBody.innerHTML = '';

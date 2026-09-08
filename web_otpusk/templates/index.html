@@ -31,6 +31,7 @@
                     <span>👁️ Скрыть кружочки</span>
                 </label>
                 <button id="holidaysBtn" type="button">📅 Праздники</button>
+                <button id="versionsBtn" type="button">🗂️ Версии</button>
                 <button id="saveBtn" class="primary" type="button">💾 Сохранить изменения</button>
             </div>
         </div>
@@ -138,6 +139,40 @@
             </div>
         </div>
     </div>
-    <script src="/otpusk/static/script.js?v=rtps_v15"></script>
+
+    <!-- Модальное окно управления версиями графика отпусков -->
+    <div id="versionsModal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 780px;">
+            <div class="modal-header">
+                <h3 id="versionsModalTitle">🗂️ Сохранённые версии графика отпусков (<span id="versionModalYear">2026</span>)</h3>
+                <button id="closeVersionsModal" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex; gap:10px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <input type="text" id="newVersionNameInput" class="holiday-input" placeholder="Название новой версии (например: Вариант 2 или Проект №1)" style="flex:1; min-width: 260px;">
+                    <button id="createVersionBtn" class="primary" type="button">➕ Сохранить текущую версию</button>
+                </div>
+                <div class="holidays-grid-container" style="max-height: 360px; overflow-y: auto;">
+                    <table class="holidays-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 45px;">№</th>
+                                <th>Название версии</th>
+                                <th style="width: 170px;">Дата сохранения</th>
+                                <th style="width: 200px; text-align: center;">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="versionsTableBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelVersionsBtn" type="button">Закрыть</button>
+            </div>
+        </div>
+    </div>
+    <script src="/otpusk/static/script.js?v=rtps_v16"></script>
 </body>
 </html>

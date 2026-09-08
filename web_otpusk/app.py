@@ -1,8 +1,9 @@
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -60,6 +61,15 @@ def init_db():
                 end_date TEXT NOT NULL,
                 days INTEGER DEFAULT 0,
                 note TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vacation_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                y INTEGER NOT NULL,
+                version_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                data_json TEXT NOT NULL
             )
         """)
         conn.commit()
@@ -315,6 +325,63 @@ async def save_archive(request: Request):
             )
         conn.commit()
     return {"status": "success"}
+
+@app.get("/api/versions")
+@app.get(f"{APP_PREFIX}/api/versions")
+async def get_versions(year: int = 2026):
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT id, y, version_name, created_at FROM vacation_versions WHERE y=? ORDER BY id DESC",
+            (year,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+@app.get("/api/versions/{version_id}")
+@app.get(f"{APP_PREFIX}/api/versions/{version_id}")
+async def get_version_detail(version_id: int):
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT id, y, version_name, created_at, data_json FROM vacation_versions WHERE id=?",
+            (version_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Version not found")
+        res = dict(row)
+        res["data"] = json.loads(res["data_json"] or "[]")
+        return res
+
+@app.post("/api/versions")
+@app.post(f"{APP_PREFIX}/api/versions")
+async def create_version(request: Request, year: int = 2026):
+    payload = await request.json()
+    v_name = (payload.get("version_name") or "").strip()
+    v_data = payload.get("data") or []
+    if not v_name:
+        v_name = f"Версия от {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    created_at = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO vacation_versions (y, version_name, created_at, data_json) VALUES (?, ?, ?, ?)",
+            (year, v_name, created_at, json.dumps(v_data, ensure_ascii=False))
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+        return {"status": "ok", "id": new_id, "version_name": v_name, "created_at": created_at}
+
+@app.delete("/api/versions/{version_id}")
+@app.delete(f"{APP_PREFIX}/api/versions/{version_id}")
+async def delete_version(version_id: int):
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM vacation_versions WHERE id=?", (version_id,))
+        conn.commit()
+        return {"status": "ok"}
 
 if __name__ == "__main__":
     import os
