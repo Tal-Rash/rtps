@@ -1486,14 +1486,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const years = data.years || [];
         const employees = data.employees || [];
+        const overall = data.overall_stats || {};
+
+        // Render Overall Stats Bar
+        const overallContainer = document.getElementById('overallStatsContainer');
+        if (overallContainer) {
+            if (overall.total_vacations > 0) {
+                const sumPct = overall.summer_pct || 0;
+                const winPct = overall.winter_pct || 0;
+                const othPct = overall.other_pct || 0;
+
+                overallContainer.style.display = 'block';
+                overallContainer.innerHTML = `
+                    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                            <span style="font-weight: 700; color: #1e293b; font-size: 0.92rem;">📊 Соотношение отпусков по сезонам в целом по участку:</span>
+                            <div style="display: flex; gap: 16px; font-size: 0.88rem; font-weight: 600;">
+                                <span style="color: #c62828;">🔴 Лето: ${sumPct}% (${overall.summer_count || 0} отп. / ${overall.summer_days || 0} дн.)</span>
+                                <span style="color: #0277bd;">🔵 Зима: ${winPct}% (${overall.winter_count || 0} отп. / ${overall.winter_days || 0} дн.)</span>
+                                <span style="color: #475569;">⚪ Демисезон: ${othPct}% (${overall.other_count || 0} отп. / ${overall.other_days || 0} дн.)</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #e2e8f0;">
+                            <div style="width: ${sumPct}%; background: #d32f2f;" title="Лето: ${sumPct}%"></div>
+                            <div style="width: ${winPct}%; background: #0288d1;" title="Зима: ${winPct}%"></div>
+                            <div style="width: ${othPct}%; background: #94a3b8;" title="Демисезон: ${othPct}%"></div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                overallContainer.style.display = 'none';
+            }
+        }
 
         // Generate Header Row
         let headerHtml = `
             <th class="col-sticky-1" style="width: 240px; min-width: 240px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
             <th class="col-sticky-2" style="width: 75px; min-width: 75px; position: sticky; left: 240px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 4px; text-align: center;">Норма</th>
-            <th style="min-width: 110px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">🔴 Лето (всего)</th>
-            <th style="min-width: 110px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">🔵 Зима (всего)</th>
-            <th style="min-width: 110px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">⚪ Демисезон</th>
+            <th style="min-width: 125px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">🔴 Лето (всего)</th>
+            <th style="min-width: 125px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">🔵 Зима (всего)</th>
+            <th style="min-width: 125px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">⚪ Демисезон</th>
         `;
 
         years.forEach(y => {
@@ -1545,10 +1577,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const sCnt = stats.summer_count || 0;
             const sDays = stats.summer_days || 0;
+            const sPct = stats.summer_pct || 0;
+
             const wCnt = stats.winter_count || 0;
             const wDays = stats.winter_days || 0;
+            const wPct = stats.winter_pct || 0;
+
             const oCnt = stats.other_count || 0;
             const oDays = stats.other_days || 0;
+            const oPct = stats.other_pct || 0;
 
             bodyHtml += `<tr style="border-bottom: 1px solid #e2e8f0;">`;
             bodyHtml += `
@@ -1560,13 +1597,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${vDays}
                 </td>
                 <td style="text-align: center; background: #fff5f5; border-right: 1px solid #fee2e2; font-weight: 600;">
-                    ${sCnt > 0 ? `<span style="color: #b71c1c; background: #ffcdd2; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Летних дней: ${sDays}">${sCnt} раз (${sDays} д.)</span>` : '<span style="color:#cbd5e1;">0</span>'}
+                    ${sCnt > 0 ? `<span style="color: #b71c1c; background: #ffcdd2; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Летних дней: ${sDays} (${sPct}%)">${sCnt} раз (${sPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
                 </td>
                 <td style="text-align: center; background: #f0f9ff; border-right: 1px solid #e0f2fe; font-weight: 600;">
-                    ${wCnt > 0 ? `<span style="color: #0277bd; background: #bae6fd; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Зимних дней: ${wDays}">${wCnt} раз (${wDays} д.)</span>` : '<span style="color:#cbd5e1;">0</span>'}
+                    ${wCnt > 0 ? `<span style="color: #0277bd; background: #bae6fd; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Зимних дней: ${wDays} (${wPct}%)">${wCnt} раз (${wPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
                 </td>
                 <td style="text-align: center; background: #fafafa; border-right: 2px solid #cbd5e1;">
-                    ${oCnt > 0 ? `<span style="color: #334155; font-size: 0.84rem;">${oCnt} раз (${oDays} д.)</span>` : '<span style="color:#cbd5e1;">0</span>'}
+                    ${oCnt > 0 ? `<span style="color: #334155; font-size: 0.84rem;">${oCnt} раз (${oPct}%)</span>` : '<span style="color:#cbd5e1;">0%</span>'}
                 </td>
             `;
 
