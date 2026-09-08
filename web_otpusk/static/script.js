@@ -1410,13 +1410,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function openHistoryModal() {
         if (!historyModal) return;
-        historyModal.style.display = 'flex';
+        historyModal.classList.add('active');
         loadHistoryMatrix();
     }
 
     function closeHistoryModalFunc() {
         if (!historyModal) return;
-        historyModal.style.display = 'none';
+        historyModal.classList.remove('active');
     }
 
     if (historyMatrixBtn) {
