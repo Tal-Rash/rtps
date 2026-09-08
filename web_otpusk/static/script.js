@@ -230,6 +230,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const prevYearBtn = document.getElementById('prevYearBtn');
+    const nextYearBtn = document.getElementById('nextYearBtn');
+
+    function setYear(y) {
+        if (!yearSelect) return;
+        let option = Array.from(yearSelect.options).find(opt => parseInt(opt.value) === y);
+        if (!option) {
+            option = document.createElement('option');
+            option.value = y;
+            option.textContent = y;
+            yearSelect.appendChild(option);
+        }
+        yearSelect.value = y;
+        yearSelect.dispatchEvent(new Event('change'));
+    }
+
+    if (prevYearBtn) {
+        prevYearBtn.addEventListener('click', () => {
+            setYear(currentYear - 1);
+        });
+    }
+
+    if (nextYearBtn) {
+        nextYearBtn.addEventListener('click', () => {
+            setYear(currentYear + 1);
+        });
+    }
+
     // Modal Handlers
     function openHolidaysModal() {
         if (!holidaysTableBody) return;
