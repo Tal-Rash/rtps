@@ -164,6 +164,31 @@ def format_date_to_iso(date_str: str) -> str:
             return f"{y}-{m}-{d}"
     return date_str
 
+def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bool:
+    t1 = str(tab1 or "").strip()
+    t2 = str(tab2 or "").strip()
+    if t1 and t2 and t1 == t2:
+        return True
+
+    n1 = str(name1 or "").replace('.', ' ').strip().split()
+    n2 = str(name2 or "").replace('.', ' ').strip().split()
+
+    if not n1 or not n2:
+        return False
+
+    if n1[0].lower() != n2[0].lower():
+        return False
+
+    if len(n1) > 1 and len(n2) > 1:
+        if n1[1][0].lower() != n2[1][0].lower():
+            return False
+
+    if len(n1) > 2 and len(n2) > 2:
+        if n1[2][0].lower() != n2[2][0].lower():
+            return False
+
+    return True
+
 @app.get("/api/vacations")
 @app.get(f"{APP_PREFIX}/api/vacations")
 async def get_vacations(year: int = 2026):
@@ -230,8 +255,8 @@ async def get_vacations(year: int = 2026):
             (year, year - 1)
         ).fetchall()
 
-        archive_vacations = {}
-        prev_archive_vacations = {}
+        archive_items = []
+        prev_archive_items = []
         for a_row in archive_rows:
             a_dict = dict(a_row)
             ay = a_dict.get("y")
@@ -242,32 +267,45 @@ async def get_vacations(year: int = 2026):
             days = int(a_dict.get("days") or 0)
 
             if s_iso and e_iso:
-                item = {"start": s_iso, "end": e_iso, "days": days}
-                target_map = archive_vacations if ay == year else prev_archive_vacations
-                if t_num:
-                    target_map.setdefault(t_num, []).append(item)
-                if a_name:
-                    target_map.setdefault(a_name, []).append(item)
+                entry = {
+                    "name": a_name,
+                    "tab_num": t_num,
+                    "vacation": {"start": s_iso, "end": e_iso, "days": days}
+                }
+                if ay == year:
+                    archive_items.append(entry)
+                else:
+                    prev_archive_items.append(entry)
 
     result = []
     jan_prefix = f"{year}-01-"
-    known_keys = set()
+    processed_archive_names = set()
 
     for emp in employees:
         if is_employee_excluded_for_year(emp, year):
             continue
 
         emp_name = emp.get("name") or emp.get("full_name") or ""
+        emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
-        if emp_name: known_keys.add(emp_name)
-        if tab_num: known_keys.add(tab_num)
 
         vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
         if not vacations:
-            vacations = archive_vacations.get(tab_num) or archive_vacations.get(emp_name) or []
+            for ai in archive_items:
+                if (tab_num and ai["tab_num"] and tab_num == ai["tab_num"]) or \
+                   is_same_person(emp_name, ai["name"]) or \
+                   (emp_full and is_same_person(emp_full, ai["name"])):
+                    vacations.append(ai["vacation"])
+                    processed_archive_names.add(ai["name"])
 
         prev_vacs = prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
-        prev_arc_vacs = prev_archive_vacations.get(tab_num) or prev_archive_vacations.get(emp_name) or []
+        
+        prev_arc_vacs = []
+        for pai in prev_archive_items:
+            if (tab_num and pai["tab_num"] and tab_num == pai["tab_num"]) or \
+               is_same_person(emp_name, pai["name"]) or \
+               (emp_full and is_same_person(emp_full, pai["name"])):
+                prev_arc_vacs.append(pai["vacation"])
 
         all_prev_vacs = prev_vacs + prev_arc_vacs
 
@@ -287,36 +325,54 @@ async def get_vacations(year: int = 2026):
             "id": len(result) + 1,
             "tab_num": tab_num,
             "name": emp_name,
-            "full_name": emp.get("full_name") or emp_name,
+            "full_name": emp_full or emp_name,
             "position": emp.get("pos") or "",
             "vacation_days": v_days,
             "vacations": vacations,
             "carried_over_vacations": carried_over
         })
 
-    # Include any archive employees for this year not found in main employee list
-    for a_key, a_vacs in archive_vacations.items():
-        if a_key and a_key not in known_keys:
-            known_keys.add(a_key)
+    # Only add archive entries for year if they belong to a completely NEW person not matched above
+    for ai in archive_items:
+        a_name = ai["name"]
+        a_tab = ai["tab_num"]
+        
+        already_matched = False
+        for emp in employees:
+            e_name = emp.get("name") or emp.get("full_name") or ""
+            e_full = emp.get("full_name") or ""
+            e_tab = str(emp.get("tab_num") or "")
+            if (a_tab and e_tab and a_tab == e_tab) or \
+               is_same_person(e_name, a_name) or \
+               (e_full and is_same_person(e_full, a_name)):
+                already_matched = True
+                break
+
+        if not already_matched and a_name not in processed_archive_names:
+            processed_archive_names.add(a_name)
+            person_vacs = [x["vacation"] for x in archive_items if is_same_person(a_name, x["name"])]
+            
             carried_over = []
             seen_cov = set()
-            for pv in prev_archive_vacations.get(a_key, []):
-                s_date = str(pv.get("start") or "")
-                e_date = str(pv.get("end") or "")
-                if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
-                    key = f"{s_date}_{e_date}"
-                    if key not in seen_cov:
-                        seen_cov.add(key)
-                        carried_over.append(pv)
+            for pai in prev_archive_items:
+                if is_same_person(a_name, pai["name"]):
+                    pv = pai["vacation"]
+                    s_date = str(pv.get("start") or "")
+                    e_date = str(pv.get("end") or "")
+                    if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
+                        key = f"{s_date}_{e_date}"
+                        if key not in seen_cov:
+                            seen_cov.add(key)
+                            carried_over.append(pv)
 
             result.append({
                 "id": len(result) + 1,
-                "tab_num": a_key if a_key.isdigit() else "",
-                "name": a_key if not a_key.isdigit() else "",
-                "full_name": a_key if not a_key.isdigit() else "",
+                "tab_num": a_tab if a_tab.isdigit() else "",
+                "name": a_name,
+                "full_name": a_name,
                 "position": "",
                 "vacation_days": 28,
-                "vacations": a_vacs,
+                "vacations": person_vacs,
                 "carried_over_vacations": carried_over
             })
 
