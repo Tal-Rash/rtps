@@ -65,12 +65,12 @@ jobs:
           backup_path web_tabel/data
           backup_path web_edu/data
           backup_path web_alsn/data
+          backup_path web_otpusk/data
 
           git fetch origin main
           git reset --hard origin/main
 
           restore_path base/common_database.db
-          restore_path base/web_users.db
           restore_path base/web_users.db
 
           restore_path data
@@ -79,6 +79,7 @@ jobs:
           restore_path web_tabel/data
           restore_path web_edu/data
           restore_path web_alsn/data
+          restore_path web_otpusk/data
 
           python3 -m pip install openpyxl || pip3 install openpyxl --break-system-packages || true
 
