@@ -1439,29 +1439,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const historySortSelect = document.getElementById('historySortSelect');
+    const historyFilterSelect = document.getElementById('historyFilterSelect');
+
+    function updateHistoryMatrixView() {
+        if (!historyMatrixCache) return;
+        renderHistoryMatrix(
+            historyMatrixCache,
+            historySearchInput ? historySearchInput.value.trim() : '',
+            historySortSelect ? historySortSelect.value : 'default',
+            historyFilterSelect ? historyFilterSelect.value : 'all'
+        );
+    }
 
     if (historySearchInput) {
-        historySearchInput.addEventListener('input', () => {
-            if (historyMatrixCache) {
-                renderHistoryMatrix(
-                    historyMatrixCache,
-                    historySearchInput.value.trim(),
-                    historySortSelect ? historySortSelect.value : 'default'
-                );
-            }
-        });
+        historySearchInput.addEventListener('input', updateHistoryMatrixView);
     }
 
     if (historySortSelect) {
-        historySortSelect.addEventListener('change', () => {
-            if (historyMatrixCache) {
-                renderHistoryMatrix(
-                    historyMatrixCache,
-                    historySearchInput ? historySearchInput.value.trim() : '',
-                    historySortSelect.value
-                );
-            }
-        });
+        historySortSelect.addEventListener('change', updateHistoryMatrixView);
+    }
+
+    if (historyFilterSelect) {
+        historyFilterSelect.addEventListener('change', updateHistoryMatrixView);
     }
 
     function loadHistoryMatrix() {
@@ -1473,11 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 historyMatrixCache = data;
-                renderHistoryMatrix(
-                    data,
-                    historySearchInput ? historySearchInput.value.trim() : '',
-                    historySortSelect ? historySortSelect.value : 'default'
-                );
+                updateHistoryMatrixView();
             })
             .catch(err => {
                 console.error('Error loading history matrix:', err);
@@ -1485,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    function renderHistoryMatrix(data, filterText = '', sortBy = 'default') {
+    function renderHistoryMatrix(data, filterText = '', sortBy = 'default', filterSeason = 'all') {
         if (!historyHeaderRow || !historyTableBody) return;
 
         const years = data.years || [];
@@ -1505,19 +1500,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         historyHeaderRow.innerHTML = headerHtml;
 
-        // Filter employees if search query present
+        // Filter employees if search query or season filter present
         const query = filterText.toLowerCase();
         let filteredEmployees = employees.filter(emp => {
-            if (!query) return true;
-            const name = (emp.name || '').toLowerCase();
-            const full = (emp.full_name || '').toLowerCase();
-            const pos = (emp.position || '').toLowerCase();
-            const tab = (emp.tab_num || '').toLowerCase();
-            return name.includes(query) || full.includes(query) || pos.includes(query) || tab.includes(query);
+            if (query) {
+                const name = (emp.name || '').toLowerCase();
+                const full = (emp.full_name || '').toLowerCase();
+                const pos = (emp.position || '').toLowerCase();
+                const tab = (emp.tab_num || '').toLowerCase();
+                if (!name.includes(query) && !full.includes(query) && !pos.includes(query) && !tab.includes(query)) {
+                    return false;
+                }
+            }
+
+            const stats = emp.stats || {};
+            const sPct = stats.summer_pct || 0;
+            const wPct = stats.winter_pct || 0;
+
+            if (filterSeason === 'summer_dominant') {
+                return sPct > wPct;
+            } else if (filterSeason === 'winter_dominant') {
+                return wPct > sPct;
+            } else if (filterSeason === 'equal') {
+                return sPct === wPct && (sPct > 0 || wPct > 0);
+            }
+
+            return true;
         });
 
         // Apply Sorting
-        if (sortBy === 'summer_desc') {
+        if (sortBy === 'summer_pct_desc') {
+            filteredEmployees.sort((a, b) => {
+                const sA = (a.stats && a.stats.summer_pct) || 0;
+                const sB = (b.stats && b.stats.summer_pct) || 0;
+                if (sB !== sA) return sB - sA;
+                return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
+            });
+        } else if (sortBy === 'winter_pct_desc') {
+            filteredEmployees.sort((a, b) => {
+                const wA = (a.stats && a.stats.winter_pct) || 0;
+                const wB = (b.stats && b.stats.winter_pct) || 0;
+                if (wB !== wA) return wB - wA;
+                return ((b.stats && b.stats.winter_days) || 0) - ((a.stats && a.stats.winter_days) || 0);
+            });
+        } else if (sortBy === 'summer_desc') {
             filteredEmployees.sort((a, b) => {
                 const sA = (a.stats && a.stats.summer_count) || 0;
                 const sB = (b.stats && b.stats.summer_count) || 0;
