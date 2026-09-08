@@ -80,5 +80,8 @@ async def save_holidays(request: Request):
     return {"status": "success"}
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=8085, reload=True)
+    host = os.environ.get("WEB_HOST", "127.0.0.1")
+    port = int(os.environ.get("WEB_PORT", "8085"))
+    uvicorn.run("app:app", host=host, port=port, reload=False)

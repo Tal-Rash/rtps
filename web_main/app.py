@@ -254,7 +254,7 @@ async def home_page(request: Request):
 
     def link_for(mod_name, url):
         if has_access_to(mod_name):
-            target_base = ALSN_SITE_URL if mod_name == "alsn" else (OTPUSK_SITE_URL if mod_name == "otpusk" else MAIN_SITE_URL)
+            target_base = ALSN_SITE_URL if mod_name == "alsn" else MAIN_SITE_URL
             return f'<a href="{target_base}{url}">Открыть модуль</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
