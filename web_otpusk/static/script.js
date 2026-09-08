@@ -1381,7 +1381,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(data => {
                 importArchiveBtn.textContent = '📥 Импорт из Excel';
                 importArchiveFileInput.value = '';
-                alert(`Успешно импортировано записей: ${data.imported_count || 0}`);
+                let msg = `Успешно добавлено записей: ${data.imported_count || 0}`;
+                if (data.skipped_count && data.skipped_count > 0) {
+                    msg += `\n(Пропущено дубликатов: ${data.skipped_count})`;
+                }
+                alert(msg);
                 loadArchive();
                 // Перезагружаем годовой график после импорта в архив
                 if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {

@@ -930,11 +930,36 @@ async def import_archive(file: UploadFile = File(...), mode: str = "append"):
         raise HTTPException(status_code=400, detail="В файле не найдено строк с данными.")
 
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+
         if mode == "replace":
             cur.execute("DELETE FROM vacations_archive")
 
+        existing_rows = []
+        if mode == "append":
+            existing_rows = [dict(r) for r in cur.execute("SELECT y, tab_num, name, start_date, end_date FROM vacations_archive").fetchall()]
+
+        inserted_count = 0
+        skipped_count = 0
+
         for item in imported_items:
+            if mode == "append":
+                is_duplicate = False
+                for ex in existing_rows:
+                    if int(ex.get("y") or 0) == int(item.get("y") or 0):
+                        ex_s = format_date_to_iso(ex.get("start_date") or "")
+                        ex_e = format_date_to_iso(ex.get("end_date") or "")
+                        it_s = format_date_to_iso(item.get("start_date") or "")
+                        it_e = format_date_to_iso(item.get("end_date") or "")
+                        if ex_s == it_s and ex_e == it_e:
+                            if is_same_person(item.get("name") or "", ex.get("name") or "", item.get("tab_num") or "", ex.get("tab_num") or ""):
+                                is_duplicate = True
+                                break
+                if is_duplicate:
+                    skipped_count += 1
+                    continue
+
             cur.execute(
                 """
                 INSERT INTO vacations_archive (y, tab_num, name, start_date, end_date, days, note)
@@ -950,11 +975,16 @@ async def import_archive(file: UploadFile = File(...), mode: str = "append"):
                     item["note"]
                 )
             )
+            inserted_count += 1
+            if mode == "append":
+                # Добавляем в локальный список для предотвращения дубликатов внутри одного файла
+                existing_rows.append(item)
+
         # Очищаем сохраненные графики, чтобы годовая таблица перестраивалась из актуального архива
         cur.execute("DELETE FROM vacations_schedule")
         conn.commit()
 
-    return {"status": "success", "imported_count": len(imported_items)}
+    return {"status": "success", "imported_count": inserted_count, "skipped_count": skipped_count}
 
 @app.get("/api/versions")
 @app.get(f"{APP_PREFIX}/api/versions")
