@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>График отпусков 2026</title>
+    <link rel="stylesheet" href="/static/style.css?v=rtps">
+</head>
+<body>
+    <div class="wrap">
+        <div class="top">
+            <div class="titlebox">
+                <h1>График отпусков 2026</h1>
+            </div>
+            <div class="actions">
+                <a class="home-link" href="http://yrtps.ru/">На главную</a>
+                <label class="toggle-control">
+                    <input type="checkbox" id="toggleBadges">
+                    <span>👁️ Скрыть кружочки</span>
+                </label>
+                <button id="holidaysBtn" type="button">📅 Праздники</button>
+                <button id="saveBtn" class="primary" type="button">💾 Сохранить изменения</button>
+            </div>
+        </div>
+
+        <div class="panel active">
+            <div class="table-shell">
+                <table id="vacationTable" class="excel-table">
+                    <thead>
+                        <tr id="headerMonths">
+                            <th rowspan="2" class="col-sticky-1" style="width: 250px; min-width: 250px; max-width: 250px;">Сотрудник</th>
+                            <th rowspan="2" class="col-sticky-2" style="width: 100px; min-width: 100px; max-width: 100px;">Отпуск<br>(дней)</th>
+                            <!-- JS will generate 12 months here -->
+                        </tr>
+                        <tr id="headerSub">
+                            <!-- JS will generate с/по here -->
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- JS will populate rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно настройки праздничных дней -->
+    <div id="holidaysModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>📅 Праздничные дни по месяцах (2026)</h3>
+                <button id="closeHolidaysModal" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">Укажите точные даты нерабочих праздничных дней для каждого месяца (через запятую или диапазоном, например: <code>1, 9</code> или <code>1-8</code>).</p>
+                <div class="holidays-grid-container">
+                    <table class="holidays-table">
+                        <thead>
+                            <tr>
+                                <th>Месяц</th>
+                                <th>Всего дней</th>
+                                <th>Даты праздников</th>
+                                <th>Праздников</th>
+                                <th>Дней отпуска</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holidaysTableBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelHolidaysBtn" type="button">Отмена</button>
+                <button id="saveHolidaysBtn" class="primary" type="button">Сохранить праздники</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>

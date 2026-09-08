@@ -1,0 +1,74 @@
+[
+  {
+    "month": 0,
+    "name": "Январь",
+    "totalDays": 31,
+    "dates": "1, 2, 3, 4, 5, 6, 7, 8"
+  },
+  {
+    "month": 1,
+    "name": "Февраль",
+    "totalDays": 28,
+    "dates": "23"
+  },
+  {
+    "month": 2,
+    "name": "Март",
+    "totalDays": 31,
+    "dates": "8"
+  },
+  {
+    "month": 3,
+    "name": "Апрель",
+    "totalDays": 30,
+    "dates": ""
+  },
+  {
+    "month": 4,
+    "name": "Май",
+    "totalDays": 31,
+    "dates": "1, 9"
+  },
+  {
+    "month": 5,
+    "name": "Июнь",
+    "totalDays": 30,
+    "dates": "12"
+  },
+  {
+    "month": 6,
+    "name": "Июль",
+    "totalDays": 31,
+    "dates": ""
+  },
+  {
+    "month": 7,
+    "name": "Август",
+    "totalDays": 31,
+    "dates": ""
+  },
+  {
+    "month": 8,
+    "name": "Сентябрь",
+    "totalDays": 30,
+    "dates": ""
+  },
+  {
+    "month": 9,
+    "name": "Октябрь",
+    "totalDays": 31,
+    "dates": ""
+  },
+  {
+    "month": 10,
+    "name": "Ноябрь",
+    "totalDays": 30,
+    "dates": "4"
+  },
+  {
+    "month": 11,
+    "name": "Декабрь",
+    "totalDays": 31,
+    "dates": ""
+  }
+]

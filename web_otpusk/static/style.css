@@ -1,0 +1,505 @@
+:root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --line: #2f6fed;
+    --grid-line: #6f87a8;
+    --text: #102033;
+    --muted: #607086;
+    --blue: #276ef1;
+    --blue-dark: #1f57d6;
+    --accent-soft: #eaf1ff;
+    --red-line: #ef4444;
+    --red-text: #dc2626;
+    --shadow: 0 12px 32px rgba(16, 32, 51, 0.08);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: linear-gradient(180deg, #e8eefb, #f7f9fc 170px) fixed;
+    color: var(--text);
+    min-height: 100vh;
+}
+
+.wrap {
+    max-width: 1650px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Topbar Header */
+.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 18px;
+    box-shadow: var(--shadow);
+    flex-wrap: wrap;
+}
+
+.titlebox h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* RTPS Button & Link Styles */
+button, .home-link {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--blue-dark);
+    padding: 9px 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+button:hover, .home-link:hover {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.12);
+}
+
+button.primary, .btn-primary {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+button.primary:hover, .btn-primary:hover {
+    background: var(--blue-dark);
+    border-color: var(--blue-dark);
+    box-shadow: 0 4px 12px rgba(39, 110, 241, 0.3);
+}
+
+/* Toggle Switch Control */
+.toggle-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    user-select: none;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+}
+
+.toggle-control:hover {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.12);
+}
+
+.toggle-control input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--blue);
+}
+
+/* Panel & Table Shell */
+.panel {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: var(--shadow);
+}
+
+.table-wrapper, .table-shell {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow-x: auto;
+    box-shadow: none;
+}
+
+.excel-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 1200px;
+    table-layout: fixed;
+}
+
+.excel-table th, .excel-table td {
+    box-sizing: border-box;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+    height: 34px;
+}
+
+.excel-table th {
+    background: #f7fafc;
+    padding: 0.5rem 0.4rem;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.col-sticky-1 {
+    position: sticky;
+    left: 0;
+    background: #ffffff;
+    z-index: 10;
+    width: 250px !important;
+    min-width: 250px !important;
+    max-width: 250px !important;
+    text-align: left !important;
+    padding: 0.2rem 0.75rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle !important;
+}
+
+.col-sticky-2 {
+    background: #ffffff;
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 100px !important;
+    text-align: center !important;
+    padding: 0.2rem 0.4rem !important;
+    vertical-align: middle !important;
+}
+
+.excel-table td.col-sticky-1, .excel-table td.col-sticky-2 {
+    font-weight: 500;
+    background: #ffffff;
+}
+
+.employee-name {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.1;
+}
+
+.employee-pos {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 1px;
+    line-height: 1.1;
+}
+
+.cell-input-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    position: relative;
+    width: 100%;
+}
+
+.month-cell {
+    min-width: 140px;
+}
+
+.inputs-row {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+}
+
+.day-input {
+    width: 50%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    outline: none;
+    font-family: "Segoe UI", Arial, sans-serif;
+    position: relative;
+    z-index: 2;
+}
+
+.day-input:focus {
+    background: var(--accent-soft);
+}
+
+.day-input:first-child {
+    border-right: 1px solid var(--line);
+}
+
+.allowed-days-input {
+    border: 1px solid var(--line) !important;
+    border-radius: 6px !important;
+    text-align: center !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    background: #f7fafc !important;
+    height: 26px !important;
+}
+
+.allowed-days-input:focus {
+    border-color: var(--blue) !important;
+    box-shadow: 0 0 0 2px var(--accent-soft) !important;
+}
+
+.day-result {
+    display: none !important;
+}
+
+/* Vacation Line */
+.vacation-line {
+    position: absolute;
+    top: 31px;
+    height: 3px;
+    background-color: var(--red-line);
+    z-index: 1;
+    pointer-events: none;
+}
+
+.total-days-badge {
+    position: absolute;
+    top: 17px;
+    transform: translate(-50%, -50%);
+    background: #ffffff;
+    color: var(--red-text);
+    padding: 1px 7px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    z-index: 5;
+    border: 1px solid var(--red-line);
+    white-space: nowrap;
+    transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.total-days-badge.badge-overflow {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+.total-days-badge.badge-success {
+    background: #10b981;
+    color: #ffffff;
+    border-color: #10b981;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+/* Hide Badges Mode */
+body.hide-badges .total-days-badge {
+    display: none !important;
+}
+
+/* Print Styles */
+@media print {
+    .top, .actions {
+        display: none !important;
+    }
+    .wrap {
+        padding: 0;
+        max-width: 100%;
+    }
+    .panel, .table-shell {
+        box-shadow: none;
+        border: none;
+    }
+    body.hide-badges .total-days-badge {
+        display: none !important;
+    }
+}
+
+/* Modal Window Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(16, 32, 51, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-card {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 680px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(16, 32, 51, 0.18);
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: #ffffff;
+}
+
+.modal-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    font-size: 22px;
+    color: var(--muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+}
+
+.modal-close-btn:hover {
+    color: var(--text);
+    background: transparent;
+    box-shadow: none;
+}
+
+.modal-body {
+    padding: 18px 20px;
+    overflow-y: auto;
+}
+
+.modal-desc {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    line-height: 1.4;
+}
+
+.modal-desc code {
+    background: var(--accent-soft);
+    color: var(--blue-dark);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.holidays-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 13px;
+}
+
+.holidays-table th {
+    background: #f7fafc;
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+}
+
+.holidays-table th:last-child {
+    border-right: none;
+}
+
+.holidays-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    vertical-align: middle;
+}
+
+.holidays-table td:last-child {
+    border-right: none;
+}
+
+.holidays-table tr:last-child td {
+    border-bottom: none;
+}
+
+.holiday-input {
+    width: 160px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    text-align: left;
+    font-weight: 500;
+    font-size: 13px;
+    outline: none;
+    background: #ffffff;
+    color: var(--text);
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.holiday-input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--line);
+    background: #f7fafc;
+}

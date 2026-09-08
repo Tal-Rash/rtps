@@ -103,6 +103,15 @@
         {% endif %}
         {{ SPRAVOCHNIK_LINK | safe }}
       </div>
+      <div class="card">
+        {% if not HIDE_OTPUSK %}
+        <div>
+          <h2>График отпусков</h2>
+          <p>Планирование и учет отпусков сотрудников.</p>
+        </div>
+        {% endif %}
+        {{ OTPUSK_LINK | safe }}
+      </div>
     </div>
     <div class="status">Сервер запущен: {{STARTED_AT}}</div>
   </div>

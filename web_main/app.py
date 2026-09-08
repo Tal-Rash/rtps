@@ -43,7 +43,7 @@ templates = Jinja2Templates(directory=str(ROOT / "templates"))
 def normalize_admin_modules(modules_str: str) -> str:
     modules = [m.strip() for m in str(modules_str or "").split(",") if m.strip()]
     by_name = {m.split(":", 1)[0]: i for i, m in enumerate(modules)}
-    for module_name in ("grafik_ppr", "zamer_kp", "spravochnik", "tabel", "edu", "alsn"):
+    for module_name in ("grafik_ppr", "zamer_kp", "spravochnik", "tabel", "edu", "alsn", "otpusk"):
         if module_name in by_name:
             modules[by_name[module_name]] = f"{module_name}:edit"
         else:
@@ -270,12 +270,14 @@ async def home_page(request: Request):
         "HIDE_TABEL": ("hide_tabel:yes" in session["modules"]) or not has_access_to("tabel"),
         "HIDE_EDU": ("hide_edu:yes" in session["modules"]) or not has_access_to("edu"),
         "HIDE_ALSN": ("hide_alsn:yes" in session["modules"]) or not has_access_to("alsn"),
+        "HIDE_OTPUSK": ("hide_otpusk:yes" in session["modules"]) or not has_access_to("otpusk"),
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "ALSN_LINK": link_for("alsn", "/alsn"),
         "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik"),
         "TABEL_LINK": link_for("tabel", "/tabel"),
-        "EDU_LINK": link_for("edu", "/edu")
+        "EDU_LINK": link_for("edu", "/edu"),
+        "OTPUSK_LINK": link_for("otpusk", "/otpusk")
     }
     try:
         return templates.TemplateResponse(request=request, name="home.html", context=context)
@@ -402,7 +404,7 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), module_otpusk: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -416,6 +418,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
+    if module_otpusk != "none": modules.append(f"otpusk:{module_otpusk}")
     
     if form.get("hide_grafik_ppr") == "yes": modules.append("hide_grafik_ppr:yes")
     if form.get("hide_zamer_kp") == "yes": modules.append("hide_zamer_kp:yes")
@@ -423,6 +426,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if form.get("hide_tabel") == "yes": modules.append("hide_tabel:yes")
     if form.get("hide_edu") == "yes": modules.append("hide_edu:yes")
     if form.get("hide_alsn") == "yes": modules.append("hide_alsn:yes")
+    if form.get("hide_otpusk") == "yes": modules.append("hide_otpusk:yes")
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -431,6 +435,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
             "tabel:edit",
             "edu:edit",
             "alsn:edit",
+            "otpusk:edit",
             "admin",
         ]
     
@@ -442,7 +447,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), module_otpusk: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -473,6 +478,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     module_tabel = posted_or_existing("module_tabel", "tabel", module_tabel)
     module_edu = posted_or_existing("module_edu", "edu", module_edu)
     module_alsn = posted_or_existing("module_alsn", "alsn", module_alsn)
+    module_otpusk = posted_or_existing("module_otpusk", "otpusk", module_otpusk)
     
     def posted_or_existing_hide(field_name: str) -> bool:
         if "is_full_update" in posted_fields:
@@ -487,6 +493,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     hide_tabel = posted_or_existing_hide("hide_tabel")
     hide_edu = posted_or_existing_hide("hide_edu")
     hide_alsn = posted_or_existing_hide("hide_alsn")
+    hide_otpusk = posted_or_existing_hide("hide_otpusk")
 
     modules = []
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
@@ -495,6 +502,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
+    if module_otpusk != "none": modules.append(f"otpusk:{module_otpusk}")
     
     if hide_grafik_ppr: modules.append("hide_grafik_ppr:yes")
     if hide_zamer_kp: modules.append("hide_zamer_kp:yes")
@@ -502,6 +510,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if hide_tabel: modules.append("hide_tabel:yes")
     if hide_edu: modules.append("hide_edu:yes")
     if hide_alsn: modules.append("hide_alsn:yes")
+    if hide_otpusk: modules.append("hide_otpusk:yes")
     
     if role == "admin":
         modules = [
@@ -511,6 +520,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
             "tabel:edit",
             "edu:edit",
             "alsn:edit",
+            "otpusk:edit",
             "admin",
         ]
     
@@ -569,6 +579,11 @@ async def redir_zamer():
 @app.get("/alsn/")
 async def redir_alsn():
     return RedirectResponse(f"{ALSN_SITE_URL}/alsn", status_code=303)
+
+@app.get("/otpusk")
+@app.get("/otpusk/")
+async def redir_otpusk():
+    return RedirectResponse(f"{MAIN_SITE_URL}/otpusk", status_code=303)
 
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")
