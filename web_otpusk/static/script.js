@@ -553,4 +553,213 @@ document.addEventListener('DOMContentLoaded', () => {
             nextInput.select();
         }
     });
+
+    // Tabs Switcher & Archive Management
+    const tabCurrentBtn = document.getElementById('tabCurrentBtn');
+    const tabArchiveBtn = document.getElementById('tabArchiveBtn');
+    const panelCurrent = document.getElementById('panelCurrent');
+    const panelArchive = document.getElementById('panelArchive');
+    const badgeToggleLabel = document.getElementById('badgeToggleLabel');
+    const holidaysBtn = document.getElementById('holidaysBtn');
+    const saveBtn = document.getElementById('saveBtn');
+
+    let archiveData = [];
+    let selectedArchiveIndex = -1;
+
+    if (tabCurrentBtn && tabArchiveBtn) {
+        tabCurrentBtn.addEventListener('click', () => {
+            tabCurrentBtn.classList.add('active');
+            tabArchiveBtn.classList.remove('active');
+            panelCurrent.style.display = 'block';
+            panelArchive.style.display = 'none';
+            if (badgeToggleLabel) badgeToggleLabel.style.display = '';
+            if (holidaysBtn) holidaysBtn.style.display = '';
+            if (saveBtn) saveBtn.style.display = '';
+        });
+
+        tabArchiveBtn.addEventListener('click', () => {
+            tabArchiveBtn.classList.add('active');
+            tabCurrentBtn.classList.remove('active');
+            panelCurrent.style.display = 'none';
+            panelArchive.style.display = 'block';
+            if (badgeToggleLabel) badgeToggleLabel.style.display = 'none';
+            if (holidaysBtn) holidaysBtn.style.display = 'none';
+            if (saveBtn) saveBtn.style.display = 'none';
+
+            loadArchive();
+        });
+    }
+
+    const archiveTableBody = document.getElementById('archiveTableBody');
+    const addArchiveRowBtn = document.getElementById('addArchiveRowBtn');
+    const deleteArchiveRowBtn = document.getElementById('deleteArchiveRowBtn');
+    const saveArchiveBtn = document.getElementById('saveArchiveBtn');
+
+    function escapeHtml(val) {
+        return String(val ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function loadArchive() {
+        fetch(`${APP_PREFIX}/api/vacations/archive`)
+            .then(res => res.json())
+            .then(data => {
+                archiveData = data;
+                if (archiveData.length === 0) {
+                    archiveData = [{
+                        y: 2025,
+                        tab_num: '',
+                        name: '',
+                        start_date: '',
+                        end_date: '',
+                        days: 14,
+                        note: ''
+                    }];
+                }
+                renderArchiveTable();
+            })
+            .catch(err => console.error('Error loading archive:', err));
+    }
+
+    function renderArchiveTable() {
+        if (!archiveTableBody) return;
+        archiveTableBody.innerHTML = '';
+
+        const empOptions = allData.map(e => `<option value="${escapeHtml(e.name)}" data-tab="${escapeHtml(e.tab_num || '')}">${escapeHtml(e.name)}</option>`).join('');
+
+        archiveData.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            if (selectedArchiveIndex === index) {
+                tr.classList.add('selected-row');
+            }
+
+            tr.addEventListener('click', () => {
+                selectedArchiveIndex = index;
+                renderArchiveTable();
+            });
+
+            tr.innerHTML = `
+                <td style="text-align:center; font-weight:bold; color:var(--muted);">${index + 1}</td>
+                <td><input type="number" class="archive-input archive-year" value="${row.y || 2025}" style="text-align:center;"></td>
+                <td>
+                    <input type="text" class="archive-input archive-name" value="${escapeHtml(row.name || '')}" list="archiveEmpList_${index}" placeholder="ФИО сотрудника">
+                    <datalist id="archiveEmpList_${index}">
+                        ${empOptions}
+                    </datalist>
+                </td>
+                <td><input type="text" class="archive-input archive-tab" value="${escapeHtml(row.tab_num || '')}" placeholder="Таб. №"></td>
+                <td><input type="date" class="archive-input archive-start" value="${row.start_date || ''}"></td>
+                <td><input type="date" class="archive-input archive-end" value="${row.end_date || ''}"></td>
+                <td><input type="number" class="archive-input archive-days" value="${row.days || 0}" style="text-align:center;"></td>
+                <td><input type="text" class="archive-input archive-note" value="${escapeHtml(row.note || '')}" placeholder="Примечание"></td>
+            `;
+
+            const startInp = tr.querySelector('.archive-start');
+            const endInp = tr.querySelector('.archive-end');
+            const daysInp = tr.querySelector('.archive-days');
+            const nameInp = tr.querySelector('.archive-name');
+            const tabInp = tr.querySelector('.archive-tab');
+
+            const calcDays = () => {
+                if (startInp.value && endInp.value) {
+                    const s = new Date(startInp.value);
+                    const e = new Date(endInp.value);
+                    if (s <= e) {
+                        const diffTime = Math.abs(e - s);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        daysInp.value = diffDays;
+                        row.days = diffDays;
+                    }
+                }
+            };
+
+            startInp.addEventListener('change', calcDays);
+            endInp.addEventListener('change', calcDays);
+
+            nameInp.addEventListener('change', (e) => {
+                const val = e.target.value;
+                const match = allData.find(x => x.name === val);
+                if (match && match.tab_num) {
+                    tabInp.value = match.tab_num;
+                    row.tab_num = match.tab_num;
+                }
+            });
+
+            archiveTableBody.appendChild(tr);
+        });
+    }
+
+    function syncArchiveDataFromDOM() {
+        if (!archiveTableBody) return;
+        const rows = archiveTableBody.querySelectorAll('tr');
+        archiveData = Array.from(rows).map(tr => {
+            return {
+                y: parseInt(tr.querySelector('.archive-year').value) || 2025,
+                name: tr.querySelector('.archive-name').value.trim(),
+                tab_num: tr.querySelector('.archive-tab').value.trim(),
+                start_date: tr.querySelector('.archive-start').value,
+                end_date: tr.querySelector('.archive-end').value,
+                days: parseInt(tr.querySelector('.archive-days').value) || 0,
+                note: tr.querySelector('.archive-note').value.trim()
+            };
+        });
+    }
+
+    if (addArchiveRowBtn) {
+        addArchiveRowBtn.addEventListener('click', () => {
+            syncArchiveDataFromDOM();
+            archiveData.push({
+                y: 2025,
+                tab_num: '',
+                name: '',
+                start_date: '',
+                end_date: '',
+                days: 14,
+                note: ''
+            });
+            selectedArchiveIndex = archiveData.length - 1;
+            renderArchiveTable();
+        });
+    }
+
+    if (deleteArchiveRowBtn) {
+        deleteArchiveRowBtn.addEventListener('click', () => {
+            syncArchiveDataFromDOM();
+            if (selectedArchiveIndex >= 0 && selectedArchiveIndex < archiveData.length) {
+                archiveData.splice(selectedArchiveIndex, 1);
+                selectedArchiveIndex = -1;
+                renderArchiveTable();
+            } else if (archiveData.length > 0) {
+                archiveData.pop();
+                renderArchiveTable();
+            }
+        });
+    }
+
+    if (saveArchiveBtn) {
+        saveArchiveBtn.addEventListener('click', () => {
+            syncArchiveDataFromDOM();
+            saveArchiveBtn.textContent = 'Сохранение...';
+
+            fetch(`${APP_PREFIX}/api/vacations/archive`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(archiveData)
+            })
+            .then(res => res.json())
+            .then(() => {
+                saveArchiveBtn.textContent = '💾 Архив сохранен!';
+                setTimeout(() => {
+                    saveArchiveBtn.textContent = '💾 Сохранить архив';
+                }, 2000);
+            })
+            .catch(err => {
+                saveArchiveBtn.textContent = '❌ Ошибка';
+                console.error(err);
+            });
+        });
+    }
 });

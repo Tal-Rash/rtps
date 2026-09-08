@@ -50,6 +50,18 @@ def init_db():
                 holidays_json TEXT NOT NULL
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vacations_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                y INTEGER NOT NULL,
+                tab_num TEXT DEFAULT '',
+                name TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                days INTEGER DEFAULT 0,
+                note TEXT DEFAULT ''
+            )
+        """)
         conn.commit()
 
         # Migrate existing JSON files into SQLite if DB table is empty
@@ -190,6 +202,43 @@ async def save_holidays(request: Request):
             "INSERT OR REPLACE INTO vacation_holidays (y, holidays_json) VALUES (?, ?)",
             (year, json.dumps(data, ensure_ascii=False))
         )
+        conn.commit()
+    return {"status": "success"}
+
+@app.get("/api/vacations/archive")
+@app.get(f"{APP_PREFIX}/api/vacations/archive")
+async def get_archive():
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT id, y, tab_num, name, start_date, end_date, days, note FROM vacations_archive ORDER BY y DESC, name ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/vacations/archive")
+@app.post(f"{APP_PREFIX}/api/vacations/archive")
+async def save_archive(request: Request):
+    items = await request.json()
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM vacations_archive")
+        for item in items:
+            cur.execute(
+                """
+                INSERT INTO vacations_archive (y, tab_num, name, start_date, end_date, days, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(item.get("y") or 2025),
+                    str(item.get("tab_num") or ""),
+                    str(item.get("name") or ""),
+                    str(item.get("start_date") or ""),
+                    str(item.get("end_date") or ""),
+                    int(item.get("days") or 0),
+                    str(item.get("note") or "")
+                )
+            )
         conn.commit()
     return {"status": "success"}
 

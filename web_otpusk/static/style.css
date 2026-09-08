@@ -503,3 +503,105 @@ body.hide-badges .total-days-badge {
     border-top: 1px solid var(--line);
     background: #f7fafc;
 }
+
+/* Tabs Navigation */
+.tabs-nav {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    margin-bottom: -10px;
+}
+
+.tab-btn {
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    background: #e6efff;
+    color: var(--blue-dark);
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+    background: var(--accent-soft);
+}
+
+.tab-btn.active {
+    background: #ffffff;
+    color: var(--blue);
+    border: 2px solid var(--blue);
+    border-bottom: 2px solid #ffffff;
+    font-weight: 700;
+    box-shadow: 0 -4px 12px rgba(39, 110, 241, 0.08);
+}
+
+/* Archive Panel & Table */
+.archive-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 18px;
+    margin-bottom: 12px;
+}
+
+.archive-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.archive-table th {
+    background: #f0f5ff;
+    color: var(--text);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 10px;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    text-align: center;
+}
+
+.archive-table td {
+    padding: 6px;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    vertical-align: middle;
+}
+
+.archive-table th:last-child, .archive-table td:last-child {
+    border-right: none;
+}
+
+.archive-table tr:hover td {
+    background: #f8fafc;
+}
+
+.archive-table tr.selected-row td {
+    background: #eaf1ff !important;
+}
+
+.archive-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    background: #ffffff;
+}
+
+.archive-input:focus {
+    border-color: var(--blue);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}

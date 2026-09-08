@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>График отпусков 2026</title>
+    <title>График отпусков</title>
     <link rel="stylesheet" href="/otpusk/static/style.css?v=rtps">
 </head>
 <body>
     <div class="wrap">
         <div class="top">
             <div class="titlebox">
-                <h1>График отпусков 2026</h1>
+                <h1>График отпусков</h1>
             </div>
             <div class="actions">
                 <a class="home-link" href="/">На главную</a>
-                <label class="toggle-control">
+                <label class="toggle-control" id="badgeToggleLabel">
                     <input type="checkbox" id="toggleBadges">
                     <span>👁️ Скрыть кружочки</span>
                 </label>
@@ -23,7 +23,13 @@
             </div>
         </div>
 
-        <div class="panel active">
+        <div class="tabs-nav">
+            <button id="tabCurrentBtn" class="tab-btn active" type="button">📅 График отпусков 2026</button>
+            <button id="tabArchiveBtn" class="tab-btn" type="button">📦 Архив отпусков</button>
+        </div>
+
+        <!-- Panel 1: Current Vacation Grid -->
+        <div id="panelCurrent" class="panel active">
             <div class="table-shell">
                 <table id="vacationTable" class="excel-table">
                     <thead>
@@ -38,6 +44,36 @@
                     </thead>
                     <tbody id="tableBody">
                         <!-- JS will populate rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Panel 2: Archive -->
+        <div id="panelArchive" class="panel" style="display: none;">
+            <div class="archive-toolbar">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button id="addArchiveRowBtn" type="button">➕ Добавить запись в архив</button>
+                    <button id="deleteArchiveRowBtn" type="button" style="color:#b00020; border-color:#fca5a5;">🗑️ Удалить выбранную</button>
+                </div>
+                <button id="saveArchiveBtn" class="primary" type="button">💾 Сохранить архив</button>
+            </div>
+            <div class="table-shell" style="margin-top: 10px;">
+                <table class="archive-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 45px;">№</th>
+                            <th style="width: 110px;">Год</th>
+                            <th style="width: 260px;">Сотрудник</th>
+                            <th style="width: 130px;">Таб. №</th>
+                            <th style="width: 150px;">Дата начала</th>
+                            <th style="width: 150px;">Дата окончания</th>
+                            <th style="width: 120px;">Дней отпуска</th>
+                            <th>Вид отпуска / Примечание</th>
+                        </tr>
+                    </thead>
+                    <tbody id="archiveTableBody">
+                        <!-- JS will populate archive rows -->
                     </tbody>
                 </table>
             </div>
