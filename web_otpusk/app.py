@@ -113,6 +113,26 @@ async def read_root():
     with open(index_file, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
+def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
+    is_exc = int(emp.get("is_excluded") or 0)
+    exc_date_str = str(emp.get("exclude_date") or "").strip()
+    exc_year = None
+    if exc_date_str:
+        parts = exc_date_str.replace("/", ".").replace("-", ".").split(".")
+        for part in parts:
+            part = part.strip()
+            if len(part) == 4 and part.isdigit():
+                exc_year = int(part)
+                break
+
+    if exc_year is not None:
+        if exc_year < target_year:
+            return True
+    elif is_exc == 1:
+        return True
+
+    return False
+
 @app.get("/api/vacations")
 @app.get(f"{APP_PREFIX}/api/vacations")
 async def get_vacations(year: int = 2026):
@@ -121,14 +141,27 @@ async def get_vacations(year: int = 2026):
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        emp_rows = cur.execute(
-            "SELECT rowid, pos, name, full_name, tab_num, vacation_days FROM employees WHERE y=? ORDER BY rowid",
-            (year,)
-        ).fetchall()
-        if not emp_rows:
+        try:
             emp_rows = cur.execute(
-                "SELECT rowid, pos, name, full_name, tab_num, vacation_days FROM employees ORDER BY rowid"
+                "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
             ).fetchall()
+        except Exception:
+            emp_rows = cur.execute(
+                "SELECT rowid, * FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
+            ).fetchall()
+
+        if not emp_rows:
+            try:
+                emp_rows = cur.execute(
+                    "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees ORDER BY rowid"
+                ).fetchall()
+            except Exception:
+                emp_rows = cur.execute(
+                    "SELECT rowid, * FROM employees ORDER BY rowid"
+                ).fetchall()
+
         employees = [dict(r) for r in emp_rows]
 
         vac_rows = cur.execute(
@@ -146,13 +179,16 @@ async def get_vacations(year: int = 2026):
                 saved_vacations[str(v_row["name"])] = v_list
 
     result = []
-    for idx, emp in enumerate(employees, 1):
+    for emp in employees:
+        if is_employee_excluded_for_year(emp, year):
+            continue
+
         emp_name = emp.get("name") or emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
         vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
         result.append({
-            "id": idx,
+            "id": len(result) + 1,
             "tab_num": tab_num,
             "name": emp_name,
             "full_name": emp.get("full_name") or emp_name,
