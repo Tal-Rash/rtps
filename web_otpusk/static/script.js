@@ -1,15 +1,19 @@
 document.addEventListener('DOMContentLoaded', () => {
     const APP_PREFIX = window.location.pathname.startsWith('/otpusk') ? '/otpusk' : '';
-    const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
     
     const yearSelect = document.getElementById('yearSelect');
     let currentYear = yearSelect ? (parseInt(yearSelect.value) || 2026) : 2026;
+
+    function getMonthsList(year) {
+        return ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь', `Январь ${year + 1}`];
+    }
 
     function getDaysInFeb(y) {
         return (y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)) ? 29 : 28;
     }
 
-    let calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let months = getMonthsList(currentYear);
+    let calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31];
     
     let holidaysData = [];
     let daysInMonths = [...calendarDaysInMonths];
@@ -80,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let m = startM; m <= endM; m++) {
             let s = (m === startM) ? startD : 1;
             let e = (m === endM) ? endD : calendarDaysInMonths[m];
-            let datesStr = (holidaysData[m] && holidaysData[m].dates) ? holidaysData[m].dates : '';
+            let datesStr = (holidaysData[m] && holidaysData[m].dates) ? holidaysData[m].dates : (m === 12 ? '1, 2, 3, 4, 5, 6, 7, 8' : '');
             let hSet = parseHolidayDates(datesStr, calendarDaysInMonths[m]);
 
             for (let d = s; d <= e; d++) {
@@ -99,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         months.forEach((m, i) => {
             const th = document.createElement('th');
-            th.innerHTML = `${m}<br><span style="font-weight:400; font-size:0.75rem;">${daysInMonths[i]}</span>`;
+            th.innerHTML = `${m}<br><span style="font-weight:400; font-size:0.75rem;">${daysInMonths[i]} дн.</span>`;
             headerMonths.appendChild(th);
 
             const thSub = document.createElement('th');
@@ -111,13 +115,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateDaysInMonths() {
         daysInMonths = months.map((m, i) => {
             const totalD = calendarDaysInMonths[i];
-            const datesStr = (holidaysData[i] && holidaysData[i].dates) ? holidaysData[i].dates : '';
+            const datesStr = (holidaysData[i] && holidaysData[i].dates) ? holidaysData[i].dates : (i === 12 ? '1, 2, 3, 4, 5, 6, 7, 8' : '');
             const hSet = parseHolidayDates(datesStr, totalD);
             return totalD - hSet.size;
         });
     }
 
-    // Render Annual Calendar Grid
+    // Render Annual Calendar Grid (First 12 months of selected year)
     function renderAnnualCalendar(year) {
         const grid = document.getElementById('yearCalendarGrid');
         const yearTitle = document.getElementById('calendarYearTitle');
@@ -126,7 +130,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         grid.innerHTML = '';
 
-        months.forEach((monthName, mIndex) => {
+        const baseMonthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+        baseMonthNames.forEach((monthName, mIndex) => {
             const card = document.createElement('div');
             card.className = 'month-card';
 
@@ -208,7 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (yearSelect) {
         yearSelect.addEventListener('change', (e) => {
             currentYear = parseInt(e.target.value) || 2026;
-            calendarDaysInMonths[1] = getDaysInFeb(currentYear);
+            months = getMonthsList(currentYear);
+            calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31];
             
             const tabCurrentBtn = document.getElementById('tabCurrentBtn');
             if (tabCurrentBtn) {
@@ -216,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const holidaysModalTitle = document.getElementById('holidaysModalTitle');
             if (holidaysModalTitle) {
-                holidaysModalTitle.textContent = `📅 Праздничные дни по месяцам (${currentYear})`;
+                holidaysModalTitle.textContent = `📅 Праздничные дни по месяцах (${currentYear})`;
             }
 
             loadYearData(currentYear);
@@ -229,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
         holidaysTableBody.innerHTML = '';
         holidaysData.forEach((item, index) => {
             const tr = document.createElement('tr');
-            const totalD = calendarDaysInMonths[index];
+            const totalD = calendarDaysInMonths[index] || 31;
             const datesStr = item.dates || '';
             const hSet = parseHolidayDates(datesStr, totalD);
             const hCount = hSet.size;
@@ -251,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
             input.addEventListener('input', (e) => {
                 const idx = parseInt(e.target.dataset.index);
                 const dStr = e.target.value;
-                const totalD = calendarDaysInMonths[idx];
+                const totalD = calendarDaysInMonths[idx] || 31;
                 const hSet = parseHolidayDates(dStr, totalD);
                 const hCount = hSet.size;
                 const calculated = Math.max(0, totalD - hCount);
@@ -280,7 +287,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const inputs = holidaysTableBody.querySelectorAll('.holiday-input');
             inputs.forEach(input => {
                 const idx = parseInt(input.dataset.index);
-                holidaysData[idx].dates = input.value.trim();
+                if (holidaysData[idx]) {
+                    holidaysData[idx].dates = input.value.trim();
+                }
             });
 
             saveHolidaysBtn.textContent = 'Сохранение...';
@@ -297,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateDaysInMonths();
                 renderHeaders();
                 renderAnnualCalendar(currentYear);
-                document.querySelectorAll('#tableBody tr').forEach(tr => calculateRow(tr));
+                document.querySelectorAll('#tableBody tr[data-emp-id]').forEach(tr => calculateRow(tr));
             })
             .catch(err => {
                 saveHolidaysBtn.textContent = 'Ошибка';
@@ -343,8 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             tr.appendChild(tdAllowed);
 
-            // Month cells
-            for (let m = 0; m < 12; m++) {
+            // Month cells (13 months)
+            for (let m = 0; m < 13; m++) {
                 const td = document.createElement('td');
                 td.className = 'month-cell';
                 td.dataset.month = m;
@@ -369,10 +378,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const end = new Date(vac.end);
                 if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
                 
-                const startM = start.getMonth();
-                const startD = start.getDate();
-                const endM = end.getMonth();
-                const endD = end.getDate();
+                let startM = (start.getFullYear() === currentYear + 1 && start.getMonth() === 0) ? 12 : start.getMonth();
+                let startD = start.getDate();
+                let endM = (end.getFullYear() === currentYear + 1 && end.getMonth() === 0) ? 12 : end.getMonth();
+                let endD = end.getDate();
 
                 const cInput = tr.querySelector(`.c-input[data-month="${startM}"]`);
                 if (cInput) cInput.value = startD;
@@ -390,9 +399,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 input.addEventListener('input', () => calculateRow(tr));
             });
         });
+
+        // Summary Row 1: Всего положено отпусков
+        const trSumAllowed = document.createElement('tr');
+        trSumAllowed.className = 'summary-row allowed-summary-row';
+        trSumAllowed.innerHTML = `
+            <td class="col-sticky-1 summary-label"><strong>Всего положено:</strong></td>
+            <td class="col-sticky-2 summary-value"><strong id="grandAllowedSum">0</strong></td>
+            ${Array.from({length: 13}, () => '<td class="month-cell summary-empty"></td>').join('')}
+        `;
+        tableBody.appendChild(trSumAllowed);
+
+        // Summary Row 2: Всего занесено отпусков (факт)
+        const trSumFact = document.createElement('tr');
+        trSumFact.className = 'summary-row fact-summary-row';
+        trSumFact.innerHTML = `
+            <td class="col-sticky-1 summary-label"><strong>Занесено (факт):</strong></td>
+            <td class="col-sticky-2 summary-value"><strong id="grandFactSum">0</strong></td>
+            ${Array.from({length: 13}, (_, m) => `<td class="month-cell summary-month-fact" id="monthFactSum_${m}">0</td>`).join('')}
+        `;
+        tableBody.appendChild(trSumFact);
+
+        updateTotals();
     }
 
     function calculateRow(tr) {
+        if (!tr || !tr.dataset.empId) return;
+
         // Clear all previous results, lines, and badges
         tr.querySelectorAll('.day-result').forEach(el => el.textContent = '');
         tr.querySelectorAll('.vacation-line').forEach(el => el.remove());
@@ -402,9 +435,13 @@ document.addEventListener('DOMContentLoaded', () => {
         let currentStartMonth = null;
         let vacations = [];
 
-        for (let m = 0; m < 12; m++) {
-            const cValStr = tr.querySelector(`.c-input[data-month="${m}"]`).value.trim();
-            const poValStr = tr.querySelector(`.po-input[data-month="${m}"]`).value.trim();
+        for (let m = 0; m < 13; m++) {
+            const cInput = tr.querySelector(`.c-input[data-month="${m}"]`);
+            const poInput = tr.querySelector(`.po-input[data-month="${m}"]`);
+            if (!cInput || !poInput) continue;
+
+            const cValStr = cInput.value.trim();
+            const poValStr = poInput.value.trim();
             
             const c_val = parseInt(cValStr);
             const po_val = parseInt(poValStr);
@@ -451,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        let allowedStr = tr.querySelector('.allowed-days-input').value;
+        let allowedStr = tr.querySelector('.allowed-days-input') ? tr.querySelector('.allowed-days-input').value : '';
         let allowedDays = allowedStr ? parseInt(allowedStr) : Infinity;
 
         // Calculate grand total excluding holidays
@@ -486,6 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 let daysInM = calendarDaysInMonths[m];
                 let cellWrapper = tr.querySelector(`.month-cell[data-month="${m}"] .cell-input-wrapper`);
 
+                if (!cellWrapper) continue;
+
                 if (vac.startMonth === vac.endMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = ((vac.endDay - vac.startDay + 1) / daysInM) * 100;
@@ -502,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Calculate center point in the gap between dates (50% for single month, cell border/center for multi-month)
+            // Calculate center point in the gap between dates
             let centerM, centerLeft;
             if (vac.startMonth === vac.endMonth) {
                 centerM = vac.startMonth;
@@ -529,6 +568,81 @@ document.addEventListener('DOMContentLoaded', () => {
                 centerCell.insertAdjacentHTML('beforeend', `<div class="total-days-badge ${overflowClass}" style="left: ${centerLeft}%;">${badgeText}</div>`);
             }
         });
+
+        updateTotals();
+    }
+
+    function updateTotals() {
+        let allowedSum = 0;
+        let factSum = 0;
+        const monthFactSums = Array(13).fill(0);
+
+        const empRows = tableBody.querySelectorAll('tr[data-emp-id]');
+        empRows.forEach(tr => {
+            const allowedInp = tr.querySelector('.allowed-days-input');
+            if (allowedInp) {
+                allowedSum += (parseInt(allowedInp.value) || 0);
+            }
+
+            let currentStart = null;
+            let currentStartMonth = null;
+            let vacations = [];
+
+            for (let m = 0; m < 13; m++) {
+                const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
+                const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                if (!cInp || !poInp) continue;
+
+                const c_val = parseInt(cInp.value);
+                const po_val = parseInt(poInp.value);
+
+                if (!isNaN(c_val) && !isNaN(po_val)) {
+                    if (currentStart !== null) {
+                        vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                    }
+                    vacations.push({ startMonth: m, startDay: c_val, endMonth: m, endDay: po_val });
+                    currentStart = null;
+                    currentStartMonth = null;
+                } else if (!isNaN(c_val)) {
+                    if (currentStart !== null) {
+                        vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                    }
+                    currentStart = c_val;
+                    currentStartMonth = m;
+                } else if (!isNaN(po_val)) {
+                    if (currentStart !== null) {
+                        vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
+                        currentStart = null;
+                        currentStartMonth = null;
+                    }
+                }
+            }
+            if (currentStart !== null) {
+                vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+            }
+
+            vacations.forEach(vac => {
+                let empVacDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+                factSum += empVacDays;
+
+                for (let m = vac.startMonth; m <= vac.endMonth; m++) {
+                    let s = (m === vac.startMonth) ? vac.startDay : 1;
+                    let e = (m === vac.endMonth) ? vac.endDay : calendarDaysInMonths[m];
+                    monthFactSums[m] += getWorkingVacationDays(m, s, m, e);
+                }
+            });
+        });
+
+        const allowedEl = document.getElementById('grandAllowedSum');
+        if (allowedEl) allowedEl.textContent = allowedSum;
+
+        const factEl = document.getElementById('grandFactSum');
+        if (factEl) factEl.textContent = factSum;
+
+        for (let m = 0; m < 13; m++) {
+            const mEl = document.getElementById(`monthFactSum_${m}`);
+            if (mEl) mEl.textContent = monthFactSums[m];
+        }
     }
 
     function drawLine(wrapper, leftPct, widthPct) {
@@ -539,26 +653,28 @@ document.addEventListener('DOMContentLoaded', () => {
     saveBtn.addEventListener('click', () => {
         saveBtn.textContent = 'Сохранение...';
         
-        const rows = document.querySelectorAll('#tableBody tr');
+        const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
         rows.forEach(tr => {
             const empId = parseInt(tr.dataset.empId);
             const employee = allData.find(e => e.id === empId);
             
             if (employee) {
-                // Save allowed days
                 const allowedInput = tr.querySelector('.allowed-days-input');
                 if (allowedInput) {
                     employee.allowedDays = parseInt(allowedInput.value) || 0;
                 }
 
-                // Re-parse vacations from row inputs
                 let currentStart = null;
                 let currentStartMonth = null;
                 let parsedVacations = [];
 
-                for (let m = 0; m < 12; m++) {
-                    const c_val = parseInt(tr.querySelector(`.c-input[data-month="${m}"]`).value);
-                    const po_val = parseInt(tr.querySelector(`.po-input[data-month="${m}"]`).value);
+                for (let m = 0; m < 13; m++) {
+                    const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
+                    const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                    if (!cInp || !poInp) continue;
+
+                    const c_val = parseInt(cInp.value);
+                    const po_val = parseInt(poInp.value);
 
                     if (!isNaN(c_val) && !isNaN(po_val)) {
                         if (currentStart !== null) {
@@ -603,13 +719,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Map back to absolute dates
                 employee.vacations = parsedVacations.map(vac => {
+                    let sYear = vac.startMonth === 12 ? (currentYear + 1) : currentYear;
+                    let realSMonth = vac.startMonth === 12 ? 1 : (vac.startMonth + 1);
                     let sDay = String(vac.startDay).padStart(2, '0');
-                    let sMonth = String(vac.startMonth + 1).padStart(2, '0');
-                    let start = `${currentYear}-${sMonth}-${sDay}`;
+                    let sMonth = String(realSMonth).padStart(2, '0');
+                    let start = `${sYear}-${sMonth}-${sDay}`;
 
+                    let eYear = vac.endMonth === 12 ? (currentYear + 1) : currentYear;
+                    let realEMonth = vac.endMonth === 12 ? 1 : (vac.endMonth + 1);
                     let eDay = String(vac.endDay).padStart(2, '0');
-                    let eMonth = String(vac.endMonth + 1).padStart(2, '0');
-                    let end = `${currentYear}-${eMonth}-${eDay}`;
+                    let eMonth = String(realEMonth).padStart(2, '0');
+                    let end = `${eYear}-${eMonth}-${eDay}`;
 
                     let totalDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
 
@@ -647,7 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const inputsInRow = Array.from(tr.querySelectorAll('.day-input'));
         const colIndex = inputsInRow.indexOf(currentInput);
         
-        const rows = Array.from(tableBody.querySelectorAll('tr'));
+        const rows = Array.from(tableBody.querySelectorAll('tr[data-emp-id]'));
         const rowIndex = rows.indexOf(tr);
 
         let nextInput = null;
@@ -661,7 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 nextInput = inputsInRow[colIndex - 1];
             }
         } else if (e.key === 'ArrowDown') {
-            if (rowIndex < rows.length - 1) {
+            if (rowIndex >= 0 && rowIndex < rows.length - 1) {
                 nextInput = rows[rowIndex + 1].querySelectorAll('.day-input')[colIndex];
             }
         } else if (e.key === 'ArrowUp') {
@@ -715,8 +835,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addArchiveRowBtn = document.getElementById('addArchiveRowBtn');
     const deleteArchiveRowBtn = document.getElementById('deleteArchiveRowBtn');
     const saveArchiveBtn = document.getElementById('saveArchiveBtn');
-
-
 
     function loadArchive() {
         fetch(`${APP_PREFIX}/api/vacations/archive`)

@@ -767,3 +767,38 @@ body.hide-badges .total-days-badge {
 .month-calendar-table td.cal-empty {
     background: transparent;
 }
+
+/* Summary Rows below employee table */
+.summary-row {
+    background: #f0f4fd !important;
+    font-weight: 700;
+}
+
+.summary-row.allowed-summary-row td {
+    border-top: 2px solid var(--line);
+    background: #f0f4fd !important;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.summary-row.fact-summary-row td {
+    background: #eaf1ff !important;
+    color: var(--blue-dark);
+    font-size: 13px;
+}
+
+.summary-label {
+    text-align: right !important;
+    padding-right: 12px !important;
+}
+
+.summary-value {
+    text-align: center !important;
+    font-size: 14px !important;
+}
+
+.summary-month-fact {
+    text-align: center;
+    font-weight: 700;
+    color: var(--blue-dark);
+}
