@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from io import BytesIO
 from pathlib import Path
 from threading import Lock
@@ -153,22 +153,60 @@ def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
 
     return False
 
-def format_date_to_iso(date_str: str) -> str:
-    if not date_str:
+def format_date_to_iso(val) -> str:
+    """Универсально преобразует любые варианты значения даты из Excel (datetime, date, serial float, тексты DD.MM.YYYY, YYYY-MM-DD и др.) в формат YYYY-MM-DD"""
+    if val is None or val == "":
         return ""
-    date_str = date_str.strip()
-    if "-" in date_str:
-        parts = date_str.split("-")
-        if len(parts) == 3 and len(parts[0]) == 4:
-            return date_str
-    if "." in date_str:
-        parts = date_str.split(".")
-        if len(parts) == 3:
-            d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
+
+    if isinstance(val, (datetime, date)):
+        return val.strftime("%Y-%m-%d")
+
+    # Перевод числовых серийных дат Excel (например, 45443)
+    if isinstance(val, (int, float)):
+        try:
+            if 30000 <= val <= 70000:
+                dt = datetime(1899, 12, 30) + timedelta(days=float(val))
+                return dt.strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+    s = str(val).strip()
+    if not s:
+        return ""
+
+    # Если передан численный серийный номер в виде строки, например "45443" или "45443.0"
+    try:
+        f_val = float(s)
+        if 30000 <= f_val <= 70000:
+            dt = datetime(1899, 12, 30) + timedelta(days=f_val)
+            return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+
+    # Приведение разделителей к точкам
+    s_clean = s.replace("/", ".").replace("-", ".").replace(" ", "")
+    parts = s_clean.split(".")
+
+    if len(parts) == 3:
+        p1, p2, p3 = parts[0].strip(), parts[1].strip(), parts[2].strip()
+
+        # Формат YYYY.MM.DD
+        if len(p1) == 4 and p1.isdigit():
+            y = p1
+            m = p2.zfill(2)
+            d = p3.zfill(2)
+            return f"{y}-{m}-{d}"
+
+        # Формат DD.MM.YYYY или DD.MM.YY
+        if len(p3) in (2, 4) and p3.isdigit():
+            d = p1.zfill(2)
+            m = p2.zfill(2)
+            y = p3
             if len(y) == 2:
                 y = "20" + y
             return f"{y}-{m}-{d}"
-    return date_str
+
+    return s
 
 def normalize_tab(tab: str) -> str:
     if not tab:
@@ -751,11 +789,13 @@ async def import_archive(file: UploadFile = File(...), mode: str = "append"):
 
         def val(idx, default=""):
             if idx < len(row) and row[idx] is not None:
-                v = row[idx]
-                if isinstance(v, datetime):
-                    return v.strftime("%Y-%m-%d")
-                return str(v).strip()
+                return str(row[idx]).strip()
             return str(default)
+
+        def date_val(idx):
+            if idx < len(row) and row[idx] is not None:
+                return format_date_to_iso(row[idx])
+            return ""
 
         def int_val(idx, default=0):
             try:
@@ -764,13 +804,31 @@ async def import_archive(file: UploadFile = File(...), mode: str = "append"):
             except Exception:
                 return default
 
-        y_val = int_val(0, 2025)
+        s_date = date_val(3)
+        e_date = date_val(4)
+
+        y_val = int_val(0, 0)
+        if not y_val and s_date and len(s_date) >= 4:
+            try:
+                y_val = int(s_date.split("-")[0])
+            except Exception:
+                pass
+        if not y_val:
+            y_val = 2025
+
         name_val = val(1, "")
         tab_val = val(2, "")
-        s_date = val(3, "")
-        e_date = val(4, "")
         days_val = int_val(5, 0)
         note_val = val(6, "")
+
+        # Автовычисление количества дней, если упущены дни, но указаны даты
+        if days_val == 0 and s_date and e_date:
+            try:
+                d1 = datetime.strptime(s_date, "%Y-%m-%d")
+                d2 = datetime.strptime(e_date, "%Y-%m-%d")
+                days_val = (d2 - d1).days + 1
+            except Exception:
+                pass
 
         if name_val or tab_val or s_date:
             imported_items.append({
