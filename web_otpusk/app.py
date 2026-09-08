@@ -11,17 +11,21 @@ ROOT = Path(__file__).resolve().parent
 (ROOT / "static").mkdir(exist_ok=True)
 (ROOT / "templates").mkdir(exist_ok=True)
 
+APP_PREFIX = "/otpusk"
+
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+app.mount(f"{APP_PREFIX}/static", StaticFiles(directory=ROOT / "static"), name="otpusk_static")
 
 @app.get("/", response_class=HTMLResponse)
-@app.get("/otpusk", response_class=HTMLResponse)
-@app.get("/otpusk/", response_class=HTMLResponse)
+@app.get(f"{APP_PREFIX}", response_class=HTMLResponse)
+@app.get(f"{APP_PREFIX}/", response_class=HTMLResponse)
 async def read_root():
     index_file = ROOT / "templates" / "index.html"
     with open(index_file, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 @app.get("/api/vacations")
+@app.get(f"{APP_PREFIX}/api/vacations")
 async def get_vacations():
     data_file = ROOT / "data" / "mock_data.json"
     if not data_file.exists():
@@ -31,6 +35,7 @@ async def get_vacations():
     return data
 
 @app.post("/api/vacations")
+@app.post(f"{APP_PREFIX}/api/vacations")
 async def save_vacations(request: Request):
     new_data = await request.json()
     data_file = ROOT / "data" / "mock_data.json"
@@ -54,6 +59,7 @@ DEFAULT_HOLIDAYS = [
 ]
 
 @app.get("/api/holidays")
+@app.get(f"{APP_PREFIX}/api/holidays")
 async def get_holidays():
     file_path = ROOT / "data" / "holidays.json"
     if not file_path.exists():
@@ -65,6 +71,7 @@ async def get_holidays():
         return json.load(f)
 
 @app.post("/api/holidays")
+@app.post(f"{APP_PREFIX}/api/holidays")
 async def save_holidays(request: Request):
     data = await request.json()
     file_path = ROOT / "data" / "holidays.json"

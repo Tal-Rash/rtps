@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const APP_PREFIX = window.location.pathname.startsWith('/otpusk') ? '/otpusk' : '';
     const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
     const calendarDaysInMonths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     
@@ -102,8 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load Data (holidays & vacations)
     Promise.all([
-        fetch('/api/holidays').then(res => res.json()),
-        fetch('/api/vacations').then(res => res.json())
+        fetch(`${APP_PREFIX}/api/holidays`).then(res => res.json()),
+        fetch(`${APP_PREFIX}/api/vacations`).then(res => res.json())
     ]).then(([holidays, vacations]) => {
         holidaysData = holidays;
         updateDaysInMonths();
@@ -174,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             saveHolidaysBtn.textContent = 'Сохранение...';
 
-            fetch('/api/holidays', {
+            fetch(`${APP_PREFIX}/api/holidays`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(holidaysData)
@@ -494,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        fetch('/api/vacations', {
+        fetch(`${APP_PREFIX}/api/vacations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(allData)

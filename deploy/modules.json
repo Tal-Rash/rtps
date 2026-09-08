@@ -69,5 +69,15 @@
       "kind": "prefix",
       "path": "/alsn"
     }
+  },
+  "otpusk": {
+    "title": "RTPS График отпусков web app",
+    "module_dir": "web_otpusk",
+    "service": "otpusk.service",
+    "port": 8085,
+    "route": {
+      "kind": "prefix",
+      "path": "/otpusk"
+    }
   }
 }

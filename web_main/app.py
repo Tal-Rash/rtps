@@ -32,7 +32,7 @@ SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
 ALSN_SITE_URL = os.environ.get("ALSN_SITE_URL", "http://yrtps.ru:8008")
-OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru:8085")
+OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru/otpusk")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
