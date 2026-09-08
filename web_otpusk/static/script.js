@@ -32,6 +32,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let allData = [];
 
+    function escapeHtml(val) {
+        return String(val ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     // Helper: Parse date string into Set of holiday day numbers
     function parseHolidayDates(datesStr, maxDays) {
         if (!datesStr) return new Set();
@@ -196,10 +204,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderTable(data) {
+        if (!tableBody) return;
         tableBody.innerHTML = '';
+        if (!Array.isArray(data)) return;
+
         data.forEach((employee, empIndex) => {
             const tr = document.createElement('tr');
             tr.dataset.empId = employee.id;
+
+            const empName = escapeHtml(employee.name || employee.full_name || '');
+            const empPos = escapeHtml(employee.position || '');
+            const allowedVal = employee.vacation_days ?? employee.allowedDays ?? 28;
 
             // Employee info
             const tdInfo = document.createElement('td');
@@ -208,8 +223,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tdInfo.style.minWidth = '250px';
             tdInfo.style.maxWidth = '250px';
             tdInfo.innerHTML = `
-                <div class="employee-name">${employee.name}</div>
-                <div class="employee-pos">${employee.position}</div>
+                <div class="employee-name">${empName}</div>
+                <div class="employee-pos">${empPos}</div>
             `;
             tr.appendChild(tdInfo);
 
@@ -220,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tdAllowed.style.maxWidth = '100px';
             tdAllowed.innerHTML = `
                 <div class="cell-input-wrapper" style="justify-content: center; height: 100%; display: flex; align-items: center;">
-                    <input type="text" class="day-input allowed-days-input" value="${employee.vacation_days ?? employee.allowedDays ?? 28}" placeholder="28" style="width: 80%; height: 40px; font-weight: bold; background: rgba(0,0,0,0.05); border-radius: 6px; color: var(--text-primary);" readonly title="Количество дней положенного отпуска (задается в Справочнике)">
+                    <input type="text" class="day-input allowed-days-input" value="${allowedVal}" placeholder="28" style="width: 80%; height: 40px; font-weight: bold; background: rgba(0,0,0,0.05); border-radius: 6px; color: var(--text-primary);" readonly title="Количество дней положенного отпуска (задается в Справочнике)">
                 </div>
             `;
             tr.appendChild(tdAllowed);
@@ -245,9 +260,11 @@ document.addEventListener('DOMContentLoaded', () => {
             tableBody.appendChild(tr);
 
             // Populate existing vacations
-            employee.vacations.forEach(vac => {
+            (employee.vacations || []).forEach(vac => {
+                if (!vac || !vac.start || !vac.end) return;
                 const start = new Date(vac.start);
                 const end = new Date(vac.end);
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
                 
                 const startM = start.getMonth();
                 const startD = start.getDate();
