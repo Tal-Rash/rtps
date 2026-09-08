@@ -140,15 +140,17 @@ def extract_year_from_date(date_str: str) -> int | None:
     return None
 
 def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
-    """Проверяет, уволен ли сотрудник до целевого года или помечен уволенным"""
-    is_exc = int(emp.get("is_excluded") or 0)
-    if is_exc == 1:
-        return True
-
+    """Проверяет, был ли сотрудник уволен ДО целевого года"""
     exc_date_str = str(emp.get("exclude_date") or "").strip()
     exc_year = extract_year_from_date(exc_date_str)
-    if exc_year is not None and exc_year <= target_year:
-        return True
+
+    if exc_year is not None:
+        if exc_year < target_year:
+            return True
+    else:
+        is_exc = int(emp.get("is_excluded") or 0)
+        if is_exc == 1:
+            return True
 
     return False
 
