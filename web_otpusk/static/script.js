@@ -572,16 +572,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (vac.startMonth === vac.endMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = ((vac.endDay - vac.startDay + 1) / daysInM) * 100;
-                    drawLine(cellWrapper, left, width, vac.is_carried_over);
+                    drawLine(cellWrapper, left, width);
                 } else if (m === vac.startMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = 100 - left;
-                    drawLine(cellWrapper, left, width, vac.is_carried_over);
+                    drawLine(cellWrapper, left, width);
                 } else if (m === vac.endMonth) {
                     let width = (vac.endDay / daysInM) * 100;
-                    drawLine(cellWrapper, 0, width, vac.is_carried_over);
+                    drawLine(cellWrapper, 0, width);
                 } else {
-                    drawLine(cellWrapper, 0, 100, vac.is_carried_over);
+                    drawLine(cellWrapper, 0, 100);
                 }
             }
 
@@ -598,10 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let badgeText = totalDays;
             let overflowClass = '';
-            if (vac.is_carried_over) {
-                overflowClass = 'badge-carried-over';
-                badgeText = `${totalDays} (прошл. год)`;
-            } else if (overflow > 0) {
+            if (overflow > 0 && !vac.is_carried_over) {
                 overflowClass = 'badge-overflow';
                 if (index === vacations.length - 1) {
                     badgeText = `${totalDays} (перебор +${overflow})`;
@@ -677,8 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     vac.is_carried_over = true;
                 }
 
-                if (vac.is_carried_over) return; // Skip carried-over days from current year's totals!
-
+                // Count in fact totals regardless of carried_over status!
                 let empVacDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
                 factSum += empVacDays;
 
@@ -743,9 +739,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function drawLine(wrapper, leftPct, widthPct, isCarried = false) {
-        const extraClass = isCarried ? ' vacation-line-carried' : '';
-        wrapper.insertAdjacentHTML('beforeend', `<div class="vacation-line${extraClass}" style="left: ${leftPct}%; width: ${widthPct}%;"></div>`);
+    function drawLine(wrapper, leftPct, widthPct) {
+        wrapper.insertAdjacentHTML('beforeend', `<div class="vacation-line" style="left: ${leftPct}%; width: ${widthPct}%;"></div>`);
     }
 
     // Save functionality
