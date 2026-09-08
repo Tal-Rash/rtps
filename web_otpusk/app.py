@@ -164,11 +164,16 @@ def format_date_to_iso(date_str: str) -> str:
             return f"{y}-{m}-{d}"
     return date_str
 
+def normalize_tab(tab: str) -> str:
+    if not tab:
+        return ""
+    return str(tab).strip().lstrip('0')
+
 def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bool:
-    t1 = str(tab1 or "").strip()
-    t2 = str(tab2 or "").strip()
-    if t1 and t2 and t1 == t2:
-        return True
+    t1 = normalize_tab(tab1)
+    t2 = normalize_tab(tab2)
+    if t1 and t2:
+        return t1 == t2
 
     n1 = str(name1 or "").replace('.', ' ').strip().split()
     n2 = str(name2 or "").replace('.', ' ').strip().split()
@@ -279,7 +284,7 @@ async def get_vacations(year: int = 2026):
 
     result = []
     jan_prefix = f"{year}-01-"
-    processed_archive_names = set()
+    processed_archive_keys = set()
 
     for emp in employees:
         if is_employee_excluded_for_year(emp, year):
@@ -292,19 +297,17 @@ async def get_vacations(year: int = 2026):
         vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
         if not vacations:
             for ai in archive_items:
-                if (tab_num and ai["tab_num"] and tab_num == ai["tab_num"]) or \
-                   is_same_person(emp_name, ai["name"]) or \
-                   (emp_full and is_same_person(emp_full, ai["name"])):
+                if is_same_person(emp_name, ai["name"], tab_num, ai["tab_num"]) or \
+                   (emp_full and is_same_person(emp_full, ai["name"], tab_num, ai["tab_num"])):
                     vacations.append(ai["vacation"])
-                    processed_archive_names.add(ai["name"])
+                    processed_archive_keys.add((ai["tab_num"], ai["name"]))
 
         prev_vacs = prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
         
         prev_arc_vacs = []
         for pai in prev_archive_items:
-            if (tab_num and pai["tab_num"] and tab_num == pai["tab_num"]) or \
-               is_same_person(emp_name, pai["name"]) or \
-               (emp_full and is_same_person(emp_full, pai["name"])):
+            if is_same_person(emp_name, pai["name"], tab_num, pai["tab_num"]) or \
+               (emp_full and is_same_person(emp_full, pai["name"], tab_num, pai["tab_num"])):
                 prev_arc_vacs.append(pai["vacation"])
 
         all_prev_vacs = prev_vacs + prev_arc_vacs
@@ -342,20 +345,19 @@ async def get_vacations(year: int = 2026):
             e_name = emp.get("name") or emp.get("full_name") or ""
             e_full = emp.get("full_name") or ""
             e_tab = str(emp.get("tab_num") or "")
-            if (a_tab and e_tab and a_tab == e_tab) or \
-               is_same_person(e_name, a_name) or \
-               (e_full and is_same_person(e_full, a_name)):
+            if is_same_person(e_name, a_name, e_tab, a_tab) or \
+               (e_full and is_same_person(e_full, a_name, e_tab, a_tab)):
                 already_matched = True
                 break
 
-        if not already_matched and a_name not in processed_archive_names:
-            processed_archive_names.add(a_name)
-            person_vacs = [x["vacation"] for x in archive_items if is_same_person(a_name, x["name"])]
+        if not already_matched and (a_tab, a_name) not in processed_archive_keys:
+            processed_archive_keys.add((a_tab, a_name))
+            person_vacs = [x["vacation"] for x in archive_items if is_same_person(a_name, x["name"], a_tab, x["tab_num"])]
             
             carried_over = []
             seen_cov = set()
             for pai in prev_archive_items:
-                if is_same_person(a_name, pai["name"]):
+                if is_same_person(a_name, pai["name"], a_tab, pai["tab_num"]):
                     pv = pai["vacation"]
                     s_date = str(pv.get("start") or "")
                     e_date = str(pv.get("end") or "")
