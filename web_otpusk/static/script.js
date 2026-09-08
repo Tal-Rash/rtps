@@ -1,7 +1,15 @@
 document.addEventListener('DOMContentLoaded', () => {
     const APP_PREFIX = window.location.pathname.startsWith('/otpusk') ? '/otpusk' : '';
     const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-    const calendarDaysInMonths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    
+    const yearSelect = document.getElementById('yearSelect');
+    let currentYear = yearSelect ? (parseInt(yearSelect.value) || 2026) : 2026;
+
+    function getDaysInFeb(y) {
+        return (y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)) ? 29 : 28;
+    }
+
+    let calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     
     let holidaysData = [];
     let daysInMonths = [...calendarDaysInMonths];
@@ -109,17 +117,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Load Data (holidays & vacations)
-    Promise.all([
-        fetch(`${APP_PREFIX}/api/holidays`).then(res => res.json()),
-        fetch(`${APP_PREFIX}/api/vacations`).then(res => res.json())
-    ]).then(([holidays, vacations]) => {
-        holidaysData = holidays;
-        updateDaysInMonths();
-        renderHeaders();
-        allData = vacations;
-        renderTable(allData);
-    }).catch(err => console.error(err));
+    // Load Data (holidays & vacations for selected year)
+    function loadYearData(year) {
+        Promise.all([
+            fetch(`${APP_PREFIX}/api/holidays?year=${year}`).then(res => res.json()),
+            fetch(`${APP_PREFIX}/api/vacations?year=${year}`).then(res => res.json())
+        ]).then(([holidays, vacations]) => {
+            holidaysData = holidays;
+            updateDaysInMonths();
+            renderHeaders();
+            allData = vacations;
+            renderTable(allData);
+        }).catch(err => console.error(err));
+    }
+
+    loadYearData(currentYear);
+
+    if (yearSelect) {
+        yearSelect.addEventListener('change', (e) => {
+            currentYear = parseInt(e.target.value) || 2026;
+            calendarDaysInMonths[1] = getDaysInFeb(currentYear);
+            
+            const tabCurrentBtn = document.getElementById('tabCurrentBtn');
+            if (tabCurrentBtn) {
+                tabCurrentBtn.textContent = `📅 График отпусков ${currentYear}`;
+            }
+            const holidaysModalTitle = document.getElementById('holidaysModalTitle');
+            if (holidaysModalTitle) {
+                holidaysModalTitle.textContent = `📅 Праздничные дни по месяцам (${currentYear})`;
+            }
+
+            loadYearData(currentYear);
+        });
+    }
 
     // Modal Handlers
     function openHolidaysModal() {
@@ -183,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             saveHolidaysBtn.textContent = 'Сохранение...';
 
-            fetch(`${APP_PREFIX}/api/holidays`, {
+            fetch(`${APP_PREFIX}/api/holidays?year=${currentYear}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(holidaysData)
@@ -499,11 +529,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 employee.vacations = parsedVacations.map(vac => {
                     let sDay = String(vac.startDay).padStart(2, '0');
                     let sMonth = String(vac.startMonth + 1).padStart(2, '0');
-                    let start = `2026-${sMonth}-${sDay}`;
+                    let start = `${currentYear}-${sMonth}-${sDay}`;
 
                     let eDay = String(vac.endDay).padStart(2, '0');
                     let eMonth = String(vac.endMonth + 1).padStart(2, '0');
-                    let end = `2026-${eMonth}-${eDay}`;
+                    let end = `${currentYear}-${eMonth}-${eDay}`;
 
                     let totalDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
 
@@ -512,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        fetch(`${APP_PREFIX}/api/vacations`, {
+        fetch(`${APP_PREFIX}/api/vacations?year=${currentYear}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(allData)

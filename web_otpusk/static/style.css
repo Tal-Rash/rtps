@@ -54,11 +54,46 @@ body {
     flex-wrap: wrap;
 }
 
+.titlebox {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
 .titlebox h1 {
     margin: 0;
     font-size: 22px;
     font-weight: 700;
     color: var(--text);
+}
+
+.year-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0f4fd;
+    border: 1px solid var(--line);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.year-select {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--blue-dark);
+    background: #ffffff;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.year-select:focus, .year-select:hover {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.2);
 }
 
 .actions {

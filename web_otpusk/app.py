@@ -174,9 +174,8 @@ async def get_vacations(year: int = 2026):
 
 @app.post("/api/vacations")
 @app.post(f"{APP_PREFIX}/api/vacations")
-async def save_vacations(request: Request):
+async def save_vacations(request: Request, year: int = 2026):
     items = await request.json()
-    year = 2026
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
         for item in items:
@@ -207,9 +206,8 @@ async def get_holidays(year: int = 2026):
 
 @app.post("/api/holidays")
 @app.post(f"{APP_PREFIX}/api/holidays")
-async def save_holidays(request: Request):
+async def save_holidays(request: Request, year: int = 2026):
     data = await request.json()
-    year = 2026
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute(
