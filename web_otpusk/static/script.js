@@ -420,6 +420,16 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         tableBody.appendChild(trSumFact);
 
+        // Summary Row 3: Отклонение / превышение / недобор (%)
+        const trSumDiff = document.createElement('tr');
+        trSumDiff.className = 'summary-row diff-summary-row';
+        trSumDiff.innerHTML = `
+            <td class="col-sticky-1 summary-label"><strong>Отклонение (%):</strong></td>
+            <td class="col-sticky-2 summary-value"><strong id="grandDiffPct">0%</strong></td>
+            ${Array.from({length: 13}, (_, m) => `<td class="month-cell summary-month-diff" id="monthDiffPct_${m}">0%</td>`).join('')}
+        `;
+        tableBody.appendChild(trSumDiff);
+
         updateTotals();
     }
 
@@ -639,18 +649,50 @@ document.addEventListener('DOMContentLoaded', () => {
         const factEl = document.getElementById('grandFactSum');
         if (factEl) factEl.textContent = factSum;
 
+        const grandDiffEl = document.getElementById('grandDiffPct');
+        if (grandDiffEl) {
+            const grandDiff = factSum - allowedSum;
+            if (allowedSum > 0) {
+                const grandPct = Math.round((grandDiff / allowedSum) * 100);
+                const sign = grandPct > 0 ? '+' : '';
+                grandDiffEl.textContent = `${sign}${grandPct}%`;
+                grandDiffEl.className = grandPct > 0 ? 'diff-excess' : (grandPct < 0 ? 'diff-shortage' : 'diff-exact');
+            } else {
+                grandDiffEl.textContent = '0%';
+                grandDiffEl.className = 'diff-exact';
+            }
+        }
+
         // Total working days in main year (first 12 months)
         const totalYearWorkingDays = daysInMonths.slice(0, 12).reduce((a, b) => a + b, 0) || 365;
 
         for (let m = 0; m < 13; m++) {
             const mWorkingDays = daysInMonths[m] || 30;
             const mAllowedCalc = Math.round((allowedSum / totalYearWorkingDays) * mWorkingDays);
+            const mFact = monthFactSums[m];
             
             const mAllowedEl = document.getElementById(`monthAllowedSum_${m}`);
             if (mAllowedEl) mAllowedEl.textContent = mAllowedCalc;
 
             const mFactEl = document.getElementById(`monthFactSum_${m}`);
-            if (mFactEl) mFactEl.textContent = monthFactSums[m];
+            if (mFactEl) mFactEl.textContent = mFact;
+
+            const mDiffEl = document.getElementById(`monthDiffPct_${m}`);
+            if (mDiffEl) {
+                const mDiff = mFact - mAllowedCalc;
+                if (mAllowedCalc > 0) {
+                    const mPct = Math.round((mDiff / mAllowedCalc) * 100);
+                    const sign = mPct > 0 ? '+' : '';
+                    mDiffEl.textContent = `${sign}${mPct}%`;
+                    mDiffEl.className = 'month-cell summary-month-diff ' + (mPct > 0 ? 'diff-excess' : (mPct < 0 ? 'diff-shortage' : 'diff-exact'));
+                } else if (mFact > 0) {
+                    mDiffEl.textContent = '+100%';
+                    mDiffEl.className = 'month-cell summary-month-diff diff-excess';
+                } else {
+                    mDiffEl.textContent = '0%';
+                    mDiffEl.className = 'month-cell summary-month-diff diff-exact';
+                }
+            }
         }
     }
 

@@ -808,3 +808,27 @@ body.hide-badges .total-days-badge {
     font-weight: 700;
     color: var(--text);
 }
+
+.summary-row.diff-summary-row td {
+    background: #f8fafc !important;
+    color: var(--text);
+    font-size: 12px;
+}
+
+.summary-month-diff {
+    text-align: center;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.diff-excess {
+    color: #dc2626 !important; /* Red for excess / превышение */
+}
+
+.diff-shortage {
+    color: #2563eb !important; /* Blue for shortage / недобор */
+}
+
+.diff-exact {
+    color: #10b981 !important; /* Green for exact match */
+}
