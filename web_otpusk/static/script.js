@@ -1464,7 +1464,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!historyTableBody) return;
         historyTableBody.innerHTML = '<tr><td colspan="20" style="text-align:center; padding: 20px;">Загрузка истории отпусков...</td></tr>';
 
-        fetch(`${APP_PREFIX}/api/vacations/history_matrix`)
+        const yr = typeof currentYear !== 'undefined' ? currentYear : 2026;
+        fetch(`${APP_PREFIX}/api/vacations/history_matrix?year=${yr}`)
             .then(res => res.json())
             .then(data => {
                 historyMatrixCache = data;

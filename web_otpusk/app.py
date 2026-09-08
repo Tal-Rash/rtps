@@ -503,7 +503,7 @@ def get_season(month: int) -> str:
 
 @app.get("/api/vacations/history_matrix")
 @app.get(f"{APP_PREFIX}/api/vacations/history_matrix")
-async def get_history_matrix():
+async def get_history_matrix(year: int = 2026):
     """Возвращает матрицу отпусков по годам для визуального анализа летних и сезонных отпусков сотрудников"""
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
@@ -603,7 +603,7 @@ async def get_history_matrix():
                     "season": season
                 })
 
-        # Вычисление итоговой статистики сезонов отпусков сотрудника за все года
+        # Вычисление итоговой статистики сезонов отпусков только за прошлые года (не считая планируемый/будущий год)
         summer_count = 0
         summer_days = 0
         winter_count = 0
@@ -612,18 +612,25 @@ async def get_history_matrix():
         other_days = 0
 
         for y_str, v_list in emp_history.items():
-            for v in v_list:
-                s_type = v.get("season")
-                d_cnt = int(v.get("days") or 0)
-                if s_type == "summer":
-                    summer_count += 1
-                    summer_days += d_cnt
-                elif s_type == "winter":
-                    winter_count += 1
-                    winter_days += d_cnt
-                else:
-                    other_count += 1
-                    other_days += d_cnt
+            try:
+                y_val = int(y_str)
+            except Exception:
+                y_val = 0
+
+            # Учитываем статистику строго за прошлые года (y_val < year)
+            if y_val > 0 and y_val < year:
+                for v in v_list:
+                    s_type = v.get("season")
+                    d_cnt = int(v.get("days") or 0)
+                    if s_type == "summer":
+                        summer_count += 1
+                        summer_days += d_cnt
+                    elif s_type == "winter":
+                        winter_count += 1
+                        winter_days += d_cnt
+                    else:
+                        other_count += 1
+                        other_days += d_cnt
 
         dominant_season = "balanced"
         if summer_count > winter_count:
