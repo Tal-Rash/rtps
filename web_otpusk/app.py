@@ -449,6 +449,138 @@ async def save_holidays(request: Request, year: int = 2026):
         conn.commit()
     return {"status": "success"}
 
+MONTH_NAMES_RU = {
+    1: "янв", 2: "февр", 3: "март", 4: "апр", 5: "май", 6: "июнь",
+    7: "июль", 8: "авг", 9: "сент", 10: "окт", 11: "нояб", 12: "дек"
+}
+
+def get_season(month: int) -> str:
+    """Определяет сезон месяца: лето, зима или демисезон"""
+    if month in (6, 7, 8):
+        return "summer"
+    elif month in (12, 1, 2):
+        return "winter"
+    else:
+        return "other"
+
+@app.get("/api/vacations/history_matrix")
+@app.get(f"{APP_PREFIX}/api/vacations/history_matrix")
+async def get_history_matrix():
+    """Возвращает матрицу отпусков по годам для визуального анализа летних и сезонных отпусков сотрудников"""
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        try:
+            emp_rows = cur.execute(
+                "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees ORDER BY rowid"
+            ).fetchall()
+        except Exception:
+            emp_rows = cur.execute("SELECT rowid, * FROM employees ORDER BY rowid").fetchall()
+
+        employees = [dict(r) for r in emp_rows]
+
+        arc_rows = cur.execute(
+            "SELECT y, tab_num, name, start_date, end_date, days FROM vacations_archive ORDER BY y ASC, start_date ASC"
+        ).fetchall()
+
+        sched_rows = cur.execute(
+            "SELECT y, tab_num, name, vacations_json FROM vacations_schedule ORDER BY y ASC"
+        ).fetchall()
+
+    years_set = set()
+    archive_items = []
+
+    for r in arc_rows:
+        y = int(r["y"] or 0)
+        if y > 0:
+            years_set.add(y)
+        archive_items.append(dict(r))
+
+    for s in sched_rows:
+        y = int(s["y"] or 0)
+        if y > 0:
+            years_set.add(y)
+            try:
+                v_list = json.loads(s["vacations_json"] or "[]")
+                for v in v_list:
+                    archive_items.append({
+                        "y": y,
+                        "tab_num": s["tab_num"],
+                        "name": s["name"],
+                        "start_date": v.get("start") or "",
+                        "end_date": v.get("end") or "",
+                        "days": v.get("days") or 0
+                    })
+            except Exception:
+                pass
+
+    if not years_set:
+        years_set = {2024, 2025, 2026}
+
+    sorted_years = sorted(list(years_set))
+    result_emp_list = []
+
+    for emp in employees:
+        emp_name = emp.get("name") or emp.get("full_name") or ""
+        emp_full = emp.get("full_name") or ""
+        tab_num = str(emp.get("tab_num") or "")
+
+        emp_history = {str(y): [] for y in sorted_years}
+        seen_keys = set()
+
+        for ai in archive_items:
+            ay = str(ai.get("y"))
+            if ay not in emp_history:
+                continue
+
+            a_name = str(ai.get("name") or "")
+            a_tab = str(ai.get("tab_num") or "")
+
+            if is_same_person(emp_name, a_name, tab_num, a_tab) or \
+               (emp_full and is_same_person(emp_full, a_name, tab_num, a_tab)):
+                s_iso = format_date_to_iso(ai.get("start_date") or "")
+                e_iso = format_date_to_iso(ai.get("end_date") or "")
+                key = f"{ay}_{s_iso}_{e_iso}"
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                month_num = 0
+                if s_iso and "-" in s_iso:
+                    try:
+                        month_num = int(s_iso.split("-")[1])
+                    except Exception:
+                        pass
+
+                season = get_season(month_num) if month_num else "other"
+                m_name = MONTH_NAMES_RU.get(month_num, "")
+
+                emp_history[ay].append({
+                    "month_num": month_num,
+                    "month_name": m_name,
+                    "start": s_iso,
+                    "end": e_iso,
+                    "days": int(ai.get("days") or 0),
+                    "season": season
+                })
+
+        v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
+
+        result_emp_list.append({
+            "tab_num": tab_num,
+            "name": emp_name,
+            "full_name": emp_full or emp_name,
+            "position": emp.get("pos") or "",
+            "vacation_days": v_days,
+            "history": emp_history
+        })
+
+    return {
+        "years": sorted_years,
+        "employees": result_emp_list
+    }
+
 @app.get("/api/vacations/archive")
 @app.get(f"{APP_PREFIX}/api/vacations/archive")
 async def get_archive():

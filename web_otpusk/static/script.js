@@ -1396,4 +1396,169 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    // History Matrix Modal logic
+    const historyMatrixBtn = document.getElementById('historyMatrixBtn');
+    const historyModal = document.getElementById('historyModal');
+    const closeHistoryModal = document.getElementById('closeHistoryModal');
+    const cancelHistoryBtn = document.getElementById('cancelHistoryBtn');
+    const historyHeaderRow = document.getElementById('historyHeaderRow');
+    const historyTableBody = document.getElementById('historyTableBody');
+    const historySearchInput = document.getElementById('historySearchInput');
+
+    let historyMatrixCache = null;
+
+    function openHistoryModal() {
+        if (!historyModal) return;
+        historyModal.style.display = 'flex';
+        loadHistoryMatrix();
+    }
+
+    function closeHistoryModalFunc() {
+        if (!historyModal) return;
+        historyModal.style.display = 'none';
+    }
+
+    if (historyMatrixBtn) {
+        historyMatrixBtn.addEventListener('click', openHistoryModal);
+    }
+    if (closeHistoryModal) {
+        closeHistoryModal.addEventListener('click', closeHistoryModalFunc);
+    }
+    if (cancelHistoryBtn) {
+        cancelHistoryBtn.addEventListener('click', closeHistoryModalFunc);
+    }
+    if (historyModal) {
+        historyModal.addEventListener('click', (e) => {
+            if (e.target === historyModal) closeHistoryModalFunc();
+        });
+    }
+
+    if (historySearchInput) {
+        historySearchInput.addEventListener('input', () => {
+            if (historyMatrixCache) {
+                renderHistoryMatrix(historyMatrixCache, historySearchInput.value.trim());
+            }
+        });
+    }
+
+    function loadHistoryMatrix() {
+        if (!historyTableBody) return;
+        historyTableBody.innerHTML = '<tr><td colspan="20" style="text-align:center; padding: 20px;">Загрузка истории отпусков...</td></tr>';
+
+        fetch(`${APP_PREFIX}/api/vacations/history_matrix`)
+            .then(res => res.json())
+            .then(data => {
+                historyMatrixCache = data;
+                renderHistoryMatrix(data, historySearchInput ? historySearchInput.value.trim() : '');
+            })
+            .catch(err => {
+                console.error('Error loading history matrix:', err);
+                historyTableBody.innerHTML = '<tr><td colspan="20" style="text-align:center; color: red; padding: 20px;">Ошибка загрузки данных истории отпусков.</td></tr>';
+            });
+    }
+
+    function renderHistoryMatrix(data, filterText = '') {
+        if (!historyHeaderRow || !historyTableBody) return;
+
+        const years = data.years || [];
+        const employees = data.employees || [];
+
+        // Generate Header Row
+        let headerHtml = `
+            <th class="col-sticky-1" style="width: 260px; min-width: 260px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
+            <th class="col-sticky-2" style="width: 100px; min-width: 100px; position: sticky; left: 260px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 6px; text-align: center;">Кол-во дней</th>
+        `;
+
+        years.forEach(y => {
+            headerHtml += `<th style="min-width: 90px; padding: 8px 6px; text-align: center; background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-weight: 700;">${y}</th>`;
+        });
+        historyHeaderRow.innerHTML = headerHtml;
+
+        // Filter employees if search query present
+        const query = filterText.toLowerCase();
+        const filteredEmployees = employees.filter(emp => {
+            if (!query) return true;
+            const name = (emp.name || '').toLowerCase();
+            const full = (emp.full_name || '').toLowerCase();
+            const pos = (emp.position || '').toLowerCase();
+            const tab = (emp.tab_num || '').toLowerCase();
+            return name.includes(query) || full.includes(query) || pos.includes(query) || tab.includes(query);
+        });
+
+        if (filteredEmployees.length === 0) {
+            historyTableBody.innerHTML = `<tr><td colspan="${years.length + 2}" style="text-align:center; padding: 20px; color: #64748b;">Сотрудники не найдены</td></tr>`;
+            return;
+        }
+
+        let bodyHtml = '';
+
+        filteredEmployees.forEach(emp => {
+            const empName = escapeHtml(emp.name || emp.full_name || '');
+            const empPos = escapeHtml(emp.position || '');
+            const vDays = emp.vacation_days || 52;
+            const history = emp.history || {};
+
+            bodyHtml += `<tr style="border-bottom: 1px solid #e2e8f0;">`;
+            bodyHtml += `
+                <td class="col-sticky-1" style="position: sticky; left: 0; background: #ffffff; z-index: 5; border-right: 2px solid #cbd5e1; padding: 8px 12px; font-weight: 500;">
+                    <div style="font-weight: 600; color: #1e293b;">${empName}</div>
+                    <div style="font-size: 0.78rem; color: #64748b;">${empPos}</div>
+                </td>
+                <td class="col-sticky-2" style="position: sticky; left: 260px; background: #ffffff; z-index: 5; border-right: 2px solid #cbd5e1; text-align: center; font-weight: 600; color: #334155;">
+                    ${vDays}
+                </td>
+            `;
+
+            years.forEach(y => {
+                const yearItems = history[String(y)] || [];
+                bodyHtml += `<td style="padding: 4px; text-align: center; vertical-align: middle; min-width: 90px; border-right: 1px solid #f1f5f9;">`;
+
+                if (yearItems.length === 0) {
+                    bodyHtml += `<span style="color: #cbd5e1; font-size: 0.8rem;">—</span>`;
+                } else {
+                    bodyHtml += `<div style="display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center;">`;
+                    yearItems.forEach(item => {
+                        const mName = escapeHtml(item.month_name || 'отпуск');
+                        const season = item.season;
+                        const startDate = formatDateRu(item.start);
+                        const endDate = formatDateRu(item.end);
+                        const days = item.days ? `${item.days} дн.` : '';
+                        const tooltip = `${startDate} — ${endDate} (${days})`.trim();
+
+                        let badgeStyle = 'background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;';
+                        if (season === 'summer') {
+                            badgeStyle = 'background: #d32f2f; color: #ffffff; font-weight: 700; border: 1px solid #b71c1c;';
+                        } else if (season === 'winter') {
+                            badgeStyle = 'background: #0288d1; color: #ffffff; font-weight: 600; border: 1px solid #0277bd;';
+                        } else {
+                            badgeStyle = 'background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; font-weight: 500;';
+                        }
+
+                        bodyHtml += `
+                            <span title="${tooltip}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.82rem; cursor: pointer; text-transform: lowercase; min-width: 52px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); ${badgeStyle}">
+                                ${mName}
+                            </span>
+                        `;
+                    });
+                    bodyHtml += `</div>`;
+                }
+
+                bodyHtml += `</td>`;
+            });
+
+            bodyHtml += `</tr>`;
+        });
+
+        historyTableBody.innerHTML = bodyHtml;
+    }
+
+    function formatDateRu(isoStr) {
+        if (!isoStr) return '';
+        const parts = isoStr.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+        return isoStr;
+    }
 });

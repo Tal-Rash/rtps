@@ -39,6 +39,7 @@
         <div class="tabs-nav">
             <button id="tabCurrentBtn" class="tab-btn active" type="button">📅 График отпусков 2026</button>
             <button id="tabArchiveBtn" class="tab-btn" type="button">📦 Архив отпусков</button>
+            <button id="historyMatrixBtn" class="tab-btn" type="button" style="margin-left: auto; background-color: #1565c0; color: #ffffff; border-color: #0d47a1; font-weight: 600;">📊 История по годам (Летние отпуска)</button>
         </div>
 
         <!-- Panel 1: Current Vacation Grid -->
@@ -179,6 +180,46 @@
             </div>
         </div>
     </div>
-    <script src="/otpusk/static/script.js?v=rtps_v17"></script>
+
+    <!-- Модальное окно истории отпусков по годам (шахматка / анализ летних отпусков) -->
+    <div id="historyModal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 1200px; width: 95vw;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1565c0, #1e88e5); color: #fff;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">📊 График отпусков участка по годам (Анализ летних отпусков)</h3>
+                <button id="closeHistoryModal" class="modal-close-btn" style="color: #fff;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="display: flex; align-items: center; gap: 16px; font-size: 0.9rem; font-weight: 500;">
+                        <span>Легенда:</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #d32f2f; border-radius: 3px;"></span> 🔴 Летние (Июн, Июл, Авг)</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #0288d1; border-radius: 3px;"></span> 🔵 Зимние (Дек, Янв, Фев)</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px;"></span> ⚪ Демисезон</span>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 220px;">
+                    </div>
+                </div>
+                <div class="table-shell" style="max-height: 70vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <table class="excel-table" style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead>
+                            <tr id="historyHeaderRow" style="background: #f1f5f9; position: sticky; top: 0; z-index: 10;">
+                                <th class="col-sticky-1" style="width: 260px; min-width: 260px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1;">ФИО Сотрудника</th>
+                                <th class="col-sticky-2" style="width: 110px; min-width: 110px; position: sticky; left: 260px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1;">Кол-во дней</th>
+                                <!-- JS will populate year headers -->
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <!-- JS will populate history rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelHistoryBtn" type="button">Закрыть</button>
+            </div>
+        </div>
+    </div>
+    <script src="/otpusk/static/script.js?v=rtps_v18"></script>
 </body>
 </html>
