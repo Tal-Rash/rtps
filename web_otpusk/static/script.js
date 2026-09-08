@@ -230,33 +230,116 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const prevYearBtn = document.getElementById('prevYearBtn');
-    const nextYearBtn = document.getElementById('nextYearBtn');
+    // Undo / Redo History System
+    let undoStack = [];
+    let redoStack = [];
 
-    function setYear(y) {
-        if (!yearSelect) return;
-        let option = Array.from(yearSelect.options).find(opt => parseInt(opt.value) === y);
-        if (!option) {
-            option = document.createElement('option');
-            option.value = y;
-            option.textContent = y;
-            yearSelect.appendChild(option);
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+
+    function updateUndoRedoButtons() {
+        if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+        if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+    }
+
+    function captureTableState() {
+        if (!tableBody) return null;
+        const snapshot = [];
+        const rows = tableBody.querySelectorAll('tr[data-emp-id]');
+        rows.forEach(tr => {
+            const empId = tr.dataset.empId;
+            const allowedInp = tr.querySelector('.allowed-days-input');
+            const allowedVal = allowedInp ? allowedInp.value : '';
+            const inputs = {};
+            tr.querySelectorAll('.day-input').forEach(inp => {
+                const m = inp.dataset.month;
+                const isC = inp.classList.contains('c-input');
+                inputs[`${isC ? 'c' : 'po'}_${m}`] = inp.value;
+            });
+            snapshot.push({ empId, allowedVal, inputs });
+        });
+        return snapshot;
+    }
+
+    function applyTableState(snapshot) {
+        if (!snapshot || !Array.isArray(snapshot) || !tableBody) return;
+        snapshot.forEach(item => {
+            const tr = tableBody.querySelector(`tr[data-emp-id="${item.empId}"]`);
+            if (!tr) return;
+            const allowedInp = tr.querySelector('.allowed-days-input');
+            if (allowedInp && item.allowedVal !== undefined) {
+                allowedInp.value = item.allowedVal;
+            }
+            if (item.inputs) {
+                Object.keys(item.inputs).forEach(key => {
+                    const parts = key.split('_');
+                    const isC = parts[0] === 'c';
+                    const m = parts[1];
+                    const selector = isC ? `.c-input[data-month="${m}"]` : `.po-input[data-month="${m}"]`;
+                    const inp = tr.querySelector(selector);
+                    if (inp) {
+                        inp.value = item.inputs[key];
+                    }
+                });
+            }
+            calculateRow(tr);
+        });
+        updateTotals();
+        updateUndoRedoButtons();
+    }
+
+    function pushUndoState() {
+        const currentState = captureTableState();
+        if (!currentState) return;
+        if (undoStack.length > 0) {
+            const lastState = JSON.stringify(undoStack[undoStack.length - 1]);
+            if (lastState === JSON.stringify(currentState)) return;
         }
-        yearSelect.value = y;
-        yearSelect.dispatchEvent(new Event('change'));
+        undoStack.push(currentState);
+        if (undoStack.length > 50) undoStack.shift();
+        redoStack = [];
+        updateUndoRedoButtons();
     }
 
-    if (prevYearBtn) {
-        prevYearBtn.addEventListener('click', () => {
-            setYear(currentYear - 1);
-        });
+    function doUndo() {
+        if (undoStack.length === 0) return;
+        const currentState = captureTableState();
+        if (currentState) {
+            redoStack.push(currentState);
+        }
+        const previousState = undoStack.pop();
+        applyTableState(previousState);
     }
 
-    if (nextYearBtn) {
-        nextYearBtn.addEventListener('click', () => {
-            setYear(currentYear + 1);
-        });
+    function doRedo() {
+        if (redoStack.length === 0) return;
+        const currentState = captureTableState();
+        if (currentState) {
+            undoStack.push(currentState);
+        }
+        const nextState = redoStack.pop();
+        applyTableState(nextState);
     }
+
+    if (undoBtn) undoBtn.addEventListener('click', doUndo);
+    if (redoBtn) redoBtn.addEventListener('click', doRedo);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key.toLowerCase() === 'z') {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    doRedo();
+                } else {
+                    e.preventDefault();
+                    doUndo();
+                }
+            } else if (e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                doRedo();
+            }
+        }
+    });
 
     // Modal Handlers
     function openHolidaysModal() {
@@ -660,11 +743,18 @@ document.addEventListener('DOMContentLoaded', () => {
             calculateRow(tr);
 
             // Attach listeners to all inputs in this row
-            const inputs = tr.querySelectorAll('.day-input');
+            const inputs = tr.querySelectorAll('.day-input, .allowed-days-input');
             inputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    pushUndoState();
+                });
                 input.addEventListener('input', () => calculateRow(tr));
             });
         });
+
+        undoStack = [];
+        redoStack = [];
+        updateUndoRedoButtons();
 
         // Summary Row 1: Всего положено отпусков
         const trSumAllowed = document.createElement('tr');

@@ -78,30 +78,10 @@ body {
     font-size: 14px;
 }
 
-.btn-year-nav {
-    background: #ffffff;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
-}
-
-.btn-year-nav:hover {
-    background: var(--blue-main);
-    color: #ffffff;
-    border-color: var(--blue-main);
-}
-
-.btn-year-nav:active {
-    transform: scale(0.95);
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    pointer-events: none;
 }
 
 .year-select {
