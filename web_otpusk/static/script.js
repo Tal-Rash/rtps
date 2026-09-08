@@ -429,13 +429,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Calculate center point across the cells
-            let startPoint = vac.startMonth + (vac.startDay - 1) / calendarDaysInMonths[vac.startMonth];
-            let endPoint = vac.endMonth + vac.endDay / calendarDaysInMonths[vac.endMonth];
-            let centerPoint = (startPoint + endPoint) / 2;
-            
-            let centerM = Math.floor(centerPoint);
-            let centerLeft = (centerPoint - centerM) * 100;
+            // Calculate center point in the gap between dates (50% for single month, cell border/center for multi-month)
+            let centerM, centerLeft;
+            if (vac.startMonth === vac.endMonth) {
+                centerM = vac.startMonth;
+                centerLeft = 50;
+            } else {
+                let centerPoint = (vac.startMonth + vac.endMonth + 1) / 2;
+                centerM = Math.floor(centerPoint);
+                centerLeft = (centerPoint - centerM) * 100;
+            }
 
             let badgeText = totalDays;
             let overflowClass = '';
