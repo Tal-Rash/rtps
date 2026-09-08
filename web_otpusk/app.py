@@ -178,7 +178,23 @@ async def get_vacations(year: int = 2026):
             if v_row["name"]:
                 saved_vacations[str(v_row["name"])] = v_list
 
+        prev_vac_rows = cur.execute(
+            "SELECT tab_num, name, vacations_json FROM vacations_schedule WHERE y=?",
+            (year - 1,)
+        ).fetchall()
+        prev_saved_vacations = {}
+        for p_row in prev_vac_rows:
+            try:
+                p_list = json.loads(p_row["vacations_json"] or "[]")
+            except Exception:
+                p_list = []
+            if p_row["tab_num"]:
+                prev_saved_vacations[str(p_row["tab_num"])] = p_list
+            if p_row["name"]:
+                prev_saved_vacations[str(p_row["name"])] = p_list
+
     result = []
+    jan_prefix = f"{year}-01-"
     for emp in employees:
         if is_employee_excluded_for_year(emp, year):
             continue
@@ -186,6 +202,15 @@ async def get_vacations(year: int = 2026):
         emp_name = emp.get("name") or emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
         vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        prev_vacs = prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
+        
+        carried_over = []
+        for pv in prev_vacs:
+            s_date = str(pv.get("start") or "")
+            e_date = str(pv.get("end") or "")
+            if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
+                carried_over.append(pv)
+
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
         result.append({
             "id": len(result) + 1,
@@ -194,7 +219,8 @@ async def get_vacations(year: int = 2026):
             "full_name": emp.get("full_name") or emp_name,
             "position": emp.get("pos") or "",
             "vacation_days": v_days,
-            "vacations": vacations
+            "vacations": vacations,
+            "carried_over_vacations": carried_over
         })
 
     if not result:

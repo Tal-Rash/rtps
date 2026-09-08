@@ -390,6 +390,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (poInput) poInput.value = endD;
             });
 
+            // Populate carried over vacations from previous year (January)
+            (employee.carried_over_vacations || []).forEach(cov => {
+                if (!cov || !cov.start || !cov.end) return;
+                const start = new Date(cov.start);
+                const end = new Date(cov.end);
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+
+                const covStartD = start.getDate();
+                const covEndD = end.getDate();
+
+                const cInput = tr.querySelector('.c-input[data-month="0"]');
+                const poInput = tr.querySelector('.po-input[data-month="0"]');
+
+                if (cInput && poInput && (!cInput.value || (parseInt(cInput.value) === covStartD && parseInt(poInput.value) === covEndD))) {
+                    cInput.value = covStartD;
+                    poInput.value = covEndD;
+                    tr.dataset.carriedOverJan = "true";
+                    tr.dataset.carriedOverStartD = covStartD;
+                    tr.dataset.carriedOverEndD = covEndD;
+                }
+            });
+
             // Calculate and draw row
             calculateRow(tr);
 
@@ -498,13 +520,25 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
+        const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
+        const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
+
+        vacations.forEach(vac => {
+            if (isCarriedOverJan && vac.startMonth === 0 && vac.endMonth === 0 && vac.startDay === carriedStartD && vac.endDay === carriedEndD) {
+                vac.is_carried_over = true;
+            }
+        });
+
         let allowedStr = tr.querySelector('.allowed-days-input') ? tr.querySelector('.allowed-days-input').value : '';
         let allowedDays = allowedStr ? parseInt(allowedStr) : Infinity;
 
-        // Calculate grand total excluding holidays
+        // Calculate grand total excluding holidays and carried over vacations
         let grandTotalDays = 0;
         vacations.forEach(vac => {
-            grandTotalDays += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+            if (!vac.is_carried_over) {
+                grandTotalDays += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+            }
         });
 
         let overflow = grandTotalDays > allowedDays ? grandTotalDays - allowedDays : 0;
@@ -538,16 +572,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (vac.startMonth === vac.endMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = ((vac.endDay - vac.startDay + 1) / daysInM) * 100;
-                    drawLine(cellWrapper, left, width);
+                    drawLine(cellWrapper, left, width, vac.is_carried_over);
                 } else if (m === vac.startMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = 100 - left;
-                    drawLine(cellWrapper, left, width);
+                    drawLine(cellWrapper, left, width, vac.is_carried_over);
                 } else if (m === vac.endMonth) {
                     let width = (vac.endDay / daysInM) * 100;
-                    drawLine(cellWrapper, 0, width);
+                    drawLine(cellWrapper, 0, width, vac.is_carried_over);
                 } else {
-                    drawLine(cellWrapper, 0, 100);
+                    drawLine(cellWrapper, 0, 100, vac.is_carried_over);
                 }
             }
 
@@ -564,7 +598,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let badgeText = totalDays;
             let overflowClass = '';
-            if (overflow > 0) {
+            if (vac.is_carried_over) {
+                overflowClass = 'badge-carried-over';
+                badgeText = `${totalDays} (прошл. год)`;
+            } else if (overflow > 0) {
                 overflowClass = 'badge-overflow';
                 if (index === vacations.length - 1) {
                     badgeText = `${totalDays} (перебор +${overflow})`;
@@ -593,6 +630,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (allowedInp) {
                 allowedSum += (parseInt(allowedInp.value) || 0);
             }
+
+            const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
+            const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
+            const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
 
             let currentStart = null;
             let currentStartMonth = null;
@@ -632,6 +673,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             vacations.forEach(vac => {
+                if (isCarriedOverJan && vac.startMonth === 0 && vac.endMonth === 0 && vac.startDay === carriedStartD && vac.endDay === carriedEndD) {
+                    vac.is_carried_over = true;
+                }
+
+                if (vac.is_carried_over) return; // Skip carried-over days from current year's totals!
+
                 let empVacDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
                 factSum += empVacDays;
 
@@ -696,8 +743,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function drawLine(wrapper, leftPct, widthPct) {
-        wrapper.insertAdjacentHTML('beforeend', `<div class="vacation-line" style="left: ${leftPct}%; width: ${widthPct}%;"></div>`);
+    function drawLine(wrapper, leftPct, widthPct, isCarried = false) {
+        const extraClass = isCarried ? ' vacation-line-carried' : '';
+        wrapper.insertAdjacentHTML('beforeend', `<div class="vacation-line${extraClass}" style="left: ${leftPct}%; width: ${widthPct}%;"></div>`);
     }
 
     // Save functionality
@@ -768,7 +816,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
-                // Map back to absolute dates
+                // Map back to absolute dates, filtering out carried over vacations from previous year
+                const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
+                const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
+                const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
+
+                parsedVacations = parsedVacations.filter(vac => {
+                    if (isCarriedOverJan && vac.startMonth === 0 && vac.endMonth === 0 && vac.startDay === carriedStartD && vac.endDay === carriedEndD) {
+                        return false;
+                    }
+                    return true;
+                });
+
                 employee.vacations = parsedVacations.map(vac => {
                     let sYear = vac.startMonth === 12 ? (currentYear + 1) : currentYear;
                     let realSMonth = vac.startMonth === 12 ? 1 : (vac.startMonth + 1);

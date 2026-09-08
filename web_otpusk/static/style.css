@@ -833,3 +833,14 @@ body.hide-badges .total-days-badge {
 .diff-exact {
     color: #10b981 !important; /* Green for exact match */
 }
+
+/* Carried Over Vacation Badge & Line */
+.badge-carried-over {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #94a3b8 !important;
+}
+
+.vacation-line-carried {
+    background-color: #94a3b8 !important;
+}
