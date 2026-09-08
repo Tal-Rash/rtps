@@ -127,17 +127,23 @@ async def read_root():
     with open(index_file, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
+def extract_year_from_date(date_str: str) -> int | None:
+    """Извлекает 4-значный год из строки даты (поддерживает форматы YYYY-MM-DD, DD.MM.YYYY и др.)"""
+    if not date_str:
+        return None
+    d_str = str(date_str).strip()
+    parts = d_str.replace("/", ".").replace("-", ".").split(".")
+    for part in parts:
+        part = part.strip()
+        if len(part) == 4 and part.isdigit():
+            return int(part)
+    return None
+
 def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
+    """Проверяет, уволен ли сотрудник до целевого года"""
     is_exc = int(emp.get("is_excluded") or 0)
     exc_date_str = str(emp.get("exclude_date") or "").strip()
-    exc_year = None
-    if exc_date_str:
-        parts = exc_date_str.replace("/", ".").replace("-", ".").split(".")
-        for part in parts:
-            part = part.strip()
-            if len(part) == 4 and part.isdigit():
-                exc_year = int(part)
-                break
+    exc_year = extract_year_from_date(exc_date_str)
 
     if exc_year is not None:
         if exc_year < target_year:
@@ -290,6 +296,11 @@ async def get_vacations(year: int = 2026):
         if is_employee_excluded_for_year(emp, year):
             continue
 
+        # Проверяем дату приема на работу: не выводить сотрудника в графиках прошлых лет
+        hire_year = extract_year_from_date(emp.get("hire_date"))
+        if hire_year is not None and hire_year > year:
+            continue
+
         emp_name = emp.get("name") or emp.get("full_name") or ""
         emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
@@ -301,6 +312,10 @@ async def get_vacations(year: int = 2026):
                    (emp_full and is_same_person(emp_full, ai["name"], tab_num, ai["tab_num"])):
                     vacations.append(ai["vacation"])
                     processed_archive_keys.add((ai["tab_num"], ai["name"]))
+
+        # Персонал, пришедший в текущем (целевом) году, не должен отображаться в графике этого года, если его нет в архиве и нет сохраненного графика
+        if hire_year is not None and hire_year == year and not vacations:
+            continue
 
         prev_vacs = prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
         
