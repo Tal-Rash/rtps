@@ -581,10 +581,33 @@ async def redir_zamer():
 async def redir_alsn():
     return RedirectResponse(f"{ALSN_SITE_URL}/alsn", status_code=303)
 
-@app.get("/otpusk")
-@app.get("/otpusk/")
-async def redir_otpusk():
-    return RedirectResponse(f"{OTPUSK_SITE_URL}", status_code=303)
+import urllib.request
+import urllib.error
+
+@app.api_route("/otpusk", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("/otpusk/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_otpusk(request: Request, path: str = ""):
+    sub_path = f"/{path}" if path else ""
+    target_url = f"http://127.0.0.1:8085/otpusk{sub_path}"
+    if request.query_params:
+        target_url += f"?{request.query_params}"
+    body = await request.body()
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
+    try:
+        req = urllib.request.Request(target_url, data=body if body else None, headers=headers, method=request.method)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content = resp.read()
+            media_type = resp.headers.get("Content-Type", "text/html")
+            return Response(content=content, media_type=media_type, status_code=resp.status)
+    except urllib.error.HTTPError as e:
+        return Response(content=e.read(), media_type=e.headers.get("Content-Type", "text/plain"), status_code=e.code)
+    except Exception as e:
+        return HTMLResponse(
+            content=f"""<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Модуль не запущен</title>
+            <style>body{{margin:0;font-family:Segoe UI, Arial, sans-serif;background:#f4f7fb;color:#102033;text-align:center;padding:50px;}} .card{{background:#fff;padding:40px;border-radius:18px;max-width:480px;margin:10vh auto;box-shadow:0 12px 32px rgba(16,32,51,.08);}}</style>
+            </head><body><div class="card"><h2 style="margin-top:0;color:#b00020;">Сервис отпусков временно недоступен</h2><p style="color:#64748b;margin-bottom:24px;">Модуль отпусков (порт 8085) еще не запущен на сервере.<br><br><small>Ошибка подключения к 127.0.0.1:8085: {e}</small></p><a href="/" style="background:#276ef1;color:#fff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:8px;display:inline-block;">На главную</a></div></body></html>""",
+            status_code=502
+        )
 
 if __name__ == "__main__":
     host = os.environ.get("WEB_HOST", "127.0.0.1")
