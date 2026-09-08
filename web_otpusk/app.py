@@ -635,14 +635,14 @@ async def get_history_matrix(year: int = 2026):
         total_vacations = summer_count + winter_count + other_count
         total_days = summer_days + winter_days + other_days
 
-        summer_pct = round((summer_count / total_vacations * 100), 1) if total_vacations > 0 else 0.0
-        winter_pct = round((winter_count / total_vacations * 100), 1) if total_vacations > 0 else 0.0
-        other_pct = round((other_count / total_vacations * 100), 1) if total_vacations > 0 else 0.0
+        summer_pct = round((summer_days / total_days * 100), 1) if total_days > 0 else 0.0
+        winter_pct = round((winter_days / total_days * 100), 1) if total_days > 0 else 0.0
+        other_pct = round((other_days / total_days * 100), 1) if total_days > 0 else 0.0
 
         dominant_season = "balanced"
-        if summer_count > winter_count:
+        if summer_days > winter_days:
             dominant_season = "summer"
-        elif winter_count > summer_count:
+        elif winter_days > summer_days:
             dominant_season = "winter"
 
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
@@ -679,9 +679,9 @@ async def get_history_matrix(year: int = 2026):
     tot_all_count = tot_summer_count + tot_winter_count + tot_other_count
     tot_all_days = tot_summer_days + tot_winter_days + tot_other_days
 
-    tot_summer_pct = round((tot_summer_count / tot_all_count * 100), 1) if tot_all_count > 0 else 0.0
-    tot_winter_pct = round((tot_winter_count / tot_all_count * 100), 1) if tot_all_count > 0 else 0.0
-    tot_other_pct = round((tot_other_count / tot_all_count * 100), 1) if tot_all_count > 0 else 0.0
+    tot_summer_pct = round((tot_summer_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
+    tot_winter_pct = round((tot_winter_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
+    tot_other_pct = round((tot_other_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
 
     overall_stats = {
         "total_employees": len(result_emp_list),
