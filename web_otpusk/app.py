@@ -125,6 +125,10 @@ async def get_vacations(year: int = 2026):
             "SELECT rowid, pos, name, full_name, tab_num, vacation_days FROM employees WHERE y=? ORDER BY rowid",
             (year,)
         ).fetchall()
+        if not emp_rows:
+            emp_rows = cur.execute(
+                "SELECT rowid, pos, name, full_name, tab_num, vacation_days FROM employees ORDER BY rowid"
+            ).fetchall()
         employees = [dict(r) for r in emp_rows]
 
         vac_rows = cur.execute(
@@ -156,6 +160,16 @@ async def get_vacations(year: int = 2026):
             "vacation_days": v_days,
             "vacations": vacations
         })
+
+    if not result:
+        mock_file = ROOT / "data" / "mock_data.json"
+        if mock_file.exists():
+            try:
+                with open(mock_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
     return result
 
 @app.post("/api/vacations")

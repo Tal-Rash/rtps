@@ -577,8 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const panelCurrent = document.getElementById('panelCurrent');
     const panelArchive = document.getElementById('panelArchive');
     const badgeToggleLabel = document.getElementById('badgeToggleLabel');
-    const holidaysBtn = document.getElementById('holidaysBtn');
-    const saveBtn = document.getElementById('saveBtn');
 
     let archiveData = [];
     let selectedArchiveIndex = -1;
@@ -612,13 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteArchiveRowBtn = document.getElementById('deleteArchiveRowBtn');
     const saveArchiveBtn = document.getElementById('saveArchiveBtn');
 
-    function escapeHtml(val) {
-        return String(val ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
+
 
     function loadArchive() {
         fetch(`${APP_PREFIX}/api/vacations/archive`)
