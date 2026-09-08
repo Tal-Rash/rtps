@@ -406,7 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
         trSumAllowed.innerHTML = `
             <td class="col-sticky-1 summary-label"><strong>Всего положено:</strong></td>
             <td class="col-sticky-2 summary-value"><strong id="grandAllowedSum">0</strong></td>
-            ${Array.from({length: 13}, () => '<td class="month-cell summary-empty"></td>').join('')}
+            ${Array.from({length: 13}, (_, m) => `<td class="month-cell summary-month-allowed" id="monthAllowedSum_${m}">0</td>`).join('')}
         `;
         tableBody.appendChild(trSumAllowed);
 
@@ -639,9 +639,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const factEl = document.getElementById('grandFactSum');
         if (factEl) factEl.textContent = factSum;
 
+        // Total working days in main year (first 12 months)
+        const totalYearWorkingDays = daysInMonths.slice(0, 12).reduce((a, b) => a + b, 0) || 365;
+
         for (let m = 0; m < 13; m++) {
-            const mEl = document.getElementById(`monthFactSum_${m}`);
-            if (mEl) mEl.textContent = monthFactSums[m];
+            const mWorkingDays = daysInMonths[m] || 30;
+            const mAllowedCalc = Math.round((allowedSum / totalYearWorkingDays) * mWorkingDays);
+            
+            const mAllowedEl = document.getElementById(`monthAllowedSum_${m}`);
+            if (mAllowedEl) mAllowedEl.textContent = mAllowedCalc;
+
+            const mFactEl = document.getElementById(`monthFactSum_${m}`);
+            if (mFactEl) mFactEl.textContent = monthFactSums[m];
         }
     }
 

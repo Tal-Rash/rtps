@@ -802,3 +802,9 @@ body.hide-badges .total-days-badge {
     font-weight: 700;
     color: var(--blue-dark);
 }
+
+.summary-month-allowed {
+    text-align: center;
+    font-weight: 700;
+    color: var(--text);
+}
