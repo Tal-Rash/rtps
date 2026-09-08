@@ -1434,10 +1434,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const historySortSelect = document.getElementById('historySortSelect');
+
     if (historySearchInput) {
         historySearchInput.addEventListener('input', () => {
             if (historyMatrixCache) {
-                renderHistoryMatrix(historyMatrixCache, historySearchInput.value.trim());
+                renderHistoryMatrix(
+                    historyMatrixCache,
+                    historySearchInput.value.trim(),
+                    historySortSelect ? historySortSelect.value : 'default'
+                );
+            }
+        });
+    }
+
+    if (historySortSelect) {
+        historySortSelect.addEventListener('change', () => {
+            if (historyMatrixCache) {
+                renderHistoryMatrix(
+                    historyMatrixCache,
+                    historySearchInput ? historySearchInput.value.trim() : '',
+                    historySortSelect.value
+                );
             }
         });
     }
@@ -1450,7 +1468,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 historyMatrixCache = data;
-                renderHistoryMatrix(data, historySearchInput ? historySearchInput.value.trim() : '');
+                renderHistoryMatrix(
+                    data,
+                    historySearchInput ? historySearchInput.value.trim() : '',
+                    historySortSelect ? historySortSelect.value : 'default'
+                );
             })
             .catch(err => {
                 console.error('Error loading history matrix:', err);
@@ -1458,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    function renderHistoryMatrix(data, filterText = '') {
+    function renderHistoryMatrix(data, filterText = '', sortBy = 'default') {
         if (!historyHeaderRow || !historyTableBody) return;
 
         const years = data.years || [];
@@ -1466,8 +1488,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Generate Header Row
         let headerHtml = `
-            <th class="col-sticky-1" style="width: 260px; min-width: 260px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
-            <th class="col-sticky-2" style="width: 100px; min-width: 100px; position: sticky; left: 260px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 6px; text-align: center;">Кол-во дней</th>
+            <th class="col-sticky-1" style="width: 240px; min-width: 240px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
+            <th class="col-sticky-2" style="width: 75px; min-width: 75px; position: sticky; left: 240px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 4px; text-align: center;">Норма</th>
+            <th style="min-width: 110px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">🔴 Лето (всего)</th>
+            <th style="min-width: 110px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">🔵 Зима (всего)</th>
+            <th style="min-width: 110px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">⚪ Демисезон</th>
         `;
 
         years.forEach(y => {
@@ -1477,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Filter employees if search query present
         const query = filterText.toLowerCase();
-        const filteredEmployees = employees.filter(emp => {
+        let filteredEmployees = employees.filter(emp => {
             if (!query) return true;
             const name = (emp.name || '').toLowerCase();
             const full = (emp.full_name || '').toLowerCase();
@@ -1486,8 +1511,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return name.includes(query) || full.includes(query) || pos.includes(query) || tab.includes(query);
         });
 
+        // Apply Sorting
+        if (sortBy === 'summer_desc') {
+            filteredEmployees.sort((a, b) => {
+                const sA = (a.stats && a.stats.summer_count) || 0;
+                const sB = (b.stats && b.stats.summer_count) || 0;
+                if (sB !== sA) return sB - sA;
+                return ((b.stats && b.stats.summer_days) || 0) - ((a.stats && a.stats.summer_days) || 0);
+            });
+        } else if (sortBy === 'winter_desc') {
+            filteredEmployees.sort((a, b) => {
+                const wA = (a.stats && a.stats.winter_count) || 0;
+                const wB = (b.stats && b.stats.winter_count) || 0;
+                if (wB !== wA) return wB - wA;
+                return ((b.stats && b.stats.winter_days) || 0) - ((a.stats && a.stats.winter_days) || 0);
+            });
+        }
+
         if (filteredEmployees.length === 0) {
-            historyTableBody.innerHTML = `<tr><td colspan="${years.length + 2}" style="text-align:center; padding: 20px; color: #64748b;">Сотрудники не найдены</td></tr>`;
+            historyTableBody.innerHTML = `<tr><td colspan="${years.length + 5}" style="text-align:center; padding: 20px; color: #64748b;">Сотрудники не найдены</td></tr>`;
             return;
         }
 
@@ -1498,6 +1540,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const empPos = escapeHtml(emp.position || '');
             const vDays = emp.vacation_days || 52;
             const history = emp.history || {};
+            const stats = emp.stats || {};
+
+            const sCnt = stats.summer_count || 0;
+            const sDays = stats.summer_days || 0;
+            const wCnt = stats.winter_count || 0;
+            const wDays = stats.winter_days || 0;
+            const oCnt = stats.other_count || 0;
+            const oDays = stats.other_days || 0;
 
             bodyHtml += `<tr style="border-bottom: 1px solid #e2e8f0;">`;
             bodyHtml += `
@@ -1505,8 +1555,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="font-weight: 600; color: #1e293b;">${empName}</div>
                     <div style="font-size: 0.78rem; color: #64748b;">${empPos}</div>
                 </td>
-                <td class="col-sticky-2" style="position: sticky; left: 260px; background: #ffffff; z-index: 5; border-right: 2px solid #cbd5e1; text-align: center; font-weight: 600; color: #334155;">
+                <td class="col-sticky-2" style="position: sticky; left: 240px; background: #ffffff; z-index: 5; border-right: 2px solid #cbd5e1; text-align: center; font-weight: 600; color: #334155;">
                     ${vDays}
+                </td>
+                <td style="text-align: center; background: #fff5f5; border-right: 1px solid #fee2e2; font-weight: 600;">
+                    ${sCnt > 0 ? `<span style="color: #b71c1c; background: #ffcdd2; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Летних дней: ${sDays}">${sCnt} раз (${sDays} д.)</span>` : '<span style="color:#cbd5e1;">0</span>'}
+                </td>
+                <td style="text-align: center; background: #f0f9ff; border-right: 1px solid #e0f2fe; font-weight: 600;">
+                    ${wCnt > 0 ? `<span style="color: #0277bd; background: #bae6fd; padding: 3px 8px; border-radius: 4px; font-size: 0.84rem; display: inline-block;" title="Зимних дней: ${wDays}">${wCnt} раз (${wDays} д.)</span>` : '<span style="color:#cbd5e1;">0</span>'}
+                </td>
+                <td style="text-align: center; background: #fafafa; border-right: 2px solid #cbd5e1;">
+                    ${oCnt > 0 ? `<span style="color: #334155; font-size: 0.84rem;">${oCnt} раз (${oDays} д.)</span>` : '<span style="color:#cbd5e1;">0</span>'}
                 </td>
             `;
 

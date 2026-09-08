@@ -196,8 +196,13 @@
                         <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #0288d1; border-radius: 3px;"></span> 🔵 Зимние (Ноя, Дек, Янв, Фев)</span>
                         <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px;"></span> ⚪ Демисезон</span>
                     </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 220px;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <select id="historySortSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.88rem; background: #ffffff; font-weight: 500; cursor: pointer;">
+                            <option value="default">↕️ По порядку в списке</option>
+                            <option value="summer_desc">🔴 Сначала кто чаще ходил летом</option>
+                            <option value="winter_desc">🔵 Сначала кто чаще ходил зимой</option>
+                        </select>
+                        <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 200px;">
                     </div>
                 </div>
                 <div class="table-shell" style="max-height: 70vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -205,8 +210,8 @@
                         <thead>
                             <tr id="historyHeaderRow" style="background: #f1f5f9; position: sticky; top: 0; z-index: 10;">
                                 <th class="col-sticky-1" style="width: 260px; min-width: 260px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1;">ФИО Сотрудника</th>
-                                <th class="col-sticky-2" style="width: 110px; min-width: 110px; position: sticky; left: 260px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1;">Кол-во дней</th>
-                                <!-- JS will populate year headers -->
+                                <th class="col-sticky-2" style="width: 100px; min-width: 100px; position: sticky; left: 260px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1;">Кол-во дней</th>
+                                <!-- JS will populate summary stats headers & year headers -->
                             </tr>
                         </thead>
                         <tbody id="historyTableBody">
@@ -220,6 +225,6 @@
             </div>
         </div>
     </div>
-    <script src="/otpusk/static/script.js?v=rtps_v21"></script>
+    <script src="/otpusk/static/script.js?v=rtps_v22"></script>
 </body>
 </html>

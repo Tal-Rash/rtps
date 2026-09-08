@@ -603,6 +603,34 @@ async def get_history_matrix():
                     "season": season
                 })
 
+        # Вычисление итоговой статистики сезонов отпусков сотрудника за все года
+        summer_count = 0
+        summer_days = 0
+        winter_count = 0
+        winter_days = 0
+        other_count = 0
+        other_days = 0
+
+        for y_str, v_list in emp_history.items():
+            for v in v_list:
+                s_type = v.get("season")
+                d_cnt = int(v.get("days") or 0)
+                if s_type == "summer":
+                    summer_count += 1
+                    summer_days += d_cnt
+                elif s_type == "winter":
+                    winter_count += 1
+                    winter_days += d_cnt
+                else:
+                    other_count += 1
+                    other_days += d_cnt
+
+        dominant_season = "balanced"
+        if summer_count > winter_count:
+            dominant_season = "summer"
+        elif winter_count > summer_count:
+            dominant_season = "winter"
+
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
 
         result_emp_list.append({
@@ -611,6 +639,15 @@ async def get_history_matrix():
             "full_name": emp_full or emp_name,
             "position": emp.get("pos") or "",
             "vacation_days": v_days,
+            "stats": {
+                "summer_count": summer_count,
+                "summer_days": summer_days,
+                "winter_count": winter_count,
+                "winter_days": winter_days,
+                "other_count": other_count,
+                "other_days": other_days,
+                "dominant_season": dominant_season
+            },
             "history": emp_history
         })
 
