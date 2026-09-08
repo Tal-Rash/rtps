@@ -362,6 +362,24 @@ button.primary:hover, .btn-primary:hover {
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
+/* Carried Over Vacation Styling (Gray) */
+.vacation-line.vacation-line-carried {
+    background-color: #94a3b8;
+}
+
+.total-days-badge.badge-carried-over {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #94a3b8;
+    box-shadow: none;
+}
+
+.day-input.carried-over-input {
+    color: #64748b !important;
+    background: rgba(241, 245, 249, 0.9) !important;
+    font-style: italic;
+}
+
 /* Hide Badges Mode */
 body.hide-badges .total-days-badge {
     display: none !important;

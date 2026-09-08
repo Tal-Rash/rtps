@@ -581,16 +581,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (vac.startMonth === vac.endMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = ((vac.endDay - vac.startDay + 1) / daysInM) * 100;
-                    drawLine(cellWrapper, left, width);
+                    drawLine(cellWrapper, left, width, vac.is_carried_over);
                 } else if (m === vac.startMonth) {
                     let left = ((vac.startDay - 1) / daysInM) * 100;
                     let width = 100 - left;
-                    drawLine(cellWrapper, left, width);
+                    drawLine(cellWrapper, left, width, vac.is_carried_over);
                 } else if (m === vac.endMonth) {
                     let width = (vac.endDay / daysInM) * 100;
-                    drawLine(cellWrapper, 0, width);
+                    drawLine(cellWrapper, 0, width, vac.is_carried_over);
                 } else {
-                    drawLine(cellWrapper, 0, 100);
+                    drawLine(cellWrapper, 0, 100, vac.is_carried_over);
                 }
             }
 
@@ -607,7 +607,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let badgeText = totalDays;
             let overflowClass = '';
-            if (overflow > 0 && !vac.is_carried_over) {
+            if (vac.is_carried_over) {
+                overflowClass = 'badge-carried-over';
+            } else if (overflow > 0) {
                 overflowClass = 'badge-overflow';
                 if (index === vacations.length - 1) {
                     badgeText = `${totalDays} (перебор +${overflow})`;
@@ -621,6 +623,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 centerCell.insertAdjacentHTML('beforeend', `<div class="total-days-badge ${overflowClass}" style="left: ${centerLeft}%;">${badgeText}</div>`);
             }
         });
+
+        const cInp0 = tr.querySelector('.c-input[data-month="0"]');
+        const poInp0 = tr.querySelector('.po-input[data-month="0"]');
+        const hasCarriedOver = vacations.some(v => v.is_carried_over);
+        if (cInp0 && poInp0) {
+            if (hasCarriedOver) {
+                cInp0.classList.add('carried-over-input');
+                poInp0.classList.add('carried-over-input');
+            } else {
+                cInp0.classList.remove('carried-over-input');
+                poInp0.classList.remove('carried-over-input');
+            }
+        }
 
         updateTotals();
     }
@@ -750,8 +765,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function drawLine(wrapper, leftPct, widthPct) {
-        wrapper.insertAdjacentHTML('beforeend', `<div class="vacation-line" style="left: ${leftPct}%; width: ${widthPct}%;"></div>`);
+    function drawLine(wrapper, leftPct, widthPct, isCarried = false) {
+        const extraClass = isCarried ? ' vacation-line-carried' : '';
+        wrapper.insertAdjacentHTML('beforeend', `<div class="vacation-line${extraClass}" style="left: ${leftPct}%; width: ${widthPct}%;"></div>`);
     }
 
     // Save functionality
