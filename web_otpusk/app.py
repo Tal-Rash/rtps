@@ -483,6 +483,8 @@ async def save_archive(request: Request):
                     str(item.get("note") or "")
                 )
             )
+        # Очищаем сохраненные графики, чтобы годовая таблица перестраивалась из актуального архива
+        cur.execute("DELETE FROM vacations_schedule")
         conn.commit()
     return {"status": "success"}
 
@@ -673,6 +675,8 @@ async def import_archive(file: UploadFile = File(...), mode: str = "append"):
                     item["note"]
                 )
             )
+        # Очищаем сохраненные графики, чтобы годовая таблица перестраивалась из актуального архива
+        cur.execute("DELETE FROM vacations_schedule")
         conn.commit()
 
     return {"status": "success", "imported_count": len(imported_items)}

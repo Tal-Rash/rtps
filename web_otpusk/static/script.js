@@ -1159,6 +1159,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (badgeToggleLabel) badgeToggleLabel.style.display = '';
             if (holidaysBtn) holidaysBtn.style.display = '';
             if (saveBtn) saveBtn.style.display = '';
+
+            // При переключении на годовой график перезагружаем данные из сервера
+            if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {
+                loadVacations(currentYear);
+            }
         });
 
         tabArchiveBtn.addEventListener('click', () => {
@@ -1328,6 +1333,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(() => {
                 saveArchiveBtn.textContent = '💾 Архив сохранен!';
+                // Перезагружаем годовой график после обновления архива
+                if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {
+                    loadVacations(currentYear);
+                }
                 setTimeout(() => {
                     saveArchiveBtn.textContent = '💾 Сохранить архив';
                 }, 2000);
@@ -1374,6 +1383,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 importArchiveFileInput.value = '';
                 alert(`Успешно импортировано записей: ${data.imported_count || 0}`);
                 loadArchive();
+                // Перезагружаем годовой график после импорта в архив
+                if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {
+                    loadVacations(currentYear);
+                }
             })
             .catch(err => {
                 importArchiveBtn.textContent = '📥 Импорт из Excel';
