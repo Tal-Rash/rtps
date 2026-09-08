@@ -323,9 +323,10 @@ button.primary:hover, .btn-primary:hover {
 /* Vacation Line */
 .vacation-line {
     position: absolute;
-    top: 31px;
+    top: 27px;
     height: 3px;
     background-color: var(--red-line);
+    border-radius: 2px;
     z-index: 1;
     pointer-events: none;
 }
