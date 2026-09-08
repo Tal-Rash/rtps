@@ -374,14 +374,20 @@ document.addEventListener('DOMContentLoaded', () => {
             // Populate existing vacations
             (employee.vacations || []).forEach(vac => {
                 if (!vac || !vac.start || !vac.end) return;
-                const start = new Date(vac.start);
-                const end = new Date(vac.end);
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
-                
-                let startM = (start.getFullYear() === currentYear + 1 && start.getMonth() === 0) ? 12 : start.getMonth();
-                let startD = start.getDate();
-                let endM = (end.getFullYear() === currentYear + 1 && end.getMonth() === 0) ? 12 : end.getMonth();
-                let endD = end.getDate();
+                const sParts = String(vac.start).split('-');
+                const eParts = String(vac.end).split('-');
+                if (sParts.length < 3 || eParts.length < 3) return;
+
+                const sYear = parseInt(sParts[0]);
+                const sMonth = parseInt(sParts[1]) - 1;
+                const startD = parseInt(sParts[2]);
+
+                const eYear = parseInt(eParts[0]);
+                const eMonth = parseInt(eParts[1]) - 1;
+                const endD = parseInt(eParts[2]);
+
+                let startM = (sYear === currentYear + 1 && sMonth === 0) ? 12 : sMonth;
+                let endM = (eYear === currentYear + 1 && eMonth === 0) ? 12 : eMonth;
 
                 const cInput = tr.querySelector(`.c-input[data-month="${startM}"]`);
                 if (cInput) cInput.value = startD;
@@ -393,12 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Populate carried over vacations from previous year (January)
             (employee.carried_over_vacations || []).forEach(cov => {
                 if (!cov || !cov.start || !cov.end) return;
-                const start = new Date(cov.start);
-                const end = new Date(cov.end);
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+                const sParts = String(cov.start).split('-');
+                const eParts = String(cov.end).split('-');
+                if (sParts.length < 3 || eParts.length < 3) return;
 
-                const covStartD = start.getDate();
-                const covEndD = end.getDate();
+                const covStartD = parseInt(sParts[2]);
+                const covEndD = parseInt(eParts[2]);
 
                 const cInput = tr.querySelector('.c-input[data-month="0"]');
                 const poInput = tr.querySelector('.po-input[data-month="0"]');
