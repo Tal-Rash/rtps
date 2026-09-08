@@ -1486,38 +1486,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const years = data.years || [];
         const employees = data.employees || [];
-        const overall = data.overall_stats || {};
-
-        // Render Overall Stats Bar
-        const overallContainer = document.getElementById('overallStatsContainer');
-        if (overallContainer) {
-            if (overall.total_vacations > 0) {
-                const sumPct = overall.summer_pct || 0;
-                const winPct = overall.winter_pct || 0;
-                const othPct = overall.other_pct || 0;
-
-                overallContainer.style.display = 'block';
-                overallContainer.innerHTML = `
-                    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                            <span style="font-weight: 700; color: #1e293b; font-size: 0.92rem;">📊 Соотношение отпусков по сезонам в целом по участку:</span>
-                            <div style="display: flex; gap: 16px; font-size: 0.88rem; font-weight: 600;">
-                                <span style="color: #c62828;">🔴 Лето: ${sumPct}% (${overall.summer_count || 0} отп. / ${overall.summer_days || 0} дн.)</span>
-                                <span style="color: #0277bd;">🔵 Зима: ${winPct}% (${overall.winter_count || 0} отп. / ${overall.winter_days || 0} дн.)</span>
-                                <span style="color: #475569;">⚪ Демисезон: ${othPct}% (${overall.other_count || 0} отп. / ${overall.other_days || 0} дн.)</span>
-                            </div>
-                        </div>
-                        <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #e2e8f0;">
-                            <div style="width: ${sumPct}%; background: #d32f2f;" title="Лето: ${sumPct}%"></div>
-                            <div style="width: ${winPct}%; background: #0288d1;" title="Зима: ${winPct}%"></div>
-                            <div style="width: ${othPct}%; background: #94a3b8;" title="Демисезон: ${othPct}%"></div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                overallContainer.style.display = 'none';
-            }
-        }
 
         // Generate Header Row
         let headerHtml = `
