@@ -117,6 +117,77 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Render Annual Calendar Grid
+    function renderAnnualCalendar(year) {
+        const grid = document.getElementById('yearCalendarGrid');
+        const yearTitle = document.getElementById('calendarYearTitle');
+        if (!grid) return;
+        if (yearTitle) yearTitle.textContent = year;
+
+        grid.innerHTML = '';
+
+        months.forEach((monthName, mIndex) => {
+            const card = document.createElement('div');
+            card.className = 'month-card';
+
+            const totalDaysInM = calendarDaysInMonths[mIndex];
+            const datesStr = (holidaysData[mIndex] && holidaysData[mIndex].dates) ? holidaysData[mIndex].dates : '';
+            const hSet = parseHolidayDates(datesStr, totalDaysInM);
+
+            const firstDate = new Date(year, mIndex, 1);
+            const firstDayIdx = (firstDate.getDay() + 6) % 7;
+
+            let tableHtml = `
+                <div class="month-card-title">${monthName}</div>
+                <table class="month-calendar-table">
+                    <thead>
+                        <tr>
+                            <th>Пн</th>
+                            <th>Вт</th>
+                            <th>Ср</th>
+                            <th>Чт</th>
+                            <th>Пт</th>
+                            <th class="weekend-th">Сб</th>
+                            <th class="weekend-th">Вс</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            let dayCounter = 1;
+            let rowCount = Math.ceil((firstDayIdx + totalDaysInM) / 7);
+
+            for (let r = 0; r < rowCount; r++) {
+                tableHtml += '<tr>';
+                for (let col = 0; col < 7; col++) {
+                    const cellIdx = r * 7 + col;
+                    if (cellIdx < firstDayIdx || dayCounter > totalDaysInM) {
+                        tableHtml += '<td class="cal-empty"></td>';
+                    } else {
+                        const dayNum = dayCounter;
+                        const isWeekend = (col === 5 || col === 6);
+                        const isHoliday = hSet.has(dayNum);
+
+                        let cellClass = 'cal-day';
+                        if (isHoliday) {
+                            cellClass = 'cal-holiday';
+                        } else if (isWeekend) {
+                            cellClass = 'cal-weekend';
+                        }
+
+                        tableHtml += `<td class="${cellClass}">${dayNum}</td>`;
+                        dayCounter++;
+                    }
+                }
+                tableHtml += '</tr>';
+            }
+
+            tableHtml += '</tbody></table>';
+            card.innerHTML = tableHtml;
+            grid.appendChild(card);
+        });
+    }
+
     // Load Data (holidays & vacations for selected year)
     function loadYearData(year) {
         Promise.all([
@@ -128,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderHeaders();
             allData = vacations;
             renderTable(allData);
+            renderAnnualCalendar(year);
         }).catch(err => console.error(err));
     }
 
@@ -224,6 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeHolidaysModalFn();
                 updateDaysInMonths();
                 renderHeaders();
+                renderAnnualCalendar(currentYear);
                 document.querySelectorAll('#tableBody tr').forEach(tr => calculateRow(tr));
             })
             .catch(err => {

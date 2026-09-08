@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>График отпусков</title>
-    <link rel="stylesheet" href="/otpusk/static/style.css?v=rtps_v8">
+    <link rel="stylesheet" href="/otpusk/static/style.css?v=rtps_v9">
 </head>
 <body>
     <div class="wrap">
@@ -58,6 +58,20 @@
                         <!-- JS will populate rows -->
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Annual Calendar Reference Section -->
+            <div class="calendar-section">
+                <div class="calendar-section-header">
+                    <h2>📅 Календарь на <span id="calendarYearTitle">2026</span> год</h2>
+                    <div class="calendar-legend">
+                        <span class="legend-item"><span class="legend-box weekend"></span> Выходные (Сб, Вс)</span>
+                        <span class="legend-item"><span class="legend-box holiday"></span> Праздники</span>
+                    </div>
+                </div>
+                <div id="yearCalendarGrid" class="year-calendar-grid">
+                    <!-- JS will populate 12 months -->
+                </div>
             </div>
         </div>
 
@@ -124,6 +138,6 @@
             </div>
         </div>
     </div>
-    <script src="/otpusk/static/script.js?v=rtps_v8"></script>
+    <script src="/otpusk/static/script.js?v=rtps_v9"></script>
 </body>
 </html>

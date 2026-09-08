@@ -640,3 +640,130 @@ body.hide-badges .total-days-badge {
     outline: none;
     box-shadow: 0 0 0 2px var(--accent-soft);
 }
+
+/* Annual Calendar Section */
+.calendar-section {
+    margin-top: 24px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+}
+
+.calendar-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.calendar-section-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+
+.calendar-legend {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-box {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.legend-box.weekend {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+}
+
+.legend-box.holiday {
+    background: #ef4444;
+}
+
+.year-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.month-card {
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.month-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    color: var(--blue-dark);
+    margin-bottom: 8px;
+}
+
+.month-calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.month-calendar-table th, .month-calendar-table td {
+    text-align: center;
+    padding: 4px 2px;
+    width: 14.28%;
+}
+
+.month-calendar-table th {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+}
+
+.month-calendar-table th.weekend-th {
+    color: #ef4444;
+}
+
+.month-calendar-table td {
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+.month-calendar-table td.cal-day {
+    color: var(--text);
+}
+
+.month-calendar-table td.cal-weekend {
+    color: #dc2626;
+    background: #fee2e2;
+    font-weight: 600;
+}
+
+.month-calendar-table td.cal-holiday {
+    color: #ffffff;
+    background: #ef4444;
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(239, 68, 68, 0.3);
+}
+
+.month-calendar-table td.cal-empty {
+    background: transparent;
+}
