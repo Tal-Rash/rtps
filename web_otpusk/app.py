@@ -1,11 +1,15 @@
 import json
 import sqlite3
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from threading import Lock
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 app = FastAPI(title="График Отпусков")
 ROOT = Path(__file__).resolve().parent
@@ -325,6 +329,197 @@ async def save_archive(request: Request):
             )
         conn.commit()
     return {"status": "success"}
+
+def create_archive_excel(rows_data: list, title: str = "Архив отпусков") -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Архив отпусков"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="276EF1", end_color="276EF1", fill_type="solid")
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left_align = Alignment(horizontal="left", vertical="center")
+    
+    thin_border = Border(
+        left=Side(style='thin', color='D0D7DE'),
+        right=Side(style='thin', color='D0D7DE'),
+        top=Side(style='thin', color='D0D7DE'),
+        bottom=Side(style='thin', color='D0D7DE')
+    )
+
+    headers = ["Год", "Сотрудник", "Табельный номер", "Дата начала", "Дата окончания", "Дней отпуска", "Примечание"]
+    ws.append(headers)
+
+    header_row = ws[1]
+    ws.row_dimensions[1].height = 28
+    for cell in header_row:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+        cell.border = thin_border
+
+    data_font = Font(name="Segoe UI", size=10)
+    
+    for row_idx, r in enumerate(rows_data, 2):
+        ws.append([
+            r.get("y", 2025),
+            r.get("name", ""),
+            r.get("tab_num", ""),
+            r.get("start_date", ""),
+            r.get("end_date", ""),
+            r.get("days", 0),
+            r.get("note", "")
+        ])
+        ws.row_dimensions[row_idx].height = 22
+        
+        row_cells = ws[row_idx]
+        for c_idx, cell in enumerate(row_cells, 1):
+            cell.font = data_font
+            cell.border = thin_border
+            if c_idx in (1, 3, 4, 5, 6):
+                cell.alignment = center_align
+            else:
+                cell.alignment = left_align
+
+    col_widths = {1: 10, 2: 32, 3: 18, 4: 16, 5: 16, 6: 15, 7: 35}
+    for col_idx, width in col_widths.items():
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+@app.get("/api/vacations/archive/export")
+@app.get(f"{APP_PREFIX}/api/vacations/archive/export")
+async def export_archive():
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT y, tab_num, name, start_date, end_date, days, note FROM vacations_archive ORDER BY y DESC, name ASC"
+        ).fetchall()
+        rows_data = [dict(r) for r in rows]
+
+    excel_bytes = create_archive_excel(rows_data, title="Архив отпусков")
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=vacations_archive.xlsx"}
+    )
+
+@app.get("/api/vacations/archive/template")
+@app.get(f"{APP_PREFIX}/api/vacations/archive/template")
+async def template_archive():
+    sample_data = [
+        {
+            "y": 2025,
+            "name": "Иванов Иван Иванович",
+            "tab_num": "4001234",
+            "start_date": "15.01.2025",
+            "end_date": "28.01.2025",
+            "days": 14,
+            "note": "Ежегодный основной"
+        },
+        {
+            "y": 2025,
+            "name": "Петров Петр Петрович",
+            "tab_num": "4005678",
+            "start_date": "10.05.2025",
+            "end_date": "23.05.2025",
+            "days": 14,
+            "note": "Дополнительный"
+        }
+    ]
+    excel_bytes = create_archive_excel(sample_data, title="Шаблон архива")
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=vacations_archive_template.xlsx"}
+    )
+
+@app.post("/api/vacations/archive/import")
+@app.post(f"{APP_PREFIX}/api/vacations/archive/import")
+async def import_archive(file: UploadFile = File(...), mode: str = "append"):
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Файл должен быть в формате Excel (.xlsx)")
+
+    contents = await file.read()
+    buffer = BytesIO(contents)
+
+    try:
+        wb = openpyxl.load_workbook(buffer, data_only=True)
+        ws = wb.active
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка чтения Excel файла: {str(e)}")
+
+    imported_items = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not any(row):
+            continue
+
+        def val(idx, default=""):
+            if idx < len(row) and row[idx] is not None:
+                v = row[idx]
+                if isinstance(v, datetime):
+                    return v.strftime("%Y-%m-%d")
+                return str(v).strip()
+            return str(default)
+
+        def int_val(idx, default=0):
+            try:
+                v = val(idx, default)
+                return int(float(v))
+            except Exception:
+                return default
+
+        y_val = int_val(0, 2025)
+        name_val = val(1, "")
+        tab_val = val(2, "")
+        s_date = val(3, "")
+        e_date = val(4, "")
+        days_val = int_val(5, 0)
+        note_val = val(6, "")
+
+        if name_val or tab_val or s_date:
+            imported_items.append({
+                "y": y_val,
+                "name": name_val,
+                "tab_num": tab_val,
+                "start_date": s_date,
+                "end_date": e_date,
+                "days": days_val,
+                "note": note_val
+            })
+
+    if not imported_items:
+        raise HTTPException(status_code=400, detail="В файле не найдено строк с данными.")
+
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        cur = conn.cursor()
+        if mode == "replace":
+            cur.execute("DELETE FROM vacations_archive")
+
+        for item in imported_items:
+            cur.execute(
+                """
+                INSERT INTO vacations_archive (y, tab_num, name, start_date, end_date, days, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item["y"],
+                    item["tab_num"],
+                    item["name"],
+                    item["start_date"],
+                    item["end_date"],
+                    item["days"],
+                    item["note"]
+                )
+            )
+        conn.commit()
+
+    return {"status": "success", "imported_count": len(imported_items)}
 
 @app.get("/api/versions")
 @app.get(f"{APP_PREFIX}/api/versions")

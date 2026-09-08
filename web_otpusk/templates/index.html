@@ -78,12 +78,18 @@
 
         <!-- Panel 2: Archive -->
         <div id="panelArchive" class="panel" style="display: none;">
-            <div class="archive-toolbar">
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <button id="addArchiveRowBtn" type="button">➕ Добавить запись в архив</button>
+            <div class="archive-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+                    <button id="addArchiveRowBtn" type="button">➕ Добавить запись</button>
                     <button id="deleteArchiveRowBtn" type="button" style="color:#b00020; border-color:#fca5a5;">🗑️ Удалить выбранную</button>
+                    <button id="saveArchiveBtn" class="primary" type="button">💾 Сохранить архив</button>
                 </div>
-                <button id="saveArchiveBtn" class="primary" type="button">💾 Сохранить архив</button>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+                    <a href="/otpusk/api/vacations/archive/template" download="vacations_archive_template.xlsx" class="home-link" style="text-decoration:none;">📄 Шаблон Excel</a>
+                    <a href="/otpusk/api/vacations/archive/export" download="vacations_archive.xlsx" class="home-link" style="text-decoration:none;">📊 Экспорт в Excel</a>
+                    <button id="importArchiveBtn" type="button">📥 Импорт из Excel</button>
+                    <input type="file" id="importArchiveFileInput" accept=".xlsx,.xls" style="display: none;">
+                </div>
             </div>
             <div class="table-shell" style="margin-top: 10px;">
                 <table class="archive-table">
@@ -173,6 +179,6 @@
             </div>
         </div>
     </div>
-    <script src="/otpusk/static/script.js?v=rtps_v16"></script>
+    <script src="/otpusk/static/script.js?v=rtps_v17"></script>
 </body>
 </html>

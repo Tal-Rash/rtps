@@ -1338,4 +1338,49 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    // Excel Import functionality for Archive
+    const importArchiveBtn = document.getElementById('importArchiveBtn');
+    const importArchiveFileInput = document.getElementById('importArchiveFileInput');
+
+    if (importArchiveBtn && importArchiveFileInput) {
+        importArchiveBtn.addEventListener('click', () => {
+            importArchiveFileInput.click();
+        });
+
+        importArchiveFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const modeChoice = confirm("Импорт записей из Excel:\n\n[Нажмите ОК] — Добавить новые записи к имеющемуся архиву\n[Нажмите Отмена] — Очистить архив и заменить файл всеми данными из Excel");
+            const mode = modeChoice ? "append" : "replace";
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            importArchiveBtn.textContent = 'Импорт...';
+            fetch(`${APP_PREFIX}/api/vacations/archive/import?mode=${mode}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.detail || 'Ошибка импорта'); });
+                }
+                return res.json();
+            })
+            .then(data => {
+                importArchiveBtn.textContent = '📥 Импорт из Excel';
+                importArchiveFileInput.value = '';
+                alert(`Успешно импортировано записей: ${data.imported_count || 0}`);
+                loadArchive();
+            })
+            .catch(err => {
+                importArchiveBtn.textContent = '📥 Импорт из Excel';
+                importArchiveFileInput.value = '';
+                alert(`Ошибка при импорте: ${err.message}`);
+                console.error(err);
+            });
+        });
+    }
 });
