@@ -339,7 +339,7 @@ async def get_versions(year: int = 2026):
         return [dict(r) for r in rows]
 
 @app.get("/api/versions/{version_id}")
-@app.get(f"{APP_PREFIX}/api/versions/{version_id}")
+@app.get(APP_PREFIX + "/api/versions/{version_id}")
 async def get_version_detail(version_id: int):
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
@@ -375,7 +375,7 @@ async def create_version(request: Request, year: int = 2026):
         return {"status": "ok", "id": new_id, "version_name": v_name, "created_at": created_at}
 
 @app.delete("/api/versions/{version_id}")
-@app.delete(f"{APP_PREFIX}/api/versions/{version_id}")
+@app.delete(APP_PREFIX + "/api/versions/{version_id}")
 async def delete_version(version_id: int):
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
