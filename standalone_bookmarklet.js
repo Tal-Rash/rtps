@@ -1,9 +1,9 @@
 /*
  * Автономный JavaScript код для закладки браузера.
  * 
- * Точная привязка колонок:
+ * Точное сопоставление по столбцам:
  * - "Работник №X" -> ФИО сокращённое (Цюрко Г. В.)
- * - "Сотрудник №X" -> ФИО полное (Цюрко Геннадий Васильевич)
+ * - "СотрудникПолн №X" / "Сотрудник №X" -> ФИО полное (Цюрко Геннадий Васильевич)
  * - "Должность №X" -> Должность
  * - "ID_00X" -> Табельный номер (4004236)
  */
@@ -22,12 +22,11 @@
             }
         }
 
-        // Сортировка заменой от самых длинных ключей
         pairs.sort(function (a, b) {
             return b.from.length - a.from.length;
         });
 
-        // 1. Замена в текстовых узлах DOM
+        // 1. Текстовые узлы
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
 
@@ -49,7 +48,7 @@
             }
         }
 
-        // 2. Замена внутри полей ввода (input, select, option, textarea)
+        // 2. Инпуты и списки
         var inputs = document.querySelectorAll('input, select, option, textarea');
         for (var i = 0; i < inputs.length; i++) {
             var el = inputs[i];
@@ -67,7 +66,7 @@
         }
 
         if (!silent && count > 0) {
-            alert("Подстановка колонок успешно выполнена! Изменено элементов: " + count);
+            alert("Подстановка успешно выполнена! Изменено элементов: " + count);
         }
     }
 
@@ -90,7 +89,6 @@
                     var line = lines[i].trim();
                     if (!line || line.indexOf('#') === 0) continue;
 
-                    // Разбор строки CSV с разделителем ';' или ','
                     var parts = line.split(';');
                     if (parts.length < 2) parts = line.split(',');
 
@@ -106,16 +104,17 @@
                             var num = parseInt(numStr, 10);
 
                             if (!isNaN(num)) {
-                                // 1. ФИО (Столбец ФИО на странице) -> сокращенное ФИО (Цюрко Г. В.)
+                                // "Работник №X" (столбец ФИО) -> Цюрко Г. В.
                                 map["Работник №" + num] = shortFio || fullFio;
 
-                                // 2. ФИО полное -> новое полное ФИО (Цюрко Геннадий Васильевич)
+                                // "СотрудникПолн №X" и "Сотрудник №X" (столбец ФИО полное) -> Цюрко Геннадий Васильевич
+                                map["СотрудникПолн №" + num] = fullFio;
                                 map["Сотрудник №" + num] = fullFio;
 
-                                // 3. Должность -> реальная должность
+                                // "Должность №X" -> Слесарь по ремонту...
                                 if (pos) map["Должность №" + num] = pos;
 
-                                // 4. Код системы ID_001 -> табельный номер (4004236)
+                                // "ID_00X" -> 4004236 (Табельный номер)
                                 map[id] = tab || id;
                             }
                             loaded++;
@@ -126,7 +125,7 @@
                 localStorage.removeItem('rtps_employees_full_dict');
                 localStorage.setItem(KEY, JSON.stringify(map));
 
-                alert("Справочник успешно загружен! Записей сотрудников: " + loaded);
+                alert("Новый файл загружен! Записей сотрудников: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');

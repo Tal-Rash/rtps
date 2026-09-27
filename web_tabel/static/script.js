@@ -956,6 +956,7 @@ document.addEventListener('focusout', function(e) {
             let num = parseInt(numStr, 10);
             if (!isNaN(num)) {
               flatMap["Работник №" + num] = rec.shortFio || rec.fio || rec.fullFio;
+              flatMap["СотрудникПолн №" + num] = rec.fullFio || rec.fio;
               flatMap["Сотрудник №" + num] = rec.fullFio || rec.fio;
               if (rec.pos) flatMap["Должность №" + num] = rec.pos;
               flatMap[rec.id] = rec.tab || rec.id;

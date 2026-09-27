@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Полный скрипт анонимизации SQLite базы данных с разделением на краткое ФИО (Работник №X) и полное ФИО (Сотрудник №X).
+Полный скрипт анонимизации SQLite базы данных с разделением названий (Работник №X для краткого, СотрудникПолн №X для полного).
 """
 
 import sqlite3
@@ -35,7 +35,7 @@ def main():
 
         anon_id = f"ID_{i:03d}"
         anon_short_name = f"Работник №{i}"
-        anon_full_name = f"Сотрудник №{i}"
+        anon_full_name = f"СотрудникПолн №{i}"
         anon_pos = f"Должность №{i}"
 
         emp_info = {
@@ -52,7 +52,7 @@ def main():
         employees_list.append(emp_info)
         employees_map[real_tab] = anon_id
 
-    print(f"Анонимизация {len(employees_list)} сотрудников...")
+    print(f"Анонимизация {len(employees_list)} сотрудников с уникальными метками...")
 
     for emp in employees_list:
         cur.execute("""
@@ -88,7 +88,7 @@ def main():
 
     conn.commit()
     conn.close()
-    print("Успешно! База данных полностью анонимизирована с раздельными именами!")
+    print("Успешно! База данных анонимизирована с раздельными метками для каждого столбца.")
 
 if __name__ == "__main__":
     main()
