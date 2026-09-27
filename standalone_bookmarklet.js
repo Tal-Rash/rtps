@@ -1,21 +1,14 @@
 /*
- * Автономный JavaScript код для закладки браузера с автоматическим слежением (MutationObserver).
- * 
- * Логика работы:
- * 1. При нажатии на закладку один раз утром активируется автоматическая подстановка ФИО.
- * 2. При кликах по месяцам, переключении таблиц и заново подгружаемых данных MutationObserver
- *    автоматически подставляет ФИО и Должности без повторных кликов по закладке!
+ * Автономный JavaScript код для закладки браузера с глубокой заменой (включая input.value и title).
  */
 
 (function () {
     var KEY = 'rtps_emp_dict';
 
-    // Функция замены элементов на странице
     function replaceText(map, silent) {
         if (!map) return;
         var count = 0;
 
-        // Формируем список пар и сортируем по убыванию длины
         var pairs = [];
         for (var k in map) {
             if (map.hasOwnProperty(k) && k && map[k]) {
@@ -27,6 +20,7 @@
             return b.from.length - a.from.length;
         });
 
+        // 1. Замена во всех обычных текстовых узлах
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
 
@@ -48,16 +42,52 @@
             }
         }
 
+        // 2. Замена внутри атрибутов value и title элементов ввода (input, select, option)
+        var inputs = document.querySelectorAll('input, select, option, textarea');
+        for (var i = 0; i < inputs.length; i++) {
+            var el = inputs[i];
+            
+            // Проверка value
+            if (el.value) {
+                var val = el.value;
+                var newVal = val;
+                for (var p = 0; p < pairs.length; p++) {
+                    var item = pairs[p];
+                    if (newVal.indexOf(item.from) !== -1) {
+                        newVal = newVal.split(item.from).join(item.to);
+                        count++;
+                    }
+                }
+                if (newVal !== val) {
+                    el.value = newVal;
+                }
+            }
+
+            // Проверка title
+            if (el.title) {
+                var val = el.title;
+                var newVal = val;
+                for (var p = 0; p < pairs.length; p++) {
+                    var item = pairs[p];
+                    if (newVal.indexOf(item.from) !== -1) {
+                        newVal = newVal.split(item.from).join(item.to);
+                        count++;
+                    }
+                }
+                if (newVal !== val) {
+                    el.title = newVal;
+                }
+            }
+        }
+
         if (!silent && count > 0) {
-            alert("Режим отображения ФИО активирован! Обновлено элементов: " + count);
+            alert("Подстановка ФИО и Должностей успешно выполнена! Элементов: " + count);
         }
     }
 
-    // Запуск слежения за изменениями страницы (при кликах по месяцам и вкладкам)
     function startAutoObserver(map) {
         replaceText(map, false);
 
-        // Если авто-наблюдатель уже запущен в этой вкладке
         if (window.__rtps_observer) {
             window.__rtps_observer.disconnect();
         }
@@ -73,7 +103,6 @@
         window.__rtps_observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // Функция выбора файла
     function loadFile(callback) {
         var inp = document.createElement('input');
         inp.type = 'file';
@@ -132,7 +161,7 @@
             startAutoObserver(newMap);
         });
     } else {
-        var useSaved = confirm("Включить отображение ФИО на этой странице?\n\n[OK] — Включить подстановку ФИО\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
+        var useSaved = confirm("Включить отображение ФИО и Должностей на этой странице?\n\n[OK] — Применить сохраненные ФИО\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
         if (useSaved) {
             startAutoObserver(map);
         } else {
