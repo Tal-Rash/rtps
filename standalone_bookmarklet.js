@@ -1,5 +1,5 @@
 /*
- * Автономный скрипт подстановки полных и сокращенных ФИО.
+ * Точный автономный скрипт подстановки ФИО, Сокращенных ФИО, Должностей и Табельных номеров.
  */
 
 (function () {
@@ -16,10 +16,12 @@
             }
         }
 
+        // Сортировка заменой от самых длинных ключей
         pairs.sort(function (a, b) {
             return b.from.length - a.from.length;
         });
 
+        // 1. Замена в текстовых узлах
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
 
@@ -41,6 +43,7 @@
             }
         }
 
+        // 2. Замена в полях ввода input, select, option
         var inputs = document.querySelectorAll('input, select, option, textarea');
         for (var i = 0; i < inputs.length; i++) {
             var el = inputs[i];
@@ -58,7 +61,7 @@
         }
 
         if (!silent && count > 0) {
-            alert("Подстановка полных и сокращенных ФИО успешно выполнена! Обновлено элементов: " + count);
+            alert("Данные успешно подставлены на странице! Заменено элементов: " + count);
         }
     }
 
@@ -94,10 +97,17 @@
                             var num = parseInt(numStr, 10);
 
                             if (!isNaN(num)) {
+                                // "Работник №1" (столбец ФИО на странице) -> сокращенное ФИО (Цюрко Г. В.)
                                 map["Работник №" + num] = shortFio || fullFio;
+                                
+                                // "Сотрудник №1" (столбец ФИО полное) -> полное ФИО (Цюрко Геннадий Васильевич)
                                 map["Сотрудник №" + num] = fullFio;
+
+                                // "Должность №1" -> реальная должность
                                 if (pos) map["Должность №" + num] = pos;
                             }
+                            
+                            // "ID_001" (столбец Таб. №) -> реальный табельный номер (4004236)
                             if (tab && tab !== id) {
                                 map[id] = tab;
                             }
@@ -109,7 +119,7 @@
                 localStorage.removeItem('rtps_employees_full_dict');
                 localStorage.setItem(KEY, JSON.stringify(map));
 
-                alert("Загружен новый список с сокращенными ФИО! Записей: " + loaded);
+                alert("Файл успешно прочитан! Записей сотрудников: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');

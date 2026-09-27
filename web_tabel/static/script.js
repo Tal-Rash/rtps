@@ -955,12 +955,14 @@ document.addEventListener('focusout', function(e) {
             let numStr = rec.id.replace('ID_', '');
             let num = parseInt(numStr, 10);
             if (!isNaN(num)) {
+              // Работник №X -> сокращенное ФИО (Цюрко Г. В.)
               flatMap["Работник №" + num] = rec.shortFio || rec.fio || rec.fullFio;
+              // Сотрудник №X -> полное ФИО (Цюрко Геннадий Васильевич)
               flatMap["Сотрудник №" + num] = rec.fullFio || rec.fio;
               if (rec.pos) flatMap["Должность №" + num] = rec.pos;
             }
             if (rec.tab && rec.tab !== rec.id) {
-              flatMap[rec.id] = rec.tab;
+              flatMap[rec.id] = rec.tab; // ID_001 -> 4004236 (Табельный номер)
             }
           }
         }
