@@ -1,10 +1,9 @@
 /*
  * Автономный JavaScript код для закладки браузера.
  * 
- * Особенности:
- * - Не требует сервера или внешних скриптов (100% работает в любом браузере).
- * - Длина кода всего ~800 символов (влезает в любые лимиты браузеров).
- * - Поддерживает форматы CSV/TXT (сохраняемые прямо из Excel).
+ * Логика работы:
+ * 1. Если список сохранён, спрашивает через confirm: "Применить сохраненный список? (Отмена — для выбора нового файла)".
+ * 2. При выборе "Отмена" или если список пуст — открывает окно выбора файла Excel/CSV.
  */
 
 (function () {
@@ -12,6 +11,7 @@
 
     // Функция замены элементов на странице
     function replaceText(map) {
+        if (!map) return;
         var count = 0;
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
@@ -33,7 +33,7 @@
                 node.nodeValue = newVal;
             }
         }
-        alert("Готово! Обновлено элементов на странице: " + count);
+        alert("Готово! На странице обновлено элементов: " + count);
     }
 
     // Функция выбора файла CSV / TXT / Excel
@@ -56,7 +56,6 @@
                     var line = lines[i].trim();
                     if (!line || line.indexOf('#') === 0) continue;
 
-                    // Парсинг разделителей: запятая, точка с запятой, табуляция, знак равенства
                     var parts = line.split(/[,;\t=]/);
                     if (parts.length >= 2) {
                         var id = parts[0].trim();
@@ -80,7 +79,7 @@
                 }
 
                 localStorage.setItem(KEY, JSON.stringify(map));
-                alert("Загружено сотрудников из файла: " + loaded);
+                alert("Успешно загружено сотрудников: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');
@@ -91,11 +90,20 @@
     var saved = localStorage.getItem(KEY);
     var map = saved ? JSON.parse(saved) : null;
 
-    if (!map || window.event && window.event.shiftKey) {
+    if (!map) {
+        // Если база еще не загружалась
         loadFile(function (newMap) {
             replaceText(newMap);
         });
     } else {
-        replaceText(map);
+        // Если база уже загружена, спрашиваем пользователю выбор
+        var useSaved = confirm("Применить сохранённый список сотрудников?\n\n[OK] — Заменить ФИО на странице\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
+        if (useSaved) {
+            replaceText(map);
+        } else {
+            loadFile(function (newMap) {
+                replaceText(newMap);
+            });
+        }
     }
 })();
