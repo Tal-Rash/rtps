@@ -1,5 +1,5 @@
 /*
- * Автономный скрипт подстановки ФИО с гарантированной очисткой старых дублей.
+ * Автономный скрипт подстановки полных и сокращенных ФИО.
  */
 
 (function () {
@@ -58,7 +58,7 @@
         }
 
         if (!silent && count > 0) {
-            alert("Данные успешно обновлены! Подставлено элементов: " + count);
+            alert("Подстановка полных и сокращенных ФИО успешно выполнена! Обновлено элементов: " + count);
         }
     }
 
@@ -85,15 +85,17 @@
                     if (parts.length >= 2) {
                         var id = parts[0].trim();
                         var pos = parts.length >= 3 ? parts[1].trim() : '';
-                        var fio = parts.length >= 3 ? parts[2].trim() : parts[1].trim();
-                        var tab = parts.length >= 4 ? parts[3].trim() : id;
+                        var fullFio = parts.length >= 3 ? parts[2].trim() : parts[1].trim();
+                        var shortFio = parts.length >= 4 ? parts[3].trim() : fullFio;
+                        var tab = parts.length >= 5 ? parts[4].trim() : id;
 
-                        if (id && fio && id !== 'Код системы (ID)' && id !== 'Табельный номер') {
+                        if (id && fullFio && id !== 'Код системы (ID)' && id !== 'Табельный номер') {
                             var numStr = id.replace('ID_', '');
                             var num = parseInt(numStr, 10);
 
                             if (!isNaN(num)) {
-                                map["Работник №" + num] = fio;
+                                map["Работник №" + num] = shortFio || fullFio;
+                                map["Сотрудник №" + num] = fullFio;
                                 if (pos) map["Должность №" + num] = pos;
                             }
                             if (tab && tab !== id) {
@@ -104,11 +106,10 @@
                     }
                 }
 
-                // Очистка старых версий хранилища
                 localStorage.removeItem('rtps_employees_full_dict');
                 localStorage.setItem(KEY, JSON.stringify(map));
 
-                alert("Загружен новый файл! Записей: " + loaded);
+                alert("Загружен новый список с сокращенными ФИО! Записей: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');
@@ -116,7 +117,6 @@
         inp.click();
     }
 
-    // Принудительный запуск выбора нового файла при каждом вызове для 100% точности
     loadFile(function (newMap) {
         replaceText(newMap, false);
     });

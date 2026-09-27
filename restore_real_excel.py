@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Скрипт восстановления эталонных ФИО и Должностей в файлах Excel и CSV.
-Объединяет сохраняемые табельные номера, реальные ФИО и реальные должности.
+Скрипт восстановления эталонных ФИО (полных и сокращенных), Должностей и Табельных номеров в Excel и CSV.
 """
 
 import openpyxl
@@ -9,7 +8,15 @@ import csv
 from openpyxl.styles import Font, PatternFill, Alignment
 from pathlib import Path
 
-# Эталонный список реальных данных сотрудников
+# Функция автоматического формирования сокращенного ФИО (Иванов И. В.)
+def make_short_fio(full_name: str) -> str:
+    parts = full_name.strip().split()
+    if len(parts) >= 3:
+        return f"{parts[0]} {parts[1][0]}. {parts[2][0]}."
+    elif len(parts) == 2:
+        return f"{parts[0]} {parts[1][0]}."
+    return full_name
+
 REAL_EMPLOYEES = [
     {"tab": "4004236", "fio": "Цюрко Геннадий Васильевич", "pos": "Слесарь по ремонту подвижного состава"},
     {"tab": "4604571", "fio": "Ханин Дмитрий Викторович", "pos": "Слесарь по ремонту подвижного состава"},
@@ -33,8 +40,7 @@ def main():
     ws = wb.active
     ws.title = "Сотрудники"
 
-    # Заголовок таблицы
-    headers = ["Код системы (ID)", "Должность", "ФИО", "Табельный номер"]
+    headers = ["Код системы (ID)", "Должность", "ФИО полное", "ФИО сокращённое", "Табельный номер"]
     ws.append(headers)
 
     header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
@@ -48,25 +54,26 @@ def main():
     rows = []
     for i, emp in enumerate(REAL_EMPLOYEES, start=1):
         anon_id = f"ID_{i:03d}"
-        row = [anon_id, emp["pos"], emp["fio"], emp["tab"]]
+        short_fio = make_short_fio(emp["fio"])
+        row = [anon_id, emp["pos"], emp["fio"], short_fio, emp["tab"]]
         ws.append(row)
         rows.append(row)
 
     ws.column_dimensions['A'].width = 18
     ws.column_dimensions['B'].width = 45
-    ws.column_dimensions['C'].width = 40
+    ws.column_dimensions['C'].width = 35
     ws.column_dimensions['D'].width = 20
+    ws.column_dimensions['E'].width = 20
 
     wb.save(xlsx_path)
-    print(f"Файл {xlsx_path} полностью восстановлен с оригинальными ФИО!")
+    print(f"Файл {xlsx_path} обновился с сокращенными ФИО!")
 
-    # Сохраняем также CSV для быстрого открытия в Excel
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f, delimiter=";")
         writer.writerow(headers)
         writer.writerows(rows)
 
-    print(f"Файл {csv_path} полностью восстановлен с оригинальными ФИО!")
+    print(f"Файл {csv_path} обновился с сокращенными ФИО!")
 
 if __name__ == "__main__":
     main()

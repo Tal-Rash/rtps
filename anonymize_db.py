@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Полный скрипт анонимизации всех связанных таблиц табеля (включая timesheet и vacations).
-Привязывает табельные смены к новым анонимным кодам (ID_001, ID_002...).
+Полный скрипт анонимизации SQLite базы данных с разделением на краткое ФИО (Работник №X) и полное ФИО (Сотрудник №X).
 """
 
 import sqlite3
@@ -24,9 +23,8 @@ def main():
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    # 1. Получаем уникальных сотрудников и формируем маппинг
     employees_list = []
-    employees_map = {} # old_tab -> new_anon_id
+    employees_map = {}
 
     rows = cur.execute("SELECT DISTINCT tab_num, pos, name, full_name FROM employees WHERE tab_num IS NOT NULL AND tab_num != ''").fetchall()
     for i, r in enumerate(rows, start=1):
@@ -36,7 +34,8 @@ def main():
         real_pos = str(r["pos"] or "").strip()
 
         anon_id = f"ID_{i:03d}"
-        anon_name = f"Работник №{i}"
+        anon_short_name = f"Работник №{i}"
+        anon_full_name = f"Сотрудник №{i}"
         anon_pos = f"Должность №{i}"
 
         emp_info = {
@@ -46,15 +45,15 @@ def main():
             "real_full_name": real_full_name,
             "real_pos": real_pos,
             "anon_id": anon_id,
-            "anon_name": anon_name,
+            "anon_short_name": anon_short_name,
+            "anon_full_name": anon_full_name,
             "anon_pos": anon_pos
         }
         employees_list.append(emp_info)
         employees_map[real_tab] = anon_id
 
-    print(f"Обработка {len(employees_list)} сотрудников...")
+    print(f"Анонимизация {len(employees_list)} сотрудников...")
 
-    # 2. Обновление таблицы employees
     for emp in employees_list:
         cur.execute("""
             UPDATE employees
@@ -63,39 +62,33 @@ def main():
                 pos = ?,
                 tab_num = ?
             WHERE tab_num = ?
-        """, (emp["anon_name"], emp["anon_name"], emp["anon_pos"], emp["anon_id"], emp["real_tab"]))
+        """, (emp["anon_short_name"], emp["anon_full_name"], emp["anon_pos"], emp["anon_id"], emp["real_tab"]))
 
-    # 3. Обновление таблицы timesheet (связывание смен с новыми ID)
     tables = [r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     
     if "timesheet" in tables:
-        print("Обновление связей смен в таблице timesheet...")
         for old_tab, new_id in employees_map.items():
             cur.execute("UPDATE timesheet SET tab_num = ? WHERE tab_num = ?", (new_id, old_tab))
 
     if "vacations" in tables:
-        print("Обновление связей отпусков в таблице vacations...")
         for old_tab, new_id in employees_map.items():
             cur.execute("UPDATE vacations SET tab_num = ? WHERE tab_num = ?", (new_id, old_tab))
 
     if "vacations_schedule" in tables:
-        print("Обновление связей в vacations_schedule...")
         for emp in employees_list:
-            cur.execute("UPDATE vacations_schedule SET name = ?, tab_num = ? WHERE tab_num = ?", (emp["anon_name"], emp["anon_id"], emp["real_tab"]))
+            cur.execute("UPDATE vacations_schedule SET name = ?, tab_num = ? WHERE tab_num = ?", (emp["anon_short_name"], emp["anon_id"], emp["real_tab"]))
 
     if "vacations_archive" in tables:
-        print("Обновление связей в vacations_archive...")
         for emp in employees_list:
-            cur.execute("UPDATE vacations_archive SET name = ?, tab_num = ? WHERE tab_num = ?", (emp["anon_name"], emp["anon_id"], emp["real_tab"]))
+            cur.execute("UPDATE vacations_archive SET name = ?, tab_num = ? WHERE tab_num = ?", (emp["anon_short_name"], emp["anon_id"], emp["real_tab"]))
 
     if "employee_row_order" in tables:
-        print("Обновление связей в employee_row_order...")
         for old_tab, new_id in employees_map.items():
             cur.execute("UPDATE employee_row_order SET tab_num = ? WHERE tab_num = ?", (new_id, old_tab))
 
     conn.commit()
     conn.close()
-    print("Успешно! Все смены, отпуска и табели связаны с анонимными ID!")
+    print("Успешно! База данных полностью анонимизирована с раздельными именами!")
 
 if __name__ == "__main__":
     main()

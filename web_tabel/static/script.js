@@ -947,20 +947,20 @@ document.addEventListener('focusout', function(e) {
       let map = JSON.parse(raw);
       if (!map) return;
 
-      // Парсим сопоставления для точной подмены
       if (Array.isArray(map)) {
         const flatMap = {};
         for (let i = 0; i < map.length; i++) {
           let rec = map[i];
-          if (rec.id && rec.fio) {
+          if (rec.id && (rec.fio || rec.fullFio)) {
             let numStr = rec.id.replace('ID_', '');
             let num = parseInt(numStr, 10);
             if (!isNaN(num)) {
-              flatMap["Работник №" + num] = rec.fio;
+              flatMap["Работник №" + num] = rec.shortFio || rec.fio || rec.fullFio;
+              flatMap["Сотрудник №" + num] = rec.fullFio || rec.fio;
               if (rec.pos) flatMap["Должность №" + num] = rec.pos;
             }
             if (rec.tab && rec.tab !== rec.id) {
-              flatMap[rec.id] = rec.tab; // ID_001 -> 4004236 (без вторичной замены на ФИО)
+              flatMap[rec.id] = rec.tab;
             }
           }
         }
