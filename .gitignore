@@ -38,3 +38,10 @@ pos.txt
 test_hint.py
 test_khanin*.py
 test_sys*.py
+
+# Private employee files and backups
+employees_private.txt
+*.bak
+scratch/
+BOOKMARKLET_LINK.txt
+
