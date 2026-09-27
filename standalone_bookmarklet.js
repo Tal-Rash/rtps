@@ -1,19 +1,21 @@
 /*
- * Автономный JavaScript код для закладки браузера.
+ * Автономный JavaScript код для закладки браузера с автоматическим слежением (MutationObserver).
  * 
- * Логика замены:
- * - Сортировка ключей по убыванию длины для предотвращения коллизий (например "Работник №10" не перехватывается как "Работник №1" + "0").
- * - Интерактивный диалог: "Применить сохраненный список?" или выбор нового файла.
+ * Логика работы:
+ * 1. При нажатии на закладку один раз утром активируется автоматическая подстановка ФИО.
+ * 2. При кликах по месяцам, переключении таблиц и заново подгружаемых данных MutationObserver
+ *    автоматически подставляет ФИО и Должности без повторных кликов по закладке!
  */
 
 (function () {
     var KEY = 'rtps_emp_dict';
 
-    function replaceText(map) {
+    // Функция замены элементов на странице
+    function replaceText(map, silent) {
         if (!map) return;
         var count = 0;
 
-        // Создаем массив пар {from, to} и сортируем по УБЫВАНИЮ ДЛИНЫ ключа
+        // Формируем список пар и сортируем по убыванию длины
         var pairs = [];
         for (var k in map) {
             if (map.hasOwnProperty(k) && k && map[k]) {
@@ -21,7 +23,6 @@
             }
         }
 
-        // Сортировка по длине от самых длинных к коротким
         pairs.sort(function (a, b) {
             return b.from.length - a.from.length;
         });
@@ -46,9 +47,33 @@
                 node.nodeValue = newVal;
             }
         }
-        alert("Готово! На странице успешно обновлено элементов: " + count);
+
+        if (!silent && count > 0) {
+            alert("Режим отображения ФИО активирован! Обновлено элементов: " + count);
+        }
     }
 
+    // Запуск слежения за изменениями страницы (при кликах по месяцам и вкладкам)
+    function startAutoObserver(map) {
+        replaceText(map, false);
+
+        // Если авто-наблюдатель уже запущен в этой вкладке
+        if (window.__rtps_observer) {
+            window.__rtps_observer.disconnect();
+        }
+
+        var timer = null;
+        window.__rtps_observer = new MutationObserver(function () {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(function () {
+                replaceText(map, true);
+            }, 100);
+        });
+
+        window.__rtps_observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Функция выбора файла
     function loadFile(callback) {
         var inp = document.createElement('input');
         inp.type = 'file';
@@ -104,15 +129,15 @@
 
     if (!map) {
         loadFile(function (newMap) {
-            replaceText(newMap);
+            startAutoObserver(newMap);
         });
     } else {
-        var useSaved = confirm("Применить сохранённый список сотрудников?\n\n[OK] — Заменить ФИО на странице\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
+        var useSaved = confirm("Включить отображение ФИО на этой странице?\n\n[OK] — Включить подстановку ФИО\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
         if (useSaved) {
-            replaceText(map);
+            startAutoObserver(map);
         } else {
             loadFile(function (newMap) {
-                replaceText(newMap);
+                startAutoObserver(newMap);
             });
         }
     }
