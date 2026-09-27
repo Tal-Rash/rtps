@@ -2,7 +2,7 @@
 """
 Скрипт анонимизации персональных данных в базе данных SQLite.
 1. Создаёт резервную копию базы данных common_database.db.bak
-2. Экспортирует словарь соответствий (Табельный номер -> ФИО) в локальный файл employees_private.txt
+2. Экспортирует словарь соответствий (Табельный номер -> ФИО) в локальный файл Excel (employees_private.xlsx)
 3. Очищает поля name и full_name в таблицах БД (заменяет на 'Сотрудник <tab_num>')
 """
 
@@ -10,11 +10,13 @@ import sqlite3
 import json
 import shutil
 from pathlib import Path
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
 
 # Константы путей
 DB_PATH = Path("base/common_database.db")
 BACKUP_PATH = Path("base/common_database.db.bak")
-EXPORT_TXT_PATH = Path("employees_private.txt")
+EXPORT_XLSX_PATH = Path("employees_private.xlsx")
 
 def main():
 
@@ -47,14 +49,35 @@ def main():
     except Exception as e:
         print(f"Предупреждение при чтении таблицы employees: {e}")
 
-    # 3. Сохранение словаря ПДн в локальный текстовый файл
-    print(f"Сохранение словаря ПДн в локальный файл {EXPORT_TXT_PATH}...")
-    with open(EXPORT_TXT_PATH, "w", encoding="utf-8") as f:
-        f.write("# Формат: Табельный_Номер = ФИО\n")
-        for tab, data in employees_dict.items():
-            f.write(f"{tab}={data['full_name']}\n")
+    # 3. Сохранение словаря ПДн в локальный файл Excel
+    print(f"Сохранение словаря ПДн в локальный файл Excel {EXPORT_XLSX_PATH}...")
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Сотрудники"
+    
+    # Шапка таблицы Excel
+    ws.append(["Табельный номер", "ФИО"])
+    
+    # Красивое оформление шапки
+    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    print(f"Успешно экспортировано {len(employees_dict)} записей сотрудников.")
+    # Заполнение данных
+    for tab, data in employees_dict.items():
+        ws.append([tab, data["full_name"]])
+        
+    # Автоматическая ширина колонок
+    ws.column_dimensions['A'].width = 20
+    ws.column_dimensions['B'].width = 40
+
+    wb.save(EXPORT_XLSX_PATH)
+    print(f"Успешно экспортировано {len(employees_dict)} записей сотрудников в Excel.")
 
     # 4. Анонимизация таблицы employees
     print("Анонимизация таблицы employees...")

@@ -41,7 +41,9 @@ test_sys*.py
 
 # Private employee files and backups
 employees_private.txt
+employees_private.xlsx
 *.bak
 scratch/
 BOOKMARKLET_LINK.txt
+
 
