@@ -1,17 +1,24 @@
 /*
- * JavaScript код для закладки браузера (Bookmarklet) с поддержкой файлов Excel (.xlsx, .xls) и Текстовых файлов (.txt, .csv).
+ * JavaScript код для закладки браузера (Bookmarklet).
  * 
  * Описание:
- * 1. Загружает лёгкий парсер SheetJS при выборе файла Excel.
- * 2. Сохраняет словарь (Табельный номер -> ФИО) в localStorage браузера.
- * 3. Заменяет на открытой странице сайта записи "Сотрудник №XXXXX" и табельные номера XXXXX на реальные ФИО.
+ * 1. Загружает файл Excel (employees_private.xlsx) со столбцами:
+ *    - Код системы (ID_001...)
+ *    - Должность
+ *    - ФИО
+ *    - Табельный номер
+ * 2. Сохраняет эти сопоставления в localStorage.
+ * 3. Подменяет на открытой странице сайта:
+ *    - "Работник №X" -> ФИО
+ *    - "Должность №X" -> Должность
+ *    - "ID_00X" -> Настоящий Табельный номер
  */
 
 (function () {
-    var STORAGE_KEY = 'rtps_employees_dict';
+    var STORAGE_KEY = 'rtps_employees_full_dict';
 
-    // Функция подстановки ФИО в открытый HTML документ
-    function applyReplacements(map) {
+    // Функция подстановки на странице
+    function applyReplacements(records) {
         var count = 0;
         var walker = document.createTreeWalker(
             document.body,
@@ -20,28 +27,49 @@
             false
         );
 
+        // Готовим список всех сопоставлений для быстрой замены
+        var replacements = [];
+        
+        for (var i = 0; i < records.length; i++) {
+            var rec = records[i];
+            var anonId = rec.id;           // e.g. ID_001
+            var realPos = rec.pos;         // e.g. Слесарь...
+            var realFio = rec.fio;         // e.g. Цюрко...
+            var realTab = rec.tab;         // e.g. 4004236
+            var num = anonId.replace('ID_', '').replace(/^0+/, '');
+
+            // 1. Замена имен
+            replacements.push({ from: "Работник №" + num, to: realFio });
+            replacements.push({ from: "Работник №0" + num, to: realFio });
+            replacements.push({ from: "Работник №00" + num, to: realFio });
+            
+            // 2. Замена должностей
+            replacements.push({ from: "Должность №" + num, to: realPos });
+            replacements.push({ from: "Должность №0" + num, to: realPos });
+            replacements.push({ from: "Должность №00" + num, to: realPos });
+
+            // 3. Замена ID на Табельный номер
+            replacements.push({ from: anonId, to: realTab });
+
+            // 4. Дополнительные сопоставления по старым данным
+            if (realTab && realTab !== anonId) {
+                replacements.push({ from: realTab, to: realFio });
+            }
+        }
+
         var node;
         while ((node = walker.nextNode())) {
             var text = node.nodeValue;
             if (!text || !text.trim()) continue;
 
             var newText = text;
-            for (var tab in map) {
-                if (map.hasOwnProperty(tab)) {
-                    var fio = map[tab];
-                    var target1 = "Сотрудник №" + tab;
-                    var target2 = "Сотрудник " + tab;
-                    
-                    if (newText.indexOf(target1) !== -1) {
-                        newText = newText.split(target1).join(fio);
-                        count++;
-                    } else if (newText.indexOf(target2) !== -1) {
-                        newText = newText.split(target2).join(fio);
-                        count++;
-                    } else if (newText === tab) {
-                        newText = fio;
-                        count++;
-                    }
+            for (var r = 0; r < replacements.length; r++) {
+                var item = replacements[r];
+                if (!item.from || !item.to) continue;
+                
+                if (newText.indexOf(item.from) !== -1) {
+                    newText = newText.split(item.from).join(item.to);
+                    count++;
                 }
             }
 
@@ -52,7 +80,7 @@
         return count;
     }
 
-    // Подключение парсера SheetJS XLSX при необходимости
+    // Загрузка библиотеки SheetJS при отсутствии
     function loadXLSXLibrary(callback) {
         if (window.XLSX) {
             callback();
@@ -64,13 +92,13 @@
             callback();
         };
         script.onerror = function () {
-            alert("Не удалось загрузить библиотеку обработки Excel. Проверьте подключение к сети.");
+            alert("Не удалось загрузить модуль чтения Excel. Проверьте сеть.");
         };
         document.head.appendChild(script);
     }
 
-    // Запрос выбора файла Excel или TXT
-    function promptFileLoad(currentMap, callback) {
+    // Выбор файла пользователем
+    function promptFileLoad(currentRecords, callback) {
         var input = document.createElement('input');
         input.type = 'file';
         input.accept = '.xlsx,.xls,.csv,.txt';
@@ -90,22 +118,28 @@
                         var worksheet = workbook.Sheets[firstSheetName];
                         var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                         
-                        var map = {};
-                        var loaded = 0;
+                        var records = [];
                         for (var i = 0; i < rows.length; i++) {
                             var row = rows[i];
-                            if (!row || row.length < 2) continue;
-                            var tab = String(row[0]).trim();
-                            var fio = String(row[1]).trim();
-                            if (tab && fio && tab !== 'Табельный номер' && tab !== 'ID') {
-                                map[tab] = fio;
-                                loaded++;
+                            if (!row || row.length < 3) continue;
+                            var id = String(row[0] || '').trim();
+                            var pos = String(row[1] || '').trim();
+                            var fio = String(row[2] || '').trim();
+                            var tab = String(row[3] || row[0] || '').trim();
+
+                            if (id && fio && id !== 'Код системы (ID)' && id !== 'Табельный номер') {
+                                records.push({
+                                    id: id,
+                                    pos: pos,
+                                    fio: fio,
+                                    tab: tab
+                                });
                             }
                         }
 
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-                        alert("Успешно загружено " + loaded + " сотрудников из Excel!");
-                        callback(map);
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+                        alert("Загружено " + records.length + " сотрудников из Excel!");
+                        callback(records);
                     };
                     reader.readAsArrayBuffer(file);
                 });
@@ -114,27 +148,30 @@
                 reader.onload = function (evt) {
                     var content = evt.target.result;
                     var lines = content.split(/\r?\n/);
-                    var map = {};
-                    var loaded = 0;
+                    var records = [];
 
                     for (var i = 0; i < lines.length; i++) {
                         var line = lines[i].trim();
                         if (!line || line.indexOf('#') === 0) continue;
 
-                        var parts = line.indexOf('=') !== -1 ? line.split('=') : line.split(';');
+                        var parts = line.split('=');
                         if (parts.length >= 2) {
-                            var tab = parts[0].trim();
+                            var id = parts[0].trim();
                             var fio = parts.slice(1).join('=').trim();
-                            if (tab && fio && tab !== 'Табельный номер') {
-                                map[tab] = fio;
-                                loaded++;
+                            if (id && fio && id !== 'Код системы (ID)') {
+                                records.push({
+                                    id: id,
+                                    pos: 'Должность',
+                                    fio: fio,
+                                    tab: id
+                                });
                             }
                         }
                     }
 
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-                    alert("Успешно загружено " + loaded + " сотрудников!");
-                    callback(map);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+                    alert("Загружено " + records.length + " сотрудников!");
+                    callback(records);
                 };
                 reader.readAsText(file, 'UTF-8');
             }
@@ -142,17 +179,17 @@
         input.click();
     }
 
-    // Основной запуск
+    // Запуск
     var stored = localStorage.getItem(STORAGE_KEY);
-    var map = stored ? JSON.parse(stored) : null;
+    var records = stored ? JSON.parse(stored) : null;
 
-    if (!map || window.event && window.event.shiftKey) {
-        promptFileLoad(map, function (newMap) {
-            var replaced = applyReplacements(newMap);
+    if (!records || window.event && window.event.shiftKey) {
+        promptFileLoad(records, function (newRecords) {
+            var replaced = applyReplacements(newRecords);
             console.log("Заменено элементов: " + replaced);
         });
     } else {
-        var replaced = applyReplacements(map);
+        var replaced = applyReplacements(records);
         console.log("Заменено элементов: " + replaced);
     }
 })();
