@@ -137,8 +137,9 @@
                                 map["Работник №" + num] = fio;
                                 if (pos) map["Должность №" + num] = pos;
                             }
-                            map[id] = tab || fio;
-                            if (tab && tab !== id) map[tab] = fio;
+                            if (tab && tab !== id) {
+                                map[id] = tab; // ID_001 -> 4004236 (без вторичной подмены на ФИО)
+                            }
                             loaded++;
                         }
                     }

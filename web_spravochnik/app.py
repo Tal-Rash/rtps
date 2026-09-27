@@ -1178,8 +1178,9 @@ if (activeTab) {
               flatMap["Работник №" + num] = rec.fio;
               if (rec.pos) flatMap["Должность №" + num] = rec.pos;
             }
-            flatMap[rec.id] = rec.tab || rec.fio;
-            if (rec.tab && rec.tab !== rec.id) flatMap[rec.tab] = rec.fio;
+            if (rec.tab && rec.tab !== rec.id) {
+              flatMap[rec.id] = rec.tab; // ID_001 -> 4004236
+            }
           }
         }
         map = flatMap;

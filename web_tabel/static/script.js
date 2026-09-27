@@ -947,7 +947,7 @@ document.addEventListener('focusout', function(e) {
       let map = JSON.parse(raw);
       if (!map) return;
 
-      // Если сохранен массив объектов (от старой версии закладки)
+      // Парсим сопоставления для точной подмены
       if (Array.isArray(map)) {
         const flatMap = {};
         for (let i = 0; i < map.length; i++) {
@@ -959,8 +959,9 @@ document.addEventListener('focusout', function(e) {
               flatMap["Работник №" + num] = rec.fio;
               if (rec.pos) flatMap["Должность №" + num] = rec.pos;
             }
-            flatMap[rec.id] = rec.tab || rec.fio;
-            if (rec.tab && rec.tab !== rec.id) flatMap[rec.tab] = rec.fio;
+            if (rec.tab && rec.tab !== rec.id) {
+              flatMap[rec.id] = rec.tab; // ID_001 -> 4004236 (без вторичной замены на ФИО)
+            }
           }
         }
         map = flatMap;
