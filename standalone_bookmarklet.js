@@ -1,18 +1,31 @@
 /*
  * Автономный JavaScript код для закладки браузера.
  * 
- * Логика работы:
- * 1. Если список сохранён, спрашивает через confirm: "Применить сохраненный список? (Отмена — для выбора нового файла)".
- * 2. При выборе "Отмена" или если список пуст — открывает окно выбора файла Excel/CSV.
+ * Логика замены:
+ * - Сортировка ключей по убыванию длины для предотвращения коллизий (например "Работник №10" не перехватывается как "Работник №1" + "0").
+ * - Интерактивный диалог: "Применить сохраненный список?" или выбор нового файла.
  */
 
 (function () {
     var KEY = 'rtps_emp_dict';
 
-    // Функция замены элементов на странице
     function replaceText(map) {
         if (!map) return;
         var count = 0;
+
+        // Создаем массив пар {from, to} и сортируем по УБЫВАНИЮ ДЛИНЫ ключа
+        var pairs = [];
+        for (var k in map) {
+            if (map.hasOwnProperty(k) && k && map[k]) {
+                pairs.push({ from: k, to: map[k] });
+            }
+        }
+
+        // Сортировка по длине от самых длинных к коротким
+        pairs.sort(function (a, b) {
+            return b.from.length - a.from.length;
+        });
+
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
 
@@ -21,22 +34,21 @@
             if (!val || !val.trim()) continue;
 
             var newVal = val;
-            for (var k in map) {
-                if (map.hasOwnProperty(k) && map[k]) {
-                    if (newVal.indexOf(k) !== -1) {
-                        newVal = newVal.split(k).join(map[k]);
-                        count++;
-                    }
+            for (var p = 0; p < pairs.length; p++) {
+                var item = pairs[p];
+                if (newVal.indexOf(item.from) !== -1) {
+                    newVal = newVal.split(item.from).join(item.to);
+                    count++;
                 }
             }
+
             if (newVal !== val) {
                 node.nodeValue = newVal;
             }
         }
-        alert("Готово! На странице обновлено элементов: " + count);
+        alert("Готово! На странице успешно обновлено элементов: " + count);
     }
 
-    // Функция выбора файла CSV / TXT / Excel
     function loadFile(callback) {
         var inp = document.createElement('input');
         inp.type = 'file';
@@ -79,7 +91,7 @@
                 }
 
                 localStorage.setItem(KEY, JSON.stringify(map));
-                alert("Успешно загружено сотрудников: " + loaded);
+                alert("Успешно загружено сотрудников из файла: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');
@@ -91,12 +103,10 @@
     var map = saved ? JSON.parse(saved) : null;
 
     if (!map) {
-        // Если база еще не загружалась
         loadFile(function (newMap) {
             replaceText(newMap);
         });
     } else {
-        // Если база уже загружена, спрашиваем пользователю выбор
         var useSaved = confirm("Применить сохранённый список сотрудников?\n\n[OK] — Заменить ФИО на странице\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
         if (useSaved) {
             replaceText(map);
