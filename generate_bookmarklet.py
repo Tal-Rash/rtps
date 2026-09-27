@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Скрипт генерирует минифицированную ссылку javascript:... для закладки браузера из файла bookmarklet_code.js
+Генератор автономного bookmarklet URL из файла standalone_bookmarklet.js.
 """
 
 import urllib.parse
 from pathlib import Path
 
-js_path = Path("bookmarklet_code.js")
+js_path = Path("standalone_bookmarklet.js")
 out_path = Path("BOOKMARKLET_LINK.txt")
 
 if js_path.exists():
     raw_js = js_path.read_text(encoding="utf-8")
     
-    # Простая очистка однострочных комментариев и переносов строк
+    # Очистка от комментариев и лишних пробелов
     lines = []
     for line in raw_js.splitlines():
         line = line.strip()
@@ -24,4 +24,4 @@ if js_path.exists():
     bookmarklet = "javascript:" + urllib.parse.quote(js_code)
     
     out_path.write_text(bookmarklet, encoding="utf-8")
-    print(f"Ссылка для закладки создана и сохранена в {out_path}")
+    print(f"Автономная ссылка для закладки сохранена в {out_path}")
