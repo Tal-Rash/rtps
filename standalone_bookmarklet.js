@@ -1,5 +1,11 @@
 /*
- * Точный автономный скрипт подстановки ФИО, Сокращенных ФИО, Должностей и Табельных номеров.
+ * Автономный JavaScript код для закладки браузера.
+ * 
+ * Точная привязка колонок:
+ * - "Работник №X" -> ФИО сокращённое (Цюрко Г. В.)
+ * - "Сотрудник №X" -> ФИО полное (Цюрко Геннадий Васильевич)
+ * - "Должность №X" -> Должность
+ * - "ID_00X" -> Табельный номер (4004236)
  */
 
 (function () {
@@ -21,7 +27,7 @@
             return b.from.length - a.from.length;
         });
 
-        // 1. Замена в текстовых узлах
+        // 1. Замена в текстовых узлах DOM
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
 
@@ -43,7 +49,7 @@
             }
         }
 
-        // 2. Замена в полях ввода input, select, option
+        // 2. Замена внутри полей ввода (input, select, option, textarea)
         var inputs = document.querySelectorAll('input, select, option, textarea');
         for (var i = 0; i < inputs.length; i++) {
             var el = inputs[i];
@@ -61,7 +67,7 @@
         }
 
         if (!silent && count > 0) {
-            alert("Данные успешно подставлены на странице! Заменено элементов: " + count);
+            alert("Подстановка колонок успешно выполнена! Изменено элементов: " + count);
         }
     }
 
@@ -84,32 +90,33 @@
                     var line = lines[i].trim();
                     if (!line || line.indexOf('#') === 0) continue;
 
-                    var parts = line.split(/[,;\t=]/);
-                    if (parts.length >= 2) {
-                        var id = parts[0].trim();
-                        var pos = parts.length >= 3 ? parts[1].trim() : '';
-                        var fullFio = parts.length >= 3 ? parts[2].trim() : parts[1].trim();
-                        var shortFio = parts.length >= 4 ? parts[3].trim() : fullFio;
-                        var tab = parts.length >= 5 ? parts[4].trim() : id;
+                    // Разбор строки CSV с разделителем ';' или ','
+                    var parts = line.split(';');
+                    if (parts.length < 2) parts = line.split(',');
 
-                        if (id && fullFio && id !== 'Код системы (ID)' && id !== 'Табельный номер') {
+                    if (parts.length >= 2) {
+                        var id = parts[0] ? parts[0].trim() : '';
+                        var pos = parts[1] ? parts[1].trim() : '';
+                        var fullFio = parts[2] ? parts[2].trim() : parts[1].trim();
+                        var shortFio = parts[3] ? parts[3].trim() : fullFio;
+                        var tab = parts[4] ? parts[4].trim() : (parts[3] || id);
+
+                        if (id && fullFio && id.indexOf('Код') === -1 && id.indexOf('Табельный') === -1) {
                             var numStr = id.replace('ID_', '');
                             var num = parseInt(numStr, 10);
 
                             if (!isNaN(num)) {
-                                // "Работник №1" (столбец ФИО на странице) -> сокращенное ФИО (Цюрко Г. В.)
+                                // 1. ФИО (Столбец ФИО на странице) -> сокращенное ФИО (Цюрко Г. В.)
                                 map["Работник №" + num] = shortFio || fullFio;
-                                
-                                // "Сотрудник №1" (столбец ФИО полное) -> полное ФИО (Цюрко Геннадий Васильевич)
+
+                                // 2. ФИО полное -> новое полное ФИО (Цюрко Геннадий Васильевич)
                                 map["Сотрудник №" + num] = fullFio;
 
-                                // "Должность №1" -> реальная должность
+                                // 3. Должность -> реальная должность
                                 if (pos) map["Должность №" + num] = pos;
-                            }
-                            
-                            // "ID_001" (столбец Таб. №) -> реальный табельный номер (4004236)
-                            if (tab && tab !== id) {
-                                map[id] = tab;
+
+                                // 4. Код системы ID_001 -> табельный номер (4004236)
+                                map[id] = tab || id;
                             }
                             loaded++;
                         }
@@ -119,7 +126,7 @@
                 localStorage.removeItem('rtps_employees_full_dict');
                 localStorage.setItem(KEY, JSON.stringify(map));
 
-                alert("Файл успешно прочитан! Записей сотрудников: " + loaded);
+                alert("Справочник успешно загружен! Записей сотрудников: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');
