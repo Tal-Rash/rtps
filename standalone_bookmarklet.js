@@ -1,5 +1,5 @@
 /*
- * Автономный JavaScript код для закладки браузера с глубокой заменой (включая input.value и title).
+ * Автономный скрипт подстановки ФИО с гарантированной очисткой старых дублей.
  */
 
 (function () {
@@ -20,7 +20,6 @@
             return b.from.length - a.from.length;
         });
 
-        // 1. Замена во всех обычных текстовых узлах
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
 
@@ -42,15 +41,11 @@
             }
         }
 
-        // 2. Замена внутри атрибутов value и title элементов ввода (input, select, option)
         var inputs = document.querySelectorAll('input, select, option, textarea');
         for (var i = 0; i < inputs.length; i++) {
             var el = inputs[i];
-            
-            // Проверка value
             if (el.value) {
-                var val = el.value;
-                var newVal = val;
+                var val = el.value, newVal = val;
                 for (var p = 0; p < pairs.length; p++) {
                     var item = pairs[p];
                     if (newVal.indexOf(item.from) !== -1) {
@@ -58,49 +53,13 @@
                         count++;
                     }
                 }
-                if (newVal !== val) {
-                    el.value = newVal;
-                }
-            }
-
-            // Проверка title
-            if (el.title) {
-                var val = el.title;
-                var newVal = val;
-                for (var p = 0; p < pairs.length; p++) {
-                    var item = pairs[p];
-                    if (newVal.indexOf(item.from) !== -1) {
-                        newVal = newVal.split(item.from).join(item.to);
-                        count++;
-                    }
-                }
-                if (newVal !== val) {
-                    el.title = newVal;
-                }
+                if (newVal !== val) el.value = newVal;
             }
         }
 
         if (!silent && count > 0) {
-            alert("Подстановка ФИО и Должностей успешно выполнена! Элементов: " + count);
+            alert("Данные успешно обновлены! Подставлено элементов: " + count);
         }
-    }
-
-    function startAutoObserver(map) {
-        replaceText(map, false);
-
-        if (window.__rtps_observer) {
-            window.__rtps_observer.disconnect();
-        }
-
-        var timer = null;
-        window.__rtps_observer = new MutationObserver(function () {
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(function () {
-                replaceText(map, true);
-            }, 100);
-        });
-
-        window.__rtps_observer.observe(document.body, { childList: true, subtree: true });
     }
 
     function loadFile(callback) {
@@ -125,8 +84,8 @@
                     var parts = line.split(/[,;\t=]/);
                     if (parts.length >= 2) {
                         var id = parts[0].trim();
-                        var fio = parts[parts.length >= 3 ? 2 : 1].trim();
                         var pos = parts.length >= 3 ? parts[1].trim() : '';
+                        var fio = parts.length >= 3 ? parts[2].trim() : parts[1].trim();
                         var tab = parts.length >= 4 ? parts[3].trim() : id;
 
                         if (id && fio && id !== 'Код системы (ID)' && id !== 'Табельный номер') {
@@ -138,15 +97,18 @@
                                 if (pos) map["Должность №" + num] = pos;
                             }
                             if (tab && tab !== id) {
-                                map[id] = tab; // ID_001 -> 4004236 (без вторичной подмены на ФИО)
+                                map[id] = tab;
                             }
                             loaded++;
                         }
                     }
                 }
 
+                // Очистка старых версий хранилища
+                localStorage.removeItem('rtps_employees_full_dict');
                 localStorage.setItem(KEY, JSON.stringify(map));
-                alert("Успешно загружено сотрудников из файла: " + loaded);
+
+                alert("Загружен новый файл! Записей: " + loaded);
                 callback(map);
             };
             reader.readAsText(f, 'UTF-8');
@@ -154,21 +116,8 @@
         inp.click();
     }
 
-    var saved = localStorage.getItem(KEY);
-    var map = saved ? JSON.parse(saved) : null;
-
-    if (!map) {
-        loadFile(function (newMap) {
-            startAutoObserver(newMap);
-        });
-    } else {
-        var useSaved = confirm("Включить отображение ФИО и Должностей на этой странице?\n\n[OK] — Применить сохраненные ФИО\n[Отмена] — Выбрать НОВЫЙ файл с компьютера");
-        if (useSaved) {
-            startAutoObserver(map);
-        } else {
-            loadFile(function (newMap) {
-                startAutoObserver(newMap);
-            });
-        }
-    }
+    // Принудительный запуск выбора нового файла при каждом вызове для 100% точности
+    loadFile(function (newMap) {
+        replaceText(newMap, false);
+    });
 })();
