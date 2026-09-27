@@ -197,6 +197,11 @@ function renderTable() {
     vHTML += `</tr>`;
   }
   vbody.innerHTML = vHTML;
+
+  // Автоматический вызов подстановки локальных меток (ФИО)
+  if (window.applyCustomLabels) {
+    window.applyCustomLabels();
+  }
 }
 
 function renderTabelBody() {
@@ -935,13 +940,31 @@ document.addEventListener('focusout', function(e) {
 
 /* Автоматическая инициализация пользовательских меток строк таблицы */
 (function initTableCustomLabels() {
-  const KEY = 'rtps_emp_dict';
   function applyCustomLabels() {
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
       if (!raw) return;
-      const map = JSON.parse(raw);
+      let map = JSON.parse(raw);
       if (!map) return;
+
+      // Если сохранен массив объектов (от старой версии закладки)
+      if (Array.isArray(map)) {
+        const flatMap = {};
+        for (let i = 0; i < map.length; i++) {
+          let rec = map[i];
+          if (rec.id && rec.fio) {
+            let numStr = rec.id.replace('ID_', '');
+            let num = parseInt(numStr, 10);
+            if (!isNaN(num)) {
+              flatMap["Работник №" + num] = rec.fio;
+              if (rec.pos) flatMap["Должность №" + num] = rec.pos;
+            }
+            flatMap[rec.id] = rec.tab || rec.fio;
+            if (rec.tab && rec.tab !== rec.id) flatMap[rec.tab] = rec.fio;
+          }
+        }
+        map = flatMap;
+      }
 
       const pairs = [];
       for (let k in map) {
@@ -986,14 +1009,17 @@ document.addEventListener('focusout', function(e) {
     } catch (e) {}
   }
 
+  window.applyCustomLabels = applyCustomLabels;
+
   document.addEventListener("DOMContentLoaded", function () {
     applyCustomLabels();
     let timer = null;
     const observer = new MutationObserver(function () {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(applyCustomLabels, 50);
+      timer = setTimeout(applyCustomLabels, 10);
     });
     observer.observe(document.body, { childList: true, subtree: true });
   });
 })();
+
 
