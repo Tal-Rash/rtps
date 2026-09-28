@@ -708,7 +708,8 @@ HTML = """<!doctype html>
       <button type="button" class="primary" onclick="submitAddLocomotive()">Добавить</button>
     </div>
   </div>
-</div>
+<script src="/spravochnik/static/jszip.min.js"></script>
+<script src="/spravochnik/static/xlsx.full.min.js"></script>
 <script>
 const API = '/spravochnik';
 const CAN_EDIT = {{CAN_EDIT}};
@@ -1241,6 +1242,242 @@ if (activeTab) {
     observer.observe(document.body, { childList: true, subtree: true });
   });
 })();
+
+/* ==========================================================================
+ * Утилиты автоматической разанонимизации (расшифровки) отчетов Excel в браузере.
+ * Комментарии к коду на русском языке.
+ * ========================================================================== */
+
+function getEmpReplacementPairs() {
+  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
+  if (!raw) return [];
+  
+  let map = null;
+  try { map = JSON.parse(raw); } catch (e) { return []; }
+  if (!map) return [];
+
+  const flatMap = {};
+
+  function extractNum(idStr) {
+    if (!idStr) return null;
+    const clean = String(idStr)
+      .replace(/ID_/g, '')
+      .replace(/Работник\s*№?\s*/g, '')
+      .replace(/СотрудникПолн\s*№?\s*/g, '')
+      .replace(/Сотрудник\s*№?\s*/g, '')
+      .replace(/Должность\s*№?\s*/g, '')
+      .trim();
+    const num = parseInt(clean, 10);
+    return isNaN(num) ? null : num;
+  }
+
+  function addVariants(num, shortF, fullF, pos, tab) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+
+    const shortVal = shortF || fullF;
+    const fullVal = fullF || shortF;
+
+    if (shortVal) {
+      flatMap["Работник №" + num] = shortVal;
+      flatMap["Работник №" + sNum] = shortVal;
+      flatMap["Работник №" + pNum] = shortVal;
+      flatMap["Работник № " + sNum] = shortVal;
+      flatMap["Работник № " + pNum] = shortVal;
+    }
+
+    if (fullVal) {
+      flatMap["СотрудникПолн №" + num] = fullVal;
+      flatMap["СотрудникПолн №" + sNum] = fullVal;
+      flatMap["СотрудникПолн №" + pNum] = fullVal;
+      flatMap["СотрудникПолн № " + sNum] = fullVal;
+      flatMap["СотрудникПолн № " + pNum] = fullVal;
+
+      flatMap["Сотрудник №" + num] = fullVal;
+      flatMap["Сотрудник №" + sNum] = fullVal;
+      flatMap["Сотрудник №" + pNum] = fullVal;
+      flatMap["Сотрудник № " + sNum] = fullVal;
+      flatMap["Сотрудник № " + pNum] = fullVal;
+    }
+
+    if (pos) {
+      flatMap["Должность №" + num] = pos;
+      flatMap["Должность №" + sNum] = pos;
+      flatMap["Должность №" + pNum] = pos;
+      flatMap["Должность № " + sNum] = pos;
+      flatMap["Должность № " + pNum] = pos;
+    }
+
+    if (tab) {
+      flatMap["ID_" + pNum] = tab;
+      flatMap["ID_" + sNum] = tab;
+      flatMap["ID_" + num] = tab;
+    }
+  }
+
+  if (Array.isArray(map)) {
+    for (let i = 0; i < map.length; i++) {
+      let rec = map[i];
+      if (!rec) continue;
+
+      let num = extractNum(rec.id || rec.tab || rec.tab_num);
+      if (num === null) num = i + 1;
+
+      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
+      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
+      let pos = rec.pos || rec.position || '';
+      let tab = rec.tab || rec.tab_num || rec.id || '';
+
+      addVariants(num, shortF, fullF, pos, tab);
+
+      if (rec.id && tab) {
+        flatMap[String(rec.id)] = String(tab);
+      }
+    }
+  } else if (typeof map === 'object') {
+    for (let k in map) {
+      if (map.hasOwnProperty(k) && k && map[k]) {
+        flatMap[k] = String(map[k]);
+        let num = extractNum(k);
+        if (num !== null) {
+          addVariants(num, map[k], map[k], map[k], map[k]);
+        }
+      }
+    }
+  }
+
+  const pairs = [];
+  for (let k in flatMap) {
+    if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
+      pairs.push({ from: k, to: String(flatMap[k]) });
+    }
+  }
+
+  pairs.sort((a, b) => b.from.length - a.from.length);
+  return pairs;
+}
+
+async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      alert("Ошибка скачивания файла: " + response.statusText);
+      return;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+
+    let filename = defaultFilename || "Отчет.xlsx";
+    const disposition = response.headers.get('Content-Disposition');
+    if (disposition) {
+      const matchUtf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (matchUtf && matchUtf[1]) {
+        filename = decodeURIComponent(matchUtf[1]);
+      } else {
+        const matchNorm = disposition.match(/filename="?([^";]+)"?/i);
+        if (matchNorm && matchNorm[1]) {
+          filename = matchNorm[1];
+        }
+      }
+    }
+
+    const pairs = getEmpReplacementPairs();
+    let finalBuffer = arrayBuffer;
+
+    if (pairs.length > 0) {
+      if (window.JSZip) {
+        try {
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          let modified = false;
+
+          const xmlFiles = Object.keys(zip.files).filter(name => name.endsWith('.xml') || name.endsWith('.rels'));
+          
+          for (let i = 0; i < xmlFiles.length; i++) {
+            const fileName = xmlFiles[i];
+            let content = await zip.files[fileName].async('string');
+            let fileChanged = false;
+
+            for (let p = 0; p < pairs.length; p++) {
+              const item = pairs[p];
+              if (content.includes(item.from)) {
+                content = content.split(item.from).join(item.to);
+                fileChanged = true;
+                modified = true;
+              }
+            }
+
+            if (fileChanged) {
+              zip.file(fileName, content);
+            }
+          }
+
+          if (modified) {
+            finalBuffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+          }
+        } catch (zipErr) {
+          console.error("Ошибка при ZIP разанонимизации:", zipErr);
+        }
+      }
+
+      if (finalBuffer === arrayBuffer && window.XLSX) {
+        try {
+          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellFormulas: true, cellDates: true });
+          let modified = false;
+
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) return;
+
+            for (let cellRef in sheet) {
+              if (cellRef.startsWith('!')) continue;
+              const cell = sheet[cellRef];
+              if (!cell) continue;
+
+              if (cell.v !== undefined && cell.v !== null) {
+                let valStr = String(cell.v);
+                let changed = false;
+
+                for (let i = 0; i < pairs.length; i++) {
+                  const item = pairs[i];
+                  if (valStr.includes(item.from)) {
+                    valStr = valStr.split(item.from).join(item.to);
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  cell.v = valStr;
+                  delete cell.w;
+                  delete cell.r;
+                  delete cell.h;
+                  modified = true;
+                }
+              }
+            }
+          });
+
+          if (modified) {
+            finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+          }
+        } catch (err) {
+          console.error("Ошибка при расшифровке ячеек Excel:", err);
+        }
+      }
+    }
+
+    const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+  } catch (err) {
+    console.error("Ошибка при загрузке отчета:", err);
+    alert("Не удалось скачать отчет: " + err.message);
+  }
+}
+
 loadState();
 </script>
 </body>

@@ -2121,49 +2121,90 @@ function getEmpReplacementPairs() {
 
   const flatMap = {};
 
+  function extractNum(idStr) {
+    if (!idStr) return null;
+    const clean = String(idStr)
+      .replace(/ID_/g, '')
+      .replace(/Работник\s*№?\s*/g, '')
+      .replace(/СотрудникПолн\s*№?\s*/g, '')
+      .replace(/Сотрудник\s*№?\s*/g, '')
+      .replace(/Должность\s*№?\s*/g, '')
+      .trim();
+    const num = parseInt(clean, 10);
+    return isNaN(num) ? null : num;
+  }
+
+  function addVariants(num, shortF, fullF, pos, tab) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+
+    const shortVal = shortF || fullF;
+    const fullVal = fullF || shortF;
+
+    if (shortVal) {
+      flatMap["Работник №" + num] = shortVal;
+      flatMap["Работник №" + sNum] = shortVal;
+      flatMap["Работник №" + pNum] = shortVal;
+      flatMap["Работник № " + sNum] = shortVal;
+      flatMap["Работник № " + pNum] = shortVal;
+    }
+
+    if (fullVal) {
+      flatMap["СотрудникПолн №" + num] = fullVal;
+      flatMap["СотрудникПолн №" + sNum] = fullVal;
+      flatMap["СотрудникПолн №" + pNum] = fullVal;
+      flatMap["СотрудникПолн № " + sNum] = fullVal;
+      flatMap["СотрудникПолн № " + pNum] = fullVal;
+
+      flatMap["Сотрудник №" + num] = fullVal;
+      flatMap["Сотрудник №" + sNum] = fullVal;
+      flatMap["Сотрудник №" + pNum] = fullVal;
+      flatMap["Сотрудник № " + sNum] = fullVal;
+      flatMap["Сотрудник № " + pNum] = fullVal;
+    }
+
+    if (pos) {
+      flatMap["Должность №" + num] = pos;
+      flatMap["Должность №" + sNum] = pos;
+      flatMap["Должность №" + pNum] = pos;
+      flatMap["Должность № " + sNum] = pos;
+      flatMap["Должность № " + pNum] = pos;
+    }
+
+    if (tab) {
+      flatMap["ID_" + pNum] = tab;
+      flatMap["ID_" + sNum] = tab;
+      flatMap["ID_" + num] = tab;
+    }
+  }
+
   if (Array.isArray(map)) {
     for (let i = 0; i < map.length; i++) {
       let rec = map[i];
-      if (rec && rec.id && (rec.fio || rec.fullFio || rec.shortFio)) {
-        let numStr = rec.id.replace('ID_', '');
-        let num = parseInt(numStr, 10);
-        if (!isNaN(num)) {
-          let sNum = String(num);
-          let pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+      if (!rec) continue;
 
-          let shortF = rec.shortFio || rec.fio || rec.fullFio;
-          let fullF = rec.fullFio || rec.fio || rec.shortFio;
-          let pos = rec.pos || rec.position || '';
-          let tab = rec.tab || rec.tab_num || rec.id;
+      let num = extractNum(rec.id || rec.tab || rec.tab_num);
+      if (num === null) num = i + 1;
 
-          flatMap["Работник №" + num] = shortF;
-          flatMap["Работник №" + sNum] = shortF;
-          flatMap["Работник №" + pNum] = shortF;
+      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
+      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
+      let pos = rec.pos || rec.position || '';
+      let tab = rec.tab || rec.tab_num || rec.id || '';
 
-          flatMap["СотрудникПолн №" + num] = fullF;
-          flatMap["СотрудникПолн №" + sNum] = fullF;
-          flatMap["СотрудникПолн №" + pNum] = fullF;
+      addVariants(num, shortF, fullF, pos, tab);
 
-          flatMap["Сотрудник №" + num] = fullF;
-          flatMap["Сотрудник №" + sNum] = fullF;
-          flatMap["Сотрудник №" + pNum] = fullF;
-
-          if (pos) {
-            flatMap["Должность №" + num] = pos;
-            flatMap["Должность №" + sNum] = pos;
-            flatMap["Должность №" + pNum] = pos;
-          }
-
-          flatMap[rec.id] = tab;
-          flatMap["ID_" + pNum] = tab;
-          flatMap["ID_" + sNum] = tab;
-        }
+      if (rec.id && tab) {
+        flatMap[String(rec.id)] = String(tab);
       }
     }
   } else if (typeof map === 'object') {
     for (let k in map) {
       if (map.hasOwnProperty(k) && k && map[k]) {
-        flatMap[k] = map[k];
+        flatMap[k] = String(map[k]);
+        let num = extractNum(k);
+        if (num !== null) {
+          addVariants(num, map[k], map[k], map[k], map[k]);
+        }
       }
     }
   }
@@ -2181,6 +2222,7 @@ function getEmpReplacementPairs() {
 
 /**
  * Перехватывает скачивание файла Excel, подставляет реальные данные работников и отдает файл пользователю.
+ * Использует гибрид JSZip (100% сохранение форматирования openpyxl) и SheetJS.
  */
 async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
   try {
@@ -2208,42 +2250,86 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
     const pairs = getEmpReplacementPairs();
     let finalBuffer = arrayBuffer;
 
-    if (window.XLSX && pairs.length > 0) {
-      try {
-        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true, cellFormulas: true, cellDates: true });
-        
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          if (!sheet) return;
+    if (pairs.length > 0) {
+      // 1. Быстрая замена через JSZip в XML контейнере Excel
+      if (window.JSZip) {
+        try {
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          let modified = false;
 
-          for (let cellRef in sheet) {
-            if (cellRef.startsWith('!')) continue;
-            const cell = sheet[cellRef];
-            if (!cell) continue;
+          const xmlFiles = Object.keys(zip.files).filter(name => name.endsWith('.xml') || name.endsWith('.rels'));
+          
+          for (let i = 0; i < xmlFiles.length; i++) {
+            const fileName = xmlFiles[i];
+            let content = await zip.files[fileName].async('string');
+            let fileChanged = false;
 
-            if (cell.v !== undefined && cell.v !== null) {
-              let valStr = String(cell.v);
-              let changed = false;
-
-              for (let i = 0; i < pairs.length; i++) {
-                const item = pairs[i];
-                if (valStr.includes(item.from)) {
-                  valStr = valStr.split(item.from).join(item.to);
-                  changed = true;
-                }
-              }
-
-              if (changed) {
-                cell.v = valStr;
-                if (cell.w !== undefined) cell.w = valStr;
+            for (let p = 0; p < pairs.length; p++) {
+              const item = pairs[p];
+              if (content.includes(item.from)) {
+                content = content.split(item.from).join(item.to);
+                fileChanged = true;
+                modified = true;
               }
             }
-          }
-        });
 
-        finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      } catch (err) {
-        console.error("Ошибка при расшифровке ячеек Excel:", err);
+            if (fileChanged) {
+              zip.file(fileName, content);
+            }
+          }
+
+          if (modified) {
+            finalBuffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+          }
+        } catch (zipErr) {
+          console.error("Ошибка при ZIP разанонимизации:", zipErr);
+        }
+      }
+
+      // 2. Резервная замена через SheetJS ячейки
+      if (finalBuffer === arrayBuffer && window.XLSX) {
+        try {
+          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellFormulas: true, cellDates: true });
+          let modified = false;
+
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) return;
+
+            for (let cellRef in sheet) {
+              if (cellRef.startsWith('!')) continue;
+              const cell = sheet[cellRef];
+              if (!cell) continue;
+
+              if (cell.v !== undefined && cell.v !== null) {
+                let valStr = String(cell.v);
+                let changed = false;
+
+                for (let i = 0; i < pairs.length; i++) {
+                  const item = pairs[i];
+                  if (valStr.includes(item.from)) {
+                    valStr = valStr.split(item.from).join(item.to);
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  cell.v = valStr;
+                  delete cell.w;
+                  delete cell.r;
+                  delete cell.h;
+                  modified = true;
+                }
+              }
+            }
+          });
+
+          if (modified) {
+            finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+          }
+        } catch (err) {
+          console.error("Ошибка при расшифровке ячеек Excel:", err);
+        }
       }
     }
 
