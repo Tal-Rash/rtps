@@ -698,7 +698,12 @@ async def export_milk(year: int, month: int, type: str):
                         continue
 
                     val = emp_ts.get(d, "").strip().upper()
-                    if type == "факт":
+                    if type == "компенсация":
+                        if "М" in val or "M" in val:
+                            count += 1
+                        elif val:
+                            missed_days.append(f"{d:02d}.{month:02d} {val}")
+                    elif type == "факт":
                         if is_shift_mark(val) and val not in non_shift_codes:
                             count += 1
                         elif val:
@@ -915,7 +920,12 @@ async def export_milk_details(year: int, month: int, type: str):
             if hire_start is not None and d < hire_start:
                 continue
             val = emp_ts.get(d, "").strip().upper()
-            if type == "факт":
+            if type == "компенсация":
+                if "М" in val or "M" in val:
+                    count += 1
+                elif val:
+                    missed_days.append(f"{d:02d}.{month:02d} — {val}")
+            elif type == "факт":
                 if is_shift_mark(val) and val not in non_shift_codes:
                     count += 1
                 elif val:
