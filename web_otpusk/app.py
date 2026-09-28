@@ -220,22 +220,46 @@ def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bo
     if t1 and t2:
         return t1 == t2
 
-    n1 = str(name1 or "").replace('.', ' ').strip().split()
-    n2 = str(name2 or "").replace('.', ' ').strip().split()
+    s1 = str(name1 or "").strip().lower()
+    s2 = str(name2 or "").strip().lower()
+
+    if not s1 or not s2:
+        return False
+
+    if s1 == s2:
+        return True
+
+    # Для плейсхолдеров анонимизации (Работник №1, СотрудникПолн №1, Сотрудник №1, ID_001)
+    if ("№" in s1 or "id_" in s1) and ("№" in s2 or "id_" in s2):
+        num1 = "".join(ch for ch in s1 if ch.isdigit())
+        num2 = "".join(ch for ch in s2 if ch.isdigit())
+        if num1 and num2:
+            return int(num1) == int(num2)
+
+    n1 = s1.replace('.', ' ').split()
+    n2 = s2.replace('.', ' ').split()
 
     if not n1 or not n2:
         return False
 
-    if n1[0].lower() != n2[0].lower():
+    if n1[0] != n2[0]:
         return False
 
     if len(n1) > 1 and len(n2) > 1:
-        if n1[1][0].lower() != n2[1][0].lower():
-            return False
+        if len(n1[1]) == 1 or len(n2[1]) == 1:
+            if n1[1][0] != n2[1][0]:
+                return False
+        else:
+            if n1[1] != n2[1]:
+                return False
 
     if len(n1) > 2 and len(n2) > 2:
-        if n1[2][0].lower() != n2[2][0].lower():
-            return False
+        if len(n1[2]) == 1 or len(n2[2]) == 1:
+            if n1[2][0] != n2[2][0]:
+                return False
+        else:
+            if n1[2] != n2[2]:
+                return False
 
     return True
 
@@ -449,14 +473,24 @@ async def save_vacations(request: Request, year: int = 2026):
     items = await request.json()
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
+        emp_rows = cur.execute("SELECT tab_num, name, full_name FROM employees").fetchall()
         for item in items:
             t_num = str(item.get("tab_num") or item.get("name") or "")
             e_name = str(item.get("name") or "")
             v_json = json.dumps(item.get("vacations", []), ensure_ascii=False)
-            if t_num:
+            
+            target_tab = t_num
+            target_name = e_name
+            for emp in emp_rows:
+                if is_same_person(emp[1], e_name, emp[0], t_num) or is_same_person(emp[2], e_name, emp[0], t_num):
+                    target_tab = emp[0]
+                    target_name = emp[1]
+                    break
+
+            if target_tab:
                 cur.execute(
                     "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
-                    (year, t_num, e_name, v_json)
+                    (year, target_tab, target_name, v_json)
                 )
         conn.commit()
     return {"status": "success"}
