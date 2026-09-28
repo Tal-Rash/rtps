@@ -2121,6 +2121,7 @@ function getEmpReplacementPairs() {
 
   const flatMap = {};
 
+  // Извлекает порядковый номер из строки вида ID_001, Работник №1 и т.д.
   function extractNum(idStr) {
     if (!idStr) return null;
     const clean = String(idStr)
@@ -2134,48 +2135,28 @@ function getEmpReplacementPairs() {
     return isNaN(num) ? null : num;
   }
 
-  function addVariants(num, shortF, fullF, pos, tab) {
+  // Добавляет варианты написания текстового поля (Работник №1, Работник №001 и т.д.)
+  function addFieldVariants(prefix, num, val) {
     const sNum = String(num);
     const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+    const valStr = String(val);
 
-    const shortVal = shortF || fullF;
-    const fullVal = fullF || shortF;
+    flatMap[prefix + " №" + num] = valStr;
+    flatMap[prefix + " №" + sNum] = valStr;
+    flatMap[prefix + " №" + pNum] = valStr;
+    flatMap[prefix + " № " + sNum] = valStr;
+    flatMap[prefix + " № " + pNum] = valStr;
+  }
 
-    if (shortVal) {
-      flatMap["Работник №" + num] = shortVal;
-      flatMap["Работник №" + sNum] = shortVal;
-      flatMap["Работник №" + pNum] = shortVal;
-      flatMap["Работник № " + sNum] = shortVal;
-      flatMap["Работник № " + pNum] = shortVal;
-    }
+  // Добавляет варианты написания ID (ID_001, ID_1 и т.д.)
+  function addIdVariants(num, val) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+    const valStr = String(val);
 
-    if (fullVal) {
-      flatMap["СотрудникПолн №" + num] = fullVal;
-      flatMap["СотрудникПолн №" + sNum] = fullVal;
-      flatMap["СотрудникПолн №" + pNum] = fullVal;
-      flatMap["СотрудникПолн № " + sNum] = fullVal;
-      flatMap["СотрудникПолн № " + pNum] = fullVal;
-
-      flatMap["Сотрудник №" + num] = fullVal;
-      flatMap["Сотрудник №" + sNum] = fullVal;
-      flatMap["Сотрудник №" + pNum] = fullVal;
-      flatMap["Сотрудник № " + sNum] = fullVal;
-      flatMap["Сотрудник № " + pNum] = fullVal;
-    }
-
-    if (pos) {
-      flatMap["Должность №" + num] = pos;
-      flatMap["Должность №" + sNum] = pos;
-      flatMap["Должность №" + pNum] = pos;
-      flatMap["Должность № " + sNum] = pos;
-      flatMap["Должность № " + pNum] = pos;
-    }
-
-    if (tab) {
-      flatMap["ID_" + pNum] = tab;
-      flatMap["ID_" + sNum] = tab;
-      flatMap["ID_" + num] = tab;
-    }
+    flatMap["ID_" + pNum] = valStr;
+    flatMap["ID_" + sNum] = valStr;
+    flatMap["ID_" + num] = valStr;
   }
 
   if (Array.isArray(map)) {
@@ -2191,19 +2172,37 @@ function getEmpReplacementPairs() {
       let pos = rec.pos || rec.position || '';
       let tab = rec.tab || rec.tab_num || rec.id || '';
 
-      addVariants(num, shortF, fullF, pos, tab);
-
-      if (rec.id && tab) {
-        flatMap[String(rec.id)] = String(tab);
+      if (shortF) addFieldVariants("Работник", num, shortF);
+      if (fullF) {
+        addFieldVariants("СотрудникПолн", num, fullF);
+        addFieldVariants("Сотрудник", num, fullF);
+      }
+      if (pos) addFieldVariants("Должность", num, pos);
+      if (tab) {
+        addIdVariants(num, tab);
+        if (rec.id) flatMap[String(rec.id)] = String(tab);
       }
     }
   } else if (typeof map === 'object') {
     for (let k in map) {
       if (map.hasOwnProperty(k) && k && map[k]) {
-        flatMap[k] = String(map[k]);
+        const valStr = String(map[k]);
+        flatMap[k] = valStr;
         let num = extractNum(k);
         if (num !== null) {
-          addVariants(num, map[k], map[k], map[k], map[k]);
+          if (k.startsWith("Работник")) {
+            addFieldVariants("Работник", num, valStr);
+          } else if (k.startsWith("СотрудникПолн")) {
+            addFieldVariants("СотрудникПолн", num, valStr);
+            addFieldVariants("Сотрудник", num, valStr);
+          } else if (k.startsWith("Сотрудник")) {
+            addFieldVariants("Сотрудник", num, valStr);
+            addFieldVariants("СотрудникПолн", num, valStr);
+          } else if (k.startsWith("Должность")) {
+            addFieldVariants("Должность", num, valStr);
+          } else if (k.startsWith("ID_") || /^\d+$/.test(k)) {
+            addIdVariants(num, valStr);
+          }
         }
       }
     }
