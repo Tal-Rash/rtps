@@ -421,10 +421,168 @@ async function saveState() {
   }
 }
 
+/* ==========================================================================
+ * Утилиты автоматической разанонимизации (расшифровки) отчетов Excel в браузере.
+ * Комментарии к коду на русском языке.
+ * ========================================================================== */
+
+/**
+ * Получает словарь замен из localStorage для автоподстановки реальных ФИО и табельных номеров.
+ */
+function getEmpReplacementPairs() {
+  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
+  if (!raw) return [];
+  
+  let map = null;
+  try { map = JSON.parse(raw); } catch (e) { return []; }
+  if (!map) return [];
+
+  const flatMap = {};
+
+  if (Array.isArray(map)) {
+    for (let i = 0; i < map.length; i++) {
+      let rec = map[i];
+      if (rec && rec.id && (rec.fio || rec.fullFio || rec.shortFio)) {
+        let numStr = rec.id.replace('ID_', '');
+        let num = parseInt(numStr, 10);
+        if (!isNaN(num)) {
+          let sNum = String(num);
+          let pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+
+          let shortF = rec.shortFio || rec.fio || rec.fullFio;
+          let fullF = rec.fullFio || rec.fio || rec.shortFio;
+          let pos = rec.pos || rec.position || '';
+          let tab = rec.tab || rec.tab_num || rec.id;
+
+          flatMap["Работник №" + num] = shortF;
+          flatMap["Работник №" + sNum] = shortF;
+          flatMap["Работник №" + pNum] = shortF;
+
+          flatMap["СотрудникПолн №" + num] = fullF;
+          flatMap["СотрудникПолн №" + sNum] = fullF;
+          flatMap["СотрудникПолн №" + pNum] = fullF;
+
+          flatMap["Сотрудник №" + num] = fullF;
+          flatMap["Сотрудник №" + sNum] = fullF;
+          flatMap["Сотрудник №" + pNum] = fullF;
+
+          if (pos) {
+            flatMap["Должность №" + num] = pos;
+            flatMap["Должность №" + sNum] = pos;
+            flatMap["Должность №" + pNum] = pos;
+          }
+
+          flatMap[rec.id] = tab;
+          flatMap["ID_" + pNum] = tab;
+          flatMap["ID_" + sNum] = tab;
+        }
+      }
+    }
+  } else if (typeof map === 'object') {
+    for (let k in map) {
+      if (map.hasOwnProperty(k) && k && map[k]) {
+        flatMap[k] = map[k];
+      }
+    }
+  }
+
+  const pairs = [];
+  for (let k in flatMap) {
+    if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
+      pairs.push({ from: k, to: String(flatMap[k]) });
+    }
+  }
+
+  pairs.sort((a, b) => b.from.length - a.from.length);
+  return pairs;
+}
+
+/**
+ * Перехватывает скачивание файла Excel, подставляет реальные данные работников и отдает файл пользователю.
+ */
+async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      alert("Ошибка скачивания файла: " + response.statusText);
+      return;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+
+    let filename = defaultFilename || "Отчет.xlsx";
+    const disposition = response.headers.get('Content-Disposition');
+    if (disposition) {
+      const matchUtf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (matchUtf && matchUtf[1]) {
+        filename = decodeURIComponent(matchUtf[1]);
+      } else {
+        const matchNorm = disposition.match(/filename="?([^";]+)"?/i);
+        if (matchNorm && matchNorm[1]) {
+          filename = matchNorm[1];
+        }
+      }
+    }
+
+    const pairs = getEmpReplacementPairs();
+    let finalBuffer = arrayBuffer;
+
+    if (window.XLSX && pairs.length > 0) {
+      try {
+        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true, cellFormulas: true, cellDates: true });
+        
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return;
+
+          for (let cellRef in sheet) {
+            if (cellRef.startsWith('!')) continue;
+            const cell = sheet[cellRef];
+            if (!cell) continue;
+
+            if (cell.v !== undefined && cell.v !== null) {
+              let valStr = String(cell.v);
+              let changed = false;
+
+              for (let i = 0; i < pairs.length; i++) {
+                const item = pairs[i];
+                if (valStr.includes(item.from)) {
+                  valStr = valStr.split(item.from).join(item.to);
+                  changed = true;
+                }
+              }
+
+              if (changed) {
+                cell.v = valStr;
+                if (cell.w !== undefined) cell.w = valStr;
+              }
+            }
+          }
+        });
+
+        finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      } catch (err) {
+        console.error("Ошибка при расшифровке ячеек Excel:", err);
+      }
+    }
+
+    const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+  } catch (err) {
+    console.error("Ошибка при загрузке отчета:", err);
+    alert("Не удалось скачать отчет: " + err.message);
+  }
+}
+
 function exportMilk(type) {
   const year = document.getElementById("yearInput").value;
   const month = document.getElementById("monthInput").value;
-  window.open(`${APP_PREFIX}/api/export-milk?year=${year}&month=${month}&type=${type}`, "_blank");
+  downloadAndUnAnonymizeExcel(`${APP_PREFIX}/api/export-milk?year=${year}&month=${month}&type=${encodeURIComponent(type)}`, `Отчет_Молоко_${type}.xlsx`);
 }
 
 function exportMilkMissed() {

@@ -90,7 +90,7 @@
                 </div>
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
                     <a href="/otpusk/api/vacations/archive/template" download="vacations_archive_template.xlsx" class="home-link" style="text-decoration:none;">📄 Шаблон Excel</a>
-                    <a href="/otpusk/api/vacations/archive/export" download="vacations_archive.xlsx" class="home-link" style="text-decoration:none;">📊 Экспорт в Excel</a>
+                    <a href="#" onclick="downloadAndUnAnonymizeExcel('/otpusk/api/vacations/archive/export', 'vacations_archive.xlsx'); return false;" class="home-link" style="text-decoration:none;">📊 Экспорт в Excel</a>
                     <button id="importArchiveBtn" type="button">📥 Импорт из Excel</button>
                     <input type="file" id="importArchiveFileInput" accept=".xlsx,.xls" style="display: none;">
                 </div>
@@ -236,6 +236,7 @@
             </div>
         </div>
     </div>
+    <script src="/otpusk/static/xlsx.full.min.js"></script>
     <script src="/otpusk/static/script.js?v=rtps_v25"></script>
 </body>
 </html>
