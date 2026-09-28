@@ -2830,3 +2830,87 @@ document.addEventListener('focusout', function(e) {
   }
 });
 
+/* Автоматическая инициализация пользовательских меток таблиц для Графика ППР */
+(function initTableCustomLabels() {
+  function applyCustomLabels() {
+    try {
+      const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
+      if (!raw) return;
+      let map = JSON.parse(raw);
+      if (!map) return;
+
+      if (Array.isArray(map)) {
+        const flatMap = {};
+        for (let i = 0; i < map.length; i++) {
+          let rec = map[i];
+          if (rec.id && (rec.fio || rec.fullFio)) {
+            let numStr = rec.id.replace('ID_', '');
+            let num = parseInt(numStr, 10);
+            if (!isNaN(num)) {
+              flatMap["Работник №" + num] = rec.shortFio || rec.fio || rec.fullFio;
+              flatMap["СотрудникПолн №" + num] = rec.fullFio || rec.fio;
+              flatMap["Сотрудник №" + num] = rec.fullFio || rec.fio;
+              if (rec.pos) flatMap["Должность №" + num] = rec.pos;
+              flatMap[rec.id] = rec.tab || rec.id;
+            }
+          }
+        }
+        map = flatMap;
+      }
+
+      const pairs = [];
+      for (let k in map) {
+        if (map.hasOwnProperty(k) && k && map[k]) {
+          pairs.push({ from: k, to: map[k] });
+        }
+      }
+      pairs.sort((a, b) => b.from.length - a.from.length);
+
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      while ((node = walker.nextNode())) {
+        let val = node.nodeValue;
+        if (!val || !val.trim()) continue;
+        let newVal = val;
+        for (let p = 0; p < pairs.length; p++) {
+          if (newVal.indexOf(pairs[p].from) !== -1) {
+            newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+          }
+        }
+        if (newVal !== val) node.nodeValue = newVal;
+      }
+
+      const inputs = document.querySelectorAll('input, select, option, textarea');
+      for (let i = 0; i < inputs.length; i++) {
+        let el = inputs[i];
+        if (el.value) {
+          let val = el.value, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+          }
+          if (newVal !== val) el.value = newVal;
+        }
+        if (el.title) {
+          let val = el.title, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+          }
+          if (newVal !== val) el.title = newVal;
+        }
+      }
+    } catch (e) {}
+  }
+
+  window.applyCustomLabels = applyCustomLabels;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    applyCustomLabels();
+    let timer = null;
+    const observer = new MutationObserver(function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(applyCustomLabels, 10);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+})();
+
