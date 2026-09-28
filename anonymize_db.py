@@ -58,12 +58,13 @@ def make_short_fio(full_name: str) -> str:
     return full_name
 
 def main():
-    if BACKUP_PATH.exists():
-        print(f"Восстановление оригинала из {BACKUP_PATH}...")
-        shutil.copy2(BACKUP_PATH, DB_PATH)
-    elif not DB_PATH.exists():
-        print(f"Ошибка: База данных {DB_PATH} не найдена.")
-        return
+    if not DB_PATH.exists():
+        if BACKUP_PATH.exists():
+            print(f"База {DB_PATH} не найдена. Создаем из бэкапа {BACKUP_PATH}...")
+            shutil.copy2(BACKUP_PATH, DB_PATH)
+        else:
+            print(f"Ошибка: База данных {DB_PATH} не найдена.")
+            return
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
