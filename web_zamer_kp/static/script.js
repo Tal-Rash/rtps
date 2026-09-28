@@ -3401,3 +3401,82 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
     alert("Не удалось скачать отчет: " + err.message);
   }
 }
+
+/* Автоматическая инициализация пользовательских меток таблиц для Замеров КП */
+(function initTableCustomLabels() {
+  function applyCustomLabels() {
+    try {
+      const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+      if (!pairs || !pairs.length) return;
+
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      while ((node = walker.nextNode())) {
+        let val = node.nodeValue;
+        if (!val || !val.trim()) continue;
+        let newVal = val;
+        for (let p = 0; p < pairs.length; p++) {
+          if (newVal.indexOf(pairs[p].from) !== -1) {
+            newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+          }
+        }
+        if (newVal !== val) node.nodeValue = newVal;
+      }
+
+      const inputs = document.querySelectorAll('input, select, option, textarea');
+      for (let i = 0; i < inputs.length; i++) {
+        let el = inputs[i];
+        if (el.tagName === 'OPTION' || el.tagName === 'option') {
+          if (el.textContent) {
+            let val = el.textContent, newVal = val;
+            for (let p = 0; p < pairs.length; p++) {
+              if (newVal.indexOf(pairs[p].from) !== -1) {
+                newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+              }
+            }
+            if (newVal !== val) el.textContent = newVal;
+          }
+        }
+        if (el.value) {
+          let val = el.value, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.value = newVal;
+        }
+        if (el.title) {
+          let val = el.title, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.title = newVal;
+        }
+        if (el.placeholder) {
+          let val = el.placeholder, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.placeholder = newVal;
+        }
+      }
+    } catch (e) {}
+  }
+
+  window.applyCustomLabels = applyCustomLabels;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    applyCustomLabels();
+    let timer = null;
+    const observer = new MutationObserver(function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(applyCustomLabels, 10);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+})();

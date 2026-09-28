@@ -622,39 +622,116 @@ function forceSave() {
 
 /* Автоматическая инициализация пользовательских меток таблиц для модуля Обучение */
 (function initTableCustomLabels() {
-  function applyCustomLabels() {
-    try {
-      const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
-      if (!raw) return;
-      let map = JSON.parse(raw);
-      if (!map) return;
+function getEmpReplacementPairs() {
+  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
+  if (!raw) return [];
+  
+  let map = null;
+  try { map = JSON.parse(raw); } catch (e) { return []; }
+  if (!map) return [];
 
-      if (Array.isArray(map)) {
-        const flatMap = {};
-        for (let i = 0; i < map.length; i++) {
-          let rec = map[i];
-          if (rec.id && (rec.fio || rec.fullFio)) {
-            let numStr = rec.id.replace('ID_', '');
-            let num = parseInt(numStr, 10);
-            if (!isNaN(num)) {
-              flatMap["Работник №" + num] = rec.shortFio || rec.fio || rec.fullFio;
-              flatMap["СотрудникПолн №" + num] = rec.fullFio || rec.fio;
-              flatMap["Сотрудник №" + num] = rec.fullFio || rec.fio;
-              if (rec.pos) flatMap["Должность №" + num] = rec.pos;
-              flatMap[rec.id] = rec.tab || rec.id;
-            }
+  const flatMap = {};
+
+  function extractNum(idStr) {
+    if (!idStr) return null;
+    const clean = String(idStr)
+      .replace(/ID_/g, '')
+      .replace(/Работник\s*№?\s*/g, '')
+      .replace(/СотрудникПолн\s*№?\s*/g, '')
+      .replace(/Сотрудник\s*№?\s*/g, '')
+      .replace(/Должность\s*№?\s*/g, '')
+      .trim();
+    const num = parseInt(clean, 10);
+    return isNaN(num) ? null : num;
+  }
+
+  function addFieldVariants(prefix, num, val) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+    const valStr = String(val);
+
+    flatMap[prefix + " №" + num] = valStr;
+    flatMap[prefix + " №" + sNum] = valStr;
+    flatMap[prefix + " №" + pNum] = valStr;
+    flatMap[prefix + " № " + sNum] = valStr;
+    flatMap[prefix + " № " + pNum] = valStr;
+  }
+
+  function addIdVariants(num, val) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+    const valStr = String(val);
+
+    flatMap["ID_" + pNum] = valStr;
+    flatMap["ID_" + sNum] = valStr;
+    flatMap["ID_" + num] = valStr;
+  }
+
+  if (Array.isArray(map)) {
+    for (let i = 0; i < map.length; i++) {
+      let rec = map[i];
+      if (!rec) continue;
+
+      let num = extractNum(rec.id || rec.tab || rec.tab_num);
+      if (num === null) num = i + 1;
+
+      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
+      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
+      let pos = rec.pos || rec.position || '';
+      let tab = rec.tab || rec.tab_num || rec.id || '';
+
+      if (shortF) addFieldVariants("Работник", num, shortF);
+      if (fullF) {
+        addFieldVariants("СотрудникПолн", num, fullF);
+        addFieldVariants("Сотрудник", num, fullF);
+      }
+      if (pos) addFieldVariants("Должность", num, pos);
+      if (tab) {
+        addIdVariants(num, tab);
+        if (rec.id) flatMap[String(rec.id)] = String(tab);
+      }
+    }
+  } else if (typeof map === 'object') {
+    for (let k in map) {
+      if (map.hasOwnProperty(k) && k && map[k]) {
+        const valStr = String(map[k]);
+        flatMap[k] = valStr;
+        let num = extractNum(k);
+        if (num !== null) {
+          if (k.startsWith("Работник")) {
+            addFieldVariants("Работник", num, valStr);
+          } else if (k.startsWith("СотрудникПолн")) {
+            addFieldVariants("СотрудникПолн", num, valStr);
+            addFieldVariants("Сотрудник", num, valStr);
+          } else if (k.startsWith("Сотрудник")) {
+            addFieldVariants("Сотрудник", num, valStr);
+            addFieldVariants("СотрудникПолн", num, valStr);
+          } else if (k.startsWith("Должность")) {
+            addFieldVariants("Должность", num, valStr);
+          } else if (k.startsWith("ID_") || /^\d+$/.test(k)) {
+            addIdVariants(num, valStr);
           }
         }
-        map = flatMap;
       }
+    }
+  }
 
-      const pairs = [];
-      for (let k in map) {
-        if (map.hasOwnProperty(k) && k && map[k]) {
-          pairs.push({ from: k, to: map[k] });
-        }
-      }
-      pairs.sort((a, b) => b.from.length - a.from.length);
+  const pairs = [];
+  for (let k in flatMap) {
+    if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
+      pairs.push({ from: k, to: String(flatMap[k]) });
+    }
+  }
+
+  pairs.sort((a, b) => b.from.length - a.from.length);
+  return pairs;
+}
+
+(function initTableCustomLabels() {
+  function applyCustomLabels() {
+    try {
+      const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+      if (!pairs || !pairs.length) return;
 
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
       let node;
@@ -673,19 +750,43 @@ function forceSave() {
       const inputs = document.querySelectorAll('input, select, option, textarea');
       for (let i = 0; i < inputs.length; i++) {
         let el = inputs[i];
+        if (el.tagName === 'OPTION' || el.tagName === 'option') {
+          if (el.textContent) {
+            let val = el.textContent, newVal = val;
+            for (let p = 0; p < pairs.length; p++) {
+              if (newVal.indexOf(pairs[p].from) !== -1) {
+                newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+              }
+            }
+            if (newVal !== val) el.textContent = newVal;
+          }
+        }
         if (el.value) {
           let val = el.value, newVal = val;
           for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
           }
           if (newVal !== val) el.value = newVal;
         }
         if (el.title) {
           let val = el.title, newVal = val;
           for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
           }
           if (newVal !== val) el.title = newVal;
+        }
+        if (el.placeholder) {
+          let val = el.placeholder, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.placeholder = newVal;
         }
       }
     } catch (e) {}

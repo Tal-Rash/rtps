@@ -2557,7 +2557,37 @@ function downloadTu28(){
       }
       return;
     }
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
+    let finalBuffer = arrayBuffer;
+    const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+    if (pairs.length > 0 && window.JSZip) {
+      try {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        let modified = false;
+        for (const filename of Object.keys(zip.files)) {
+          if (filename.startsWith('xl/') && (filename.endsWith('.xml') || filename.endsWith('.rels'))) {
+            let content = await zip.files[filename].async('string');
+            let fileModified = false;
+            for (let p = 0; p < pairs.length; p++) {
+              if (content.indexOf(pairs[p].from) !== -1) {
+                content = content.split(pairs[p].from).join(pairs[p].to);
+                fileModified = true;
+              }
+            }
+            if (fileModified) {
+              zip.file(filename, content);
+              modified = true;
+            }
+          }
+        }
+        if (modified) {
+          finalBuffer = await zip.generateAsync({ type: 'arraybuffer' });
+        }
+      } catch (err) {
+        console.warn('JSZip un-anonymization failed for ТУ-28:', err);
+      }
+    }
+    const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -2834,37 +2864,8 @@ document.addEventListener('focusout', function(e) {
 (function initTableCustomLabels() {
   function applyCustomLabels() {
     try {
-      const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
-      if (!raw) return;
-      let map = JSON.parse(raw);
-      if (!map) return;
-
-      if (Array.isArray(map)) {
-        const flatMap = {};
-        for (let i = 0; i < map.length; i++) {
-          let rec = map[i];
-          if (rec.id && (rec.fio || rec.fullFio)) {
-            let numStr = rec.id.replace('ID_', '');
-            let num = parseInt(numStr, 10);
-            if (!isNaN(num)) {
-              flatMap["Работник №" + num] = rec.shortFio || rec.fio || rec.fullFio;
-              flatMap["СотрудникПолн №" + num] = rec.fullFio || rec.fio;
-              flatMap["Сотрудник №" + num] = rec.fullFio || rec.fio;
-              if (rec.pos) flatMap["Должность №" + num] = rec.pos;
-              flatMap[rec.id] = rec.tab || rec.id;
-            }
-          }
-        }
-        map = flatMap;
-      }
-
-      const pairs = [];
-      for (let k in map) {
-        if (map.hasOwnProperty(k) && k && map[k]) {
-          pairs.push({ from: k, to: map[k] });
-        }
-      }
-      pairs.sort((a, b) => b.from.length - a.from.length);
+      const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+      if (!pairs || !pairs.length) return;
 
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
       let node;
@@ -2883,19 +2884,43 @@ document.addEventListener('focusout', function(e) {
       const inputs = document.querySelectorAll('input, select, option, textarea');
       for (let i = 0; i < inputs.length; i++) {
         let el = inputs[i];
+        if (el.tagName === 'OPTION' || el.tagName === 'option') {
+          if (el.textContent) {
+            let val = el.textContent, newVal = val;
+            for (let p = 0; p < pairs.length; p++) {
+              if (newVal.indexOf(pairs[p].from) !== -1) {
+                newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+              }
+            }
+            if (newVal !== val) el.textContent = newVal;
+          }
+        }
         if (el.value) {
           let val = el.value, newVal = val;
           for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
           }
           if (newVal !== val) el.value = newVal;
         }
         if (el.title) {
           let val = el.title, newVal = val;
           for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
           }
           if (newVal !== val) el.title = newVal;
+        }
+        if (el.placeholder) {
+          let val = el.placeholder, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.placeholder = newVal;
         }
       }
     } catch (e) {}
