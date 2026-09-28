@@ -205,6 +205,16 @@ def main():
                     cur.execute("UPDATE employee_row_order SET tab_num = ? WHERE rowid = ?", (emp["anon_id"], er[0]))
                     break
 
+    # 7. Update employee_trainings table
+    if "employee_trainings" in tables:
+        et_rows = cur.execute("SELECT rowid, tab_num FROM employee_trainings").fetchall()
+        for et in et_rows:
+            row_tab = str(et[1] or "")
+            for emp in employees_list:
+                if is_same_person(emp["real_name"], "", emp["real_tab"], row_tab) or is_same_person(emp["real_full_name"], "", emp["real_tab"], row_tab):
+                    cur.execute("UPDATE employee_trainings SET tab_num = ? WHERE rowid = ?", (emp["anon_id"], et[0]))
+                    break
+
     conn.commit()
     conn.close()
     print("Успешно! Все записи во всех таблицах анонимизированы по сопоставлению ФИО и Таб. №.")
