@@ -394,6 +394,82 @@ def load_state(year: int) -> dict:
     return {"year": year, "norms": norms, "employees": employees, "inventory": inventory}
 
 
+# Функция автоподтягивания данных сотрудника из локального файла employees_private.csv / employees_private.xlsx по ID, табельному или ФИО
+def lookup_private_employee(id_input: str) -> dict:
+    raw = text(id_input).strip()
+    if not raw:
+        return {}
+
+    raw_lower = raw.lower()
+    raw_digits = "".join(c for c in raw if c.isdigit())
+    raw_int = int(raw_digits) if raw_digits else None
+
+    csv_file = ROOT.parent / "employees_private.csv"
+    xlsx_file = ROOT.parent / "employees_private.xlsx"
+
+    rows = []
+    if csv_file.exists():
+        try:
+            import csv
+            with open(csv_file, "r", encoding="utf-8-sig") as f:
+                for r in csv.reader(f, delimiter=";"):
+                    if r and not r[0].startswith("Код"):
+                        rows.append([text(x).strip() for x in r])
+        except Exception:
+            pass
+    elif xlsx_file.exists():
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(xlsx_file)
+            ws = wb.active
+            for r in ws.iter_rows(values_only=True):
+                if r and r[0] and not text(r[0]).startswith("Код"):
+                    rows.append([text(x).strip() for x in r])
+        except Exception:
+            pass
+
+    for r in rows:
+        r_id = r[0] if len(r) > 0 else ""
+        r_pos = r[1] if len(r) > 1 else ""
+        r_full = r[2] if len(r) > 2 else ""
+        r_short = r[3] if len(r) > 3 else r_full
+        r_tab = r[4] if len(r) > 4 else ""
+
+        r_num_digits = "".join(c for c in r_id if c.isdigit())
+        r_int = int(r_num_digits) if r_num_digits else None
+        r_tab_digits = "".join(c for c in r_tab if c.isdigit())
+        r_tab_int = int(r_tab_digits) if r_tab_digits else None
+
+        # 1. Точное совпадение по анонимному ID (ID_001)
+        if raw.upper() == r_id.upper():
+            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
+
+        # 2. Совпадение по реальному табельному номеру (например 4004236 или 4601556)
+        if r_tab and (raw == r_tab or (raw_int is not None and r_tab_int is not None and raw_int == r_tab_int)):
+            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
+
+        # 3. Совпадение по порядковому номеру (1, 001, ID_1)
+        if raw_int is not None and r_int is not None and raw_int == r_int:
+            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
+
+        # 4. Совпадение по ФИО
+        if raw_lower and (raw_lower in r_short.lower() or raw_lower in r_full.lower()):
+            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
+
+    # Если в CSV записи нет, но передано число < 1000 — возвращаем канонический ID_00X
+    if raw_int is not None and raw_int < 1000:
+        canon_id = f"ID_{raw_int:03d}"
+        return {
+            "pos": "",
+            "name": "",
+            "full_name": "",
+            "tab_num": canon_id,
+            "found": False,
+        }
+
+    return {"tab_num": raw, "name": raw, "full_name": raw, "pos": "", "found": False}
+
+
 def save_state(payload: dict) -> None:
     year = int(payload.get("year") or dt.date.today().year)
     norms = payload.get("norms") or []
@@ -416,6 +492,17 @@ def save_state(payload: dict) -> None:
         for row in employees:
             row = list(row or []) + [""] * 10
             pos, name, full_name, tab_num = [text(v).strip() for v in row[:4]]
+
+            # Если заполнен только ID (табельный номер) или пропущены ФИО/должность — подтягиваем из CSV
+            search_key = tab_num or name or full_name
+            if search_key:
+                info = lookup_private_employee(search_key)
+                if info:
+                    if not pos or pos.startswith("Должность №"): pos = info.get("pos") or pos
+                    if not name or name.startswith("Работник №"): name = info.get("name") or name
+                    if not full_name or full_name.startswith("СотрудникПолн №"): full_name = info.get("full_name") or full_name
+                    if not tab_num or tab_num.isdigit(): tab_num = info.get("tab_num") or tab_num
+
             milk = 1 if row[4] else 0
             milk_issue = 1 if row[5] else 0
             hire_date = text(row[6]).strip()
@@ -426,7 +513,7 @@ def save_state(payload: dict) -> None:
             except Exception:
                 vacation_days = 28
             milk_note = text(row[9]).strip()
-            if pos or name:
+            if pos or name or tab_num:
                 emp_rows.append((year, pos, name, full_name, tab_num, milk, milk_issue, hire_date, exclude_date, vacation_days, milk_note))
         cur.executemany(
             """
@@ -918,7 +1005,35 @@ window.addEventListener('resize', () => {
   if (!panel || !panel.classList.contains('active')) return;
   resizeEmployeeTable(panel);
 });
-function setCell(name, row, col, value){ if (!CAN_EDIT) return; state[name][row][col] = value; updateSaveButton(); }
+let lookupTimer = null;
+function setCell(name, row, col, value){
+  if (!CAN_EDIT) return;
+  state[name][row][col] = value;
+  updateSaveButton();
+
+  // Автоматическое подтягивание ФИО и Должности из CSV при вводе ID в столбце Таб. № (col 3)
+  if (name === 'employees' && col === 3 && value && String(value).trim()) {
+    if (lookupTimer) clearTimeout(lookupTimer);
+    lookupTimer = setTimeout(() => {
+      const query = String(value).trim();
+      fetch(`${API}/api/employee-lookup?id=${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(info => {
+          if (info && info.tab_num) {
+            state.employees[row][3] = info.tab_num;
+            if (info.found) {
+              if (info.pos) state.employees[row][0] = info.pos;
+              if (info.name) state.employees[row][1] = info.name;
+              if (info.full_name) state.employees[row][2] = info.full_name;
+            }
+            renderTable('employees', state.employees, true);
+            updateSaveButton();
+          }
+        })
+        .catch(() => {});
+    }, 400);
+  }
+}
 function addRow(name){
   if (!CAN_EDIT) return;
   if (name === 'inventory') {
@@ -1258,10 +1373,10 @@ function getEmpReplacementPairs() {
     if (!idStr) return null;
     const clean = String(idStr)
       .replace(/ID_/g, '')
-      .replace(/Работник\s*№?\s*/g, '')
-      .replace(/СотрудникПолн\s*№?\s*/g, '')
-      .replace(/Сотрудник\s*№?\s*/g, '')
-      .replace(/Должность\s*№?\s*/g, '')
+      .replace(/Работник\\s*№?\\s*/g, '')
+      .replace(/СотрудникПолн\\s*№?\\s*/g, '')
+      .replace(/Сотрудник\\s*№?\\s*/g, '')
+      .replace(/Должность\\s*№?\\s*/g, '')
       .trim();
     const num = parseInt(clean, 10);
     return isNaN(num) ? null : num;
@@ -1332,7 +1447,7 @@ function getEmpReplacementPairs() {
             addFieldVariants("СотрудникПолн", num, valStr);
           } else if (k.startsWith("Должность")) {
             addFieldVariants("Должность", num, valStr);
-          } else if (k.startsWith("ID_") || /^\d+$/.test(k)) {
+          } else if (k.startsWith("ID_") || /^\\d+$/.test(k)) {
             addIdVariants(num, valStr);
           }
         }
@@ -1363,7 +1478,7 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
     let filename = defaultFilename || "Отчет.xlsx";
     const disposition = response.headers.get('Content-Disposition');
     if (disposition) {
-      const matchUtf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const matchUtf = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
       if (matchUtf && matchUtf[1]) {
         filename = decodeURIComponent(matchUtf[1]);
       } else {
@@ -1628,6 +1743,13 @@ async def get_state(request: Request, year: int = None):
     if year is None:
         year = dt.date.today().year
     return json_response(load_state(year))
+
+@app.get("/api/employee-lookup")
+async def get_employee_lookup(request: Request, id: str = ""):
+    auth_ok, session = require_auth_fastapi(request)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
+    return json_response(lookup_private_employee(id))
 
 @app.post("/login")
 async def login_post(request: Request):

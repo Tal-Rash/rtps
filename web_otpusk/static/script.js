@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableBody = document.getElementById('tableBody');
     const saveBtn = document.getElementById('saveBtn');
     const toggleBadges = document.getElementById('toggleBadges');
+    const toggleCarriedOverFact = document.getElementById('toggleCarriedOverFact');
 
     // Modal elements
     const holidaysBtn = document.getElementById('holidaysBtn');
@@ -39,6 +40,20 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 document.body.classList.remove('hide-badges');
             }
+        });
+    }
+
+    if (toggleCarriedOverFact) {
+        const savedCarriedFact = localStorage.getItem('rtps_include_carried_fact');
+        if (savedCarriedFact !== null) {
+            toggleCarriedOverFact.checked = (savedCarriedFact === '1');
+        } else {
+            toggleCarriedOverFact.checked = false;
+        }
+
+        toggleCarriedOverFact.addEventListener('change', (e) => {
+            localStorage.setItem('rtps_include_carried_fact', e.target.checked ? '1' : '0');
+            updateTotals();
         });
     }
 
@@ -623,37 +638,106 @@ document.addEventListener('DOMContentLoaded', () => {
                     versionsTableBody.appendChild(tr);
                 });
 
-                // Attach click listeners to Load & Delete buttons
+                // Обработчики кнопок Загрузить и Удалить версию
                 versionsTableBody.querySelectorAll('.btn-load-version').forEach(btn => {
                     btn.addEventListener('click', (e) => {
-                        const verId = e.target.dataset.id;
-                        const verName = e.target.dataset.name;
+                        const targetBtn = e.target.closest('.btn-load-version') || e.target;
+                        const verId = targetBtn.dataset.id;
+                        const verName = targetBtn.dataset.name;
                         if (!confirm(`Загрузить версию "${verName}" и сделать её активной?`)) return;
 
-                        btn.textContent = 'Загрузка...';
+                        targetBtn.textContent = 'Загрузка...';
                         fetch(`${APP_PREFIX}/api/versions/${verId}`)
                             .then(res => res.json())
                             .then(vData => {
                                 if (vData && Array.isArray(vData.data)) {
-                                    vData.data.forEach(savedEmp => {
-                                        const emp = allData.find(e => String(e.tab_num || e.name) === String(savedEmp.tab_num || savedEmp.name));
+                                    // Вспомогательная функция нормализации ФИО (удаление точек, пробелов, приведение к нижнему регистру)
+                                    const normalizeName = (s) => String(s || '').replace(/[.\s]/g, '').toLowerCase();
+
+                                    // Улучшенная функция поиска сотрудника с поддержкой старых форматов (по id, табельному номеру, ФИО или индексу)
+                                    const findEmp = (savedEmp, idx) => {
+                                        if (!savedEmp) return null;
+                                        const sId = savedEmp.id != null ? String(savedEmp.id) : null;
+                                        const sTab = savedEmp.tab_num != null ? String(savedEmp.tab_num).trim() : '';
+                                        const sNameStr = savedEmp.name || savedEmp.full_name || savedEmp.fio || savedEmp.emp_name || '';
+                                        const sNorm = normalizeName(sNameStr);
+
+                                        // 1. Сопоставление по ID
+                                        if (sId) {
+                                            const byId = allData.find(e => e.id != null && String(e.id) === sId);
+                                            if (byId) return byId;
+                                        }
+
+                                        // 2. Сопоставление по табельному номеру
+                                        if (sTab) {
+                                            const byTab = allData.find(e => {
+                                                const eTab = e.tab_num != null ? String(e.tab_num).trim() : '';
+                                                return eTab && (sTab === eTab || parseInt(sTab) === parseInt(eTab));
+                                            });
+                                            if (byTab) return byTab;
+                                        }
+
+                                        // 3. Сопоставление по нормализованному ФИО
+                                        if (sNorm) {
+                                            const byName = allData.find(e => {
+                                                const eNameNorm = normalizeName(e.name || e.full_name || '');
+                                                const eFullNorm = normalizeName(e.full_name || e.name || '');
+                                                return eNameNorm === sNorm || eFullNorm === sNorm ||
+                                                       (sNorm.length > 3 && (eNameNorm.includes(sNorm) || sNorm.includes(eNameNorm)));
+                                            });
+                                            if (byName) return byName;
+                                        }
+
+                                        // 4. Запасной вариант: сопоставление по порядковому номеру (индексу в таблице)
+                                        if (idx != null && idx >= 0 && idx < allData.length) {
+                                            return allData[idx];
+                                        }
+
+                                        return null;
+                                    };
+
+                                    // Если год загружаемой версии отличается от текущего выбранного года - переключаем год
+                                    if (vData.y && vData.y !== currentYear) {
+                                        currentYear = parseInt(vData.y);
+                                        if (yearSelect) yearSelect.value = currentYear;
+                                        months = getMonthsList(currentYear);
+                                        calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31];
+                                        const tabCurrentBtn = document.getElementById('tabCurrentBtn');
+                                        if (tabCurrentBtn) {
+                                            tabCurrentBtn.textContent = `📅 График отпусков ${currentYear}`;
+                                        }
+                                        renderHeaders();
+                                    }
+
+                                    // Сначала очищаем отпуска у всех текущих сотрудников
+                                    allData.forEach(emp => {
+                                        emp.vacations = [];
+                                    });
+
+                                    // Применяем отпуска из загружаемой версии
+                                    vData.data.forEach((savedEmp, idx) => {
+                                        const emp = findEmp(savedEmp, idx);
                                         if (emp) {
                                             emp.vacations = savedEmp.vacations || [];
                                         }
                                     });
 
+                                    // Сохраняем загруженную версию на сервер и обновляем интерфейс
                                     fetch(`${APP_PREFIX}/api/vacations?year=${currentYear}`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(allData)
                                     }).then(() => {
                                         renderTable(allData);
+                                        undoStack = [];
+                                        redoStack = [];
+                                        updateUndoRedoButtons();
                                         closeVersionsModalFn();
                                     });
                                 }
                             })
                             .catch(err => {
-                                btn.textContent = 'Ошибка';
+                                targetBtn.textContent = 'Ошибка';
                                 console.error(err);
                             });
                     });
@@ -661,11 +745,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 versionsTableBody.querySelectorAll('.btn-delete-version').forEach(btn => {
                     btn.addEventListener('click', (e) => {
-                        const verId = e.target.dataset.id;
-                        const verName = e.target.dataset.name;
+                        const targetBtn = e.target.closest('.btn-delete-version') || e.target;
+                        const verId = targetBtn.dataset.id;
+                        const verName = targetBtn.dataset.name;
                         if (!confirm(`Удалить версию "${verName}"?`)) return;
 
-                        btn.textContent = 'Удаление...';
+                        targetBtn.textContent = 'Удаление...';
                         fetch(`${APP_PREFIX}/api/versions/${verId}`, { method: 'DELETE' })
                             .then(res => res.json())
                             .then(() => loadVersionsList())
@@ -1173,14 +1258,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     vac.is_carried_over = true;
                 }
 
-                // Count in fact totals regardless of carried_over status!
-                let empVacDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
-                factSum += empVacDays;
+                // Учитываем или исключаем перенесенные с прошлого года отпуска из расчетов итогов "Занесено (факт)" по переключателю
+                const includeCarriedFact = toggleCarriedOverFact && toggleCarriedOverFact.checked;
+                if (!vac.is_carried_over || includeCarriedFact) {
+                    let empVacDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+                    factSum += empVacDays;
 
-                for (let m = vac.startMonth; m <= vac.endMonth; m++) {
-                    let s = (m === vac.startMonth) ? vac.startDay : 1;
-                    let e = (m === vac.endMonth) ? vac.endDay : calendarDaysInMonths[m];
-                    monthFactSums[m] += getWorkingVacationDays(m, s, m, e);
+                    for (let m = vac.startMonth; m <= vac.endMonth; m++) {
+                        let s = (m === vac.startMonth) ? vac.startDay : 1;
+                        let e = (m === vac.endMonth) ? vac.endDay : calendarDaysInMonths[m];
+                        monthFactSums[m] += getWorkingVacationDays(m, s, m, e);
+                    }
                 }
             });
         });

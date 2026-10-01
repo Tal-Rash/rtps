@@ -1041,6 +1041,52 @@ async def get_versions(year: int = 2026):
         ).fetchall()
         return [dict(r) for r in rows]
 
+# Вспомогательная функция сопоставления старых реальных табельных номеров из версий с текущими шифрами ID_00X
+def map_version_data_to_ciphers(data_list):
+    if not isinstance(data_list, list):
+        return data_list
+
+    tab_mapping = {}
+    csv_file = ROOT.parent / "employees_private.csv"
+    xlsx_file = ROOT.parent / "employees_private.xlsx"
+
+    if csv_file.exists():
+        try:
+            import csv
+            with open(csv_file, "r", encoding="utf-8-sig") as f:
+                reader = csv.reader(f, delimiter=";")
+                for row in reader:
+                    if not row or len(row) < 5 or row[0].startswith("Код"):
+                        continue
+                    anon_id = row[0].strip()
+                    real_tab = row[4].strip()
+                    if anon_id and real_tab:
+                        tab_mapping[real_tab] = anon_id
+        except Exception:
+            pass
+    elif xlsx_file.exists():
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(xlsx_file)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                if not row or len(row) < 5 or str(row[0]).startswith("Код"):
+                    continue
+                anon_id = str(row[0]).strip()
+                real_tab = str(row[4]).strip()
+                if anon_id and real_tab:
+                    tab_mapping[real_tab] = anon_id
+        except Exception:
+            pass
+
+    for item in data_list:
+        if isinstance(item, dict):
+            saved_tab = str(item.get("tab_num") or "").strip()
+            if saved_tab in tab_mapping:
+                item["tab_num"] = tab_mapping[saved_tab]
+
+    return data_list
+
 @app.get("/api/versions/{version_id}")
 @app.get(APP_PREFIX + "/api/versions/{version_id}")
 async def get_version_detail(version_id: int):
@@ -1054,7 +1100,8 @@ async def get_version_detail(version_id: int):
         if not row:
             raise HTTPException(status_code=404, detail="Version not found")
         res = dict(row)
-        res["data"] = json.loads(res["data_json"] or "[]")
+        raw_data = json.loads(res["data_json"] or "[]")
+        res["data"] = map_version_data_to_ciphers(raw_data)
         return res
 
 @app.post("/api/versions")
