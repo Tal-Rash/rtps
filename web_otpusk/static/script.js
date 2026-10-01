@@ -53,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toggleCarriedOverFact.addEventListener('change', (e) => {
             localStorage.setItem('rtps_include_carried_fact', e.target.checked ? '1' : '0');
-            tableBody.querySelectorAll('tr[data-emp-id]').forEach(tr => calculateRow(tr));
             updateTotals();
         });
     }
@@ -1103,11 +1102,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let allowedStr = tr.querySelector('.allowed-days-input') ? tr.querySelector('.allowed-days-input').value : '';
         let allowedDays = allowedStr ? parseInt(allowedStr) : Infinity;
 
-        // Calculate grand total excluding holidays (and carried over vacations if toggle is OFF)
-        const includeCarriedFact = toggleCarriedOverFact && toggleCarriedOverFact.checked;
+        // Calculate grand total for worker row excluding carried over vacations
         let grandTotalDays = 0;
         vacations.forEach(vac => {
-            if (!vac.is_carried_over || includeCarriedFact) {
+            if (!vac.is_carried_over) {
                 grandTotalDays += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
             }
         });
