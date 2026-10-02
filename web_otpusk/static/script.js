@@ -1798,6 +1798,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const historyHeaderRow = document.getElementById('historyHeaderRow');
     const historyTableBody = document.getElementById('historyTableBody');
     const historySearchInput = document.getElementById('historySearchInput');
+    const historyShowExcludedCheckbox = document.getElementById('historyShowExcludedCheckbox');
 
     let historyMatrixCache = null;
 
@@ -1833,10 +1834,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateHistoryMatrixView() {
         if (!historyMatrixCache) return;
+        const showExcluded = historyShowExcludedCheckbox ? historyShowExcludedCheckbox.checked : false;
         renderHistoryMatrix(
             historyMatrixCache,
             historySearchInput ? historySearchInput.value.trim() : '',
-            historySortSelect ? historySortSelect.value : 'default'
+            historySortSelect ? historySortSelect.value : 'default',
+            showExcluded
         );
     }
 
@@ -1846,6 +1849,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (historySortSelect) {
         historySortSelect.addEventListener('change', updateHistoryMatrixView);
+    }
+
+    if (historyShowExcludedCheckbox) {
+        historyShowExcludedCheckbox.addEventListener('change', updateHistoryMatrixView);
     }
 
     if (historyStartYearSelect) {
@@ -1972,7 +1979,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function renderHistoryMatrix(data, filterText = '', sortBy = 'default') {
+    function renderHistoryMatrix(data, filterText = '', sortBy = 'default', showExcluded = false) {
         if (!historyHeaderRow || !historyTableBody) return;
 
         const years = data.years || [];
@@ -1982,7 +1989,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const endYear = historyEndYearSelect && historyEndYearSelect.value ? parseInt(historyEndYearSelect.value) : (years[years.length - 1] || 2026);
         const periodText = startYear === endYear ? `${startYear}` : `${startYear}–${endYear}`;
 
-        // Generate Header Row with dynamic period
+        // Генерация строки заголовков с динамическим периодом
         let headerHtml = `
             <th class="col-sticky-1" style="width: 240px; min-width: 240px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
             <th class="col-sticky-2" style="width: 75px; min-width: 75px; position: sticky; left: 240px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 4px; text-align: center;">Норма</th>
@@ -1998,15 +2005,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         historyHeaderRow.innerHTML = headerHtml;
 
-        // Calculate period statistics for all employees
+        // Расчет статистики периодов для всех сотрудников
         employees.forEach(emp => {
             emp.periodStats = calcPeriodStats(emp, startYear, endYear);
         });
 
-        // Фильтрация сотрудников по поисковому запросу с поддержкой реальных ФИО
+        // Фильтрация сотрудников по поисковому запросу и статусу увольнения с поддержкой реальных ФИО
         const query = filterText.toLowerCase();
         const repPairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
         let filteredEmployees = employees.filter(emp => {
+            // Если галочка Показывать уволенных снята, исключаем уволенных
+            if (!showExcluded && emp.is_excluded) {
+                return false;
+            }
             if (!query) return true;
             let name = (emp.name || '').toLowerCase();
             let full = (emp.full_name || '').toLowerCase();
@@ -2021,7 +2032,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return name.includes(query) || full.includes(query) || pos.includes(query) || tab.includes(query);
         });
 
-        // Apply Sorting based on selected period stats
+        // Сортировка на основе выбранного периода статистики
         if (sortBy === 'summer_rel_desc') {
             filteredEmployees.sort((a, b) => {
                 const sA = (a.periodStats && a.periodStats.summer_pct) || 0;
@@ -2061,7 +2072,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         filteredEmployees.forEach(emp => {
             const empName = escapeHtml(emp.name || emp.full_name || '');
-            const empPos = escapeHtml(emp.position || '');
+            const isExcluded = Boolean(emp.is_excluded);
+            const excDate = emp.exclude_date ? formatDateRu(emp.exclude_date) : '';
+            const empPos = isExcluded 
+                ? `<span style="color: #94a3b8; font-style: italic;">${escapeHtml(emp.position || 'Уволен')}</span>`
+                : escapeHtml(emp.position || '');
             const vDays = emp.vacation_days || 52;
             const history = emp.history || {};
             const stats = emp.periodStats || {};
@@ -2078,13 +2093,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const oDays = stats.other_days || 0;
             const oPct = stats.other_pct || 0;
 
-            bodyHtml += `<tr style="border-bottom: 1px solid #e2e8f0;">`;
+            const rowStyle = isExcluded ? 'background: #f8fafc; border-bottom: 1px solid #e2e8f0;' : 'border-bottom: 1px solid #e2e8f0;';
+            const cellBg = isExcluded ? 'background: #f8fafc;' : 'background: #ffffff;';
+
+            bodyHtml += `<tr style="${rowStyle}">`;
             bodyHtml += `
-                <td class="col-sticky-1" style="position: sticky; left: 0; background: #ffffff; z-index: 5; border-right: 2px solid #cbd5e1; padding: 8px 12px; font-weight: 500;">
-                    <div style="font-weight: 600; color: #1e293b;">${empName}</div>
+                <td class="col-sticky-1" style="position: sticky; left: 0; ${cellBg} z-index: 5; border-right: 2px solid #cbd5e1; padding: 8px 12px; font-weight: 500;">
+                    <div style="font-weight: 600; color: ${isExcluded ? '#64748b' : '#1e293b'}; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+                        <span>${empName}</span>
+                        ${isExcluded ? `<span style="font-size: 0.72rem; background: #fee2e2; color: #b91c1c; padding: 1px 6px; border-radius: 4px; font-weight: 600;">Уволен${excDate && excDate !== 'Архив' ? ' ' + excDate : ''}</span>` : ''}
+                    </div>
                     <div style="font-size: 0.78rem; color: #64748b;">${empPos}</div>
                 </td>
-                <td class="col-sticky-2" style="position: sticky; left: 240px; background: #ffffff; z-index: 5; border-right: 2px solid #cbd5e1; text-align: center; font-weight: 600; color: #334155;">
+                <td class="col-sticky-2" style="position: sticky; left: 240px; ${cellBg} z-index: 5; border-right: 2px solid #cbd5e1; text-align: center; font-weight: 600; color: #334155;">
                     ${vDays}
                 </td>
                 <td style="text-align: center; background: #fff5f5; border-right: 1px solid #fee2e2; font-weight: 600;">
@@ -2146,7 +2167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatDateRu(isoStr) {
-        if (!isoStr) return '';
+        if (!isoStr || isoStr === 'Архив') return isoStr || '';
         const parts = isoStr.split('-');
         if (parts.length === 3) {
             return `${parts[2]}.${parts[1]}.${parts[0]}`;

@@ -217,6 +217,10 @@
                             <option value="summer_count_desc">🔴 Сначала кто ЧАЩЕ ходил летом (по кол-ву отпусков)</option>
                             <option value="winter_rel_desc">🔵 Сначала кто БОЛЬШЕ ходил зимой (к остальным месяцам, в %)</option>
                         </select>
+                        <label style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.88rem; font-weight: 500; cursor: pointer; user-select: none;" title="Показать уволенных и архивных сотрудников">
+                            <input type="checkbox" id="historyShowExcludedCheckbox" style="cursor: pointer; width: 15px; height: 15px;">
+                            <span>👥 Показывать уволенных</span>
+                        </label>
                         <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 170px;">
                     </div>
                 </div>
@@ -242,6 +246,6 @@
     </div>
     <script src="/otpusk/static/jszip.min.js"></script>
     <script src="/otpusk/static/xlsx.full.min.js"></script>
-    <script src="/otpusk/static/script.js?v=rtps_v27"></script>
+    <script src="/otpusk/static/script.js?v=rtps_v28"></script>
 </body>
 </html>

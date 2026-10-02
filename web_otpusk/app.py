@@ -675,6 +675,33 @@ async def get_history_matrix(year: int = 2026):
             "SELECT y, tab_num, name, vacations_json FROM vacations_schedule ORDER BY y ASC"
         ).fetchall()
 
+    # Собираем архивных сотрудников, которых уже нет в справочнике целевого года
+    emp_tabs_set = {str(r.get("tab_num") or "") for r in employees if r.get("tab_num")}
+    emp_names_set = {str(r.get("name") or "") for r in employees if r.get("name")}
+
+    seen_arc_keys = set()
+    for ai in arc_rows:
+        a_tab = str(ai["tab_num"] or "")
+        a_name = str(ai["name"] or "")
+        if (a_tab and a_tab in emp_tabs_set) or (a_name and a_name in emp_names_set):
+            continue
+        arc_k = a_tab or a_name
+        if arc_k in seen_arc_keys:
+            continue
+        seen_arc_keys.add(arc_k)
+        employees.append({
+            "rowid": None,
+            "pos": "Уволен",
+            "name": a_name,
+            "full_name": a_name,
+            "tab_num": a_tab,
+            "vacation_days": 52,
+            "is_excluded": 1,
+            "exclude_date": "Архив",
+            "hire_date": "",
+            "from_archive": True
+        })
+
     years_set = set()
     archive_items = []
 
@@ -709,9 +736,16 @@ async def get_history_matrix(year: int = 2026):
     result_emp_list = []
 
     for emp in employees:
-        # Исключаем уволенных или еще не принятых на работу сотрудников
-        if is_employee_excluded_for_year(emp, year):
-            continue
+        # Проверяем статус увольнения/исключения сотрудника
+        is_exc = False
+        if emp.get("from_archive"):
+            is_exc = True
+        elif int(emp.get("is_excluded") or 0) == 1:
+            is_exc = True
+        elif is_employee_excluded_for_year(emp, year):
+            is_exc = True
+        elif emp.get("exclude_date"):
+            is_exc = True
 
         hire_date_str = str(emp.get("hire_date") or "").strip()
         hire_year = extract_year_from_date(hire_date_str)
@@ -721,7 +755,8 @@ async def get_history_matrix(year: int = 2026):
         exc_year = extract_year_from_date(exc_date_str)
         exc_iso = format_date_to_iso(exc_date_str)
 
-        if hire_year is not None and hire_year > year:
+        # Если сотрудник ещё не был принят на работу к целевому году, пропускаем
+        if not is_exc and hire_year is not None and hire_year > year:
             continue
 
         emp_name = emp.get("name") or emp.get("full_name") or ""
@@ -833,6 +868,8 @@ async def get_history_matrix(year: int = 2026):
         has_any_vacation = any(len(v_list) > 0 for v_list in emp_history.values())
         if hire_year is not None and hire_year == year and not has_any_vacation:
             continue
+        if emp.get("from_archive") and not has_any_vacation:
+            continue
 
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
 
@@ -848,7 +885,10 @@ async def get_history_matrix(year: int = 2026):
         disp_tab = f"ID_{num_part:03d}"
         disp_name = f"Работник №{num_part}"
         disp_full = f"СотрудникПолн №{num_part}"
-        disp_pos = f"Должность №{num_part}"
+        if emp.get("from_archive"):
+            disp_pos = "Уволен"
+        else:
+            disp_pos = f"Должность №{num_part}"
 
         result_emp_list.append({
             "id": num_part,
@@ -857,6 +897,8 @@ async def get_history_matrix(year: int = 2026):
             "full_name": disp_full,
             "position": disp_pos,
             "vacation_days": v_days,
+            "is_excluded": is_exc,
+            "exclude_date": exc_date_str,
             "stats": {
                 "summer_count": summer_count,
                 "summer_days": summer_days,
@@ -874,12 +916,16 @@ async def get_history_matrix(year: int = 2026):
             "history": emp_history
         })
 
-    tot_summer_count = sum(e["stats"]["summer_count"] for e in result_emp_list)
-    tot_summer_days = sum(e["stats"]["summer_days"] for e in result_emp_list)
-    tot_winter_count = sum(e["stats"]["winter_count"] for e in result_emp_list)
-    tot_winter_days = sum(e["stats"]["winter_days"] for e in result_emp_list)
-    tot_other_count = sum(e["stats"]["other_count"] for e in result_emp_list)
-    tot_other_days = sum(e["stats"]["other_days"] for e in result_emp_list)
+    # Общая статистика по сезонам рассчитывается по активным сотрудникам (или по всем, если активных нет)
+    active_emps = [e for e in result_emp_list if not e.get("is_excluded")]
+    stats_base = active_emps if active_emps else result_emp_list
+
+    tot_summer_count = sum(e["stats"]["summer_count"] for e in stats_base)
+    tot_summer_days = sum(e["stats"]["summer_days"] for e in stats_base)
+    tot_winter_count = sum(e["stats"]["winter_count"] for e in stats_base)
+    tot_winter_days = sum(e["stats"]["winter_days"] for e in stats_base)
+    tot_other_count = sum(e["stats"]["other_count"] for e in stats_base)
+    tot_other_days = sum(e["stats"]["other_days"] for e in stats_base)
     tot_all_count = tot_summer_count + tot_winter_count + tot_other_count
     tot_all_days = tot_summer_days + tot_winter_days + tot_other_days
 
@@ -888,7 +934,7 @@ async def get_history_matrix(year: int = 2026):
     tot_other_pct = round((tot_other_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
 
     overall_stats = {
-        "total_employees": len(result_emp_list),
+        "total_employees": len(stats_base),
         "total_vacations": tot_all_count,
         "total_days": tot_all_days,
         "summer_count": tot_summer_count,
