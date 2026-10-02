@@ -417,6 +417,7 @@ async def get_vacations(year: int = 2026):
         exc_year = extract_year_from_date(exc_date_str)
         exc_iso = format_date_to_iso(exc_date_str)
 
+        vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
         if not vacations:
             for ai in archive_items:
                 s_iso = format_date_to_iso(ai["vacation"].get("start") or "")
