@@ -1302,25 +1302,46 @@ def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
 
 
 def format_fio_initials(full_name: str) -> str:
-    parts = s(full_name).split()
+    """Форматирует ФИО в виде Фамилия И. О. Для анонимизированных меток (Работник №1) сохраняет исходный вид."""
+    text = s(full_name).strip()
+    if text.startswith("Работник") or text.startswith("Сотрудник") or text.startswith("ID_"):
+        return text
+    parts = text.split()
     if len(parts) >= 3:
         return f"{parts[0]} {parts[1][0]}. {parts[2][0]}."
     if len(parts) == 2:
+        if parts[1].startswith("№") or parts[1].isdigit():
+            return text
         return f"{parts[0]} {parts[1][0]}."
-    return s(full_name).strip()
+    return text
 
 
 def get_all_employee_names() -> list[str]:
+    """Возвращает список анонимизированных меток сотрудников (Работник №1, Работник №2...) для безопасного отображения без закладки"""
     try:
         if not SOURCE_DB.exists():
             return []
         with sqlite3.connect(SOURCE_DB) as db:
             cur = db.cursor()
-            cur.execute(
-                "SELECT DISTINCT CASE WHEN COALESCE(full_name, '') != '' THEN full_name ELSE name END "
-                "FROM employees ORDER BY 1"
-            )
-            return [s(row[0]).strip() for row in cur.fetchall() if s(row[0]).strip()]
+            cur.execute("SELECT rowid, name, full_name, tab_num FROM employees ORDER BY rowid")
+            rows = cur.fetchall()
+            names = []
+            for idx, r in enumerate(rows, start=1):
+                raw_tab = s(r[3]).strip()
+                num_part = idx
+                if raw_tab.startswith("ID_"):
+                    digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                    if digits:
+                        num_part = int(digits)
+                names.append(f"Работник №{num_part}")
+            # Удаляем дубликаты с сохранением порядка
+            seen = set()
+            unique_names = []
+            for n in names:
+                if n not in seen:
+                    seen.add(n)
+                    unique_names.append(n)
+            return unique_names
     except Exception:
         return []
 
@@ -1376,6 +1397,12 @@ def get_employee_vacations() -> dict[str, list[dict]]:
         key = (year, tab_num)
         grouped.setdefault(key, {})[col] = s(row["v"]).strip()
         name_values = {s(row["name"]).strip(), s(row["full_name"]).strip()}
+        digits = "".join(ch for ch in tab_num if ch.isdigit())
+        if digits:
+            num = int(digits)
+            name_values.add(f"Работник №{num}")
+            name_values.add(f"СотрудникПолн №{num}")
+            name_values.add(f"ID_{num:03d}")
         names.setdefault(key, set()).update(item for item in name_values if item)
 
     result: dict[str, list[dict]] = {}

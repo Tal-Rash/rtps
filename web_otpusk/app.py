@@ -408,22 +408,9 @@ async def get_vacations(year: int = 2026):
         anon_num = len(result) + 1
         disp_tab = tab_num if (tab_num and tab_num.startswith("ID_")) else f"ID_{anon_num:03d}"
         
-        # Если имя сбилось, содержит спецсимволы или совпадает с ID_00X, восстанавливаем Работник №N
-        if not emp_name or emp_name.startswith("ID_") or emp_name.strip().isdigit() or "\ufffd" in emp_name:
-            disp_name = f"Работник №{anon_num}"
-        else:
-            disp_name = emp_name
-
-        if not emp_full or emp_full.startswith("ID_") or "\ufffd" in emp_full:
-            disp_full = f"СотрудникПолн №{anon_num}"
-        else:
-            disp_full = emp_full
-
-        raw_pos = emp.get("pos") or ""
-        if not raw_pos or raw_pos.startswith("ID_") or "\ufffd" in raw_pos:
-            disp_pos = f"Должность №{anon_num}"
-        else:
-            disp_pos = raw_pos
+        disp_name = f"Работник №{anon_num}"
+        disp_full = f"СотрудникПолн №{anon_num}"
+        disp_pos = f"Должность №{anon_num}"
 
         result.append({
             "id": anon_num,

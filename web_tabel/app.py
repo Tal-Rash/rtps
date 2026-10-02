@@ -296,14 +296,26 @@ def load_state(year: int, month: int) -> dict:
             emp_rows = cur.execute(
                 "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded, hire_date, exclude_date FROM employees WHERE y=? ORDER BY rowid", (year,)
             ).fetchall()
-            for r in emp_rows:
+            for idx, r in enumerate(emp_rows, start=1):
+                raw_tab = text(r["tab_num"])
+                num_part = idx
+                if raw_tab.startswith("ID_"):
+                    digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                    if digits:
+                        num_part = int(digits)
+
+                anon_id = f"ID_{num_part:03d}"
+                anon_short = f"Работник №{num_part}"
+                anon_full = f"СотрудникПолн №{num_part}"
+                anon_pos = f"Должность №{num_part}"
+
                 employees.append({
-                    "pos": text(r["pos"]),
-                    "name": text(r["name"]),
-                    "tab_num": text(r["tab_num"]),
+                    "pos": anon_pos,
+                    "name": anon_short,
+                    "tab_num": anon_id,
                     "milk": int(r["milk"] or 0),
                     "milk_issue": int(r["milk_issue"] or 0),
-                    "full_name": text(r["full_name"]),
+                    "full_name": anon_full,
                     "milk_note": text(r["milk_note"]),
                     "is_excluded": int(dict(r).get("is_excluded", 0) or 0),
                     "hire_date": text(dict(r).get("hire_date", "")),
@@ -676,10 +688,14 @@ async def export_milk(year: int, month: int, type: str):
                 if not allowed_employee(emp):
                     continue
 
-                name = str(emp["name"])
-                tab_num = str(emp["tab_num"])
-                pos = str(emp["pos"])
-                full_name = str(emp["full_name"])
+                raw_tab = str(emp["tab_num"])
+                digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                num_part = int(digits) if digits else 1
+
+                name = f"Работник №{num_part}"
+                tab_num = raw_tab
+                pos = f"Должность №{num_part}"
+                full_name = f"СотрудникПолн №{num_part}"
                 milk_note = str(emp["milk_note"])
                 exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
                 hire_start = employee_hire_start(emp["hire_date"] if "hire_date" in emp.keys() else "")
@@ -901,9 +917,14 @@ async def export_milk_details(year: int, month: int, type: str):
         if type in ("план", "факт") and name_up not in m_issue_set:
             continue
 
-        tab_num = str(emp["tab_num"])
-        pos = str(emp["pos"])
-        full_name = str(emp["full_name"])
+        raw_tab = str(emp["tab_num"])
+        digits = "".join(ch for ch in raw_tab if ch.isdigit())
+        num_part = int(digits) if digits else 1
+
+        tab_num = raw_tab
+        name = f"Работник №{num_part}"
+        pos = f"Должность №{num_part}"
+        full_name = f"СотрудникПолн №{num_part}"
         exclude_start = employee_exclude_start(emp["exclude_date"] if "exclude_date" in emp.keys() else "")
         hire_start = employee_hire_start(emp["hire_date"] if "hire_date" in emp.keys() else "")
         

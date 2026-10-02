@@ -179,9 +179,25 @@ async def api_state(request: Request):
               AND (e.exclude_date IS NULL OR e.exclude_date = '' OR e.exclude_date > ?)
               AND (e.hire_date IS NULL OR e.hire_date = '' OR e.hire_date <= ?)
             GROUP BY e.name, e.tab_num, e.pos
-            ORDER BY COALESCE(eo.sort_order, 2147483647), e.pos, e.name
         """, (today, today)).fetchall()
-        employees = [{"fio": r["name"], "tab_num": r["tab_num"], "position": r["pos"], "category": r["category"], "row_order": r["row_order"]} for r in emp_rows]
+        employees = []
+        for idx, r in enumerate(emp_rows, start=1):
+            raw_tab = str(r["tab_num"] or "").strip()
+            num_part = idx
+            if raw_tab.startswith("ID_"):
+                digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                if digits:
+                    num_part = int(digits)
+            anon_id = f"ID_{num_part:03d}"
+            anon_short = f"Работник №{num_part}"
+            anon_pos = f"Должность №{num_part}"
+            employees.append({
+                "fio": anon_short,
+                "tab_num": anon_id,
+                "position": anon_pos,
+                "category": r["category"],
+                "row_order": r["row_order"]
+            })
         
         # Загрузка записей об обучении
         t_rows = cur.execute("SELECT tab_num, training_type, last_date, period_months, protocol_num FROM employee_trainings").fetchall()
