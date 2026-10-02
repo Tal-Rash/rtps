@@ -335,12 +335,36 @@ def load_state(year: int) -> dict:
             r, c = int(row["r"]), int(row["c"])
             if 0 <= r < 12 and 0 <= c < 8:
                 norms[r][c] = text(row["v"])
+        emp_idx = 0
         for row in cur.execute(
             "SELECT pos, name, full_name, tab_num, milk, milk_issue, hire_date, exclude_date, vacation_days, milk_note FROM employees WHERE y=? ORDER BY rowid",
             (year,),
         ):
+            emp_idx += 1
             v_days = int(row["vacation_days"]) if row["vacation_days"] is not None else 28
-            employees.append([text(row[k]) for k in ("pos", "name", "full_name", "tab_num")] + [int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["hire_date"]), text(row["exclude_date"]), v_days, text(row["milk_note"])])
+
+            raw_pos = text(row["pos"])
+            raw_name = text(row["name"])
+            raw_full = text(row["full_name"])
+            raw_tab = text(row["tab_num"])
+
+            num_part = emp_idx
+            if raw_tab and raw_tab.startswith("ID_"):
+                digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                if digits:
+                    num_part = int(digits)
+
+            anon_id = f"ID_{num_part:03d}"
+            anon_short = f"Работник №{num_part}"
+            anon_full = f"СотрудникПолн №{num_part}"
+            anon_pos = f"Должность №{num_part}"
+
+            disp_pos = raw_pos if raw_pos and not raw_pos.startswith("ID_") and "\ufffd" not in raw_pos else anon_pos
+            disp_name = raw_name if raw_name and not raw_name.startswith("ID_") and not raw_name.isdigit() and "\ufffd" not in raw_name else anon_short
+            disp_full = raw_full if raw_full and not raw_full.startswith("ID_") and "\ufffd" not in raw_full else anon_full
+            disp_tab = raw_tab if raw_tab and raw_tab.startswith("ID_") else anon_id
+
+            employees.append([disp_pos, disp_name, disp_full, disp_tab, int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["hire_date"]), text(row["exclude_date"]), v_days, text(row["milk_note"])])
         inventory_rows = cur.execute(
             """
             SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(service_life, '') AS service_life, rowid
