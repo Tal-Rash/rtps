@@ -651,46 +651,73 @@ document.addEventListener('DOMContentLoaded', () => {
                             .then(res => res.json())
                             .then(vData => {
                                 if (vData && Array.isArray(vData.data)) {
-                                    // Вспомогательная функция нормализации ФИО (удаление точек, пробелов, приведение к нижнему регистру)
-                                    const normalizeName = (s) => String(s || '').replace(/[.\s]/g, '').toLowerCase();
+                                    // Нормализация табельного номера для надежного сравнения (ID_001 -> ID_1, 0015 -> 15)
+                                    const normalizeTab = (tab) => {
+                                        if (tab == null) return '';
+                                        let s = String(tab).trim();
+                                        if (!s) return '';
+                                        if (s.toUpperCase().startsWith('ID_')) {
+                                            let numPart = s.substring(3).replace(/^0+/, '');
+                                            return 'ID_' + (numPart || '0');
+                                        }
+                                        let clean = s.replace(/^0+/, '');
+                                        return clean || '0';
+                                    };
 
-                                    // Улучшенная функция поиска сотрудника с поддержкой старых форматов (по id, табельному номеру, ФИО или индексу)
-                                    const findEmp = (savedEmp, idx) => {
+                                    // Вспомогательная функция нормализации ФИО (удаление точек, пробелов, приведение к нижнему регистру)
+                                    const normalizeName = (s) => String(s || '').replace(/[.\s,–—-]/g, '').replace(/ё/g, 'е').toLowerCase();
+
+                                    // Получение фамилии и первой буквы имени для сравнения ("Иванов И.И." и "Иванов Иван")
+                                    const getLastNameAndInitial = (str) => {
+                                        const raw = String(str || '').trim().replace(/ё/g, 'е');
+                                        const parts = raw.split(/[\s.]+/).filter(Boolean);
+                                        if (parts.length >= 2) {
+                                            return (parts[0] + parts[1][0]).toLowerCase();
+                                        }
+                                        return raw.toLowerCase();
+                                    };
+
+                                    // Точная функция поиска сотрудника по табельному номеру и ФИО (без использования порядкового id и индекса списка)
+                                    const findEmp = (savedEmp) => {
                                         if (!savedEmp) return null;
-                                        const sId = savedEmp.id != null ? String(savedEmp.id) : null;
-                                        const sTab = savedEmp.tab_num != null ? String(savedEmp.tab_num).trim() : '';
+
+                                        const sTab = normalizeTab(savedEmp.tab_num);
                                         const sNameStr = savedEmp.name || savedEmp.full_name || savedEmp.fio || savedEmp.emp_name || '';
                                         const sNorm = normalizeName(sNameStr);
+                                        const sInitial = getLastNameAndInitial(sNameStr);
 
-                                        // 1. Сопоставление по ID
-                                        if (sId) {
-                                            const byId = allData.find(e => e.id != null && String(e.id) === sId);
-                                            if (byId) return byId;
-                                        }
-
-                                        // 2. Сопоставление по табельному номеру
+                                        // 1. Сопоставление по нормализованному табельному номеру
                                         if (sTab) {
                                             const byTab = allData.find(e => {
-                                                const eTab = e.tab_num != null ? String(e.tab_num).trim() : '';
-                                                return eTab && (sTab === eTab || parseInt(sTab) === parseInt(eTab));
+                                                const eTab = normalizeTab(e.tab_num);
+                                                if (!eTab) return false;
+                                                if (sTab === eTab) return true;
+                                                const savedDigits = sTab.replace(/\D/g, '');
+                                                const currDigits = eTab.replace(/\D/g, '');
+                                                return savedDigits && currDigits && savedDigits === currDigits && (sTab.includes('ID_') || eTab.includes('ID_'));
                                             });
                                             if (byTab) return byTab;
                                         }
 
-                                        // 3. Сопоставление по нормализованному ФИО
+                                        // 2. Сопоставление по нормализованному ФИО (полному или краткому)
                                         if (sNorm) {
                                             const byName = allData.find(e => {
                                                 const eNameNorm = normalizeName(e.name || e.full_name || '');
                                                 const eFullNorm = normalizeName(e.full_name || e.name || '');
-                                                return eNameNorm === sNorm || eFullNorm === sNorm ||
-                                                       (sNorm.length > 3 && (eNameNorm.includes(sNorm) || sNorm.includes(eNameNorm)));
+                                                if (eNameNorm === sNorm || eFullNorm === sNorm) return true;
+                                                if (sNorm.length > 3 && (eNameNorm.includes(sNorm) || sNorm.includes(eNameNorm))) return true;
+                                                return false;
                                             });
                                             if (byName) return byName;
                                         }
 
-                                        // 4. Запасной вариант: сопоставление по порядковому номеру (индексу в таблице)
-                                        if (idx != null && idx >= 0 && idx < allData.length) {
-                                            return allData[idx];
+                                        // 3. Сопоставление по фамилии и инициалу имени
+                                        if (sInitial && sInitial.length >= 3) {
+                                            const byInitial = allData.find(e => {
+                                                const cInitial = getLastNameAndInitial(e.name || e.full_name);
+                                                return cInitial && cInitial === sInitial;
+                                            });
+                                            if (byInitial) return byInitial;
                                         }
 
                                         return null;
@@ -714,9 +741,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                         emp.vacations = [];
                                     });
 
-                                    // Применяем отпуска из загружаемой версии
-                                    vData.data.forEach((savedEmp, idx) => {
-                                        const emp = findEmp(savedEmp, idx);
+                                    // Применяем отпуска из загружаемой версии только при четком совпадении сотрудника по табельному номеру или ФИО
+                                    vData.data.forEach((savedEmp) => {
+                                        const emp = findEmp(savedEmp);
                                         if (emp) {
                                             emp.vacations = savedEmp.vacations || [];
                                         }
@@ -775,7 +802,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
             rows.forEach(tr => {
                 const empId = parseInt(tr.dataset.empId);
-                const employee = allData.find(e => e.id === empId);
+                const empTab = tr.dataset.empTab || '';
+                const empName = tr.dataset.empName || '';
+                const employee = (typeof findEmp === 'function' ? findEmp({ tab_num: empTab, name: empName }) : null) || allData.find(e => e.id === empId);
                 if (employee) {
                     const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
                     const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
@@ -874,6 +903,8 @@ document.addEventListener('DOMContentLoaded', () => {
         data.forEach((employee, empIndex) => {
             const tr = document.createElement('tr');
             tr.dataset.empId = employee.id;
+            tr.dataset.empTab = employee.tab_num || '';
+            tr.dataset.empName = employee.name || employee.full_name || '';
 
             const empName = escapeHtml(employee.name || employee.full_name || '');
             const empPos = escapeHtml(employee.position || '');
@@ -1342,7 +1373,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
         rows.forEach(tr => {
             const empId = parseInt(tr.dataset.empId);
-            const employee = allData.find(e => e.id === empId);
+            const empTab = tr.dataset.empTab || '';
+            const empName = tr.dataset.empName || '';
+            const employee = (typeof findEmp === 'function' ? findEmp({ tab_num: empTab, name: empName }) : null) || allData.find(e => e.id === empId);
             
             if (employee) {
                 const allowedInput = tr.querySelector('.allowed-days-input');

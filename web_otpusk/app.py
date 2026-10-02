@@ -263,6 +263,57 @@ def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bo
 
     return True
 
+def get_employee_persistent_key(tab_num: str = "", name: str = "", full_name: str = "") -> str:
+    """Возвращает постоянный уникальный ключ сотрудника (реальный табельный или ФИО) для исключения смещения данных при изменении списка"""
+    t_clean = str(tab_num or "").strip()
+    n_clean = str(name or "").strip()
+    f_clean = str(full_name or "").strip()
+
+    csv_file = ROOT.parent / "employees_private.csv"
+    xlsx_file = ROOT.parent / "employees_private.xlsx"
+
+    if csv_file.exists():
+        try:
+            import csv
+            with open(csv_file, "r", encoding="utf-8-sig") as f:
+                for row in csv.reader(f, delimiter=";"):
+                    if not row or len(row) < 5 or row[0].startswith("Код"):
+                        continue
+                    anon_id = str(row[0]).strip()
+                    r_full = str(row[2]).strip()
+                    r_short = str(row[3]).strip()
+                    r_tab = str(row[4]).strip()
+
+                    if (t_clean and t_clean.upper() == anon_id.upper()) or \
+                       (t_clean and r_tab and t_clean == r_tab) or \
+                       (n_clean and n_clean.lower() == r_short.lower()) or \
+                       (f_clean and f_clean.lower() == r_full.lower()):
+                        return r_tab or r_full or r_short or anon_id
+        except Exception:
+            pass
+    elif xlsx_file.exists():
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(xlsx_file)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                if not row or len(row) < 5 or str(row[0]).startswith("Код"):
+                    continue
+                anon_id = str(row[0]).strip()
+                r_full = str(row[2]).strip()
+                r_short = str(row[3]).strip()
+                r_tab = str(row[4]).strip()
+
+                if (t_clean and t_clean.upper() == anon_id.upper()) or \
+                   (t_clean and r_tab and t_clean == r_tab) or \
+                   (n_clean and n_clean.lower() == r_short.lower()) or \
+                   (f_clean and f_clean.lower() == r_full.lower()):
+                    return r_tab or r_full or r_short or anon_id
+        except Exception:
+            pass
+
+    return t_clean or f_clean or n_clean
+
 @app.get("/api/vacations")
 @app.get(f"{APP_PREFIX}/api/vacations")
 async def get_vacations(year: int = 2026):
@@ -367,8 +418,9 @@ async def get_vacations(year: int = 2026):
         emp_name = emp.get("name") or emp.get("full_name") or ""
         emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
+        pkey = get_employee_persistent_key(tab_num, emp_name, emp_full)
 
-        vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        vacations = saved_vacations.get(pkey) or saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
         if not vacations:
             for ai in archive_items:
                 if is_same_person(emp_name, ai["name"], tab_num, ai["tab_num"]) or \
@@ -380,7 +432,7 @@ async def get_vacations(year: int = 2026):
         if hire_year is not None and hire_year == year and not vacations:
             continue
 
-        prev_vacs = prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
+        prev_vacs = prev_saved_vacations.get(pkey) or prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
         
         prev_arc_vacs = []
         for pai in prev_archive_items:
@@ -473,17 +525,19 @@ async def save_vacations(request: Request, year: int = 2026):
     items = await request.json()
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
-        emp_rows = cur.execute("SELECT tab_num, name, full_name FROM employees").fetchall()
+        emp_rows = cur.execute("SELECT tab_num, name, full_name FROM employees WHERE y=?", (year,)).fetchall()
         for item in items:
-            t_num = str(item.get("tab_num") or item.get("name") or "")
+            t_num = str(item.get("tab_num") or "")
             e_name = str(item.get("name") or "")
+            e_full = str(item.get("full_name") or e_name)
             v_json = json.dumps(item.get("vacations", []), ensure_ascii=False)
             
-            target_tab = t_num
+            pkey = get_employee_persistent_key(t_num, e_name, e_full)
+            target_tab = pkey or t_num or e_name
             target_name = e_name
+
             for emp in emp_rows:
                 if is_same_person(emp[1], e_name, emp[0], t_num) or is_same_person(emp[2], e_name, emp[0], t_num):
-                    target_tab = emp[0]
                     target_name = emp[1]
                     break
 
@@ -492,6 +546,11 @@ async def save_vacations(request: Request, year: int = 2026):
                     "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
                     (year, target_tab, target_name, v_json)
                 )
+                if t_num and t_num != target_tab:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
+                        (year, t_num, target_name, v_json)
+                    )
         conn.commit()
     return {"status": "success"}
 
