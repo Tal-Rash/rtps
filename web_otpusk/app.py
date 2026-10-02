@@ -409,7 +409,7 @@ async def get_vacations(year: int = 2026):
         disp_tab = tab_num if (tab_num and tab_num.startswith("ID_")) else f"ID_{anon_num:03d}"
         
         # Если имя сбилось, содержит спецсимволы или совпадает с ID_00X, восстанавливаем Работник №N
-        if not emp_name or emp_name.startswith("ID_") or "\ufffd" in emp_name:
+        if not emp_name or emp_name.startswith("ID_") or emp_name.strip().isdigit() or "\ufffd" in emp_name:
             disp_name = f"Работник №{anon_num}"
         else:
             disp_name = emp_name
