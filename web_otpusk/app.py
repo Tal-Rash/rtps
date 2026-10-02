@@ -215,24 +215,48 @@ def normalize_tab(tab: str) -> str:
     return str(tab).strip().lstrip('0')
 
 def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bool:
+    s1 = str(name1 or "").strip()
+    s2 = str(name2 or "").strip()
     t1 = normalize_tab(tab1)
     t2 = normalize_tab(tab2)
+
+    l1 = s1.lower()
+    l2 = s2.lower()
+
+    # Если заданы оба имени, проверяем, не разные ли это реальные люди
+    if l1 and l2:
+        is_anon1 = ("№" in l1 or "id_" in l1 or l1.isdigit())
+        is_anon2 = ("№" in l2 or "id_" in l2 or l2.isdigit())
+        if not is_anon1 and not is_anon2:
+            p1 = l1.replace('.', ' ').split()
+            p2 = l2.replace('.', ' ').split()
+            if p1 and p2 and p1[0] != p2[0]:
+                return False
+
     if t1 and t2:
+        # Для шифров ID_00X проверяем также несовпадение реальных имен
+        if t1.lower().startswith("id_") or t2.lower().startswith("id_"):
+            if l1 and l2:
+                is_anon1 = ("№" in l1 or "id_" in l1 or l1.isdigit())
+                is_anon2 = ("№" in l2 or "id_" in l2 or l2.isdigit())
+                if not is_anon1 and not is_anon2:
+                    p1 = l1.replace('.', ' ').split()
+                    p2 = l2.replace('.', ' ').split()
+                    if p1 and p2 and p1[0] != p2[0]:
+                        return False
+            return t1 == t2
         return t1 == t2
 
-    s1 = str(name1 or "").strip().lower()
-    s2 = str(name2 or "").strip().lower()
-
-    if not s1 or not s2:
+    if not l1 or not l2:
         return False
 
-    if s1 == s2:
+    if l1 == l2:
         return True
 
     # Для плейсхолдеров анонимизации (Работник №1, СотрудникПолн №1, Сотрудник №1, ID_001)
-    if ("№" in s1 or "id_" in s1) and ("№" in s2 or "id_" in s2):
-        num1 = "".join(ch for ch in s1 if ch.isdigit())
-        num2 = "".join(ch for ch in s2 if ch.isdigit())
+    if ("№" in l1 or "id_" in l1) and ("№" in l2 or "id_" in l2):
+        num1 = "".join(ch for ch in l1 if ch.isdigit())
+        num2 = "".join(ch for ch in l2 if ch.isdigit())
         if num1 and num2:
             return int(num1) == int(num2)
 
@@ -385,9 +409,21 @@ async def get_vacations(year: int = 2026):
         emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
         pkey = tab_num or emp_name
-        vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        hire_date_str = str(emp.get("hire_date") or "").strip()
+        hire_year = extract_year_from_date(hire_date_str)
+        hire_iso = format_date_to_iso(hire_date_str)
+
+        exc_date_str = str(emp.get("exclude_date") or "").strip()
+        exc_year = extract_year_from_date(exc_date_str)
+        exc_iso = format_date_to_iso(exc_date_str)
+
         if not vacations:
             for ai in archive_items:
+                s_iso = format_date_to_iso(ai["vacation"].get("start") or "")
+                if hire_iso and s_iso and s_iso < hire_iso:
+                    continue
+                if exc_iso and s_iso and s_iso > exc_iso:
+                    continue
                 if is_same_person(emp_name, ai["name"], tab_num, ai["tab_num"]) or \
                    (emp_full and is_same_person(emp_full, ai["name"], tab_num, ai["tab_num"])):
                     vacations.append(ai["vacation"])
@@ -395,7 +431,6 @@ async def get_vacations(year: int = 2026):
 
         # Проверяем дату приема на работу:
         # В предыдущие годы (до года приема) и в текущий год приема (если нет запланированного отпуска) сотрудник не отображается, только в следующих годах
-        hire_year = extract_year_from_date(emp.get("hire_date"))
         if hire_year is not None:
             if hire_year > year:
                 continue
@@ -406,6 +441,11 @@ async def get_vacations(year: int = 2026):
         
         prev_arc_vacs = []
         for pai in prev_archive_items:
+            s_iso = format_date_to_iso(pai["vacation"].get("start") or "")
+            if hire_iso and s_iso and s_iso < hire_iso:
+                continue
+            if exc_iso and s_iso and s_iso > exc_iso:
+                continue
             if is_same_person(emp_name, pai["name"], tab_num, pai["tab_num"]) or \
                (emp_full and is_same_person(emp_full, pai["name"], tab_num, pai["tab_num"])):
                 prev_arc_vacs.append(pai["vacation"])
@@ -672,7 +712,14 @@ async def get_history_matrix(year: int = 2026):
         if is_employee_excluded_for_year(emp, year):
             continue
 
-        hire_year = extract_year_from_date(emp.get("hire_date"))
+        hire_date_str = str(emp.get("hire_date") or "").strip()
+        hire_year = extract_year_from_date(hire_date_str)
+        hire_iso = format_date_to_iso(hire_date_str)
+
+        exc_date_str = str(emp.get("exclude_date") or "").strip()
+        exc_year = extract_year_from_date(exc_date_str)
+        exc_iso = format_date_to_iso(exc_date_str)
+
         if hire_year is not None and hire_year > year:
             continue
 
@@ -688,13 +735,33 @@ async def get_history_matrix(year: int = 2026):
             if ay not in emp_history:
                 continue
 
+            try:
+                ay_int = int(ay)
+            except Exception:
+                ay_int = 0
+
+            # Сотрудник не мог ходить в отпуск до года своего трудоустройства
+            if hire_year is not None and ay_int > 0 and ay_int < hire_year:
+                continue
+
+            s_iso = format_date_to_iso(ai.get("start_date") or "")
+            e_iso = format_date_to_iso(ai.get("end_date") or "")
+
+            # Отпуск до даты приёма на работу не относится к новому сотруднику
+            if hire_iso and s_iso and s_iso < hire_iso:
+                continue
+
+            # Отпуск после даты увольнения не относится к сотруднику
+            if exc_year is not None and ay_int > 0 and ay_int > exc_year:
+                continue
+            if exc_iso and s_iso and s_iso > exc_iso:
+                continue
+
             a_name = str(ai.get("name") or "")
             a_tab = str(ai.get("tab_num") or "")
 
             if is_same_person(emp_name, a_name, tab_num, a_tab) or \
                (emp_full and is_same_person(emp_full, a_name, tab_num, a_tab)):
-                s_iso = format_date_to_iso(ai.get("start_date") or "")
-                e_iso = format_date_to_iso(ai.get("end_date") or "")
                 key = f"{ay}_{s_iso}_{e_iso}"
                 if key in seen_keys:
                     continue
