@@ -359,10 +359,10 @@ def load_state(year: int) -> dict:
             anon_full = f"СотрудникПолн №{num_part}"
             anon_pos = f"Должность №{num_part}"
 
-            disp_pos = raw_pos if raw_pos and not raw_pos.startswith("ID_") and "\ufffd" not in raw_pos else anon_pos
-            disp_name = raw_name if raw_name and not raw_name.startswith("ID_") and not raw_name.isdigit() and "\ufffd" not in raw_name else anon_short
-            disp_full = raw_full if raw_full and not raw_full.startswith("ID_") and "\ufffd" not in raw_full else anon_full
-            disp_tab = raw_tab if raw_tab and raw_tab.startswith("ID_") else anon_id
+            disp_pos = anon_pos
+            disp_name = anon_short
+            disp_full = anon_full
+            disp_tab = anon_id
 
             employees.append([disp_pos, disp_name, disp_full, disp_tab, int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["hire_date"]), text(row["exclude_date"]), v_days, text(row["milk_note"])])
         inventory_rows = cur.execute(
