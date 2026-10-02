@@ -675,33 +675,6 @@ async def get_history_matrix(year: int = 2026):
             "SELECT y, tab_num, name, vacations_json FROM vacations_schedule ORDER BY y ASC"
         ).fetchall()
 
-    # Собираем архивных сотрудников, которых уже нет в справочнике целевого года
-    emp_tabs_set = {str(r.get("tab_num") or "") for r in employees if r.get("tab_num")}
-    emp_names_set = {str(r.get("name") or "") for r in employees if r.get("name")}
-
-    seen_arc_keys = set()
-    for ai in arc_rows:
-        a_tab = str(ai["tab_num"] or "")
-        a_name = str(ai["name"] or "")
-        if (a_tab and a_tab in emp_tabs_set) or (a_name and a_name in emp_names_set):
-            continue
-        arc_k = a_tab or a_name
-        if arc_k in seen_arc_keys:
-            continue
-        seen_arc_keys.add(arc_k)
-        employees.append({
-            "rowid": None,
-            "pos": "Уволен",
-            "name": a_name,
-            "full_name": a_name,
-            "tab_num": a_tab,
-            "vacation_days": 52,
-            "is_excluded": 1,
-            "exclude_date": "Архив",
-            "hire_date": "",
-            "from_archive": True
-        })
-
     years_set = set()
     archive_items = []
 
@@ -868,8 +841,6 @@ async def get_history_matrix(year: int = 2026):
         has_any_vacation = any(len(v_list) > 0 for v_list in emp_history.values())
         if hire_year is not None and hire_year == year and not has_any_vacation:
             continue
-        if emp.get("from_archive") and not has_any_vacation:
-            continue
 
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
 
@@ -885,10 +856,7 @@ async def get_history_matrix(year: int = 2026):
         disp_tab = f"ID_{num_part:03d}"
         disp_name = f"Работник №{num_part}"
         disp_full = f"СотрудникПолн №{num_part}"
-        if emp.get("from_archive"):
-            disp_pos = "Уволен"
-        else:
-            disp_pos = f"Должность №{num_part}"
+        disp_pos = f"Должность №{num_part}"
 
         result_emp_list.append({
             "id": num_part,

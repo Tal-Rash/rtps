@@ -2183,17 +2183,27 @@ document.addEventListener('DOMContentLoaded', () => {
       const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
       if (!pairs || !pairs.length) return;
 
+      // Безопасная замена метки: если метка заканчивается цифрой, не заменяем её как префикс большего числа
+      function replaceSafe(str) {
+        if (!str) return str;
+        let res = str;
+        for (let p = 0; p < pairs.length; p++) {
+          const from = pairs[p].from;
+          if (res.indexOf(from) !== -1) {
+            const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = /\d$/.test(from) ? escaped + '(?![0-9])' : escaped;
+            res = res.replace(new RegExp(pattern, 'g'), pairs[p].to);
+          }
+        }
+        return res;
+      }
+
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
       let node;
       while ((node = walker.nextNode())) {
         let val = node.nodeValue;
         if (!val || !val.trim()) continue;
-        let newVal = val;
-        for (let p = 0; p < pairs.length; p++) {
-          if (newVal.indexOf(pairs[p].from) !== -1) {
-            newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-          }
-        }
+        let newVal = replaceSafe(val);
         if (newVal !== val) node.nodeValue = newVal;
       }
 
@@ -2202,41 +2212,21 @@ document.addEventListener('DOMContentLoaded', () => {
         let el = inputs[i];
         if (el.tagName === 'OPTION' || el.tagName === 'option') {
           if (el.textContent) {
-            let val = el.textContent, newVal = val;
-            for (let p = 0; p < pairs.length; p++) {
-              if (newVal.indexOf(pairs[p].from) !== -1) {
-                newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-              }
-            }
-            if (newVal !== val) el.textContent = newVal;
+            let newVal = replaceSafe(el.textContent);
+            if (newVal !== el.textContent) el.textContent = newVal;
           }
         }
         if (el.value) {
-          let val = el.value, newVal = val;
-          for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) {
-              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-            }
-          }
-          if (newVal !== val) el.value = newVal;
+          let newVal = replaceSafe(el.value);
+          if (newVal !== el.value) el.value = newVal;
         }
         if (el.title) {
-          let val = el.title, newVal = val;
-          for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) {
-              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-            }
-          }
-          if (newVal !== val) el.title = newVal;
+          let newVal = replaceSafe(el.title);
+          if (newVal !== el.title) el.title = newVal;
         }
         if (el.placeholder) {
-          let val = el.placeholder, newVal = val;
-          for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) {
-              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-            }
-          }
-          if (newVal !== val) el.placeholder = newVal;
+          let newVal = replaceSafe(el.placeholder);
+          if (newVal !== el.placeholder) el.placeholder = newVal;
         }
       }
     } catch (e) {}
