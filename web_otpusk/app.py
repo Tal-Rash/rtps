@@ -293,6 +293,27 @@ async def get_vacations(year: int = 2026):
                     "SELECT rowid, * FROM employees ORDER BY rowid"
                 ).fetchall()
 
+        # Объединяем со всеми актуальными сотрудниками из справочника (чтобы новые сотрудники сразу появлялись)
+        existing_tabs = {str(r["tab_num"]) for r in emp_rows if r["tab_num"]}
+        try:
+            latest_rows = cur.execute("""
+                SELECT e.rowid, e.pos, e.name, e.full_name, e.tab_num, e.vacation_days, e.is_excluded, e.exclude_date, e.hire_date
+                FROM employees e
+                INNER JOIN (
+                    SELECT tab_num, MAX(y) as max_y FROM employees GROUP BY tab_num
+                ) m ON e.tab_num = m.tab_num AND e.y = m.max_y
+                ORDER BY e.rowid
+            """).fetchall()
+            combined = list(emp_rows)
+            for r in latest_rows:
+                t = str(r["tab_num"] or "")
+                if t and t not in existing_tabs:
+                    combined.append(r)
+                    existing_tabs.add(t)
+            emp_rows = combined
+        except Exception:
+            pass
+
         employees = [dict(r) for r in emp_rows]
 
         vac_rows = cur.execute(
@@ -377,10 +398,6 @@ async def get_vacations(year: int = 2026):
                     vacations.append(ai["vacation"])
                     processed_archive_keys.add((ai["tab_num"], ai["name"]))
 
-        # Персонал, пришедший в текущем (целевом) году, не должен отображаться в графике этого года, если его нет в архиве и нет сохраненного графика
-        if hire_year is not None and hire_year == year and not vacations:
-            continue
-
         prev_vacs = prev_saved_vacations.get(pkey) or prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
         
         prev_arc_vacs = []
@@ -404,16 +421,22 @@ async def get_vacations(year: int = 2026):
 
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
         
-        # Гарантированная защита от сбоя названий в БД на сервере:
-        anon_num = len(result) + 1
-        disp_tab = tab_num if (tab_num and tab_num.startswith("ID_")) else f"ID_{anon_num:03d}"
-        
-        disp_name = f"Работник №{anon_num}"
-        disp_full = f"СотрудникПолн №{anon_num}"
-        disp_pos = f"Должность №{anon_num}"
+        # Гарантированная защита от сбоя названий и привязка номера к табельному ID
+        num_part = None
+        if tab_num and tab_num.startswith("ID_"):
+            digits = "".join(ch for ch in tab_num if ch.isdigit())
+            if digits:
+                num_part = int(digits)
+        if num_part is None:
+            num_part = len(result) + 1
+
+        disp_tab = f"ID_{num_part:03d}"
+        disp_name = f"Работник №{num_part}"
+        disp_full = f"СотрудникПолн №{num_part}"
+        disp_pos = f"Должность №{num_part}"
 
         result.append({
-            "id": anon_num,
+            "id": num_part,
             "tab_num": disp_tab,
             "name": disp_name,
             "full_name": disp_full,
