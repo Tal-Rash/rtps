@@ -263,56 +263,6 @@ def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bo
 
     return True
 
-def get_employee_persistent_key(tab_num: str = "", name: str = "", full_name: str = "") -> str:
-    """Возвращает постоянный уникальный ключ сотрудника (реальный табельный или ФИО) для исключения смещения данных при изменении списка"""
-    t_clean = str(tab_num or "").strip()
-    n_clean = str(name or "").strip()
-    f_clean = str(full_name or "").strip()
-
-    csv_file = ROOT.parent / "employees_private.csv"
-    xlsx_file = ROOT.parent / "employees_private.xlsx"
-
-    if csv_file.exists():
-        try:
-            import csv
-            with open(csv_file, "r", encoding="utf-8-sig") as f:
-                for row in csv.reader(f, delimiter=";"):
-                    if not row or len(row) < 5 or row[0].startswith("Код"):
-                        continue
-                    anon_id = str(row[0]).strip()
-                    r_full = str(row[2]).strip()
-                    r_short = str(row[3]).strip()
-                    r_tab = str(row[4]).strip()
-
-                    if (t_clean and t_clean.upper() == anon_id.upper()) or \
-                       (t_clean and r_tab and t_clean == r_tab) or \
-                       (n_clean and n_clean.lower() == r_short.lower()) or \
-                       (f_clean and f_clean.lower() == r_full.lower()):
-                        return r_tab or r_full or r_short or anon_id
-        except Exception:
-            pass
-    elif xlsx_file.exists():
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(xlsx_file)
-            ws = wb.active
-            for row in ws.iter_rows(values_only=True):
-                if not row or len(row) < 5 or str(row[0]).startswith("Код"):
-                    continue
-                anon_id = str(row[0]).strip()
-                r_full = str(row[2]).strip()
-                r_short = str(row[3]).strip()
-                r_tab = str(row[4]).strip()
-
-                if (t_clean and t_clean.upper() == anon_id.upper()) or \
-                   (t_clean and r_tab and t_clean == r_tab) or \
-                   (n_clean and n_clean.lower() == r_short.lower()) or \
-                   (f_clean and f_clean.lower() == r_full.lower()):
-                    return r_tab or r_full or r_short or anon_id
-        except Exception:
-            pass
-
-    return t_clean or f_clean or n_clean
 
 @app.get("/api/vacations")
 @app.get(f"{APP_PREFIX}/api/vacations")
@@ -418,9 +368,8 @@ async def get_vacations(year: int = 2026):
         emp_name = emp.get("name") or emp.get("full_name") or ""
         emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
-        pkey = get_employee_persistent_key(tab_num, emp_name, emp_full)
-
-        vacations = saved_vacations.get(pkey) or saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        pkey = tab_num or emp_name
+        vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
         if not vacations:
             for ai in archive_items:
                 if is_same_person(emp_name, ai["name"], tab_num, ai["tab_num"]) or \
@@ -454,12 +403,34 @@ async def get_vacations(year: int = 2026):
                     carried_over.append(pv)
 
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
+        
+        # Гарантированная защита от сбоя названий в БД на сервере:
+        anon_num = len(result) + 1
+        disp_tab = tab_num if (tab_num and tab_num.startswith("ID_")) else f"ID_{anon_num:03d}"
+        
+        # Если имя сбилось, содержит спецсимволы или совпадает с ID_00X, восстанавливаем Работник №N
+        if not emp_name or emp_name.startswith("ID_") or "\ufffd" in emp_name:
+            disp_name = f"Работник №{anon_num}"
+        else:
+            disp_name = emp_name
+
+        if not emp_full or emp_full.startswith("ID_") or "\ufffd" in emp_full:
+            disp_full = f"СотрудникПолн №{anon_num}"
+        else:
+            disp_full = emp_full
+
+        raw_pos = emp.get("pos") or ""
+        if not raw_pos or raw_pos.startswith("ID_") or "\ufffd" in raw_pos:
+            disp_pos = f"Должность №{anon_num}"
+        else:
+            disp_pos = raw_pos
+
         result.append({
-            "id": len(result) + 1,
-            "tab_num": tab_num,
-            "name": emp_name,
-            "full_name": emp_full or emp_name,
-            "position": emp.get("pos") or "",
+            "id": anon_num,
+            "tab_num": disp_tab,
+            "name": disp_name,
+            "full_name": disp_full,
+            "position": disp_pos,
             "vacation_days": v_days,
             "vacations": vacations,
             "carried_over_vacations": carried_over
@@ -529,15 +500,14 @@ async def save_vacations(request: Request, year: int = 2026):
         for item in items:
             t_num = str(item.get("tab_num") or "")
             e_name = str(item.get("name") or "")
-            e_full = str(item.get("full_name") or e_name)
             v_json = json.dumps(item.get("vacations", []), ensure_ascii=False)
             
-            pkey = get_employee_persistent_key(t_num, e_name, e_full)
-            target_tab = pkey or t_num or e_name
+            target_tab = t_num or e_name
             target_name = e_name
 
             for emp in emp_rows:
                 if is_same_person(emp[1], e_name, emp[0], t_num) or is_same_person(emp[2], e_name, emp[0], t_num):
+                    target_tab = emp[0]
                     target_name = emp[1]
                     break
 
@@ -546,11 +516,6 @@ async def save_vacations(request: Request, year: int = 2026):
                     "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
                     (year, target_tab, target_name, v_json)
                 )
-                if t_num and t_num != target_tab:
-                    cur.execute(
-                        "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
-                        (year, t_num, target_name, v_json)
-                    )
         conn.commit()
     return {"status": "success"}
 
