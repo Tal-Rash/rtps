@@ -381,11 +381,6 @@ async def get_vacations(year: int = 2026):
         if is_employee_excluded_for_year(emp, year):
             continue
 
-        # Проверяем дату приема на работу: не выводить сотрудника в графиках прошлых лет
-        hire_year = extract_year_from_date(emp.get("hire_date"))
-        if hire_year is not None and hire_year > year:
-            continue
-
         emp_name = emp.get("name") or emp.get("full_name") or ""
         emp_full = emp.get("full_name") or ""
         tab_num = str(emp.get("tab_num") or "")
@@ -397,6 +392,15 @@ async def get_vacations(year: int = 2026):
                    (emp_full and is_same_person(emp_full, ai["name"], tab_num, ai["tab_num"])):
                     vacations.append(ai["vacation"])
                     processed_archive_keys.add((ai["tab_num"], ai["name"]))
+
+        # Проверяем дату приема на работу:
+        # В предыдущие годы (до года приема) и в текущий год приема (если нет запланированного отпуска) сотрудник не отображается, только в следующих годах
+        hire_year = extract_year_from_date(emp.get("hire_date"))
+        if hire_year is not None:
+            if hire_year > year:
+                continue
+            if hire_year == year and not vacations:
+                continue
 
         prev_vacs = prev_saved_vacations.get(pkey) or prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
         
