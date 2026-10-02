@@ -584,10 +584,45 @@ async def get_history_matrix(year: int = 2026):
 
         try:
             emp_rows = cur.execute(
-                "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees ORDER BY rowid"
+                "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
             ).fetchall()
         except Exception:
-            emp_rows = cur.execute("SELECT rowid, * FROM employees ORDER BY rowid").fetchall()
+            emp_rows = cur.execute(
+                "SELECT rowid, * FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
+            ).fetchall()
+
+        if not emp_rows:
+            try:
+                emp_rows = cur.execute(
+                    "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees ORDER BY rowid"
+                ).fetchall()
+            except Exception:
+                emp_rows = cur.execute(
+                    "SELECT rowid, * FROM employees ORDER BY rowid"
+                ).fetchall()
+
+        # Объединяем со всеми актуальными сотрудниками из справочника (чтобы новые сотрудники сразу появлялись)
+        existing_tabs = {str(r["tab_num"]) for r in emp_rows if r["tab_num"]}
+        try:
+            latest_rows = cur.execute("""
+                SELECT e.rowid, e.pos, e.name, e.full_name, e.tab_num, e.vacation_days, e.is_excluded, e.exclude_date, e.hire_date
+                FROM employees e
+                INNER JOIN (
+                    SELECT tab_num, MAX(y) as max_y FROM employees GROUP BY tab_num
+                ) m ON e.tab_num = m.tab_num AND e.y = m.max_y
+                ORDER BY e.rowid
+            """).fetchall()
+            combined = list(emp_rows)
+            for r in latest_rows:
+                t = str(r["tab_num"] or "")
+                if t and t not in existing_tabs:
+                    combined.append(r)
+                    existing_tabs.add(t)
+            emp_rows = combined
+        except Exception:
+            pass
 
         employees = [dict(r) for r in emp_rows]
 
@@ -726,13 +761,33 @@ async def get_history_matrix(year: int = 2026):
         elif winter_days > summer_days:
             dominant_season = "winter"
 
+        # Новые сотрудники в год приёма без запланированных отпусков не показываются в графике текущего года
+        has_any_vacation = any(len(v_list) > 0 for v_list in emp_history.values())
+        if hire_year is not None and hire_year == year and not has_any_vacation:
+            continue
+
         v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
 
+        # Гарантированная защита от сбоя названий и привязка номера к табельному ID
+        num_part = None
+        if tab_num and tab_num.startswith("ID_"):
+            digits = "".join(ch for ch in tab_num if ch.isdigit())
+            if digits:
+                num_part = int(digits)
+        if num_part is None:
+            num_part = len(result_emp_list) + 1
+
+        disp_tab = f"ID_{num_part:03d}"
+        disp_name = f"Работник №{num_part}"
+        disp_full = f"СотрудникПолн №{num_part}"
+        disp_pos = f"Должность №{num_part}"
+
         result_emp_list.append({
-            "tab_num": tab_num,
-            "name": emp_name,
-            "full_name": emp_full or emp_name,
-            "position": emp.get("pos") or "",
+            "id": num_part,
+            "tab_num": disp_tab,
+            "name": disp_name,
+            "full_name": disp_full,
+            "position": disp_pos,
             "vacation_days": v_days,
             "stats": {
                 "summer_count": summer_count,

@@ -2003,14 +2003,21 @@ document.addEventListener('DOMContentLoaded', () => {
             emp.periodStats = calcPeriodStats(emp, startYear, endYear);
         });
 
-        // Filter employees if search query present
+        // Фильтрация сотрудников по поисковому запросу с поддержкой реальных ФИО
         const query = filterText.toLowerCase();
+        const repPairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
         let filteredEmployees = employees.filter(emp => {
             if (!query) return true;
-            const name = (emp.name || '').toLowerCase();
-            const full = (emp.full_name || '').toLowerCase();
-            const pos = (emp.position || '').toLowerCase();
-            const tab = (emp.tab_num || '').toLowerCase();
+            let name = (emp.name || '').toLowerCase();
+            let full = (emp.full_name || '').toLowerCase();
+            let pos = (emp.position || '').toLowerCase();
+            let tab = (emp.tab_num || '').toLowerCase();
+            for (let p = 0; p < repPairs.length; p++) {
+                if (emp.name && emp.name.indexOf(repPairs[p].from) !== -1) name += ' ' + repPairs[p].to.toLowerCase();
+                if (emp.full_name && emp.full_name.indexOf(repPairs[p].from) !== -1) full += ' ' + repPairs[p].to.toLowerCase();
+                if (emp.position && emp.position.indexOf(repPairs[p].from) !== -1) pos += ' ' + repPairs[p].to.toLowerCase();
+                if (emp.tab_num && emp.tab_num.indexOf(repPairs[p].from) !== -1) tab += ' ' + repPairs[p].to.toLowerCase();
+            }
             return name.includes(query) || full.includes(query) || pos.includes(query) || tab.includes(query);
         });
 
@@ -2132,6 +2139,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         historyTableBody.innerHTML = bodyHtml;
+        if (typeof window.applyCustomLabels === 'function') {
+            window.applyCustomLabels();
+            setTimeout(window.applyCustomLabels, 15);
+        }
     }
 
     function formatDateRu(isoStr) {
