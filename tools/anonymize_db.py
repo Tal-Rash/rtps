@@ -8,8 +8,9 @@ import json
 import shutil
 from pathlib import Path
 
-DB_PATH = Path("base/common_database.db")
-BACKUP_PATH = Path("base/common_database.db.bak")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DB_PATH = ROOT_DIR / "base" / "common_database.db"
+BACKUP_PATH = ROOT_DIR / "base" / "common_database.db.bak"
 
 def normalize_tab(tab: str) -> str:
     if not tab: return ""

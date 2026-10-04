@@ -11,8 +11,9 @@ import openpyxl
 from pathlib import Path
 
 def load_mapping():
-    csv_file = Path("employees_private.csv")
-    xlsx_file = Path("employees_private.xlsx")
+    root_dir = Path(__file__).resolve().parent.parent
+    csv_file = root_dir / "employees_private.csv"
+    xlsx_file = root_dir / "employees_private.xlsx"
     
     mapping = {}
     

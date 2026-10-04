@@ -6,8 +6,9 @@
 import urllib.parse
 from pathlib import Path
 
-js_path = Path("standalone_bookmarklet.js")
-out_path = Path("BOOKMARKLET_LINK.txt")
+DIR = Path(__file__).resolve().parent
+js_path = DIR / "standalone_bookmarklet.js"
+out_path = DIR / "BOOKMARKLET_LINK.txt"
 
 if js_path.exists():
     raw_js = js_path.read_text(encoding="utf-8")

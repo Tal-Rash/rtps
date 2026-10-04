@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 # Пути
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 DB_PATHS = [
     ROOT_DIR / "base" / "common_database.db",
     ROOT_DIR / "base" / "web_users.db"

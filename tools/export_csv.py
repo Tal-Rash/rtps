@@ -8,8 +8,9 @@ import openpyxl
 import csv
 from pathlib import Path
 
-xlsx_path = Path("employees_private.xlsx")
-csv_path = Path("employees_private.csv")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+xlsx_path = ROOT_DIR / "employees_private.xlsx"
+csv_path = ROOT_DIR / "employees_private.csv"
 
 if xlsx_path.exists():
     wb = openpyxl.load_workbook(xlsx_path)

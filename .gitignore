@@ -46,5 +46,8 @@ employees_private.csv
 *.bak
 scratch/
 BOOKMARKLET_LINK.txt
+tools/BOOKMARKLET_LINK.txt
+out*.txt
+temp_*
 
 

@@ -33,8 +33,9 @@ REAL_EMPLOYEES = [
 ]
 
 def main():
-    xlsx_path = Path("employees_private.xlsx")
-    csv_path = Path("employees_private.csv")
+    root_dir = Path(__file__).resolve().parent.parent
+    xlsx_path = root_dir / "employees_private.xlsx"
+    csv_path = root_dir / "employees_private.csv"
 
     wb = openpyxl.Workbook()
     ws = wb.active
