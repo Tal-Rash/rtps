@@ -878,3 +878,27 @@ body.hide-badges .total-days-badge {
 .vacation-line-carried {
     background-color: #94a3b8 !important;
 }
+
+/* Стили активной версии в модальном окне версий */
+.version-row-active td {
+    background: #f0fdf4 !important;
+}
+
+.version-row-active td:first-child {
+    border-left: 4px solid #16a34a !important;
+}
+
+.badge-active-version {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+}

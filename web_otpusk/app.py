@@ -76,6 +76,13 @@ def init_db():
                 data_json TEXT NOT NULL
             )
         """)
+        # Гарантируем наличие колонки is_active в таблице vacation_versions
+        try:
+            ver_cols = [c[1] for c in cur.execute("PRAGMA table_info(vacation_versions)").fetchall()]
+            if "is_active" not in ver_cols:
+                cur.execute("ALTER TABLE vacation_versions ADD COLUMN is_active INTEGER DEFAULT 0")
+        except Exception:
+            pass
         conn.commit()
 
         # Migrate existing JSON files into SQLite if DB table is empty
@@ -1211,7 +1218,7 @@ async def get_versions(year: int = 2026):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         rows = cur.execute(
-            "SELECT id, y, version_name, created_at FROM vacation_versions WHERE y=? ORDER BY id DESC",
+            "SELECT id, y, version_name, created_at, is_active FROM vacation_versions WHERE y=? ORDER BY id DESC",
             (year,)
         ).fetchall()
         return [dict(r) for r in rows]
@@ -1269,7 +1276,7 @@ async def get_version_detail(version_id: int):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         row = cur.execute(
-            "SELECT id, y, version_name, created_at, data_json FROM vacation_versions WHERE id=?",
+            "SELECT id, y, version_name, created_at, is_active, data_json FROM vacation_versions WHERE id=?",
             (version_id,)
         ).fetchone()
         if not row:
@@ -1291,13 +1298,30 @@ async def create_version(request: Request, year: int = 2026):
 
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
+        # Сбрасываем флаг активности для остальных версий этого года и активируем новую
+        cur.execute("UPDATE vacation_versions SET is_active=0 WHERE y=?", (year,))
         cur.execute(
-            "INSERT INTO vacation_versions (y, version_name, created_at, data_json) VALUES (?, ?, ?, ?)",
+            "INSERT INTO vacation_versions (y, version_name, created_at, data_json, is_active) VALUES (?, ?, ?, ?, 1)",
             (year, v_name, created_at, json.dumps(v_data, ensure_ascii=False))
         )
         conn.commit()
         new_id = cur.lastrowid
-        return {"status": "ok", "id": new_id, "version_name": v_name, "created_at": created_at}
+        return {"status": "ok", "id": new_id, "version_name": v_name, "created_at": created_at, "is_active": 1}
+
+@app.post("/api/versions/{version_id}/activate")
+@app.post(APP_PREFIX + "/api/versions/{version_id}/activate")
+async def activate_version(version_id: int):
+    with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
+        cur = conn.cursor()
+        row = cur.execute("SELECT y FROM vacation_versions WHERE id=?", (version_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Версия не найдена")
+        y = row[0]
+        # Сбрасываем активность для версий этого года и активируем указанную
+        cur.execute("UPDATE vacation_versions SET is_active=0 WHERE y=?", (y,))
+        cur.execute("UPDATE vacation_versions SET is_active=1 WHERE id=?", (version_id,))
+        conn.commit()
+        return {"status": "ok", "active_version_id": version_id}
 
 @app.delete("/api/versions/{version_id}")
 @app.delete(APP_PREFIX + "/api/versions/{version_id}")

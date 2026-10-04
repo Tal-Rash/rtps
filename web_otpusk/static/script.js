@@ -622,15 +622,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
+                // Определение активной версии (по флагу из БД или сохраненному в localStorage)
+                const storedActiveId = localStorage.getItem(`active_version_${currentYear}`);
+                let activeId = null;
+                const dbActive = versions.find(v => Boolean(v.is_active));
+                if (dbActive) {
+                    activeId = String(dbActive.id);
+                    try { localStorage.setItem(`active_version_${currentYear}`, activeId); } catch (e) {}
+                } else if (storedActiveId) {
+                    activeId = String(storedActiveId);
+                }
+
                 versions.forEach((ver, idx) => {
+                    const isActive = Boolean(activeId && String(ver.id) === String(activeId));
                     const tr = document.createElement('tr');
+                    if (isActive) {
+                        tr.className = 'version-row-active';
+                    }
+
                     tr.innerHTML = `
-                        <td>${idx + 1}</td>
-                        <td><strong>${escapeHtml(ver.version_name)}</strong></td>
-                        <td style="font-size: 12px; color: var(--muted);">${escapeHtml(ver.created_at)}</td>
+                        <td>${isActive ? `<span style="color:#15803d; font-weight:bold;">${idx + 1}</span>` : idx + 1}</td>
+                        <td>
+                            <strong ${isActive ? 'style="color: #15803d;"' : ''}>${escapeHtml(ver.version_name)}</strong>
+                            ${isActive ? `<span class="badge-active-version">✓ Активная</span>` : ''}
+                        </td>
+                        <td style="font-size: 12px; color: ${isActive ? '#15803d' : 'var(--muted)'}; font-weight: ${isActive ? '600' : 'normal'};">${escapeHtml(ver.created_at)}</td>
                         <td style="text-align: center;">
                             <div style="display: flex; gap: 6px; justify-content: center;">
-                                <button type="button" class="btn-load-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; background: #eaf1ff;">📥 Загрузить</button>
+                                <button type="button" class="btn-load-version ${isActive ? 'is-current-active' : ''}" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; ${isActive ? 'background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 600;' : 'background: #eaf1ff;'}">${isActive ? '✓ Активна' : '📥 Загрузить'}</button>
                                 <button type="button" class="btn-delete-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">🗑️ Удалить</button>
                             </div>
                         </td>
@@ -644,6 +663,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const targetBtn = e.target.closest('.btn-load-version') || e.target;
                         const verId = targetBtn.dataset.id;
                         const verName = targetBtn.dataset.name;
+                        if (targetBtn.classList.contains('is-current-active')) {
+                            alert(`Версия "${verName}" уже загружена и является активной.`);
+                            return;
+                        }
                         if (!confirm(`Загрузить версию "${verName}" и сделать её активной?`)) return;
 
                         targetBtn.textContent = 'Загрузка...';
@@ -651,6 +674,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             .then(res => res.json())
                             .then(vData => {
                                 if (vData && Array.isArray(vData.data)) {
+                                    // Отправляем запрос на сервер для установки активной версии и сохраняем локально
+                                    fetch(`${APP_PREFIX}/api/versions/${verId}/activate`, { method: 'POST' }).catch(() => {});
+                                    try { localStorage.setItem(`active_version_${currentYear}`, String(verId)); } catch (e) {}
+
                                     // Нормализация табельного номера для надежного сравнения (ID_001 -> ID_1, 0015 -> 15)
                                     const normalizeTab = (tab) => {
                                         if (tab == null) return '';
@@ -780,7 +807,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         targetBtn.textContent = 'Удаление...';
                         fetch(`${APP_PREFIX}/api/versions/${verId}`, { method: 'DELETE' })
                             .then(res => res.json())
-                            .then(() => loadVersionsList())
+                            .then(() => {
+                                const curAct = localStorage.getItem(`active_version_${currentYear}`);
+                                if (curAct && String(curAct) === String(verId)) {
+                                    localStorage.removeItem(`active_version_${currentYear}`);
+                                }
+                                loadVersionsList();
+                            })
                             .catch(err => console.error(err));
                     });
                 });
@@ -883,9 +916,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ version_name: vName, data: allData })
             })
             .then(res => res.json())
-            .then(() => {
+            .then((resData) => {
                 createVersionBtn.textContent = '➕ Сохранить текущую версию';
                 if (newVersionNameInput) newVersionNameInput.value = '';
+                if (resData && resData.id) {
+                    try { localStorage.setItem(`active_version_${currentYear}`, String(resData.id)); } catch (e) {}
+                }
                 loadVersionsList();
             })
             .catch(err => {
