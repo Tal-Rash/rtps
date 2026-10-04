@@ -1082,79 +1082,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Calculate and draw row
             calculateRow(tr);
 
-            // Привязка обработчиков фокуса ко всем полям (для сохранения истории отмены действий)
+            // Attach listeners to all inputs in this row
             const inputs = tr.querySelectorAll('.day-input, .allowed-days-input');
             inputs.forEach(input => {
                 input.addEventListener('focus', () => {
                     pushUndoState();
                 });
-            });
-
-            // Обработка ввода даты начала отпуска (c-input) с автоматическим расчетом окончания
-            let rowAutoCalcTimeout = null;
-            tr.querySelectorAll('.c-input').forEach(cInput => {
-                const triggerAutoCalc = () => {
-                    if (rowAutoCalcTimeout) {
-                        clearTimeout(rowAutoCalcTimeout);
-                        rowAutoCalcTimeout = null;
-                    }
-                    const startM = parseInt(cInput.dataset.month);
-                    const val = cInput.value.trim();
-                    if (val === '') {
-                        clearAssociatedVacationEnd(tr, startM);
-                        calculateRow(tr);
-                        return;
-                    }
-                    const startD = parseInt(val);
-                    if (!isNaN(startD) && startD >= 1 && startD <= calendarDaysInMonths[startM]) {
-                        autoCompleteVacation(tr, startM, startD);
-                    }
-                };
-
-                cInput.addEventListener('input', () => {
-                    if (rowAutoCalcTimeout) {
-                        clearTimeout(rowAutoCalcTimeout);
-                        rowAutoCalcTimeout = null;
-                    }
-                    const val = cInput.value.trim();
-                    const num = parseInt(val);
-
-                    // Если поле очищено, введено 2 цифры, либо цифра >= 4 — рассчитываем сразу
-                    if (val === '' || val.length >= 2 || (!isNaN(num) && num >= 4)) {
-                        triggerAutoCalc();
-                    } else {
-                        // Для цифр 1, 2, 3 даем паузу 250мс для возможного ввода второй цифры
-                        rowAutoCalcTimeout = setTimeout(triggerAutoCalc, 250);
-                    }
-                });
-
-                cInput.addEventListener('change', () => {
-                    triggerAutoCalc();
-                });
-            });
-
-            // Обработка ручной корректировки окончания отпуска (po-input)
-            tr.querySelectorAll('.po-input').forEach(poInput => {
-                poInput.addEventListener('input', () => {
-                    const m = parseInt(poInput.dataset.month);
-                    const val = poInput.value.trim();
-                    if (val !== '') {
-                        // При установке даты окончания в текущем месяце очищаем висящие хвосты в последующих месяцах
-                        for (let f = m + 1; f < 13; f++) {
-                            const fC = tr.querySelector(`.c-input[data-month="${f}"]`);
-                            const fPo = tr.querySelector(`.po-input[data-month="${f}"]`);
-                            if (fC && fC.value.trim() !== '') break;
-                            if (fPo && fPo.value.trim() !== '') {
-                                fPo.value = '';
-                            }
-                        }
-                    }
-                    calculateRow(tr);
-                });
-            });
-
-            tr.querySelectorAll('.allowed-days-input').forEach(allowedInput => {
-                allowedInput.addEventListener('input', () => calculateRow(tr));
+                input.addEventListener('input', () => calculateRow(tr));
             });
         });
 
@@ -1195,39 +1129,14 @@ document.addEventListener('DOMContentLoaded', () => {
         updateTotals();
     }
 
-    // Расчет даты окончания отпуска с учетом нерабочих праздничных дней (ст. 120 ТК РФ)
-    function calculateVacationEndDate(startM, startD, daysNeeded) {
-        if (daysNeeded <= 0) daysNeeded = 1;
-        let currentM = startM;
-        let currentD = startD;
-        let countedDays = 0;
+    function calculateRow(tr) {
+        if (!tr || !tr.dataset.empId) return;
 
-        while (currentM < 13) {
-            let daysInCurrentMonth = calendarDaysInMonths[currentM];
-            let datesStr = (holidaysData[currentM] && holidaysData[currentM].dates) 
-                ? holidaysData[currentM].dates 
-                : (currentM === 12 ? '1, 2, 3, 4, 5, 6, 7, 8' : '');
-            let hSet = parseHolidayDates(datesStr, daysInCurrentMonth);
+        // Clear all previous results, lines, and badges
+        tr.querySelectorAll('.day-result').forEach(el => el.textContent = '');
+        tr.querySelectorAll('.vacation-line').forEach(el => el.remove());
+        tr.querySelectorAll('.total-days-badge').forEach(el => el.remove());
 
-            while (currentD <= daysInCurrentMonth) {
-                // Нерабочие праздничные дни не включаются в дни отпуска
-                if (!hSet.has(currentD)) {
-                    countedDays++;
-                    if (countedDays === daysNeeded) {
-                        return { endMonth: currentM, endDay: currentD };
-                    }
-                }
-                currentD++;
-            }
-            currentM++;
-            currentD = 1;
-        }
-
-        return { endMonth: 12, endDay: calendarDaysInMonths[12] };
-    }
-
-    // Разбор отпусков из полей строки таблицы
-    function parseVacationsFromRow(tr) {
         let currentStart = null;
         let currentStartMonth = null;
         let vacations = [];
@@ -1239,7 +1148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const cValStr = cInput.value.trim();
             const poValStr = poInput.value.trim();
-
+            
             const c_val = parseInt(cValStr);
             const po_val = parseInt(poValStr);
 
@@ -1277,7 +1186,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Если ввели только начало, считаем до конца этого месяца
+        // Если ввели только начало, сразу считаем до конца этого месяца
         if (currentStart !== null) {
             vacations.push({ 
                 startMonth: currentStartMonth, 
@@ -1298,85 +1207,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
-
-        return vacations;
-    }
-
-    // Подсчет дней, уже использованных другими отпусками сотрудника в этой строке
-    function getOtherVacationsUsedDays(tr, excludeStartMonth) {
-        const vacations = parseVacationsFromRow(tr);
-        let used = 0;
-        vacations.forEach(vac => {
-            if (vac.is_carried_over) return;
-            if (vac.startMonth === excludeStartMonth) return;
-            used += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
-        });
-        return used;
-    }
-
-    // Очистка окончания отпуска при удалении даты начала
-    function clearAssociatedVacationEnd(tr, startM) {
-        const currentPo = tr.querySelector(`.po-input[data-month="${startM}"]`);
-        if (currentPo) currentPo.value = '';
-
-        for (let m = startM + 1; m < 13; m++) {
-            const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
-            const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
-            if (cInp && cInp.value.trim() !== '') break;
-            if (poInp && poInp.value.trim() !== '') {
-                poInp.value = '';
-                break;
-            }
-        }
-    }
-
-    // Автоматический расчет окончания отпуска и прорисовка
-    function autoCompleteVacation(tr, startM, startD) {
-        const allowedInp = tr.querySelector('.allowed-days-input');
-        const allowedDays = allowedInp ? (parseInt(allowedInp.value) || 28) : 28;
-
-        const otherUsedDays = getOtherVacationsUsedDays(tr, startM);
-        const remainingDays = allowedDays - otherUsedDays;
-
-        // По умолчанию берем остаток положенных дней, а если он исчерпан — 14 дней (или остаток квоты)
-        let daysNeeded = remainingDays > 0 ? remainingDays : (allowedDays > 0 ? Math.min(allowedDays, 14) : 14);
-
-        const endResult = calculateVacationEndDate(startM, startD, daysNeeded);
-        const endM = endResult.endMonth;
-        const endD = endResult.endDay;
-
-        // Очищаем старые поля окончания в других месяцах для этого отрезка
-        for (let m = startM; m < 13; m++) {
-            if (m > startM) {
-                const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
-                if (cInp && cInp.value.trim() !== '') break;
-            }
-            if (m !== endM) {
-                const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
-                if (poInp && poInp.value.trim() !== '') {
-                    poInp.value = '';
-                }
-            }
-        }
-
-        // Устанавливаем рассчитанную дату окончания
-        const targetPo = tr.querySelector(`.po-input[data-month="${endM}"]`);
-        if (targetPo) {
-            targetPo.value = endD;
-        }
-
-        calculateRow(tr);
-    }
-
-    function calculateRow(tr) {
-        if (!tr || !tr.dataset.empId) return;
-
-        // Очищаем предыдущие результаты, линии и бейджи
-        tr.querySelectorAll('.day-result').forEach(el => el.textContent = '');
-        tr.querySelectorAll('.vacation-line').forEach(el => el.remove());
-        tr.querySelectorAll('.total-days-badge').forEach(el => el.remove());
-
-        const vacations = parseVacationsFromRow(tr);
 
         let allowedStr = tr.querySelector('.allowed-days-input') ? tr.querySelector('.allowed-days-input').value : '';
         let allowedDays = allowedStr ? parseInt(allowedStr) : Infinity;
@@ -1491,8 +1321,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 allowedSum += (parseInt(allowedInp.value) || 0);
             }
 
-            const vacations = parseVacationsFromRow(tr);
+            const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
+            const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
+            const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
+
+            let currentStart = null;
+            let currentStartMonth = null;
+            let vacations = [];
+
+            for (let m = 0; m < 13; m++) {
+                const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
+                const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                if (!cInp || !poInp) continue;
+
+                const c_val = parseInt(cInp.value);
+                const po_val = parseInt(poInp.value);
+
+                if (!isNaN(c_val) && !isNaN(po_val)) {
+                    if (currentStart !== null) {
+                        vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                    }
+                    vacations.push({ startMonth: m, startDay: c_val, endMonth: m, endDay: po_val });
+                    currentStart = null;
+                    currentStartMonth = null;
+                } else if (!isNaN(c_val)) {
+                    if (currentStart !== null) {
+                        vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+                    }
+                    currentStart = c_val;
+                    currentStartMonth = m;
+                } else if (!isNaN(po_val)) {
+                    if (currentStart !== null) {
+                        vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
+                        currentStart = null;
+                        currentStartMonth = null;
+                    } else {
+                        vacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
+                    }
+                }
+            }
+            if (currentStart !== null) {
+                vacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
+            }
+
             vacations.forEach(vac => {
+                if (isCarriedOverJan && vac.startMonth === 0 && vac.endMonth === 0) {
+                    if (!isNaN(carriedEndD) && vac.endDay === carriedEndD) {
+                        vac.is_carried_over = true;
+                    }
+                }
+
                 // Учитываем или исключаем перенесенные с прошлого года отпуска из расчетов итогов "Занесено (факт)" по переключателю
                 const includeCarriedFact = toggleCarriedOverFact && toggleCarriedOverFact.checked;
                 if (!vac.is_carried_over || includeCarriedFact) {
