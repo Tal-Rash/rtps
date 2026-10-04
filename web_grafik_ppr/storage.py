@@ -8,7 +8,15 @@ import sqlite3
 from pathlib import Path
 from threading import RLock
 
+import sys
+_PKG_ROOT = Path(__file__).resolve().parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+if str(_PKG_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT.parent))
+
 from rtps_common import connect_sqlite
+
 try:
     from .constants import (
         DATA_DIR,
@@ -25,6 +33,10 @@ try:
         normalize_repair_code,
         compute_repair_schedule_derived,
         default_repair_schedule_state,
+        _repair_schedule_parse_date,
+        _repair_schedule_format_date,
+        report_unit_key,
+        month_index,
     )
 except (ImportError, ValueError):
     from constants import (
@@ -42,6 +54,10 @@ except (ImportError, ValueError):
         normalize_repair_code,
         compute_repair_schedule_derived,
         default_repair_schedule_state,
+        _repair_schedule_parse_date,
+        _repair_schedule_format_date,
+        report_unit_key,
+        month_index,
     )
 
 # Глобальная блокировка для безопасных транзакций в базе данных

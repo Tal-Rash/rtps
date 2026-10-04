@@ -54,6 +54,7 @@ try:
         DB_LOCK,
         get_all_employee_names,
         get_employee_vacations,
+        build_repair_summary_state,
     )
     from .reports import (
         build_act_workbook,
@@ -89,6 +90,7 @@ except (ImportError, ValueError):
         DB_LOCK,
         get_all_employee_names,
         get_employee_vacations,
+        build_repair_summary_state,
     )
     from reports import (
         build_act_workbook,
@@ -214,8 +216,11 @@ app = FastAPI(title="RTPS Grafik PPR")
 @app.middleware("http")
 async def handle_request_middleware(request: Request, call_next):
     # Префикс роутинга и кэширование статики
-    if request.scope["path"].startswith(APP_PREFIX + "/"):
-        request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
+    raw_path = request.scope.get("path", "")
+    if raw_path == APP_PREFIX:
+        request.scope["path"] = "/"
+    elif raw_path.startswith(APP_PREFIX + "/"):
+        request.scope["path"] = raw_path[len(APP_PREFIX):]
 
     response = await call_next(request)
 

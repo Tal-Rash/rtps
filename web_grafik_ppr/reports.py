@@ -11,6 +11,15 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+import sys
+_PKG_ROOT = Path(__file__).resolve().parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+if str(_PKG_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT.parent))
+
+from rtps_common import connect_sqlite
+
 try:
     from .constants import (
         ROOT,
@@ -30,6 +39,7 @@ try:
         calculate_report_data_from_state,
         build_report_excel_tags,
         format_fio_initials,
+        normalize_repair_code,
     )
     from .storage import (
         load_state,
@@ -56,6 +66,7 @@ except (ImportError, ValueError):
         calculate_report_data_from_state,
         build_report_excel_tags,
         format_fio_initials,
+        normalize_repair_code,
     )
     from storage import (
         load_state,
