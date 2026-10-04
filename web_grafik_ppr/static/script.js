@@ -690,9 +690,6 @@ function handleGridInput(el){
   }
 }
 function focusCell(el){ if (el) el.focus(); }
-function monthCells(type){
-  return Array.from(document.querySelectorAll(`input[data-month="${ui.monthIndex}"][data-table="${type}"]`));
-}
 function moveCell(current, dx, dy){
   const table = current.dataset.table;
   const row = parseInt(current.dataset.row, 10);
@@ -760,7 +757,6 @@ function setSection(section){
   render();
 }
 function setMonth(index){ ui.monthIndex = index; clearMonthSelection(); render(); }
-function setMode(mode){ ui.mode = mode; render(); }
 function currentMonth(){ return appState.months[ui.monthIndex]; }
 function safeCurrentMonth(){
   const months = Array.isArray(appState.months) ? appState.months : [];
@@ -2764,8 +2760,6 @@ async function toggleExcluded(mi, tt, r){
     render();
   }
 }
-function addNorm(){ if (!CAN_EDIT) return; appState.norms.h_tep.push({k:'', v:''}); markDirty(true); render(); }
-function removeNorm(cat, idx){ if (!CAN_EDIT) return; appState.norms[cat].splice(idx,1); markDirty(true); render(); }
 function selectRow(section, idx){ ui.selected[section] = idx; }
 async function saveState(options = {}){
   const refreshReport = options.refreshReport !== false;
@@ -3053,132 +3047,5 @@ function getEmpReplacementPairs() {
 
   pairs.sort((a, b) => b.from.length - a.from.length);
   return pairs;
-}
-
-/**
- * Перехватывает скачивание файла Excel, подставляет реальные данные работников и отдает файл пользователю.
- * Использует гибрид JSZip (100% сохранение форматирования openpyxl) и SheetJS.
- */
-async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      alert("Ошибка скачивания файла: " + response.statusText);
-      return;
-    }
-    const arrayBuffer = await response.arrayBuffer();
-
-    let filename = defaultFilename || "Отчет.xlsx";
-    const disposition = response.headers.get('Content-Disposition');
-    if (disposition) {
-      const matchUtf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-      if (matchUtf && matchUtf[1]) {
-        filename = decodeURIComponent(matchUtf[1]);
-      } else {
-        const matchNorm = disposition.match(/filename="?([^";]+)"?/i);
-        if (matchNorm && matchNorm[1]) {
-          filename = matchNorm[1];
-        }
-      }
-    }
-
-    const pairs = getEmpReplacementPairs();
-    let finalBuffer = arrayBuffer;
-
-    if (pairs.length > 0) {
-      // 1. Быстрая замена через JSZip в XML контейнере Excel
-      if (window.JSZip) {
-        try {
-          const zip = await JSZip.loadAsync(arrayBuffer);
-          let modified = false;
-
-          const xmlFiles = Object.keys(zip.files).filter(name => name.endsWith('.xml') || name.endsWith('.rels'));
-          
-          for (let i = 0; i < xmlFiles.length; i++) {
-            const fileName = xmlFiles[i];
-            let content = await zip.files[fileName].async('string');
-            let fileChanged = false;
-
-            for (let p = 0; p < pairs.length; p++) {
-              const item = pairs[p];
-              if (content.includes(item.from)) {
-                content = content.split(item.from).join(item.to);
-                fileChanged = true;
-                modified = true;
-              }
-            }
-
-            if (fileChanged) {
-              zip.file(fileName, content);
-            }
-          }
-
-          if (modified) {
-            finalBuffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
-          }
-        } catch (zipErr) {
-          console.error("Ошибка при ZIP разанонимизации:", zipErr);
-        }
-      }
-
-      // 2. Резервная замена через SheetJS ячейки
-      if (finalBuffer === arrayBuffer && window.XLSX) {
-        try {
-          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellFormulas: true, cellDates: true });
-          let modified = false;
-
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            if (!sheet) return;
-
-            for (let cellRef in sheet) {
-              if (cellRef.startsWith('!')) continue;
-              const cell = sheet[cellRef];
-              if (!cell) continue;
-
-              if (cell.v !== undefined && cell.v !== null) {
-                let valStr = String(cell.v);
-                let changed = false;
-
-                for (let i = 0; i < pairs.length; i++) {
-                  const item = pairs[i];
-                  if (valStr.includes(item.from)) {
-                    valStr = valStr.split(item.from).join(item.to);
-                    changed = true;
-                  }
-                }
-
-                if (changed) {
-                  cell.v = valStr;
-                  delete cell.w;
-                  delete cell.r;
-                  delete cell.h;
-                  modified = true;
-                }
-              }
-            }
-          });
-
-          if (modified) {
-            finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-          }
-        } catch (err) {
-          console.error("Ошибка при расшифровке ячеек Excel:", err);
-        }
-      }
-    }
-
-    const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
-  } catch (err) {
-    console.error("Ошибка при загрузке отчета:", err);
-    alert("Не удалось скачать отчет: " + err.message);
-  }
 }
 

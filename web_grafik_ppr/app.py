@@ -8,16 +8,13 @@ import os
 from io import BytesIO
 import shutil
 import hmac
-import secrets
 import sqlite3
 import threading
 import webbrowser
 import sys
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock, RLock
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import quote, unquote
 
 APP_VERSION = "web-gpp-1.17"
 MONTHS_RU = [
@@ -53,7 +50,6 @@ from rtps_common import connect_sqlite, module_role, resolve_user_access
 DATA_DIR = ROOT / "data"
 DB_FILE = DATA_DIR / "grafik_ppr_web.db"
 SHARED_DATA_DIR = ROOT.parent / "data"
-AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
 WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 SOURCE_DB = ROOT.parent / "base" / "common_database.db"
 SOURCE_DIR = ROOT.parent / "src" / "График ППР"
@@ -86,79 +82,23 @@ WEB_SECRET = load_web_secret()
 SESSIONS: dict[str, tuple[str, str, str, str, float]] = {}
 
 
-def load_auth_config() -> tuple[str, str, str]:
-    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
-    edit_password = (
-        os.environ.get("WEB_EDIT_PASSWORD", "").strip()
-        or os.environ.get("WEB_PASSWORD", "").strip()
-    )
-    if view_password and edit_password:
-        return user, view_password, edit_password
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if AUTH_FILE.exists():
-        try:
-            payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
-            file_user = str(payload.get("user", user)).strip() or user
-            legacy_password = str(payload.get("password", "")).strip()
-            file_view = str(payload.get("view_password", legacy_password)).strip()
-            file_edit = str(payload.get("edit_password", "")).strip()
-            if not file_edit and legacy_password and not payload.get("view_password"):
-                file_edit = secrets.token_urlsafe(8)
-            if not file_edit:
-                file_edit = legacy_password
-            if file_view and not file_edit:
-                file_edit = secrets.token_urlsafe(8)
-            if file_edit and not file_view:
-                file_view = secrets.token_urlsafe(8)
-            if file_view and file_edit and file_view == file_edit:
-                file_edit = secrets.token_urlsafe(8)
-            if file_view and file_edit:
-                AUTH_FILE.write_text(
-                    json.dumps(
-                        {"user": file_user, "view_password": file_view, "edit_password": file_edit},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-                return file_user, file_view, file_edit
-        except Exception:
-            pass
-    if not view_password:
-        view_password = secrets.token_urlsafe(8)
-    if not edit_password:
-        edit_password = secrets.token_urlsafe(8)
-    AUTH_FILE.write_text(
-        json.dumps(
-            {"user": user, "view_password": view_password, "edit_password": edit_password},
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    print(f"Web auth created: user={user} view_password={view_password} edit_password={edit_password}")
-    return user, view_password, edit_password
-
-
-WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
 AUTH_ENABLED = True
 APP_PREFIX = "/grafik-ppr"
 
 
 def ensure_database() -> None:
+    # Инициализация рабочей базы данных и создание схемы при старте
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not DB_FILE.exists() and SOURCE_DB.exists():
         shutil.copy2(SOURCE_DB, DB_FILE)
-    with sqlite3.connect(DB_FILE) as conn:
-        ensure_schema(conn.cursor())
-        conn.commit()
+    with connect_sqlite(DB_FILE) as db:
+        ensure_schema(db.cursor())
+        db.commit()
 
 
 def conn() -> sqlite3.Connection:
-    c = connect_sqlite(DB_FILE)
-    ensure_schema(c.cursor())
-    return c
+    # Возвращаем настроенное подключение SQLite (WAL-режим, таймаут ожидания)
+    return connect_sqlite(DB_FILE)
 
 
 def ensure_schema(cur: sqlite3.Cursor) -> None:
@@ -351,7 +291,7 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
         }
 
     try:
-        with sqlite3.connect(SOURCE_DB) as conn:
+        with connect_sqlite(SOURCE_DB) as conn:
             cur = conn.cursor()
             rows = cur.execute(
                 "SELECT c, v FROM ts_norms_data WHERE y=? AND c IN (6, 7)",
@@ -1291,7 +1231,7 @@ def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
     if not SOURCE_DB.exists():
         return "", ""
     try:
-        with sqlite3.connect(SOURCE_DB) as db:
+        with connect_sqlite(SOURCE_DB) as db:
             cur = db.cursor()
             row = cur.execute("SELECT ser, inv FROM inventory WHERE y=? AND num=?", (year, number)).fetchone()
         if not row:
@@ -1321,7 +1261,7 @@ def get_all_employee_names() -> list[str]:
     try:
         if not SOURCE_DB.exists():
             return []
-        with sqlite3.connect(SOURCE_DB) as db:
+        with connect_sqlite(SOURCE_DB) as db:
             cur = db.cursor()
             cur.execute("SELECT rowid, name, full_name, tab_num FROM employees ORDER BY rowid")
             rows = cur.fetchall()
@@ -1368,7 +1308,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
     if not SOURCE_DB.exists():
         return {}
     try:
-        with sqlite3.connect(SOURCE_DB) as db:
+        with connect_sqlite(SOURCE_DB) as db:
             db.row_factory = sqlite3.Row
             rows = db.execute(
                 """
@@ -1423,7 +1363,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                 result.setdefault(name, []).append(item)
 
     try:
-        with sqlite3.connect(SOURCE_DB) as db:
+        with connect_sqlite(SOURCE_DB) as db:
             db.row_factory = sqlite3.Row
             ts_rows = db.execute(
                 """
@@ -1592,12 +1532,9 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     end_date_str = f"{year}-{month_num:02d}-{repair_days[-1]:02d}"
 
     db_path = Path(__file__).resolve().parent.parent / "base" / "common_database.db"
-    measurements = {}
-    print(f"DEBUG: ZAMER KP: path_exists={db_path.exists()} number={number} start={start_date_str} end={end_date_str}", flush=True)
     if db_path.exists() and number and start_date_str and end_date_str:
-        import sqlite3
         try:
-            with sqlite3.connect(db_path) as conn:
+            with connect_sqlite(db_path) as conn:
                 cur = conn.cursor()
                 db_rows = cur.execute(
                     """
@@ -1608,7 +1545,6 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                     """,
                     (number, start_date_str, end_date_str)
                 ).fetchall()
-                print(f"DEBUG: ZAMER KP: Fetched {len(db_rows)} rows from archive for {number} between {start_date_str} and {end_date_str}", flush=True)
                 dates_dict = {}
                 for d_str, r, c, v in db_rows:
                     if d_str not in dates_dict:
@@ -1832,24 +1768,8 @@ def save_state(state: dict) -> dict:
     return load_state(year)
 
 
-def json_response(handler: BaseHTTPRequestHandler, payload: dict, status: int = 200) -> None:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-    handler.send_header("Pragma", "no-cache")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-def _cookie_value(username: str, role: str) -> str:
-    payload = f"{username}:{role}:{int(dt.datetime.now().timestamp())}"
-    signature = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}:{signature}"
-
-
 def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
+    # Проверка подписи сессионной куки rtps_session
     for sep in (":", "|"):
         try:
             parts = value.rsplit(sep, 5)
@@ -1862,58 +1782,29 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
                 expiry_text = "2000000000"
             else:
                 continue
-                
+
             secrets_to_try = [WEB_SECRET]
-                
             matched = False
-            import hmac
-            import hashlib
             for secret in secrets_to_try:
                 expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
                 if hmac.compare_digest(expected, sig):
                     matched = True
                     break
-                    
+
             if not matched:
                 continue
-            import datetime as dt
             if float(expiry_text) < dt.datetime.now().timestamp():
                 return None
-                
-            import urllib.parse
-            return urllib.parse.unquote(user_id), urllib.parse.unquote(role), urllib.parse.unquote(modules), urllib.parse.unquote(safe_name)
+
+            return unquote(user_id), unquote(role), unquote(modules), unquote(safe_name)
         except Exception:
             continue
     return None
 
-def parse_cookie_values(handler, name: str) -> list[str]:
-    raw = handler.headers.get("Cookie", "")
-    values = []
-    for part in raw.split(";"):
-        if "=" not in part: continue
-        k, v = part.split("=", 1)
-        if k.strip() == name: values.append(v.strip())
-    return values
-
-
-def current_session(handler: BaseHTTPRequestHandler) -> tuple[str, str, str, str] | None:
-    for token in parse_cookie_values(handler, SESSION_COOKIE):
-        session = _verify_cookie(token)
-        if session:
-            user_id, role, modules, safe_name = session
-            SESSIONS[token] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
-            return session
-        else:
-            try:
-                with open(ROOT.parent / "data" / "grafik_auth.log", "a", encoding="utf-8") as f:
-                    f.write(f"Token verification failed for token: {token}\n")
-            except Exception:
-                pass
-    return None
-
 
 def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
-    if not session: return None
+    if not session:
+        return None
     username = session[0]
     role = session[1]
     modules = session[2]
@@ -1923,60 +1814,6 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
         return None
     role, modules = resolved
     return module_role(role, modules, mod_name)
-
-def require_auth(handler: BaseHTTPRequestHandler, need_edit: bool = False) -> bool:
-    if not AUTH_ENABLED:
-        return True
-    session = current_session(handler)
-    mod_role = get_mod_role(session, "grafik_ppr")
-    if mod_role and (not need_edit or mod_role in ("edit", "editor", "admin")):
-        return True
-    handler.send_response(HTTPStatus.UNAUTHORIZED)
-    handler.send_header("Content-Type", "text/plain; charset=utf-8")
-    handler.send_header("WWW-Authenticate", 'Form realm="Grafik PPR"')
-    handler.end_headers()
-    handler.wfile.write("Требуется вход".encode("utf-8"))
-    return False
-
-
-def render_page(state: dict, can_edit: bool, username: str | None) -> str:
-    state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
-    employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
-    employee_vacations_json = json.dumps(get_employee_vacations(), ensure_ascii=False).replace("</", "<\\/")
-    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
-    toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
-    with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
-        html_template = f.read()
-    return (
-        html_template.replace("{{STATE_JSON}}", state_json)
-        .replace("{{EMPLOYEE_NAMES}}", employees_json)
-        .replace("{{EMPLOYEE_VACATIONS}}", employee_vacations_json)
-        .replace("{{STARTED_AT}}", started_at)
-        .replace("{{APP_VERSION}}", APP_VERSION)
-        .replace("{{TOOLBAR}}", toolbar)
-        .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
-        .replace("{{APP_PREFIX}}", APP_PREFIX)
-        .replace("{{TEM_NORM_ROWS}}", json.dumps(TEM_NORM_ROWS, ensure_ascii=False))
-        .replace("{{AGR_NORM_ROWS}}", json.dumps(AGR_NORM_ROWS, ensure_ascii=False))
-    )
-
-
-def _route_path(path: str) -> str:
-    if path == APP_PREFIX:
-        return "/grafik-ppr"
-    if path.startswith(APP_PREFIX + "/"):
-        return path[len(APP_PREFIX):]
-    return path
-
-
-def render_login(extra: str = "") -> str:
-    with open(ROOT / "templates" / "login.html", "r", encoding="utf-8") as f:
-        login_template = f.read()
-    return (
-        login_template.replace("{{USER}}", WEB_USER)
-        .replace("{{APP_PREFIX}}", APP_PREFIX)
-        + extra
-    )
 
 
 EDIT_TOOLBAR = """
@@ -2003,16 +1840,35 @@ READONLY_TOOLBAR = """
 """
 
 
+def render_page(state: dict, can_edit: bool, username: str | None) -> str:
+    state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
+    employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
+    employee_vacations_json = json.dumps(get_employee_vacations(), ensure_ascii=False).replace("</", "<\\/")
+    started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
+    toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
+    with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
+        html_template = f.read()
+    return (
+        html_template.replace("{{STATE_JSON}}", state_json)
+        .replace("{{EMPLOYEE_NAMES}}", employees_json)
+        .replace("{{EMPLOYEE_VACATIONS}}", employee_vacations_json)
+        .replace("{{STARTED_AT}}", started_at)
+        .replace("{{APP_VERSION}}", APP_VERSION)
+        .replace("{{TOOLBAR}}", toolbar)
+        .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
+        .replace("{{APP_PREFIX}}", APP_PREFIX)
+        .replace("{{TEM_NORM_ROWS}}", json.dumps(TEM_NORM_ROWS, ensure_ascii=False))
+        .replace("{{AGR_NORM_ROWS}}", json.dumps(AGR_NORM_ROWS, ensure_ascii=False))
+    )
 
 
-
-
-from fastapi import FastAPI, Request, Response, Depends, Form, HTTPException, Cookie, status
+from fastapi import FastAPI, Request, Response, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 app = FastAPI(title="RTPS Grafik PPR")
+
 
 @app.middleware("http")
 async def strip_prefix(request: Request, call_next):
@@ -2020,21 +1876,24 @@ async def strip_prefix(request: Request, call_next):
         request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
     return await call_next(request)
 
+
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
-def _login_cookie(username: str, role: str) -> str:
-    token = _cookie_value(username, role)
-    SESSIONS[token] = (username, role, "", username, dt.datetime.now().timestamp())
-    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax"
 
 def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content=data, status_code=status_code)
 
-def get_current_session(request: Request):
+
+def get_current_session(request: Request) -> tuple[str, str, str, str] | None:
     cookie = request.cookies.get(SESSION_COOKIE)
     if cookie:
-        return _verify_cookie(cookie)
+        session = _verify_cookie(cookie)
+        if session:
+            user_id, role, modules, safe_name = session
+            SESSIONS[cookie] = (user_id, role, modules, safe_name, dt.datetime.now().timestamp())
+            return session
     return None
+
 
 def require_auth_fastapi(request: Request, need_edit: bool = False):
     if not AUTH_ENABLED:
