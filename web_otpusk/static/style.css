@@ -362,6 +362,7 @@ button.primary:hover, .btn-primary:hover {
     white-space: nowrap;
     transition: all 0.2s;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    pointer-events: none;
 }
 
 .total-days-badge.badge-overflow {
