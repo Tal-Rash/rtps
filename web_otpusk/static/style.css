@@ -379,6 +379,26 @@ button.primary:hover, .btn-primary:hover {
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
+/* Плашка перебора нормы отпуска (размещается справа от дат в ячейке) */
+.overflow-tag {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    background: #ef4444;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 6px;
+    z-index: 6;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(239, 68, 68, 0.4);
+    letter-spacing: 0.2px;
+}
+
 /* Carried Over Vacation Styling (Gray) */
 .vacation-line.vacation-line-carried {
     background-color: #94a3b8;
@@ -398,7 +418,8 @@ button.primary:hover, .btn-primary:hover {
 }
 
 /* Hide Badges Mode */
-body.hide-badges .total-days-badge {
+body.hide-badges .total-days-badge,
+body.hide-badges .overflow-tag {
     display: none !important;
 }
 
@@ -415,7 +436,8 @@ body.hide-badges .total-days-badge {
         box-shadow: none;
         border: none;
     }
-    body.hide-badges .total-days-badge {
+    body.hide-badges .total-days-badge,
+    body.hide-badges .overflow-tag {
         display: none !important;
     }
 }

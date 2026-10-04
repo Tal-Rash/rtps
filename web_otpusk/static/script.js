@@ -1375,6 +1375,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tr.querySelectorAll('.day-result').forEach(el => el.textContent = '');
         tr.querySelectorAll('.vacation-line').forEach(el => el.remove());
         tr.querySelectorAll('.total-days-badge').forEach(el => el.remove());
+        tr.querySelectorAll('.overflow-tag').forEach(el => el.remove());
 
         const vacations = parseVacationsFromRow(tr);
 
@@ -1444,15 +1445,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 centerLeft = (centerPoint - centerM) * 100;
             }
 
+            // На самой линии всегда отображается только компактное число дней отпуска
             let badgeText = totalDays;
             let overflowClass = '';
             if (vac.is_carried_over) {
                 overflowClass = 'badge-carried-over';
             } else if (overflow > 0) {
                 overflowClass = 'badge-overflow';
-                if (index === vacations.length - 1) {
-                    badgeText = `${totalDays} (перебор +${overflow})`;
-                }
             } else if (isMatch) {
                 overflowClass = 'badge-success';
             }
@@ -1460,6 +1459,14 @@ document.addEventListener('DOMContentLoaded', () => {
             let centerCell = tr.querySelector(`.month-cell[data-month="${centerM}"] .cell-input-wrapper`);
             if (centerCell) {
                 centerCell.insertAdjacentHTML('beforeend', `<div class="total-days-badge ${overflowClass}" style="left: ${centerLeft}%;">${badgeText}</div>`);
+            }
+
+            // При переборе нормы плашка «перебор +N» размещается справа от дат в ячейке окончания отпуска
+            if (overflow > 0 && index === vacations.length - 1) {
+                let endCell = tr.querySelector(`.month-cell[data-month="${vac.endMonth}"] .cell-input-wrapper`);
+                if (endCell) {
+                    endCell.insertAdjacentHTML('beforeend', `<div class="overflow-tag">перебор +${overflow}</div>`);
+                }
             }
         });
 
