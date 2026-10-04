@@ -1,0 +1,636 @@
+from __future__ import annotations
+
+import calendar
+import datetime as dt
+try:
+    from .constants import (
+        MONTHS_RU,
+        REPAIR_SCHEDULE_COLUMN_CODES,
+        TEP_REPORT_FACTORS,
+        AGR_REPORT_FACTORS,
+        TEP_HOUR_FACTORS,
+        AGR_HOUR_FACTORS,
+        MONTH_DAY_LIMIT_FOR_REPORT,
+    )
+except (ImportError, ValueError):
+    from constants import (
+        MONTHS_RU,
+        REPAIR_SCHEDULE_COLUMN_CODES,
+        TEP_REPORT_FACTORS,
+        AGR_REPORT_FACTORS,
+        TEP_HOUR_FACTORS,
+        AGR_HOUR_FACTORS,
+        MONTH_DAY_LIMIT_FOR_REPORT,
+    )
+
+# Модуль расчетов и нормализации данных для Графика ППР
+
+def format_n(value) -> str:
+    try:
+        number = float(str(value).replace(",", "."))
+    except Exception:
+        return "0,00"
+    if number.is_integer():
+        return f"{int(number)},00"
+    return f"{number:.2f}".replace(".", ",")
+
+
+def default_repair_schedule_state() -> dict:
+    columns = [{"code": code} for code in REPAIR_SCHEDULE_COLUMN_CODES]
+    return {
+        "columns": columns,
+        "periodicity": {
+            "series": ["ТЭМ-2УМ", "ТЭМ-2", ""],
+            "values": [["", "", "", "", ""] for _ in range(3)],
+        },
+        "objects": [
+            {
+                "series": "",
+                "number": "",
+                "kr": {"plan": "", "fact": ""},
+                "plan": ["" for _ in columns],
+                "fact": ["" for _ in columns],
+            }
+        ],
+    }
+
+
+def _repair_schedule_parse_date(value) -> dt.date | None:
+    text = s(value).strip()
+    if not text:
+        return None
+    try:
+        day_s, month_s, year_s = text.split(".")
+        day = int(day_s)
+        month = int(month_s)
+        year = int(year_s)
+        result = dt.date(year, month, day)
+    except Exception:
+        return None
+    return result
+
+
+def _repair_schedule_format_date(value: dt.date | None) -> str:
+    if not isinstance(value, dt.date):
+        return ""
+    return value.strftime("%d.%m.%Y")
+
+
+def _repair_schedule_add_months(value: dt.date | None, months: float) -> dt.date | None:
+    if not isinstance(value, dt.date):
+        return None
+    try:
+        months_total = float(months)
+    except Exception:
+        return None
+    if months_total <= 0:
+        return value
+    whole = int(months_total)
+    fraction = months_total - whole
+    year = value.year
+    month = value.month + whole
+    while month > 12:
+        year += 1
+        month -= 12
+    while month < 1:
+        year -= 1
+        month += 12
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    result = dt.date(year, month, day)
+    if fraction > 0:
+        result += dt.timedelta(days=round(30 * fraction))
+    return result
+
+
+def _repair_schedule_period_row(periodicity: dict, series_name: str) -> list:
+    series_list = periodicity.get("series", []) if isinstance(periodicity, dict) else []
+    values_list = periodicity.get("values", []) if isinstance(periodicity, dict) else []
+    target = s(series_name).strip().upper()
+    row_index = 0
+    for idx, item in enumerate(series_list):
+        if s(item).strip().upper() == target:
+            row_index = idx
+            break
+    if not isinstance(values_list, list) or row_index >= len(values_list):
+        return []
+    row = values_list[row_index]
+    return row if isinstance(row, list) else []
+
+
+def _repair_schedule_period_months(periodicity: dict, code: str, series_name: str) -> float:
+    row = _repair_schedule_period_row(periodicity, series_name)
+    index_map = {"ТР1": 0, "ТР2": 1, "ТР3": 2, "СР": 3, "КР": 4}
+    idx = index_map.get(normalize_repair_code(code))
+    if idx is None or idx >= len(row):
+        return 0.0
+    try:
+        value = float(str(row[idx]).replace(",", ".").strip())
+    except Exception:
+        return 0.0
+    return value if value > 0 else 0.0
+
+
+def _repair_schedule_code_factor(code: str) -> float:
+    normalized = normalize_repair_code(code)
+    if normalized == "ТР1":
+        return 1.0
+    if normalized == "ТР2":
+        return 0.5
+    if normalized == "ТР3":
+        return 0.25
+    if normalized == "СР":
+        return 0.125
+    if normalized == "КР":
+        return 1.0
+    return 0.0
+
+
+def compute_repair_schedule_derived(schedule: dict) -> dict:
+    if not isinstance(schedule, dict):
+        return schedule
+    columns = schedule.get("columns", []) if isinstance(schedule.get("columns", []), list) else []
+    periodicity = schedule.get("periodicity", {}) if isinstance(schedule.get("periodicity", {}), dict) else {}
+    objects = schedule.get("objects", []) if isinstance(schedule.get("objects", []), list) else []
+    for row in objects:
+        if not isinstance(row, dict):
+            continue
+        if not isinstance(row.get("kr"), dict):
+            row["kr"] = {"plan": "", "fact": ""}
+        fact_date = _repair_schedule_parse_date(row["kr"].get("fact"))
+        plan_date = fact_date or _repair_schedule_parse_date(row["kr"].get("plan"))
+        row["kr"]["plan"] = _repair_schedule_format_date(plan_date)
+        source_date = fact_date or plan_date
+        plan_list = row.get("plan", []) if isinstance(row.get("plan", []), list) else []
+        fact_list = row.get("fact", []) if isinstance(row.get("fact", []), list) else []
+        while len(plan_list) < len(columns):
+            plan_list.append("")
+        while len(fact_list) < len(columns):
+            fact_list.append("")
+        for cidx, col in enumerate(columns):
+            code = s((col or {}).get("code"))
+            period_months = _repair_schedule_period_months(periodicity, code, row.get("series", ""))
+            target_date = None
+            if source_date and period_months > 0:
+                target_date = _repair_schedule_add_months(source_date, period_months * _repair_schedule_code_factor(code))
+            planned = _repair_schedule_format_date(target_date)
+            plan_list[cidx] = planned
+            fact_date_col = _repair_schedule_parse_date(fact_list[cidx])
+            source_date = fact_date_col or target_date or source_date
+        row["plan"] = plan_list
+        row["fact"] = fact_list
+    schedule["objects"] = objects
+    return schedule
+
+
+def s(value) -> str:
+    return "" if value is None else str(value)
+
+
+def normalize_repair_code(value: str) -> str:
+    text = s(value).strip().upper().replace(" ", "").replace("-", "")
+    latin_map = str.maketrans({
+        "A": "А", "B": "В", "C": "С", "E": "Е", "H": "Н", "K": "К",
+        "M": "М", "O": "О", "P": "Р", "T": "Т", "X": "Х", "Y": "У",
+    })
+    text = text.translate(latin_map)
+    if any("А" <= c <= "Я" for c in text):
+        return text
+    if any(c.isdigit() for c in text):
+        return "".join(filter(str.isdigit, text))
+    return text
+
+
+def month_index(month_name: str) -> int:
+    return MONTHS_RU.index(month_name) + 1
+
+
+def read_norm_hours_from_state(items: list[dict]) -> dict[str, float]:
+    norms: dict[str, float] = {}
+    for item in items or []:
+        key = s(item.get("k")).strip()
+        value = s(item.get("v")).strip()
+        if not key or not value:
+            continue
+        try:
+            norms[key] = float(value.replace(",", "."))
+        except Exception:
+            continue
+    return norms
+
+
+def report_unit_key(row: dict) -> tuple[str, str] | None:
+    cells = row.get("cells") or []
+    series = s(cells[1]).strip().upper() if len(cells) > 1 else ""
+    number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
+    if not series or not number:
+        return None
+    return series, number
+
+
+def build_rows_by_unit(month_data: dict, table_type: str) -> dict[tuple[str, str], int]:
+    rows_by_unit: dict[tuple[str, str], int] = {}
+    for idx, row in enumerate(month_data.get(table_type, []) or []):
+        if row.get("excluded"):
+            continue
+        key = report_unit_key(row)
+        if key and key not in rows_by_unit:
+            rows_by_unit[key] = idx
+    return rows_by_unit
+
+
+def row_cell_is_numeric(row: dict | None, day: int) -> bool:
+    if not row or not row.get("cells"):
+        return False
+    idx = day + 3
+    raw = s(row["cells"][idx]) if idx < len(row["cells"]) else ""
+    if not raw.strip():
+        return False
+    try:
+        float(raw.replace(",", "."))
+    except ValueError:
+        return False
+    return True
+
+
+def collect_unplanned_starts_across_months(
+    year: int,
+    months: list[dict],
+    month_index: int,
+    table_type: str,
+    row_key: tuple[str, str],
+) -> list[tuple[int, int]]:
+    if not row_key or not months or not (0 <= month_index < len(months)):
+        return []
+    row_maps = [build_rows_by_unit(month, table_type) for month in months[: month_index + 1]]
+    curr_month = months[month_index]
+    curr_month_num = int(curr_month.get("month") or month_index + 1)
+    prev_month_num = int(months[month_index - 1].get("month") or month_index) if month_index > 0 else None
+    window_start = dt.date(year, prev_month_num, 26) if prev_month_num else dt.date(year, curr_month_num, 1)
+    window_end = dt.date(year, curr_month_num, MONTH_DAY_LIMIT_FOR_REPORT)
+    def row_for_date(date: dt.date) -> dict | None:
+        month_idx = date.month - 1
+        if month_idx < 0 or month_idx >= len(row_maps):
+            return None
+        row_idx = row_maps[month_idx].get(row_key)
+        rows = months[month_idx].get(table_type, []) or []
+        return rows[row_idx] if row_idx is not None and row_idx < len(rows) else None
+
+    def numeric_on(date: dt.date) -> bool:
+        return row_cell_is_numeric(row_for_date(date), date.day)
+
+    starts: list[tuple[int, int]] = []
+    seen = set()
+
+    def add_start(date: dt.date) -> None:
+        key = (date.day, date.month)
+        if key in seen:
+            return
+        seen.add(key)
+        starts.append(key)
+
+    if numeric_on(window_start):
+        start = window_start
+        prev = start - dt.timedelta(days=1)
+        while prev.year == year and prev >= dt.date(year, 1, 1) and numeric_on(prev):
+            start = prev
+            prev -= dt.timedelta(days=1)
+        add_start(start)
+
+    prev_is_num = numeric_on(window_start)
+    day = window_start + dt.timedelta(days=1)
+    while day <= window_end:
+        is_num = numeric_on(day)
+        if is_num and not prev_is_num:
+            add_start(day)
+        prev_is_num = is_num
+        day += dt.timedelta(days=1)
+
+    return starts
+
+
+def collect_row_notes(row: dict, unplanned_starts: list[tuple[int, int]], number: str) -> list[str]:
+    row_notes: list[str] = []
+    cells = row.get("cells") or []
+    note = s(cells[-1]).strip() if cells else ""
+    has_unplanned = bool(unplanned_starts)
+    is_auto_act_note = note.startswith("Акт № ") and "-" in note
+    if note and not is_auto_act_note:
+        row_notes.append(note)
+    if has_unplanned:
+        for day, month in unplanned_starts:
+            auto_note = f"Акт № {day:02d}-{month:02d}-{number}"
+            if auto_note not in row_notes:
+                row_notes.append(auto_note)
+    if not row_notes and note and is_auto_act_note:
+        row_notes.append(note)
+    return row_notes
+
+
+def collect_report_act_notes_for_category(state: dict, month_index: int, table_type: str, category: str) -> list[str]:
+    months = state.get("months", []) or []
+    if not months or not (0 <= month_index < len(months)):
+        return []
+    year = int(state.get("year") or dt.date.today().year)
+    month = months[month_index]
+    notes: list[str] = []
+    for row in month.get(table_type, []) or []:
+        if row.get("excluded"):
+            continue
+        cells = row.get("cells") or []
+        series = s(cells[1]).strip().upper() if len(cells) > 1 else ""
+        number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
+        if not series or not number:
+            continue
+        row_category = "agr" if "ПЭ" in series else "tep"
+        if row_category != category:
+            continue
+        key = report_unit_key(row)
+        if not key:
+            continue
+        for day, month_num in collect_unplanned_starts_across_months(year, months, month_index, table_type, key):
+            note = f"Акт № {day:02d}-{month_num:02d}-{number}"
+            if note not in notes:
+                notes.append(note)
+    return notes
+
+
+def process_report_day(acc, row: dict, day: int, month_num: int, category: str, table_type: str, state: dict) -> None:
+    cells = row.get("cells") or []
+    idx = day + 3
+    val = s(cells[idx]).strip().upper() if idx < len(cells) else ""
+    if val:
+        try:
+            hours = float(val.replace(",", "."))
+        except ValueError:
+            acc.result[table_type][category][val] = acc.result[table_type][category].get(val, 0) + 1
+            state["last_is_num"] = False
+        else:
+            acc.unplanned_hours[table_type][category] += hours
+            if not state["last_is_num"]:
+                acc.unplanned_blocks[table_type][category] += 1
+                state["unplanned_starts"].append((day, month_num))
+            state["last_is_num"] = True
+    else:
+        state["last_is_num"] = False
+
+
+def process_report_row(
+    acc,
+    table_type: str,
+    curr_row: dict,
+    prev_row: dict | None,
+    curr_m: int,
+    prev_m: int | None,
+    fund_days: int,
+    year: int,
+    months: list[dict],
+    month_index: int,
+) -> None:
+    if curr_row.get("excluded"):
+        return
+    cells = curr_row.get("cells") or []
+    series = s(cells[1]).strip().upper() if len(cells) > 1 else ""
+    number = s(cells[2]).strip().upper() if len(cells) > 2 else ""
+    if not series:
+        return
+    category = "agr" if "ПЭ" in series else "tep"
+    acc.units[table_type][category] += 1
+    state = {"last_is_num": False, "unplanned_starts": []}
+    if prev_row is not None and prev_m is not None:
+        for day in range(MONTH_DAY_LIMIT_FOR_REPORT + 1, fund_days + 1):
+            process_report_day(acc, prev_row, day, prev_m, category, table_type, state)
+    for day in range(1, MONTH_DAY_LIMIT_FOR_REPORT + 1):
+        process_report_day(acc, curr_row, day, curr_m, category, table_type, state)
+    row_key = report_unit_key(curr_row)
+    if table_type == "fact" and row_key:
+        auto_starts = collect_unplanned_starts_across_months(year, months, month_index, table_type, row_key)
+    else:
+        auto_starts = state["unplanned_starts"]
+    for note in collect_row_notes(curr_row, auto_starts, number):
+        if note not in acc.notes[table_type][category]:
+            acc.notes[table_type][category].append(note)
+
+
+def get_report_period(year: int, month_name: str) -> tuple[int, int, int | None, str | None, int]:
+    m_idx = MONTHS_RU.index(month_name)
+    curr_m = m_idx + 1
+    if m_idx == 0:
+        return m_idx, curr_m, None, None, MONTH_DAY_LIMIT_FOR_REPORT
+    prev_m_idx = m_idx - 1
+    prev_month_name = MONTHS_RU[prev_m_idx]
+    fund_days = calendar.monthrange(year, prev_m_idx + 1)[1]
+    return m_idx, curr_m, prev_m_idx + 1, prev_month_name, fund_days
+
+
+def calculate_ok_units(state: dict, year: int, month_name: str, acc, period_hours: int) -> tuple[float, float]:
+    _, curr_m, prev_m, _, fund_days = get_report_period(year, month_name)
+    _ = curr_m, prev_m, fund_days
+    n_tep = read_norm_hours_from_state(state.get("norms", {}).get("h_tep", []))
+    n_agr = read_norm_hours_from_state(state.get("norms", {}).get("h_agr", []))
+    fact_tep_hours = acc.unplanned_hours["fact"]["tep"] + sum(
+        acc.result["fact"]["tep"].get(code, 0) / factor * n_tep.get(code, 0)
+        for code, factor in TEP_HOUR_FACTORS.items()
+    )
+    fact_agr_hours = acc.unplanned_hours["fact"]["agr"] + sum(
+        acc.result["fact"]["agr"].get(code, 0) / factor * n_agr.get(code, 0)
+        for code, factor in AGR_HOUR_FACTORS.items()
+    )
+    fact_tep_ok = acc.units["fact"]["tep"] - (fact_tep_hours / period_hours) if period_hours else 0
+    fact_agr_ok = acc.units["fact"]["agr"] - (fact_agr_hours / period_hours) if period_hours else 0
+    return fact_tep_ok, fact_agr_ok
+
+
+def calculate_report_data_from_state(state: dict, month_name: str) -> dict:
+    m_idx, curr_m, prev_m, prev_month_name, fund_days = get_report_period(int(state.get("year") or dt.date.today().year), month_name)
+    period_hours = fund_days * 24
+    acc = type("ReportAccumulatorLike", (), {})()
+    acc.result = {"plan": {"tep": {}, "agr": {}}, "fact": {"tep": {}, "agr": {}}}
+    acc.unplanned_blocks = {"plan": {"tep": 0, "agr": 0}, "fact": {"tep": 0, "agr": 0}}
+    acc.unplanned_hours = {"plan": {"tep": 0.0, "agr": 0.0}, "fact": {"tep": 0.0, "agr": 0.0}}
+    acc.units = {"plan": {"tep": 0, "agr": 0}, "fact": {"tep": 0, "agr": 0}}
+    acc.notes = {"plan": {"tep": [], "agr": []}, "fact": {"tep": [], "agr": []}}
+    acc.excluded = {"plan": set(), "fact": set()}
+
+    months = state.get("months", []) or []
+    if not (0 <= m_idx < len(months)):
+        raise ValueError("Не найден месяц отчета")
+    curr_month = months[m_idx]
+    prev_month = months[m_idx - 1] if prev_month_name and m_idx - 1 >= 0 else None
+    prev_rows_by_unit = build_rows_by_unit(prev_month, "plan") if prev_month else {}
+    prev_rows_by_unit_fact = build_rows_by_unit(prev_month, "fact") if prev_month else {}
+
+    for table_type in ["plan", "fact"]:
+        curr_table = curr_month.get(table_type, []) or []
+        prev_rows = prev_rows_by_unit_fact if table_type == "fact" else prev_rows_by_unit
+        for row in curr_table:
+            key = report_unit_key(row)
+            if row.get("excluded") and key:
+                acc.excluded[table_type].add(key)
+            prev_row = prev_month.get(table_type, [])[prev_rows[key]] if prev_month and key and key in prev_rows else None
+            process_report_row(acc, table_type, row, prev_row, curr_m, prev_m, fund_days, int(state.get("year") or dt.date.today().year), months, m_idx)
+
+    if acc.notes["fact"]["tep"] is not None:
+        for note in collect_report_act_notes_for_category(state, m_idx, "fact", "tep"):
+            if note not in acc.notes["fact"]["tep"]:
+                acc.notes["fact"]["tep"].append(note)
+    if acc.notes["fact"]["agr"] is not None:
+        for note in collect_report_act_notes_for_category(state, m_idx, "fact", "agr"):
+            if note not in acc.notes["fact"]["agr"]:
+                acc.notes["fact"]["agr"].append(note)
+
+    fact_tep_ok, fact_agr_ok = calculate_ok_units(state, int(state.get("year") or dt.date.today().year), month_name, acc, period_hours)
+
+    def month_norm_value(key: str, fallback_index: int) -> str:
+        for item in state.get("norms", {}).get(key, []) or []:
+            item_key = s(item.get("k")).strip()
+            item_value = s(item.get("v")).strip()
+            if item_key == month_name:
+                return item_value or "0"
+        items = state.get("norms", {}).get(key, []) or []
+        if 0 <= fallback_index < len(items):
+            return s(items[fallback_index].get("v")).strip() or "0"
+        return "0"
+
+    return {
+        "m": month_name,
+        "y": int(state.get("year") or dt.date.today().year),
+        "tp": month_norm_value("p_tep", m_idx),
+        "tf": fact_tep_ok,
+        "ap": month_norm_value("p_agr", m_idx),
+        "af": fact_agr_ok,
+        "res": acc.result,
+        "ub": acc.unplanned_blocks,
+        "notes": acc.notes,
+        "excluded": {
+            "plan": sorted(["|".join(key) for key in acc.excluded["plan"]]),
+            "fact": sorted(["|".join(key) for key in acc.excluded["fact"]]),
+        },
+    }
+
+
+def build_report_excel_tags(month_name: str, data: dict, saved_notes: dict[str, str]) -> dict[str, str]:
+    def count(section: str, category: str, code: str, factor: int) -> float:
+        return data["res"][section][category].get(code, 0) / factor
+
+    def merge_notes(saved: str, auto: str) -> str:
+        saved = s(saved).strip()
+        auto = s(auto).strip()
+        if saved and auto:
+            lines = []
+            seen = set()
+            for chunk in (saved, auto):
+                for line in chunk.splitlines():
+                    line = line.strip()
+                    if not line or line in seen:
+                        continue
+                    seen.add(line)
+                    lines.append(line)
+            return "\n".join(lines)
+        return saved or auto
+
+    tep_plan = {code: count("plan", "tep", code, factor) for code, factor in TEP_REPORT_FACTORS.items()}
+    tep_fact = {code: count("fact", "tep", code, factor) for code, factor in TEP_REPORT_FACTORS.items()}
+    agr_plan = {code: count("plan", "agr", code, factor) for code, factor in AGR_REPORT_FACTORS.items()}
+    agr_fact = {code: count("fact", "agr", code, factor) for code, factor in AGR_REPORT_FACTORS.items()}
+
+    p_tep_ub = data["ub"]["plan"]["tep"]
+    f_tep_ub = data["ub"]["fact"]["tep"]
+    p_agr_ub = data["ub"]["plan"]["agr"]
+    f_agr_ub = data["ub"]["fact"]["agr"]
+
+    sum_p = sum(tep_plan.values()) + p_tep_ub + sum(agr_plan.values()) + p_agr_ub
+    sum_f = sum(tep_fact.values()) + f_tep_ub + sum(agr_fact.values()) + f_agr_ub
+
+    return {
+        "[МЕСЯЦ]": month_name,
+        "[ГОД]": str(data["y"]),
+        "[ПЛАН_ТЕП_ПАРК]": format_n(data["tp"]),
+        "[ФАКТ_ТЕП_ПАРК]": format_n(data["tf"]),
+        "[ПРИМ_ТЕП_ПАРК]": saved_notes.get("tep_park", ""),
+        "[ПЛАН_ТЕП_ТО2]": format_n(tep_plan["ТО2"]),
+        "[ФАКТ_ТЕП_ТО2]": format_n(tep_fact["ТО2"]),
+        "[ПРИМ_ТЕП_ТО2]": saved_notes.get("tep_ТО2", ""),
+        "[ПЛАН_ТЕП_ТО3]": format_n(tep_plan["ТО3"]),
+        "[ФАКТ_ТЕП_ТО3]": format_n(tep_fact["ТО3"]),
+        "[ПРИМ_ТЕП_ТО3]": saved_notes.get("tep_ТО3", ""),
+        "[ПЛАН_ТЕП_ТР1]": format_n(tep_plan["ТР1"]),
+        "[ФАКТ_ТЕП_ТР1]": format_n(tep_fact["ТР1"]),
+        "[ПРИМ_ТЕП_ТР1]": saved_notes.get("tep_ТР1", ""),
+        "[ПЛАН_ТЕП_ТР2]": format_n(tep_plan["ТР2"]),
+        "[ФАКТ_ТЕП_ТР2]": format_n(tep_fact["ТР2"]),
+        "[ПРИМ_ТЕП_ТР2]": saved_notes.get("tep_ТР2", ""),
+        "[ПЛАН_ТЕП_ТР3]": format_n(tep_plan["ТР3"]),
+        "[ФАКТ_ТЕП_ТР3]": format_n(tep_fact["ТР3"]),
+        "[ПРИМ_ТЕП_ТР3]": saved_notes.get("tep_ТР3", ""),
+        "[ПЛАН_ТЕП_НЕПЛАН]": format_n(p_tep_ub),
+        "[ФАКТ_ТЕП_НЕПЛАН]": format_n(f_tep_ub),
+        "[ПРИМ_ТЕП_НЕПЛАН]": merge_notes(saved_notes.get("tep_ТР_unplan", ""), "\n".join(data["notes"]["fact"]["tep"])),
+        "[ПЛАН_АГР_ПАРК]": format_n(data["ap"]),
+        "[ФАКТ_АГР_ПАРК]": format_n(data["af"]),
+        "[ПРИМ_АГР_ПАРК]": saved_notes.get("agr_park", ""),
+        "[ПЛАН_АГР_ТО]": format_n(agr_plan["ТО"]),
+        "[ФАКТ_АГР_ТО]": format_n(agr_fact["ТО"]),
+        "[ПРИМ_АГР_ТО]": saved_notes.get("agr_ТО", ""),
+        "[ПЛАН_АГР_ТР]": format_n(agr_plan["ТР"]),
+        "[ФАКТ_АГР_ТР]": format_n(agr_fact["ТР"]),
+        "[ПРИМ_АГР_ТР]": saved_notes.get("agr_ТР", ""),
+        "[ПЛАН_АГР_НЕПЛАН]": format_n(p_agr_ub),
+        "[ФАКТ_АГР_НЕПЛАН]": format_n(f_agr_ub),
+        "[ПРИМ_АГР_НЕПЛАН]": merge_notes(saved_notes.get("agr_ТР_unplan", ""), "\n".join(data["notes"]["fact"]["agr"])),
+        "[ПЛАН_СУММА]": format_n(sum_p),
+        "[ФАКТ_СУММА]": format_n(sum_f),
+    }
+
+
+def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str]) -> dict:
+    def count(section: str, category: str, code: str, factor: int) -> str:
+        return format_n(data["res"][section][category].get(code, 0) / factor)
+
+    def merge_notes(saved: str, auto: str) -> str:
+        saved = s(saved).strip()
+        auto = s(auto).strip()
+        if saved and auto:
+            lines = []
+            seen = set()
+            for chunk in (saved, auto):
+                for line in chunk.splitlines():
+                    line = line.strip()
+                    if not line or line in seen:
+                        continue
+                    seen.add(line)
+                    lines.append(line)
+            return "\n".join(lines)
+        return saved or auto
+
+    tep_notes = "\n".join(data["notes"]["fact"]["tep"])
+    agr_notes = "\n".join(data["notes"]["fact"]["agr"])
+    rows = [
+        {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nТЕПЛОВОЗЫ МАНЕВРОВЫЕ", "plan": format_n(data["tp"]), "fact": format_n(data["tf"]), "note_key": "tep_park", "note": saved_notes.get("tep_park", "")},
+        {"kind": "row", "key": "tep_ТО2", "label": "ТО2", "plan": count("plan", "tep", "ТО2", 1), "fact": count("fact", "tep", "ТО2", 1), "note": saved_notes.get("tep_ТО2", "")},
+        {"kind": "row", "key": "tep_ТО3", "label": "ТО3", "plan": count("plan", "tep", "ТО3", 2), "fact": count("fact", "tep", "ТО3", 2), "note": saved_notes.get("tep_ТО3", "")},
+        {"kind": "row", "key": "tep_ТР1", "label": "ТР1", "plan": count("plan", "tep", "ТР1", 5), "fact": count("fact", "tep", "ТР1", 5), "note": saved_notes.get("tep_ТР1", "")},
+        {"kind": "row", "key": "tep_ТР2", "label": "ТР2", "plan": count("plan", "tep", "ТР2", 10), "fact": count("fact", "tep", "ТР2", 10), "note": saved_notes.get("tep_ТР2", "")},
+        {"kind": "row", "key": "tep_ТР3", "label": "ТР3", "plan": count("plan", "tep", "ТР3", 15), "fact": count("fact", "tep", "ТР3", 15), "note": saved_notes.get("tep_ТР3", "")},
+        {"kind": "row", "key": "tep_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["tep"]), "fact": format_n(data["ub"]["fact"]["tep"]), "note": merge_notes(saved_notes.get("tep_ТР_unplan", ""), tep_notes)},
+        {"kind": "group", "label": "Кол-во тех.испр. локомотивов\nАГРЕГАТЫ ТЯГОВЫЕ", "plan": format_n(data["ap"]), "fact": format_n(data["af"]), "note_key": "agr_park", "note": saved_notes.get("agr_park", "")},
+        {"kind": "row", "key": "agr_ТО", "label": "ТО", "plan": count("plan", "agr", "ТО", 1), "fact": count("fact", "agr", "ТО", 1), "note": saved_notes.get("agr_ТО", "")},
+        {"kind": "row", "key": "agr_ТР", "label": "ТР", "plan": count("plan", "agr", "ТР", 5), "fact": count("fact", "agr", "ТР", 5), "note": saved_notes.get("agr_ТР", "")},
+        {"kind": "row", "key": "agr_ТР_unplan", "label": "ТР (текущий ремонт)", "plan": format_n(data["ub"]["plan"]["agr"]), "fact": format_n(data["ub"]["fact"]["agr"]), "note": merge_notes(saved_notes.get("agr_ТР_unplan", ""), agr_notes)},
+    ]
+    return {"month": month_name, "year": data["y"], "rows": rows}
+
+
+def format_fio_initials(full_name: str) -> str:
+    """Форматирует ФИО в виде Фамилия И. О. Для анонимизированных меток (Работник №1) сохраняет исходный вид."""
+    text = s(full_name).strip()
+    if text.startswith("Работник") or text.startswith("Сотрудник") or text.startswith("ID_"):
+        return text
+    parts = text.split()
+    if len(parts) >= 3:
+        return f"{parts[0]} {parts[1][0]}. {parts[2][0]}."
+    if len(parts) == 2:
+        if parts[1].startswith("№") or parts[1].isdigit():
+            return text
+        return f"{parts[0]} {parts[1][0]}."
+    return text
+
