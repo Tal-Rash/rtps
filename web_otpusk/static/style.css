@@ -360,20 +360,8 @@ button.primary:hover, .btn-primary:hover {
     z-index: 5;
     border: 1px solid var(--red-line);
     white-space: nowrap;
-    transition: opacity 0.2s, transform 0.2s;
+    transition: all 0.2s;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-    pointer-events: none;
-    user-select: none;
-}
-
-/* При наведении или фокусе на полях ячейки делаем плашку полупрозрачной, чтобы не закрывать цифры */
-.cell-input-wrapper:hover .total-days-badge {
-    opacity: 0.35;
-}
-
-.month-cell:focus-within .total-days-badge,
-.cell-input-wrapper:focus-within .total-days-badge {
-    opacity: 0.15;
 }
 
 .total-days-badge.badge-overflow {
