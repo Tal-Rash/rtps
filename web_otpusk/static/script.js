@@ -1461,11 +1461,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 centerCell.insertAdjacentHTML('beforeend', `<div class="total-days-badge ${overflowClass}" style="left: ${centerLeft}%;">${badgeText}</div>`);
             }
 
-            // При переборе нормы плашка «перебор +N» размещается справа от дат в ячейке окончания отпуска
+            // При переборе нормы плашка «перебор +N» смещается в следующую ячейку справа от даты окончания отпуска
             if (overflow > 0 && index === vacations.length - 1) {
-                let endCell = tr.querySelector(`.month-cell[data-month="${vac.endMonth}"] .cell-input-wrapper`);
-                if (endCell) {
-                    endCell.insertAdjacentHTML('beforeend', `<div class="overflow-tag">перебор +${overflow}</div>`);
+                let targetMonth = vac.endMonth < 12 ? (vac.endMonth + 1) : 12;
+                let targetCell = tr.querySelector(`.month-cell[data-month="${targetMonth}"] .cell-input-wrapper`);
+                if (targetCell) {
+                    let posStyle = vac.endMonth < 12 ? 'left: 6px;' : 'right: 6px;';
+                    targetCell.insertAdjacentHTML('beforeend', `<div class="overflow-tag" style="${posStyle}">перебор +${overflow}</div>`);
                 }
             }
         });
