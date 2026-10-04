@@ -1292,13 +1292,50 @@ async def create_version(request: Request, year: int = 2026):
     payload = await request.json()
     v_name = (payload.get("version_name") or "").strip()
     v_data = payload.get("data") or []
+    overwrite = bool(payload.get("overwrite"))
+    version_id = payload.get("version_id")
+
     if not v_name:
         v_name = f"Версия от {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     created_at = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
     with DB_LOCK, sqlite3.connect(COMMON_DB_FILE) as conn:
         cur = conn.cursor()
-        # Сбрасываем флаг активности для остальных версий этого года и активируем новую
+
+        # Поиск существующей версии с таким же названием для целевого года
+        existing = None
+        if version_id:
+            existing = cur.execute(
+                "SELECT id, version_name FROM vacation_versions WHERE id=?",
+                (version_id,)
+            ).fetchone()
+        else:
+            existing = cur.execute(
+                "SELECT id, version_name FROM vacation_versions WHERE y=? AND LOWER(TRIM(version_name))=LOWER(TRIM(?))",
+                (year, v_name)
+            ).fetchone()
+
+        # Если версия с таким названием найдена, но пользователь не подтвердил перезапись
+        if existing and not overwrite:
+            return {
+                "status": "conflict",
+                "message": f"Версия с названием «{existing[1]}» уже существует.",
+                "existing_id": existing[0],
+                "existing_name": existing[1]
+            }
+
+        # Перезапись существующей версии
+        if existing and overwrite:
+            cur_id = existing[0]
+            cur.execute("UPDATE vacation_versions SET is_active=0 WHERE y=?", (year,))
+            cur.execute(
+                "UPDATE vacation_versions SET version_name=?, created_at=?, data_json=?, is_active=1 WHERE id=?",
+                (v_name, created_at, json.dumps(v_data, ensure_ascii=False), cur_id)
+            )
+            conn.commit()
+            return {"status": "ok", "id": cur_id, "version_name": v_name, "created_at": created_at, "is_active": 1, "overwritten": True}
+
+        # Создание новой версии
         cur.execute("UPDATE vacation_versions SET is_active=0 WHERE y=?", (year,))
         cur.execute(
             "INSERT INTO vacation_versions (y, version_name, created_at, data_json, is_active) VALUES (?, ?, ?, ?, 1)",

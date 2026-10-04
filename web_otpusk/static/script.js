@@ -596,6 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const newVersionNameInput = document.getElementById('newVersionNameInput');
     const createVersionBtn = document.getElementById('createVersionBtn');
     const versionsTableBody = document.getElementById('versionsTableBody');
+    let currentVersionsList = [];
 
     function openVersionsModal() {
         if (!versionsModal) return;
@@ -617,6 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(versions => {
                 versionsTableBody.innerHTML = '';
+                currentVersionsList = Array.isArray(versions) ? versions : [];
                 if (!Array.isArray(versions) || versions.length === 0) {
                     versionsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:12px; color:var(--muted);">Сохранённых версий пока нет. Вы можете сохранить текущую версию кнопкой выше.</td></tr>';
                     return;
@@ -909,14 +911,54 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
+            // Проверка на совпадение названия с уже сохраненной версией
+            let overwrite = false;
+            let existingId = null;
+            if (vName && Array.isArray(currentVersionsList) && currentVersionsList.length > 0) {
+                const existing = currentVersionsList.find(v => (v.version_name || '').trim().toLowerCase() === vName.toLowerCase());
+                if (existing) {
+                    if (!confirm(`Версия с названием "${existing.version_name}" уже существует.\nПерезаписать её?`)) {
+                        return;
+                    }
+                    overwrite = true;
+                    existingId = existing.id;
+                }
+            }
+
             createVersionBtn.textContent = 'Сохранение версии...';
             fetch(`${APP_PREFIX}/api/versions?year=${currentYear}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ version_name: vName, data: allData })
+                body: JSON.stringify({ 
+                    version_name: vName, 
+                    data: allData,
+                    overwrite: overwrite,
+                    version_id: existingId
+                })
             })
             .then(res => res.json())
             .then((resData) => {
+                if (resData && resData.status === 'conflict') {
+                    if (confirm(`Версия с названием "${resData.existing_name || vName}" уже существует.\nПерезаписать её?`)) {
+                        return fetch(`${APP_PREFIX}/api/versions?year=${currentYear}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                version_name: vName, 
+                                data: allData,
+                                overwrite: true,
+                                version_id: resData.existing_id
+                            })
+                        }).then(r => r.json());
+                    } else {
+                        createVersionBtn.textContent = '➕ Сохранить текущую версию';
+                        return null;
+                    }
+                }
+                return resData;
+            })
+            .then((resData) => {
+                if (!resData) return;
                 createVersionBtn.textContent = '➕ Сохранить текущую версию';
                 if (newVersionNameInput) newVersionNameInput.value = '';
                 if (resData && resData.id) {
