@@ -3341,51 +3341,7 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
         }
       }
 
-      // 2. Резервная замена через SheetJS ячейки
-      if (finalBuffer === arrayBuffer && window.XLSX) {
-        try {
-          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellFormulas: true, cellDates: true });
-          let modified = false;
 
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            if (!sheet) return;
-
-            for (let cellRef in sheet) {
-              if (cellRef.startsWith('!')) continue;
-              const cell = sheet[cellRef];
-              if (!cell) continue;
-
-              if (cell.v !== undefined && cell.v !== null) {
-                let valStr = String(cell.v);
-                let changed = false;
-
-                for (let i = 0; i < pairs.length; i++) {
-                  const item = pairs[i];
-                  if (valStr.includes(item.from)) {
-                    valStr = valStr.split(item.from).join(item.to);
-                    changed = true;
-                  }
-                }
-
-                if (changed) {
-                  cell.v = valStr;
-                  delete cell.w;
-                  delete cell.r;
-                  delete cell.h;
-                  modified = true;
-                }
-              }
-            }
-          });
-
-          if (modified) {
-            finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-          }
-        } catch (err) {
-          console.error("Ошибка при расшифровке ячеек Excel:", err);
-        }
-      }
     }
 
     const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

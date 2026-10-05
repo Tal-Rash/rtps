@@ -4,28 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Замер КП</title>
-  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}-grid">
+  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div>
+  <div class="shell">
+    <div class="topbar">
+      <div class="titlebox">
         <h1>Замер КП</h1>
       </div>
-      <div class="actions">
-        <a href="http://yrtps.ru/">На главную</a>
+      <div class="controls">
+        <a class="home-link" href="http://yrtps.ru/">На главную</a>
+        <div class="nav" role="tablist" aria-label="Разделы">
+          <button id="tabInput" class="tab active" type="button" {{TAB_INPUT_STYLE}} onclick="switchTab('input')">Ввод замера</button>
+          <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
+          <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
+          <button id="tabWear" class="tab" type="button" onclick="switchTab('wear')">Анализ износа</button>
+          <button id="tabSchedule" class="tab" type="button" onclick="switchTab('schedule')">График замеров</button>
+        </div>
         <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
         <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
       </div>
-    </div>
-
-    <div class="tabs" role="tablist" aria-label="Разделы">
-      <button id="tabInput" class="tab active" type="button" {{TAB_INPUT_STYLE}} onclick="switchTab('input')">Ввод замера</button>
-      <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
-      <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
-      <button id="tabWear" class="tab" type="button" onclick="switchTab('wear')">Анализ износа</button>
-      <button id="tabSchedule" class="tab" type="button" onclick="switchTab('schedule')">График замеров</button>
     </div>
 
     <div id="panelInput" class="panel active">
@@ -409,14 +408,20 @@
   </div>
 
 <script>
-  const CAN_EDIT = {{CAN_EDIT}};
-  const APP_PREFIX = '{{APP_PREFIX}}';
-  const APP_VERSION = '{{APP_VERSION}}';
-  const API = '{{APP_PREFIX}}';
-  const LOCOMOTIVE_CHOICES = {{LOCOMOTIVE_CHOICES}};
+  window.APP_CONFIG = {
+    APP_VERSION: "{{APP_VERSION}}",
+    CAN_EDIT: {{CAN_EDIT}},
+    APP_PREFIX: "{{APP_PREFIX}}",
+    API: "{{APP_PREFIX}}",
+    LOCOMOTIVE_CHOICES: {{LOCOMOTIVE_CHOICES}}
+  };
+  const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
+  const APP_PREFIX = window.APP_CONFIG.APP_PREFIX;
+  const APP_VERSION = window.APP_CONFIG.APP_VERSION;
+  const API = window.APP_CONFIG.API;
+  const LOCOMOTIVE_CHOICES = window.APP_CONFIG.LOCOMOTIVE_CHOICES;
 </script>
 <script src="{{APP_PREFIX}}/static/jszip.min.js"></script>
-<script src="{{APP_PREFIX}}/static/xlsx.full.min.js"></script>
-<script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}-kp-versions-grid"></script>
+<script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
 </body>
 </html>

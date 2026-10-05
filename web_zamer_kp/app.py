@@ -82,10 +82,20 @@ app = FastAPI(title="RTPS Zamer KP")
 
 @app.middleware("http")
 async def strip_prefix(request: Request, call_next):
-    """Удаление префикса приложения из пути запроса при проксировании."""
-    if request.scope["path"].startswith(APP_PREFIX + "/"):
-        request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
-    return await call_next(request)
+    # Префикс роутинга и кэширование статики
+    raw_path = request.scope.get("path", "")
+    if raw_path == APP_PREFIX:
+        request.scope["path"] = "/"
+    elif raw_path.startswith(APP_PREFIX + "/"):
+        request.scope["path"] = raw_path[len(APP_PREFIX):]
+
+    response = await call_next(request)
+
+    path = request.scope.get("path", "")
+    if path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+
+    return response
 
 
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
