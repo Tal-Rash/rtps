@@ -1763,21 +1763,37 @@ function unitKeyFromCells(cells){
 function latestKpMeasurementByUnit(){
   const result = new Map();
   const measurements = appState?.repair_summary?.kp_measurements || [];
+  if (!measurements.length) return result;
+
+  // Индексируем ключи локомотивов по номерам за один проход O(N) вместо вложенного O(M*N)
+  const unitKeysByNumber = new Map();
+  (appState.months || []).forEach((month) => {
+    [...(month.plan || []), ...(month.fact || [])].forEach((row) => {
+      const cells = row?.cells || [];
+      const rowNumber = String(cells[2] ?? '').trim().toUpperCase();
+      if (!rowNumber) return;
+      const key = unitKeyFromCells(cells);
+      if (key) {
+        let set = unitKeysByNumber.get(rowNumber);
+        if (!set) {
+          set = new Set();
+          unitKeysByNumber.set(rowNumber, set);
+        }
+        set.add(key);
+      }
+    });
+  });
+
   measurements.forEach((item) => {
     const number = String(item?.number ?? '').trim().toUpperCase();
     const date = parseRepairDate(item?.measurementDate);
     if (!number || !date) return;
     const time = repairDateTime(date);
-    (appState.months || []).forEach((month) => {
-      [...(month.plan || []), ...(month.fact || [])].forEach((row) => {
-        const cells = row?.cells || [];
-        const rowNumber = String(cells[2] ?? '').trim().toUpperCase();
-        if (rowNumber !== number) return;
-        const key = unitKeyFromCells(cells);
-        if (!key) return;
-        const prev = result.get(key);
-        if (!prev || time > prev.time) result.set(key, { date, time });
-      });
+    const keys = unitKeysByNumber.get(number);
+    if (!keys) return;
+    keys.forEach((key) => {
+      const prev = result.get(key);
+      if (!prev || time > prev.time) result.set(key, { date, time });
     });
   });
   return result;

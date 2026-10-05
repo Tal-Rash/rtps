@@ -69,13 +69,20 @@ def ensure_database() -> None:
     if not DB_FILE.exists() and SOURCE_DB.exists():
         shutil.copy2(SOURCE_DB, DB_FILE)
     with connect_sqlite(DB_FILE) as db:
+        db.execute("PRAGMA journal_mode = WAL")
+        db.execute("PRAGMA synchronous = NORMAL")
         ensure_schema(db.cursor())
         db.commit()
 
 
 def conn() -> sqlite3.Connection:
-    # Возвращаем настроенное подключение SQLite (WAL-режим, таймаут ожидания)
-    return connect_sqlite(DB_FILE)
+    # Возвращаем настроенное подключение SQLite (WAL-режим, таймаут ожидания, нормальная синхронизация)
+    c = connect_sqlite(DB_FILE)
+    c.execute("PRAGMA journal_mode = WAL")
+    c.execute("PRAGMA synchronous = NORMAL")
+    c.execute("PRAGMA busy_timeout = 5000")
+    c.execute("PRAGMA temp_store = MEMORY")
+    return c
 
 
 def ensure_schema(cur: sqlite3.Cursor) -> None:
@@ -479,7 +486,19 @@ def _repair_summary_pack(rows: list[dict]) -> dict:
     return {"rows": rows, "types": types, "loco_options": locos}
 
 
+_KP_MEASUREMENTS_CACHE: tuple[float, list[dict]] | None = None
+_KP_MEASUREMENTS_CACHE_TTL = 120.0  # Время жизни кэша замеров архива (в секундах)
+
+
 def _load_kp_archive_measurements() -> list[dict]:
+    # Кэшированная загрузка замеров из архива для подсветки контрольных точек
+    global _KP_MEASUREMENTS_CACHE
+    now = dt.datetime.now().timestamp()
+    if _KP_MEASUREMENTS_CACHE is not None:
+        cached_ts, cached_list = _KP_MEASUREMENTS_CACHE
+        if now - cached_ts < _KP_MEASUREMENTS_CACHE_TTL:
+            return cached_list
+
     if not SOURCE_DB.exists():
         return []
     try:
@@ -513,6 +532,7 @@ def _load_kp_archive_measurements() -> list[dict]:
             "repairCode": repair_code,
             "measurementDate": parsed_date.isoformat(),
         })
+    _KP_MEASUREMENTS_CACHE = (now, measurements)
     return measurements
 
 
@@ -830,5 +850,10 @@ def save_state(state: dict) -> dict:
                         
             cur.executemany("INSERT INTO repair_schedule VALUES (?,?,?,?)", schedule_ins)
 
-    return load_state(year)
+    # Загружаем сохраненное состояние только текущего года без тяжелого пересчета многолетней сводки
+    loaded = load_state(year, include_summary=False)
+    # Сохраняем существующую сводку из переданного состояния, чтобы не парсить все года повторно
+    if "repair_summary" in state:
+        loaded["repair_summary"] = state["repair_summary"]
+    return loaded
 
