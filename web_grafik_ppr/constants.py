@@ -59,6 +59,6 @@ SOURCE_DIR = ROOT.parent / "src" / "График ППР"
 # Настройки авторизации и сессий
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "/login")
 APP_PREFIX = "/grafik-ppr"
 AUTH_ENABLED = True

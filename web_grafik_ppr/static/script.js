@@ -2938,7 +2938,7 @@ async function loadYearFromInput(){
 }
 function requestHomeClick(event){
   if (event) event.preventDefault();
-  return promptLeave('Есть несохранённые изменения. Сохранить перед переходом на главную?', () => { location.href = 'http://yrtps.ru/'; });
+  return promptLeave('Есть несохранённые изменения. Сохранить перед переходом на главную?', () => { location.href = '/'; });
 }
 function cancelChanges(){
   if (!CAN_EDIT || !savedMonthsState) return;
@@ -2957,7 +2957,7 @@ function restoreChanges(){
 window.addEventListener('beforeunload', (e)=>{ if (dirty && CAN_EDIT) { e.preventDefault(); e.returnValue=''; } });
 window.addEventListener('popstate', () => {
   if (!leaveGuardInstalled || !CAN_EDIT) return;
-  promptLeave('Есть несохранённые изменения. Сохранить перед уходом?', () => { location.href = 'http://yrtps.ru/'; });
+  promptLeave('Есть несохранённые изменения. Сохранить перед уходом?', () => { location.href = '/'; });
 });
 savedAppState = cloneState(appState);
 savedMonthsState = cloneState(appState.months);

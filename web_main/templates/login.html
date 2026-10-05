@@ -18,7 +18,7 @@
 </head>
 <body>
   <div class="card" id="login-form">
-    <form method="post" action="http://yrtps.ru/login{{ '?next=' ~ NEXT_URL if NEXT_URL else '' }}">
+    <form method="post" action="/login{{ '?next=' ~ NEXT_URL if NEXT_URL else '' }}">
       <h1 style="margin-top:0; text-align:center; margin-bottom: 24px;">Вход</h1>
       {% if error_message %}
       <p style="text-align:center;color:#b00020;margin-bottom:12px;">{{ error_message | safe }}</p>
@@ -31,7 +31,7 @@
   </div>
 
   <div class="card" id="request-form">
-    <form method="post" action="http://yrtps.ru/request_access">
+    <form method="post" action="/request_access">
       <h1 style="margin-top:0; text-align:center;">Запрос доступа</h1>
       <p class="muted" style="text-align:center;">Введите ФИО и желаемый пароль. Если вы забыли пароль, введите новое значение — доступ будет временно приостановлен до одобрения администратором.</p>
       <input name="full_name" type="text" placeholder="Иванов И. И." style="margin-bottom:12px;" required>
