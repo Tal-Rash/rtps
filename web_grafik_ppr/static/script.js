@@ -2817,13 +2817,28 @@ async function saveState(options = {}){
   // Исключаем тяжёлую сводку repair_summary (>230 КБ), так как сервер её не сохраняет
   const { repair_summary, ...savePayload } = appState;
   const jsonPayload = JSON.stringify(savePayload);
+
+  let bodyToSend = jsonPayload;
+  const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+
+  // Сжатие gzip на клиенте (1.2 КБ вместо 60 КБ) обходит задержки корпоративных брандмауэров и DPI
+  if (typeof CompressionStream !== 'undefined') {
+    try {
+      const stream = new Blob([jsonPayload]).stream().pipeThrough(new CompressionStream('gzip'));
+      bodyToSend = await new Response(stream).blob();
+      headers['Content-Encoding'] = 'gzip';
+    } catch (e) {
+      console.warn('Gzip fallback:', e);
+      bodyToSend = jsonPayload;
+    }
+  }
   const tPayload = performance.now();
 
   try {
     const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: jsonPayload,
+      headers,
+      body: bodyToSend,
     });
     const tFetch = performance.now();
     const netElapsed = ((tFetch - tPayload) / 1000).toFixed(1);
@@ -2853,7 +2868,8 @@ async function saveState(options = {}){
     markDirty(false);
     updateHistoryButtons();
     const totalElapsed = ((performance.now() - t0) / 1000).toFixed(1);
-    console.log(`[SAVE] Размер: ${(jsonPayload.length / 1024).toFixed(1)} КБ, сеть: ${netElapsed}с, всего: ${totalElapsed}с`);
+    const sizeKb = bodyToSend.size ? (bodyToSend.size / 1024).toFixed(1) + ' КБ (gzip)' : (jsonPayload.length / 1024).toFixed(1) + ' КБ';
+    console.log(`[SAVE] Размер: ${sizeKb}, сеть: ${netElapsed}с, всего: ${totalElapsed}с`);
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.classList.remove('save-saving', 'save-ready');

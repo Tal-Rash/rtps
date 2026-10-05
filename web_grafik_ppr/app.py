@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import gzip
 import hashlib
 import hmac
 import json
@@ -316,8 +317,15 @@ async def post_state(request: Request):
     if not auth_ok:
         return json_response({"error": "Unauthorized"}, status_code=401)
     try:
-        payload = await request.json()
-    except Exception:
+        # Поддерживаем сжатие gzip для моментальной отправки через корпоративные шлюзы/DPI
+        if request.headers.get("content-encoding") == "gzip":
+            raw_body = await request.body()
+            decompressed = gzip.decompress(raw_body)
+            payload = json.loads(decompressed.decode("utf-8"))
+        else:
+            payload = await request.json()
+    except Exception as exc:
+        print("[POST_STATE] Ошибка декодирования JSON:", exc)
         payload = {}
     if not isinstance(payload, dict):
         return json_response({"error": "Некорректный формат данных"}, status_code=400)
