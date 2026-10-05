@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 from urllib.parse import unquote
@@ -310,6 +311,7 @@ def get_state(year: int = None):
 @app.post("/api/state")
 @app.post("/api/import")
 async def post_state(request: Request):
+    t0 = time.perf_counter()
     auth_ok, session = require_auth_fastapi(request, need_edit=True)
     if not auth_ok:
         return json_response({"error": "Unauthorized"}, status_code=401)
@@ -319,10 +321,16 @@ async def post_state(request: Request):
         payload = {}
     if not isinstance(payload, dict):
         return json_response({"error": "Некорректный формат данных"}, status_code=400)
+    
+    # Для быстрого сохранения не читаем заново всю БД, а для импорта возвращаем полное состояние
+    is_import = request.url.path.endswith("/import")
     try:
-        saved = await asyncio.to_thread(save_state, payload)
+        saved = await asyncio.to_thread(save_state, payload, return_loaded=is_import)
     except Exception as exc:
         return json_response({"error": str(exc)}, status_code=400)
+    
+    elapsed = time.perf_counter() - t0
+    print(f"[SAVE_STATE] Успешно сохранено за {elapsed:.3f}с (import={is_import})")
     return json_response(saved)
 
 

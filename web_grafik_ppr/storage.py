@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+from contextlib import contextmanager
 import datetime as dt
 import json
 import shutil
@@ -68,21 +69,28 @@ def ensure_database() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not DB_FILE.exists() and SOURCE_DB.exists():
         shutil.copy2(SOURCE_DB, DB_FILE)
-    with connect_sqlite(DB_FILE) as db:
+    db = connect_sqlite(DB_FILE)
+    try:
         db.execute("PRAGMA journal_mode = WAL")
         db.execute("PRAGMA synchronous = NORMAL")
         ensure_schema(db.cursor())
         db.commit()
+    finally:
+        db.close()
 
 
-def conn() -> sqlite3.Connection:
-    # Возвращаем настроенное подключение SQLite (WAL-режим, таймаут ожидания, нормальная синхронизация)
+@contextmanager
+def conn():
+    # Возвращаем настроенное подключение SQLite с гарантированным закрытием после выхода из блока
     c = connect_sqlite(DB_FILE)
     c.execute("PRAGMA journal_mode = WAL")
     c.execute("PRAGMA synchronous = NORMAL")
     c.execute("PRAGMA busy_timeout = 5000")
     c.execute("PRAGMA temp_store = MEMORY")
-    return c
+    try:
+        yield c
+    finally:
+        c.close()
 
 
 def ensure_schema(cur: sqlite3.Cursor) -> None:
@@ -106,12 +114,15 @@ def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
         }
 
     try:
-        with connect_sqlite(SOURCE_DB) as conn:
-            cur = conn.cursor()
+        conn_src = connect_sqlite(SOURCE_DB)
+        try:
+            cur = conn_src.cursor()
             rows = cur.execute(
                 "SELECT c, v FROM ts_norms_data WHERE y=? AND c IN (6, 7)",
                 (year,),
             ).fetchall()
+        finally:
+            conn_src.close()
         for col_idx, raw_text in rows:
             if not raw_text:
                 continue
@@ -502,7 +513,8 @@ def _load_kp_archive_measurements() -> list[dict]:
     if not SOURCE_DB.exists():
         return []
     try:
-        with connect_sqlite(SOURCE_DB) as archive_conn:
+        archive_conn = connect_sqlite(SOURCE_DB)
+        try:
             archive_rows = archive_conn.execute(
                 """
                 SELECT DISTINCT measurement_date, locomotive, repair_type
@@ -513,6 +525,8 @@ def _load_kp_archive_measurements() -> list[dict]:
                 ORDER BY measurement_date
                 """
             ).fetchall()
+        finally:
+            archive_conn.close()
     except Exception:
         return []
 
@@ -573,12 +587,15 @@ def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
     if not SOURCE_DB.exists():
         return "", ""
     try:
-        with connect_sqlite(SOURCE_DB) as db:
+        db = connect_sqlite(SOURCE_DB)
+        try:
             cur = db.cursor()
             row = cur.execute("SELECT ser, inv FROM inventory WHERE y=? AND num=?", (year, number)).fetchone()
-        if not row:
-            return "", ""
-        return s(row[0]), s(row[1])
+            if not row:
+                return "", ""
+            return s(row[0]), s(row[1])
+        finally:
+            db.close()
     except Exception:
         return "", ""
 
@@ -588,27 +605,30 @@ def get_all_employee_names() -> list[str]:
     try:
         if not SOURCE_DB.exists():
             return []
-        with connect_sqlite(SOURCE_DB) as db:
+        db = connect_sqlite(SOURCE_DB)
+        try:
             cur = db.cursor()
             cur.execute("SELECT rowid, name, full_name, tab_num FROM employees ORDER BY rowid")
             rows = cur.fetchall()
-            names = []
-            for idx, r in enumerate(rows, start=1):
-                raw_tab = s(r[3]).strip()
-                num_part = idx
-                if raw_tab.startswith("ID_"):
-                    digits = "".join(ch for ch in raw_tab if ch.isdigit())
-                    if digits:
-                        num_part = int(digits)
-                names.append(f"Работник №{num_part}")
-            # Удаляем дубликаты с сохранением порядка
-            seen = set()
-            unique_names = []
-            for n in names:
-                if n not in seen:
-                    seen.add(n)
-                    unique_names.append(n)
-            return unique_names
+        finally:
+            db.close()
+        names = []
+        for idx, r in enumerate(rows, start=1):
+            raw_tab = s(r[3]).strip()
+            num_part = idx
+            if raw_tab.startswith("ID_"):
+                digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                if digits:
+                    num_part = int(digits)
+            names.append(f"Работник №{num_part}")
+        # Удаляем дубликаты с сохранением порядка
+        seen = set()
+        unique_names = []
+        for n in names:
+            if n not in seen:
+                seen.add(n)
+                unique_names.append(n)
+        return unique_names
     except Exception:
         return []
 
@@ -635,7 +655,8 @@ def get_employee_vacations() -> dict[str, list[dict]]:
     if not SOURCE_DB.exists():
         return {}
     try:
-        with connect_sqlite(SOURCE_DB) as db:
+        db = connect_sqlite(SOURCE_DB)
+        try:
             db.row_factory = sqlite3.Row
             rows = db.execute(
                 """
@@ -647,6 +668,8 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                 ORDER BY e.y, e.rowid, v.c
                 """
             ).fetchall()
+        finally:
+            db.close()
     except Exception:
         return {}
 
@@ -690,7 +713,8 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                 result.setdefault(name, []).append(item)
 
     try:
-        with connect_sqlite(SOURCE_DB) as db:
+        db = connect_sqlite(SOURCE_DB)
+        try:
             db.row_factory = sqlite3.Row
             ts_rows = db.execute(
                 """
@@ -725,13 +749,15 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                 for name in name_values:
                     if name:
                         result.setdefault(name, []).append(item)
+        finally:
+            db.close()
     except Exception as e:
         print("Error fetching timesheet for vacations:", e)
 
     return result
 
 
-def save_state(state: dict) -> dict:
+def save_state(state: dict, return_loaded: bool = False) -> dict:
     year = int(state.get("year") or dt.date.today().year)
     with DB_LOCK, conn() as db:
         cur = db.cursor()
@@ -849,6 +875,10 @@ def save_state(state: dict) -> dict:
                         schedule_ins.append((year, r, f"fact_{cidx}", value))
                         
             cur.executemany("INSERT INTO repair_schedule VALUES (?,?,?,?)", schedule_ins)
+
+    if not return_loaded:
+        # Быстрый возврат подтверждения сохранения без тяжелого повторного чтения базы
+        return {"ok": True, "year": year}
 
     # Загружаем сохраненное состояние только текущего года без тяжелого пересчета многолетней сводки
     loaded = load_state(year, include_summary=False)

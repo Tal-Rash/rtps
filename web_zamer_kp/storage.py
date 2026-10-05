@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import datetime as dt
 import json
 import sqlite3
 from http import HTTPStatus
 from pathlib import Path
 from rtps_common import connect_sqlite
+
+import sys
+_PKG_ROOT = Path(__file__).resolve().parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+if str(_PKG_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT.parent))
 
 from constants import (
     ROOT,
@@ -37,15 +45,19 @@ from calculations import (
 )
 
 
-def connect() -> sqlite3.Connection:
-    # Подключение к рабочей SQLite базе с поддержкой WAL и безопасного таймаута
+@contextmanager
+def connect():
+    # Подключение к рабочей SQLite базе с поддержкой WAL и безопасного таймаута с гарантированным закрытием
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     conn = connect_sqlite(DB_FILE)
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA temp_store = MEMORY")
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def ensure_db() -> None:

@@ -1494,15 +1494,38 @@ function repairSummaryKpMeasurements(){
   const values = appState?.repair_summary?.kp_measurements;
   return Array.isArray(values) ? values : [];
 }
+let _repairSummaryKpIndex = null;
+let _repairSummaryKpSource = null;
+function getRepairSummaryKpIndex(){
+  const values = repairSummaryKpMeasurements();
+  if (_repairSummaryKpIndex && _repairSummaryKpSource === values) {
+    return _repairSummaryKpIndex;
+  }
+  const map = new Map();
+  values.forEach((item) => {
+    const num = String(item?.number ?? '').trim();
+    if (!num) return;
+    let list = map.get(num);
+    if (!list) {
+      list = [];
+      map.set(num, list);
+    }
+    list.push(item);
+  });
+  _repairSummaryKpIndex = map;
+  _repairSummaryKpSource = values;
+  return map;
+}
 function repairSummaryKpMeasurementDates(row){
   const number = String(row?.number ?? '').trim();
   const repairCode = normalizeRepairCode(row?.repairCode);
   const dateFrom = parseRepairDate(row?.repairDateFrom || row?.repairDate);
   const dateTo = parseRepairDate(row?.repairDateTo || row?.repairDate);
   if (!number || !repairCode || !dateFrom || !dateTo) return [];
-  const dates = repairSummaryKpMeasurements()
+  const candidates = getRepairSummaryKpIndex().get(number);
+  if (!candidates || !candidates.length) return [];
+  const dates = candidates
     .filter((item) => {
-      if (String(item?.number ?? '').trim() !== number) return false;
       if (normalizeRepairCode(item?.repairCode) !== repairCode) return false;
       const measurementDate = parseRepairDate(item?.measurementDate);
       if (!measurementDate) return false;
@@ -2782,17 +2805,35 @@ async function saveState(options = {}){
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
   updateRepairScheduleDerivedValues();
   setStatus('Сохранение...');
-  const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`, { method:'POST', headers:{'Content-Type':'application/json; charset=utf-8'}, body: JSON.stringify(appState) });
-  if (!res.ok) { setStatus('Ошибка'); return; }
-  appState = await res.json();
-  savedAppState = cloneState(appState);
-  savedMonthsState = cloneState(appState.months);
-  canceledMonthsState = null;
-  markDirty(false);
-  setStatus('Сохранено');
-  render();
-  if (refreshReport && reportDialogState && document.getElementById('reportModal') && document.getElementById('reportModal').classList.contains('visible')) {
-    await refreshReportDialog();
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(appState),
+    });
+    const netElapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    if (!res.ok) {
+      setStatus(`Ошибка (${netElapsed}с)`);
+      return;
+    }
+    const data = await res.json();
+    if (data && data.months) {
+      appState = data;
+    }
+    savedAppState = cloneState(appState);
+    savedMonthsState = cloneState(appState.months);
+    canceledMonthsState = null;
+    markDirty(false);
+    updateHistoryButtons();
+    const totalElapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    setStatus(`Сохранено (${totalElapsed}с)`);
+    if (refreshReport && reportDialogState && document.getElementById('reportModal') && document.getElementById('reportModal').classList.contains('visible')) {
+      await refreshReportDialog();
+    }
+  } catch (err) {
+    console.error('Ошибка сохранения:', err);
+    setStatus('Ошибка сети');
   }
 }
 function downloadJson(){

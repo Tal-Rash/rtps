@@ -30,14 +30,18 @@ def resolve_user_access(
     if user_id == "legacy":
         return None
     try:
-        with connect_sqlite(users_db) as conn:
+        # Гарантируем закрытие подключения после запроса
+        conn = connect_sqlite(users_db)
+        try:
             row = conn.execute(
                 "SELECT role, allowed_modules FROM users WHERE id=?",
                 (user_id,),
             ).fetchone()
-        if not row:
-            return None
-        return str(row["role"] or ""), str(row["allowed_modules"] or "")
+            if not row:
+                return None
+            return str(row["role"] or ""), str(row["allowed_modules"] or "")
+        finally:
+            conn.close()
     except Exception:
         return None
 
