@@ -54,6 +54,8 @@ def render_nginx(modules: dict[str, dict]) -> str:
                 [
                     f"    location = {path} {{",
                     f"        proxy_pass http://127.0.0.1:{port}{exact_proxy_path};",
+                    "        proxy_http_version 1.1;",
+                    '        proxy_set_header Connection "";',
                     "        proxy_set_header Host $host;",
                     "        proxy_set_header X-Real-IP $remote_addr;",
                     "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
@@ -62,6 +64,8 @@ def render_nginx(modules: dict[str, dict]) -> str:
                     "",
                     f"    location {path}/ {{",
                     f"        proxy_pass http://127.0.0.1:{port}/;",
+                    "        proxy_http_version 1.1;",
+                    '        proxy_set_header Connection "";',
                     "        proxy_set_header Host $host;",
                     "        proxy_set_header X-Real-IP $remote_addr;",
                     "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
@@ -76,6 +80,8 @@ def render_nginx(modules: dict[str, dict]) -> str:
             [
                 f"    location {path} {{",
                 f"        proxy_pass http://127.0.0.1:{port};",
+                "        proxy_http_version 1.1;",
+                '        proxy_set_header Connection "";',
                 "        proxy_set_header Host $host;",
                 "        proxy_set_header X-Real-IP $remote_addr;",
                 "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
@@ -90,6 +96,8 @@ def render_nginx(modules: dict[str, dict]) -> str:
         [
             "    location / {",
             f"        proxy_pass http://127.0.0.1:{main_port};",
+            "        proxy_http_version 1.1;",
+            '        proxy_set_header Connection "";',
             "        proxy_set_header Host $host;",
             "        proxy_set_header X-Real-IP $remote_addr;",
             "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",

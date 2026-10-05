@@ -2814,13 +2814,19 @@ async function saveState(options = {}){
   }
 
   const t0 = performance.now();
+  // Исключаем тяжёлую сводку repair_summary (>230 КБ), так как сервер её не сохраняет
+  const { repair_summary, ...savePayload } = appState;
+  const jsonPayload = JSON.stringify(savePayload);
+  const tPayload = performance.now();
+
   try {
     const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(appState),
+      body: jsonPayload,
     });
-    const netElapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    const tFetch = performance.now();
+    const netElapsed = ((tFetch - tPayload) / 1000).toFixed(1);
     if (!res.ok) {
       if (saveBtn) {
         saveBtn.disabled = false;
@@ -2841,12 +2847,13 @@ async function saveState(options = {}){
     if (data && data.months) {
       appState = data;
     }
-    savedAppState = cloneState(appState);
+    savedAppState = cloneState(savePayload);
     savedMonthsState = cloneState(appState.months);
     canceledMonthsState = null;
     markDirty(false);
     updateHistoryButtons();
     const totalElapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    console.log(`[SAVE] Размер: ${(jsonPayload.length / 1024).toFixed(1)} КБ, сеть: ${netElapsed}с, всего: ${totalElapsed}с`);
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.classList.remove('save-saving', 'save-ready');
@@ -2921,14 +2928,14 @@ function cancelChanges(){
   if (!CAN_EDIT || !savedMonthsState) return;
   canceledMonthsState = cloneState(appState.months);
   appState.months = cloneState(savedMonthsState);
-  markDirty(JSON.stringify(appState) !== JSON.stringify(savedAppState));
+  markDirty(JSON.stringify(appState.months) !== JSON.stringify(savedMonthsState));
   render();
 }
 function restoreChanges(){
   if (!CAN_EDIT || !canceledMonthsState) return;
   appState.months = cloneState(canceledMonthsState);
   canceledMonthsState = null;
-  markDirty(JSON.stringify(appState) !== JSON.stringify(savedAppState));
+  markDirty(JSON.stringify(appState.months) !== JSON.stringify(savedMonthsState));
   render();
 }
 window.addEventListener('beforeunload', (e)=>{ if (dirty && CAN_EDIT) { e.preventDefault(); e.returnValue=''; } });
