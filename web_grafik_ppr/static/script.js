@@ -2804,7 +2804,15 @@ async function saveState(options = {}){
   const refreshReport = options.refreshReport !== false;
   if (!CAN_EDIT) { alert('Нужен вход'); return; }
   updateRepairScheduleDerivedValues();
-  setStatus('Сохранение...');
+
+  const saveBtn = document.getElementById('saveButton');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.classList.remove('save-ready', 'save-success', 'save-error');
+    saveBtn.classList.add('save-saving');
+    saveBtn.textContent = '⏳ Сохранение...';
+  }
+
   const t0 = performance.now();
   try {
     const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`, {
@@ -2814,7 +2822,19 @@ async function saveState(options = {}){
     });
     const netElapsed = ((performance.now() - t0) / 1000).toFixed(1);
     if (!res.ok) {
-      setStatus(`Ошибка (${netElapsed}с)`);
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('save-saving');
+        saveBtn.classList.add('save-error');
+        saveBtn.textContent = `✗ Ошибка (${netElapsed}с)`;
+        setTimeout(() => {
+          if (saveBtn) {
+            saveBtn.classList.remove('save-error');
+            saveBtn.textContent = 'Сохранить';
+            updateSaveButtonState();
+          }
+        }, 3000);
+      }
       return;
     }
     const data = await res.json();
@@ -2827,13 +2847,37 @@ async function saveState(options = {}){
     markDirty(false);
     updateHistoryButtons();
     const totalElapsed = ((performance.now() - t0) / 1000).toFixed(1);
-    setStatus(`Сохранено (${totalElapsed}с)`);
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('save-saving', 'save-ready');
+      saveBtn.classList.add('save-success');
+      saveBtn.textContent = `✓ Сохранено (${totalElapsed}с)`;
+      setTimeout(() => {
+        if (saveBtn) {
+          saveBtn.classList.remove('save-success');
+          saveBtn.textContent = 'Сохранить';
+          updateSaveButtonState();
+        }
+      }, 2500);
+    }
     if (refreshReport && reportDialogState && document.getElementById('reportModal') && document.getElementById('reportModal').classList.contains('visible')) {
       await refreshReportDialog();
     }
   } catch (err) {
     console.error('Ошибка сохранения:', err);
-    setStatus('Ошибка сети');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('save-saving');
+      saveBtn.classList.add('save-error');
+      saveBtn.textContent = '✗ Ошибка сети';
+      setTimeout(() => {
+        if (saveBtn) {
+          saveBtn.classList.remove('save-error');
+          saveBtn.textContent = 'Сохранить';
+          updateSaveButtonState();
+        }
+      }, 3000);
+    }
   }
 }
 function downloadJson(){

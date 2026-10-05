@@ -277,7 +277,8 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     db_path = Path(__file__).resolve().parent.parent / "base" / "common_database.db"
     if db_path.exists() and number and start_date_str and end_date_str:
         try:
-            with connect_sqlite(db_path) as conn:
+            conn = connect_sqlite(db_path)
+            try:
                 cur = conn.cursor()
                 db_rows = cur.execute(
                     """
@@ -288,6 +289,8 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                     """,
                     (number, start_date_str, end_date_str)
                 ).fetchall()
+            finally:
+                conn.close()
                 dates_dict = {}
                 for d_str, r, c, v in db_rows:
                     if d_str not in dates_dict:

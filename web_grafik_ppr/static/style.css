@@ -27,6 +27,9 @@
     .toolbar button { font-weight:400; }
     .toolbar button.save-ready { background:var(--accent); border-color:var(--accent); color:#fff; }
     .toolbar button.save-ready:hover { background:#1f63df; border-color:#1f63df; color:#fff; }
+    .toolbar button.save-saving { background:#e2e8f0; border-color:#94a3b8; color:#475569; cursor:wait; }
+    .toolbar button.save-success { background:#16a34a !important; border-color:#16a34a !important; color:#fff !important; }
+    .toolbar button.save-error { background:#dc2626 !important; border-color:#dc2626 !important; color:#fff !important; }
     .home-link { border:1px solid var(--accent); border-radius:8px; background:#fff; padding:10px 12px; color:var(--accent); font:inherit; font-weight:400; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
     .json-menu { position:relative; display:inline-flex; }
     .json-menu > button { min-width:84px; }
