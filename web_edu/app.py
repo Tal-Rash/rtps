@@ -27,7 +27,7 @@ DB_FILE = ROOT.parent / "base" / "common_database.db"
 WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/edu"
-APP_VERSION = "web-edu-2.8"
+APP_VERSION = "web-edu-2.9"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "/login")
 
@@ -147,6 +147,26 @@ async def index(request: Request):
     }
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
+def normalize_date_iso(val: str | None) -> str:
+    """Приводит дату к формату YYYY-MM-DD для надежного сравнения и отображения"""
+    if not val:
+        return ""
+    s = str(val).strip()
+    if not s:
+        return ""
+    if len(s) == 10 and s[4] == '-' and s[7] == '-':
+        return s
+    s_clean = s.replace('/', '.').replace('-', '.')
+    parts = s_clean.split('.')
+    if len(parts) == 3:
+        p1, p2, p3 = parts[0].strip(), parts[1].strip(), parts[2].strip()
+        if len(p1) == 4 and p1.isdigit():
+            return f"{p1}-{p2.zfill(2)}-{p3.zfill(2)}"
+        if len(p3) in (2, 4) and p3.isdigit():
+            y = p3 if len(p3) == 4 else ("20" + p3)
+            return f"{y}-{p2.zfill(2)}-{p1.zfill(2)}"
+    return s
+
 @app.get("/api/state")
 @app.get(f"{APP_PREFIX}/api/state", include_in_schema=False)
 async def api_state(request: Request):
@@ -160,26 +180,31 @@ async def api_state(request: Request):
         cols = cur.execute("SELECT name, period_months FROM training_columns ORDER BY sort_order").fetchall()
         columns = [{"name": c["name"], "period_months": c["period_months"] or 12} for c in cols]
         
-        # Загрузка активных сотрудников (из главной базы, как в табеле)
-        # Исключаем тех, у кого заполнена дата увольнения (уже наступила),
-        # и тех, у кого дата приема на работу еще не наступила.
+        # Загрузка сотрудников из справочника строго в порядке rowid (порядок справочника)
+        cur_year = dt.date.today().year
         today = dt.date.today().isoformat()
+        
         emp_rows = cur.execute("""
-            SELECT e.name, e.tab_num, e.pos, COALESCE(pc.category, 'workers') as category, eo.sort_order AS row_order
+            SELECT e.rowid, e.y, e.name, e.full_name, e.tab_num, e.pos,
+                   e.hire_date, e.exclude_date, e.is_excluded,
+                   COALESCE(pc.category, 'workers') as category
             FROM employees e
-            INNER JOIN (
-                SELECT tab_num, MAX(y) as max_y
-                FROM employees
-                GROUP BY tab_num
-            ) latest ON e.tab_num = latest.tab_num AND e.y = latest.max_y
             LEFT JOIN position_categories pc ON e.pos = pc.pos
-            LEFT JOIN employee_row_order eo ON e.tab_num = eo.tab_num
-            WHERE e.name IS NOT NULL AND e.name != '' 
-              AND COALESCE(e.is_excluded, 0) = 0
-              AND (e.exclude_date IS NULL OR e.exclude_date = '' OR e.exclude_date > ?)
-              AND (e.hire_date IS NULL OR e.hire_date = '' OR e.hire_date <= ?)
-            GROUP BY e.name, e.tab_num, e.pos
-        """, (today, today)).fetchall()
+            WHERE e.y = ? AND e.name IS NOT NULL AND TRIM(e.name) != ''
+            ORDER BY e.rowid
+        """, (cur_year,)).fetchall()
+        
+        if not emp_rows:
+            emp_rows = cur.execute("""
+                SELECT e.rowid, e.y, e.name, e.full_name, e.tab_num, e.pos,
+                       e.hire_date, e.exclude_date, e.is_excluded,
+                       COALESCE(pc.category, 'workers') as category
+                FROM employees e
+                LEFT JOIN position_categories pc ON e.pos = pc.pos
+                WHERE e.y = (SELECT MAX(y) FROM employees) AND e.name IS NOT NULL AND TRIM(e.name) != ''
+                ORDER BY e.rowid
+            """).fetchall()
+
         employees = []
         for idx, r in enumerate(emp_rows, start=1):
             raw_tab = str(r["tab_num"] or "").strip()
@@ -188,15 +213,34 @@ async def api_state(request: Request):
                 digits = "".join(ch for ch in raw_tab if ch.isdigit())
                 if digits:
                     num_part = int(digits)
-            anon_id = f"ID_{num_part:03d}"
+            anon_id = raw_tab if raw_tab else f"ID_{num_part:03d}"
             anon_short = f"Работник №{num_part}"
             anon_pos = f"Должность №{num_part}"
+
+            hire_iso = normalize_date_iso(r["hire_date"])
+            exc_iso = normalize_date_iso(r["exclude_date"])
+            is_exc = int(r["is_excluded"] or 0) == 1
+
+            # Сотрудник считается уволенным, если стоит флаг исключения или дата увольнения уже наступила
+            is_dismissed = is_exc or (bool(exc_iso) and exc_iso <= today)
+            
+            # Назначено увольнение в будущем (дата увольнения еще не наступила)
+            is_pending_dismissal = (not is_dismissed) and bool(exc_iso) and (exc_iso > today)
+            
+            # Прием на работу в будущем
+            is_future_hire = bool(hire_iso) and (hire_iso > today)
+
             employees.append({
                 "fio": anon_short,
                 "tab_num": anon_id,
                 "position": anon_pos,
                 "category": r["category"],
-                "row_order": r["row_order"]
+                "hire_date": hire_iso,
+                "exclude_date": exc_iso,
+                "is_dismissed": bool(is_dismissed),
+                "is_pending_dismissal": bool(is_pending_dismissal),
+                "is_future_hire": bool(is_future_hire),
+                "row_order": idx
             })
         
         # Загрузка записей об обучении
@@ -329,15 +373,35 @@ async def save_employee_order(request: Request, data: list[str]):
     if not tab_nums:
         return {"status": "ok"}
 
+    cur_year = dt.date.today().year
     try:
         with DB_LOCK, connect() as conn:
             cur = conn.cursor()
+            # Обновление таблицы порядка employee_row_order
             cur.execute("DELETE FROM employee_row_order")
             for idx, tab_num in enumerate(tab_nums):
                 cur.execute(
                     "INSERT INTO employee_row_order (tab_num, sort_order) VALUES (?, ?)",
                     (tab_num, idx)
                 )
+
+            # Синхронизация порядка с таблицей employees за текущий год (как в справочнике)
+            existing = cur.execute("SELECT * FROM employees WHERE y=?", (cur_year,)).fetchall()
+            if existing:
+                col_names = [d[0] for d in cur.description if d[0] != 'rowid']
+                by_tab = {str(r["tab_num"]).strip(): dict(r) for r in existing}
+                ordered_rows = []
+                for tab in tab_nums:
+                    if tab in by_tab:
+                        ordered_rows.append(by_tab.pop(tab))
+                # Добавляем оставшихся сотрудников (если кто-то был скрыт или не передан)
+                ordered_rows.extend(by_tab.values())
+
+                cur.execute("DELETE FROM employees WHERE y=?", (cur_year,))
+                placeholders = ",".join(["?"] * len(col_names))
+                insert_sql = f"INSERT INTO employees ({','.join(col_names)}) VALUES ({placeholders})"
+                cur.executemany(insert_sql, [[r[c] for c in col_names] for r in ordered_rows])
+
             conn.commit()
         return {"status": "ok"}
     except Exception as e:

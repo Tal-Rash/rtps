@@ -28,6 +28,10 @@
         </div>
         
         <div class="toolbar">
+          <label class="toggle-dismissed-label" id="toggleDismissedWrapper" title="Показать или скрыть уволенных сотрудников">
+            <input type="checkbox" id="chkShowDismissed" onchange="toggleDismissed(this.checked)">
+            <span id="toggleDismissedText">👥 Показывать уволенных</span>
+          </label>
           <button class="btn btn-outline" onclick="openSettingsModal()" id="btnSettings">⚙ Настройка колонок</button>
           <button id="saveBtn" class="btn btn-outline" style="display:none;" onclick="forceSave()">Сохранить</button>
           <button class="btn btn-outline" onclick="loadState()">🔄 Обновить</button>

@@ -8,12 +8,15 @@ let appState = {
 };
 
 let currentMode = "dates";
+let showDismissed = localStorage.getItem("edu_show_dismissed") === "true";
 let tempColumns = [];
 let tempCategories = {};
 let draggedRowTabNum = null;
 let resizeResetTimer = null;
 
 window.addEventListener("DOMContentLoaded", () => {
+  const chk = document.getElementById("chkShowDismissed");
+  if (chk) chk.checked = showDismissed;
   loadState();
   window.addEventListener("resize", () => {
     if (resizeResetTimer) clearTimeout(resizeResetTimer);
@@ -85,6 +88,37 @@ function setMode(mode) {
   renderMatrix();
 }
 
+/* Переключение отображения уволенных сотрудников */
+function toggleDismissed(checked) {
+  showDismissed = Boolean(checked);
+  localStorage.setItem("edu_show_dismissed", showDismissed ? "true" : "false");
+  renderMatrix();
+}
+
+/* Обновление надписи и счетчика уволенных на переключателе */
+function updateDismissedToggleLabel() {
+  const lbl = document.getElementById("toggleDismissedText");
+  const chk = document.getElementById("chkShowDismissed");
+  if (chk) chk.checked = showDismissed;
+  if (!lbl) return;
+  const dismissedCount = (appState.employees || []).filter(e => e.is_dismissed).length;
+  if (dismissedCount > 0) {
+    lbl.textContent = `👥 Показывать уволенных (${dismissedCount})`;
+  } else {
+    lbl.textContent = "👥 Показывать уволенных";
+  }
+}
+
+/* Преобразование даты YYYY-MM-DD в DD.MM.YYYY для отображения */
+function formatDateStrRu(str) {
+  if (!str) return "";
+  const parts = String(str).split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}.${parts[1]}.${parts[0]}`;
+  }
+  return str;
+}
+
 function parseDateStr(str) {
   if (!str) return null;
   const parts = str.split("-");
@@ -150,16 +184,47 @@ function renderMatrix() {
   hHTML += "</tr>";
   thead.innerHTML = hHTML;
 
+  updateDismissedToggleLabel();
+
   let bHTML = "";
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  appState.employees.forEach((emp, rIdx) => {
+  const visibleEmployees = (appState.employees || []).filter((emp) => {
+    if (emp.is_dismissed && !showDismissed) {
+      return false;
+    }
+    return true;
+  });
+
+  visibleEmployees.forEach((emp, rIdx) => {
+    const isDismissed = Boolean(emp.is_dismissed);
     const categoryClass = emp.category === "itr" ? "category-itr" : "category-workers";
+    const dismissedClass = isDismissed ? "row-dismissed" : "";
     const handleHtml = CAN_EDIT ? `<button type="button" class="row-handle" draggable="true" aria-label="Перетащить строку" data-tab="${escapeHtml(emp.tab_num)}">☰</button>` : "";
-    bHTML += `<tr class="edu-row ${categoryClass}" data-tab="${escapeHtml(emp.tab_num)}">
+
+    // Формирование бейджей статуса сотрудника (уволен / назначен прием / будущее увольнение)
+    let badgeHtml = "";
+    if (isDismissed) {
+      const dStr = emp.exclude_date ? formatDateStrRu(emp.exclude_date) : "";
+      const titleInfo = emp.hire_date 
+        ? `Принят: ${formatDateStrRu(emp.hire_date)} | Уволен: ${dStr || 'да'}` 
+        : `Сотрудник уволен${dStr ? ' ' + dStr : ''}`;
+      badgeHtml = `<span class="emp-badge badge-dismissed" title="${escapeHtml(titleInfo)}">Уволен${dStr ? ' ' + dStr : ''}</span>`;
+    } else if (emp.is_pending_dismissal) {
+      const dStr = emp.exclude_date ? formatDateStrRu(emp.exclude_date) : "";
+      badgeHtml = `<span class="emp-badge badge-pending-dismissal" title="Назначено увольнение">Увольнение ${dStr}</span>`;
+    } else if (emp.is_future_hire) {
+      const dStr = emp.hire_date ? formatDateStrRu(emp.hire_date) : "";
+      badgeHtml = `<span class="emp-badge badge-future-hire" title="Дата приема на работу">Прием ${dStr}</span>`;
+    } else if (emp.hire_date) {
+      const dStr = formatDateStrRu(emp.hire_date);
+      badgeHtml = `<span class="emp-badge badge-hired" title="Дата приема на работу">Принят ${dStr}</span>`;
+    }
+
+    bHTML += `<tr class="edu-row ${categoryClass} ${dismissedClass}" data-tab="${escapeHtml(emp.tab_num)}">
       <td class="col-drag">${handleHtml}</td>
-      <td class="col-fio">${escapeHtml(emp.fio)}</td>
+      <td class="col-fio"><span class="fio-text">${escapeHtml(emp.fio)}</span>${badgeHtml}</td>
       <td class="col-tab">${escapeHtml(emp.tab_num)}</td>
       <td class="col-pos">${escapeHtml(emp.position)}</td>`;
 
@@ -196,7 +261,7 @@ function renderMatrix() {
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
       const trainingClass = cIdx === 0 ? "col-training col-training-first" : "col-training";
       bHTML += `<td class="${cellClass} ${trainingClass}">
-        <div class="cell" ${contentEditable} data-row="${rIdx}" data-col="${cIdx}" data-original="${escapeHtml(cellText)}">${escapeHtml(cellText)}</div>
+        <div class="cell" ${contentEditable} data-tab="${escapeHtml(emp.tab_num)}" data-col="${cIdx}" data-original="${escapeHtml(cellText)}">${escapeHtml(cellText)}</div>
         ${autoText}
       </td>`;
     });
@@ -382,8 +447,8 @@ function onCellKeydown(e) {
   }
 }
 
-async function saveCellValue(rIdx, cIdx, rawText) {
-  const emp = appState.employees[rIdx];
+async function saveCellValue(tabNum, cIdx, rawText) {
+  const emp = (appState.employees || []).find((e) => e.tab_num === tabNum);
   const col = appState.columns[cIdx];
   if (!emp || !col) return;
 
@@ -436,7 +501,7 @@ async function onCellBlur(e) {
   }
 
   try {
-    await saveCellValue(Number(cell.dataset.row), Number(cell.dataset.col), newText);
+    await saveCellValue(cell.dataset.tab, Number(cell.dataset.col), newText);
     cell.dataset.original = newText;
     renderMatrix();
     resetSaveBtn("Сохранено!");
