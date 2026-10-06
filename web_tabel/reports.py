@@ -44,6 +44,149 @@ except (ImportError, ValueError):
     )
 
 
+# Клиентский скрипт автоматической расшифровки меток сотрудников (Работник №X -> реальное ФИО) из localStorage
+HTML_DEANONYMIZE_SCRIPT = """
+<script>
+(function() {
+  function getEmpReplacementPairs() {
+    const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
+    if (!raw) return [];
+    let map = null;
+    try { map = JSON.parse(raw); } catch (e) { return []; }
+    if (!map) return [];
+    const flatMap = {};
+    function extractNum(idStr) {
+      if (!idStr) return null;
+      const clean = String(idStr).replace(/ID_/g, '').replace(/Работник\\s*№?\\s*/g, '').replace(/СотрудникПолн\\s*№?\\s*/g, '').replace(/Сотрудник\\s*№?\\s*/g, '').replace(/Должность\\s*№?\\s*/g, '').trim();
+      const num = parseInt(clean, 10);
+      return isNaN(num) ? null : num;
+    }
+    function addFieldVariants(prefix, num, val) {
+      const sNum = String(num);
+      const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+      const valStr = String(val);
+      flatMap[prefix + " №" + num] = valStr;
+      flatMap[prefix + " №" + sNum] = valStr;
+      flatMap[prefix + " №" + pNum] = valStr;
+      flatMap[prefix + " № " + sNum] = valStr;
+      flatMap[prefix + " № " + pNum] = valStr;
+    }
+    function addIdVariants(num, val) {
+      const sNum = String(num);
+      const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+      const valStr = String(val);
+      flatMap["ID_" + pNum] = valStr;
+      flatMap["ID_" + sNum] = valStr;
+      flatMap["ID_" + num] = valStr;
+    }
+    if (Array.isArray(map)) {
+      for (let i = 0; i < map.length; i++) {
+        let rec = map[i];
+        if (!rec) continue;
+        let num = extractNum(rec.id || rec.tab || rec.tab_num);
+        if (num === null) num = i + 1;
+        let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
+        let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
+        let pos = rec.pos || rec.position || '';
+        let tab = rec.tab || rec.tab_num || rec.id || '';
+        if (shortF) addFieldVariants("Работник", num, shortF);
+        if (fullF) {
+          addFieldVariants("СотрудникПолн", num, fullF);
+          addFieldVariants("Сотрудник", num, fullF);
+        }
+        if (pos) addFieldVariants("Должность", num, pos);
+        if (tab) {
+          addIdVariants(num, tab);
+          if (rec.id) flatMap[String(rec.id)] = String(tab);
+        }
+      }
+    } else if (typeof map === 'object') {
+      for (let k in map) {
+        if (map.hasOwnProperty(k) && k && map[k]) {
+          const valStr = String(map[k]);
+          flatMap[k] = valStr;
+          let num = extractNum(k);
+          if (num !== null) {
+            if (k.startsWith("Работник")) addFieldVariants("Работник", num, valStr);
+            else if (k.startsWith("СотрудникПолн") || k.startsWith("Сотрудник")) {
+              addFieldVariants("СотрудникПолн", num, valStr);
+              addFieldVariants("Сотрудник", num, valStr);
+            } else if (k.startsWith("Должность")) addFieldVariants("Должность", num, valStr);
+            else if (k.startsWith("ID_") || /^\\d+$/.test(k)) addIdVariants(num, valStr);
+          }
+        }
+      }
+    }
+    const pairs = [];
+    for (let k in flatMap) {
+      if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
+        pairs.push({ from: k, to: String(flatMap[k]) });
+      }
+    }
+    pairs.sort((a, b) => b.from.length - a.from.length);
+    return pairs;
+  }
+
+  function deAnonymize() {
+    const pairs = getEmpReplacementPairs();
+    if (!pairs || !pairs.length) return;
+
+    // Замена текстовых узлов во всем документе
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while ((node = walker.nextNode())) {
+      let val = node.nodeValue;
+      if (!val || !val.trim()) continue;
+      let newVal = val;
+      for (let p = 0; p < pairs.length; p++) {
+        if (newVal.indexOf(pairs[p].from) !== -1) {
+          newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+        }
+      }
+      if (newVal !== val) node.nodeValue = newVal;
+    }
+
+    // Сортировка строк таблицы по реальному ФИО в алфавитном порядке
+    const table = document.querySelector('table');
+    if (table) {
+      const rows = Array.from(table.querySelectorAll('tr')).slice(1);
+      const totalRow = rows.length > 0 && rows[rows.length - 1].textContent.includes('Итого') ? rows.pop() : null;
+      if (rows.length > 0) {
+        // Определяем индекс колонки с ФИО (по умолчанию 1)
+        const headers = Array.from(table.querySelectorAll('th'));
+        let fioColIdx = 1;
+        headers.forEach((th, idx) => {
+          if (th.textContent.includes('ФИО') || th.textContent.includes('Сотрудник')) {
+            fioColIdx = idx;
+          }
+        });
+
+        rows.sort((a, b) => {
+          const nameA = a.children[fioColIdx] ? a.children[fioColIdx].textContent.trim() : '';
+          const nameB = b.children[fioColIdx] ? b.children[fioColIdx].textContent.trim() : '';
+          return nameA.localeCompare(nameB, 'ru');
+        });
+        rows.forEach((r, idx) => {
+          if (r.children[0] && (r.children[0].classList.contains('center') || r.children[0].classList.contains('num'))) {
+            r.children[0].textContent = idx + 1;
+          }
+          table.appendChild(r);
+        });
+        if (totalRow) table.appendChild(totalRow);
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', deAnonymize);
+  } else {
+    deAnonymize();
+  }
+})();
+</script>
+"""
+
+
 def build_summary_html(year: int, month: int, report_type: str) -> str:
     """Генерация сводного HTML-отчета по отпускам, больничным или работе в выходные дни."""
     if ":" in report_type:
@@ -212,7 +355,7 @@ def build_summary_html(year: int, month: int, report_type: str) -> str:
         html += f"<tr><td class='center'>{idx}</td><td>{emp}</td><td class='center'>{result[emp]}</td></tr>"
 
     html += f"<tr><td colspan='2' class='right'>Итого:</td><td class='center'><b>{total}</b></td></tr>"
-    html += "</table></body></html>"
+    html += f"</table>{HTML_DEANONYMIZE_SCRIPT}</body></html>"
     return html
 
 
@@ -665,7 +808,7 @@ def build_milk_details_html(year: int, month: int, report_type: str) -> str:
         html.append(
             f"<tr><td class='num'>{idx}</td><td class='num'>{row['tab']}</td><td>{row['fio']}</td><td>{row['pos']}</td><td class='num'>{row['shifts']}</td><td class='missed'>{missed}</td></tr>"
         )
-    html.append("</tbody></table></body></html>")
+    html.append(f"</tbody></table>{HTML_DEANONYMIZE_SCRIPT}</body></html>")
     return "".join(html)
 
 
