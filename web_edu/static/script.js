@@ -203,28 +203,28 @@ function renderMatrix() {
     const dismissedClass = isDismissed ? "row-dismissed" : "";
     const handleHtml = CAN_EDIT ? `<button type="button" class="row-handle" draggable="true" aria-label="Перетащить строку" data-tab="${escapeHtml(emp.tab_num)}">☰</button>` : "";
 
-    // Формирование бейджей статуса сотрудника (уволен / назначен прием / будущее увольнение)
-    let badgeHtml = "";
+    // Всплывающая подсказка при наведении (без визуальных бейджей)
+    let fioTitle = "";
     if (isDismissed) {
       const dStr = emp.exclude_date ? formatDateStrRu(emp.exclude_date) : "";
-      const titleInfo = emp.hire_date 
+      fioTitle = emp.hire_date 
         ? `Принят: ${formatDateStrRu(emp.hire_date)} | Уволен: ${dStr || 'да'}` 
-        : `Сотрудник уволен${dStr ? ' ' + dStr : ''}`;
-      badgeHtml = `<span class="emp-badge badge-dismissed" title="${escapeHtml(titleInfo)}">Уволен${dStr ? ' ' + dStr : ''}</span>`;
+        : `Уволен${dStr ? ' ' + dStr : ''}`;
     } else if (emp.is_pending_dismissal) {
       const dStr = emp.exclude_date ? formatDateStrRu(emp.exclude_date) : "";
-      badgeHtml = `<span class="emp-badge badge-pending-dismissal" title="Назначено увольнение">Увольнение ${dStr}</span>`;
+      fioTitle = `Назначено увольнение: ${dStr}`;
     } else if (emp.is_future_hire) {
       const dStr = emp.hire_date ? formatDateStrRu(emp.hire_date) : "";
-      badgeHtml = `<span class="emp-badge badge-future-hire" title="Дата приема на работу">Прием ${dStr}</span>`;
+      fioTitle = `Дата приема на работу: ${dStr}`;
     } else if (emp.hire_date) {
-      const dStr = formatDateStrRu(emp.hire_date);
-      badgeHtml = `<span class="emp-badge badge-hired" title="Дата приема на работу">Принят ${dStr}</span>`;
+      fioTitle = `Принят: ${formatDateStrRu(emp.hire_date)}`;
     }
+
+    const titleAttr = fioTitle ? ` title="${escapeHtml(fioTitle)}"` : "";
 
     bHTML += `<tr class="edu-row ${categoryClass} ${dismissedClass}" data-tab="${escapeHtml(emp.tab_num)}">
       <td class="col-drag">${handleHtml}</td>
-      <td class="col-fio"><span class="fio-text">${escapeHtml(emp.fio)}</span>${badgeHtml}</td>
+      <td class="col-fio"${titleAttr}><span class="fio-text">${escapeHtml(emp.fio)}</span></td>
       <td class="col-tab">${escapeHtml(emp.tab_num)}</td>
       <td class="col-pos">${escapeHtml(emp.position)}</td>`;
 
