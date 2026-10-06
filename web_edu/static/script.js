@@ -621,7 +621,6 @@ function forceSave() {
 }
 
 /* Автоматическая инициализация пользовательских меток таблиц для модуля Обучение */
-(function initTableCustomLabels() {
 function getEmpReplacementPairs() {
   const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
   if (!raw) return [];
