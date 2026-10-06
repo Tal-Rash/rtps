@@ -350,8 +350,12 @@ function vacEdited(tabNum, c, el) {
 async function saveState() {
   if (!CAN_EDIT) return;
   const btn = document.getElementById("saveBtn");
-  btn.disabled = true;
-  btn.textContent = "Сохранение...";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Сохранение...";
+  }
+
+  const t0 = performance.now();
   
   try {
     const objTimesheet = {};
@@ -369,7 +373,7 @@ async function saveState() {
     const arrNorms = [];
     for (let r=0; r<12; r++) { arrNorms[r] = (appState.ts_norms_data && appState.ts_norms_data[r]) || {}; }
 
-    // Clean empty employees from array end to avoid inflating DB
+    // Очистка пустых строк в конце массива сотрудников для предотвращения раздувания БД
     let cleanEmployees = [...appState.employees];
     while(cleanEmployees.length > 0) {
       let last = cleanEmployees[cleanEmployees.length - 1];
@@ -390,12 +394,32 @@ async function saveState() {
       month_hint: appState.month_hint || ""
     };
     
+    const jsonPayload = JSON.stringify(payload);
+    let bodyToSend = jsonPayload;
+    const headers = { "Content-Type": "application/json; charset=utf-8" };
+
+    // Сжатие gzip на клиенте (сжимает JSON в 15-25 раз и мгновенно обходит задержки сетевых экранов и антивирусов)
+    if (typeof CompressionStream !== 'undefined') {
+      try {
+        const stream = new Blob([jsonPayload]).stream().pipeThrough(new CompressionStream('gzip'));
+        bodyToSend = await new Response(stream).blob();
+        headers['Content-Encoding'] = 'gzip';
+      } catch (e) {
+        console.warn('Gzip fallback:', e);
+        bodyToSend = jsonPayload;
+      }
+    }
+
+    const tPayload = performance.now();
     const res = await fetch(`${APP_PREFIX}/api/state`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      headers,
+      body: bodyToSend
     });
     
+    const tFetch = performance.now();
+    const netElapsed = ((tFetch - tPayload) / 1000).toFixed(1);
+
     if (!res.ok) {
       let errMsg = `Save failed (HTTP ${res.status})`;
       try {
@@ -409,15 +433,39 @@ async function saveState() {
           errMsg = `HTTP ${res.status} HTML: ${text.substring(0, 100)}`;
         }
       } catch (e) {}
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `✗ Ошибка (${netElapsed}с)`;
+        setTimeout(() => {
+          if (btn) btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
+        }, 3000);
+      }
       throw new Error(errMsg);
     }
+
     markDirty(false);
+    const totalElapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    const sizeKb = bodyToSend.size ? (bodyToSend.size / 1024).toFixed(1) + ' КБ (gzip)' : (jsonPayload.length / 1024).toFixed(1) + ' КБ';
+    console.log(`[SAVE] Размер: ${sizeKb}, сеть: ${netElapsed}с, всего: ${totalElapsed}с`);
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `✓ Сохранено (${totalElapsed}с)`;
+      btn.classList.remove('dirty');
+      setTimeout(() => {
+        if (btn && !isDirty) {
+          btn.textContent = "Сохранить";
+        }
+      }, 2500);
+    }
   } catch (err) {
     console.error(err);
     alert("Ошибка сохранения: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
+    }
   }
 }
 

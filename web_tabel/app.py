@@ -1,11 +1,13 @@
-from __future__ import annotations
-
+import asyncio
 import datetime as dt
+import gzip
 import hashlib
 import hmac
 import io
+import json
 import os
 import sys
+import time
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -222,7 +224,8 @@ async def api_get_state(request: Request, year: int, month: int):
 
 @app.post("/api/state")
 async def api_save_state(request: Request):
-    """Сохранение состояния табеля, сотрудников, отпусков и норм."""
+    """Сохранение состояния табеля, сотрудников, отпусков и норм с поддержкой gzip-сжатия."""
+    t0 = time.perf_counter()
     try:
         session = get_current_session_fastapi(request)
         role = get_mod_role_fastapi(session, "tabel")
@@ -230,11 +233,20 @@ async def api_save_state(request: Request):
             return json_response({"error": "Forbidden"}, 403)
 
         try:
-            payload = await request.json()
-        except Exception:
-            return json_response({"error": "Некорректный JSON в теле запроса"}, 400)
+            # Поддержка сжатия gzip для моментальной передачи через защитник Windows и сетевые фильтры
+            if request.headers.get("content-encoding") == "gzip":
+                raw_body = await request.body()
+                decompressed = gzip.decompress(raw_body)
+                payload = json.loads(decompressed.decode("utf-8"))
+            else:
+                payload = await request.json()
+        except Exception as exc:
+            return json_response({"error": f"Некорректный JSON в теле запроса: {exc}"}, 400)
 
-        result = save_state(payload)
+        # Выполняем сохранение в SQLite в пуле потоков для максимальной отзывчивости
+        result = await asyncio.to_thread(save_state, payload)
+        elapsed = time.perf_counter() - t0
+        print(f"[SAVE_TABEL] Успешно сохранено за {elapsed:.3f}с")
         return json_response(result)
     except Exception as e:
         import traceback
