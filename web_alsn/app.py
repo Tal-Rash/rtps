@@ -1,6 +1,6 @@
-from __future__ import annotations
-
+import asyncio
 import datetime as dt
+import gzip
 import hashlib
 import hmac
 import json
@@ -25,12 +25,11 @@ DATA_DIR = ROOT / "data"
 DB_FILE = DATA_DIR / "alsn.db"
 WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 WEB_SECRET_FILE = ROOT.parent / "data" / "web_secret.txt"
-LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/alsn"
-APP_VERSION = "web-alsn-1.1"
+APP_VERSION = "web-alsn-1.2"
 DB_LOCK = Lock()
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
+MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "/login")
 
 
 def load_web_secret() -> str:
@@ -97,6 +96,8 @@ def get_session(request: Request):
 def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with connect_sqlite(DB_FILE) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS locomotives (
@@ -126,24 +127,6 @@ def init_db() -> None:
         )
 
         cur = conn.cursor()
-        cur.execute("PRAGMA table_info(locomotives)")
-        columns = {str(row[1]) for row in cur.fetchall()}
-        if "devices_json" not in columns:
-            conn.execute("ALTER TABLE locomotives ADD COLUMN devices_json TEXT NOT NULL DEFAULT '[]'")
-
-        cur.execute("PRAGMA table_info(warehouse)")
-        warehouse_columns = {str(row[1]) for row in cur.fetchall()}
-        for column in [
-            "type",
-            "number",
-            "verification_date",
-            "periodicity",
-            "next_verification_date",
-            "location",
-        ]:
-            if column not in warehouse_columns:
-                conn.execute(f"ALTER TABLE warehouse ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
-
         cur.execute("SELECT COUNT(*) FROM locomotives")
         if int(cur.fetchone()[0] or 0) == 0:
             conn.execute(
@@ -157,17 +140,7 @@ def init_db() -> None:
                 "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
                 (1, "", "", "", "", "", ""),
             )
-        elif {"item", "unit", "quantity", "note"} & warehouse_columns:
-            conn.execute(
-                """
-                UPDATE warehouse
-                SET
-                    type = CASE WHEN type = '' AND item <> '' THEN item ELSE type END,
-                    number = CASE WHEN number = '' AND unit <> '' THEN unit ELSE number END,
-                    verification_date = CASE WHEN verification_date = '' AND quantity <> '' THEN quantity ELSE verification_date END,
-                    location = CASE WHEN location = '' AND note <> '' THEN note ELSE location END
-                """
-            )
+        conn.commit()
 
 
 init_db()
@@ -194,6 +167,92 @@ async def index(request: Request):
         "USER_NAME": session["full_name"],
     }
     return templates.TemplateResponse(request=request, name="index.html", context=context)
+
+
+def _blank_device_rows(count: int = 5) -> list[dict[str, str]]:
+    """Создание пустых строк для приборов локомотива."""
+    return [{"type": "", "number": ""} for _ in range(max(1, count))]
+
+
+def _parse_devices_json(value) -> list[dict[str, str]]:
+    """Разбор JSON со списком приборов локомотива."""
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except Exception:
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+    normalized = []
+    for row in parsed:
+        if not isinstance(row, dict):
+            continue
+        normalized.append({
+            "type": str(row.get("type", "") or "").strip(),
+            "number": str(row.get("number", "") or "").strip(),
+        })
+    return normalized or _blank_device_rows()
+
+
+def _normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
+    """Нормализация строк склада приборов."""
+    normalized = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            normalized.append({
+                "type": str(row.get("type", "") or "").strip(),
+                "number": str(row.get("number", "") or "").strip(),
+                "verification_date": str(row.get("verification_date", "") or "").strip(),
+                "periodicity": str(row.get("periodicity", "") or "").strip(),
+                "next_verification_date": str(row.get("next_verification_date", "") or "").strip(),
+                "location": str(row.get("location", "") or "").strip(),
+            })
+    if not normalized:
+        normalized.append({
+            "type": "",
+            "number": "",
+            "verification_date": "",
+            "periodicity": "",
+            "next_verification_date": "",
+            "location": "",
+        })
+    return normalized
+
+
+def _normalize_locomotives(rows: list | None) -> list[dict]:
+    """Нормализация строк локомотивов и их приборов."""
+    normalized = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            devices = row.get("devices")
+            if not isinstance(devices, list):
+                devices = []
+            normalized.append({
+                "series": str(row.get("series", "") or "").strip(),
+                "number": str(row.get("number", "") or "").strip(),
+                "inventory_num": str(row.get("inventory_num", "") or "").strip(),
+                "note": str(row.get("note", "") or "").strip(),
+                "devices": [
+                    {
+                        "type": str(d.get("type", "") or "").strip(),
+                        "number": str(d.get("number", "") or "").strip(),
+                    }
+                    for d in devices
+                    if isinstance(d, dict)
+                ] or _blank_device_rows(),
+            })
+    if not normalized:
+        normalized.append({
+            "series": "",
+            "number": "",
+            "inventory_num": "",
+            "note": "",
+            "devices": _blank_device_rows(),
+        })
+    return normalized
 
 
 @app.get("/api/state")
@@ -232,115 +291,11 @@ async def api_state(request: Request):
     return {"locomotives": locomotives, "warehouse": warehouse}
 
 
-def _normalize_rows(rows, fields):
-    normalized = []
-    if not isinstance(rows, list):
-        return normalized
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        normalized.append({field: str(row.get(field, "") or "") for field in fields})
-    if not normalized:
-        normalized.append({field: "" for field in fields})
-    return normalized
-
-
-def _normalize_warehouse_rows(rows):
-    normalized = []
-    if not isinstance(rows, list):
-        rows = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        normalized.append({
-            "type": str(row.get("type", "") or ""),
-            "number": str(row.get("number", "") or ""),
-            "verification_date": str(row.get("verification_date", "") or ""),
-            "periodicity": str(row.get("periodicity", "") or ""),
-            "next_verification_date": str(row.get("next_verification_date", "") or ""),
-            "location": str(row.get("location", "") or ""),
-        })
-    if not normalized:
-        normalized.append({
-            "type": "",
-            "number": "",
-            "verification_date": "",
-            "periodicity": "",
-            "next_verification_date": "",
-            "location": "",
-        })
-    return normalized
-
-
-def _blank_device_rows(count: int = 5) -> list[dict[str, str]]:
-    return [{"type": "", "number": ""} for _ in range(max(1, count))]
-
-
-def _parse_devices_json(value) -> list[dict[str, str]]:
-    try:
-        parsed = json.loads(str(value or "[]"))
-    except Exception:
-        parsed = []
-    if not isinstance(parsed, list):
-        parsed = []
-    normalized = []
-    for row in parsed:
-        if not isinstance(row, dict):
-            continue
-        normalized.append({
-            "type": str(row.get("type", "") or ""),
-            "number": str(row.get("number", "") or ""),
-        })
-    return normalized or _blank_device_rows()
-
-
-def _normalize_locomotives(rows):
-    normalized = []
-    if not isinstance(rows, list):
-        rows = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        devices = row.get("devices")
-        if not isinstance(devices, list):
-            devices = []
-        normalized.append({
-            "series": str(row.get("series", "") or ""),
-            "number": str(row.get("number", "") or ""),
-            "inventory_num": str(row.get("inventory_num", "") or ""),
-            "note": str(row.get("note", "") or ""),
-            "devices": [
-                {
-                    "type": str(device.get("type", "") or ""),
-                    "number": str(device.get("number", "") or ""),
-                }
-                for device in devices
-                if isinstance(device, dict)
-            ] or _blank_device_rows(),
-        })
-    if not normalized:
-        normalized.append({
-            "series": "",
-            "number": "",
-            "inventory_num": "",
-            "note": "",
-            "devices": _blank_device_rows(),
-        })
-    return normalized
-
-
-@app.post("/api/state")
-@app.post(f"{APP_PREFIX}/api/state", include_in_schema=False)
-async def api_save_state(request: Request):
-    session = get_session(request)
-    if not session or not session["can_edit"]:
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
-
-    payload = await request.json()
-    locomotives = _normalize_locomotives(payload.get("locomotives"))
-    warehouse = _normalize_warehouse_rows(payload.get("warehouse"))
-
+def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
+    """Атомарное сохранение локомотивов и склада в БД с WAL-режимом."""
     with DB_LOCK, connect_sqlite(DB_FILE) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         cur = conn.cursor()
         cur.execute("DELETE FROM locomotives")
         cur.execute("DELETE FROM warehouse")
@@ -375,6 +330,30 @@ async def api_save_state(request: Request):
         )
         conn.commit()
 
+
+@app.post("/api/state")
+@app.post(f"{APP_PREFIX}/api/state", include_in_schema=False)
+async def api_save_state(request: Request):
+    """Сохранение состояния АЛСН с поддержкой gzip-сжатия и асинхронного выполнения."""
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        # Поддержка gzip для моментальной передачи через защитник Windows и сетевые фильтры
+        if request.headers.get("content-encoding") == "gzip":
+            raw_body = await request.body()
+            payload = json.loads(gzip.decompress(raw_body).decode("utf-8"))
+        else:
+            payload = await request.json()
+    except Exception as exc:
+        return JSONResponse({"error": f"Некорректный JSON в теле запроса: {exc}"}, status_code=400)
+
+    locomotives = _normalize_locomotives(payload.get("locomotives"))
+    warehouse = _normalize_warehouse_rows(payload.get("warehouse"))
+
+    # Выполняем сохранение в SQLite в пуле потоков, чтобы не блокировать event loop
+    await asyncio.to_thread(save_state_to_db, locomotives, warehouse)
     return {"ok": True}
 
 

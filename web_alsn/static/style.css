@@ -371,3 +371,24 @@ button:hover:not(:disabled),
   .controls { justify-content: flex-start; }
   .topbar { align-items: stretch; }
 }
+
+/* Кнопка сохранения с индикацией несохраненных изменений */
+button.dirty,
+#saveBtn.dirty {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+button.dirty:hover,
+#saveBtn.dirty:hover {
+  background: #1f63df;
+  border-color: #1f63df;
+}
+
+#saveBtn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
