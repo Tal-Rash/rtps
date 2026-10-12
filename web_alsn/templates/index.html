@@ -10,7 +10,8 @@
     var _canEdit = "{{CAN_EDIT}}";
     window.APP_CONFIG = {
       APP_PREFIX: _prefix,
-      CAN_EDIT: _canEdit === "true"
+      CAN_EDIT: _canEdit === "true",
+      MAIN_SITE_URL: "{{MAIN_SITE_URL}}" || "http://yrtps.ru"
     };
   </script>
 </head>
@@ -21,7 +22,7 @@
         <h1>АЛСН</h1>
       </div>
       <div class="controls">
-        <a class="home-link" href="/">На главную</a>
+        <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
         <div class="toolbar">
           <button onclick="addRow()">+ строку</button>
           <button onclick="removeRow()">- строку</button>

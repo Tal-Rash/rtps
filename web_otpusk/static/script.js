@@ -70,22 +70,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Применение фильтрации и исключения увольняемых сотрудников
     function applyQuittingFilter() {
-        const hideQuitting = toggleQuitting && toggleQuitting.checked;
+        const hideQuitting = Boolean(toggleQuitting && toggleQuitting.checked);
         const rows = tableBody ? tableBody.querySelectorAll('tr[data-emp-id]') : [];
         rows.forEach(tr => {
             const isQuitting = tr.dataset.isQuitting === "true";
             const rowChk = tr.querySelector('.exclude-row-checkbox');
-            const rowExcluded = rowChk && rowChk.checked;
+            const rowExcluded = Boolean(rowChk && rowChk.checked);
 
-            if ((isQuitting && hideQuitting) || rowExcluded) {
+            // Если сотрудник исключен индивидуально, визуально приглушаем строку (не скрывая её намертво)
+            if (rowExcluded) {
                 tr.classList.add('row-excluded');
-                tr.style.display = 'none';
             } else {
                 tr.classList.remove('row-excluded');
+            }
+
+            // Полное скрытие применяется только когда включен верхний тумблер скрытия увольняемых
+            if (isQuitting && hideQuitting) {
+                tr.style.display = 'none';
+            } else {
                 tr.style.display = '';
             }
         });
-        updateTotals();
+        if (typeof updateTotals === 'function') {
+            updateTotals();
+        }
     }
 
     let allData = [];
@@ -1024,7 +1032,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tr.dataset.excludeDate = employee.exclude_date || "";
             const excFormatted = employee.exclude_date ? formatDateRu(employee.exclude_date) : '';
 
-            // Информация о сотруднике и бейдж увольнения с возможностью исключения
+            // Информация о сотруднике с возможностью исключения увольняемого
             const tdInfo = document.createElement('td');
             tdInfo.className = 'col-sticky-1';
             tdInfo.style.width = '250px';
@@ -1033,12 +1041,11 @@ document.addEventListener('DOMContentLoaded', () => {
             tdInfo.innerHTML = `
                 <div class="employee-name" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                     <span>${empName}</span>
-                    ${isQuitting ? `<span class="badge-quitting" title="Дата увольнения: ${excFormatted}" style="font-size: 0.72rem; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 1px 6px; border-radius: 4px; font-weight: 600; white-space: nowrap;">🚪 Увольнение: ${excFormatted}</span>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 2px;">
                     <div class="employee-pos">${empPos}</div>
                     ${isQuitting ? `
-                        <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; color: #64748b; cursor: pointer; user-select: none; white-space: nowrap;" title="Исключить увольняемого сотрудника из расчета графика">
+                        <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; color: #64748b; cursor: pointer; user-select: none; white-space: nowrap;" title="Исключить сотрудника из расчета графика (приглушить строку)">
                             <input type="checkbox" class="exclude-row-checkbox" style="width: 13px; height: 13px; cursor: pointer;">
                             <span>исключить</span>
                         </label>
@@ -1049,7 +1056,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const rowChk = tdInfo.querySelector('.exclude-row-checkbox');
             if (rowChk) {
+                const storageKey = `rtps_excluded_emp_${employee.id}_${currentYear}`;
+                rowChk.checked = (localStorage.getItem(storageKey) === '1');
                 rowChk.addEventListener('change', () => {
+                    localStorage.setItem(storageKey, rowChk.checked ? '1' : '0');
                     applyQuittingFilter();
                 });
             }

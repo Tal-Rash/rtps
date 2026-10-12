@@ -147,12 +147,13 @@ def extract_year_from_date(date_str: str) -> int | None:
     return None
 
 def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
-    """Проверяет, был ли сотрудник уволен ДО целевого года"""
+    """Проверяет, был ли сотрудник уволен более года назад относительно целевого года (показываем в год увольнения и на следующий год)"""
     exc_date_str = str(emp.get("exclude_date") or "").strip()
     exc_year = extract_year_from_date(exc_date_str)
 
     if exc_year is not None:
-        if exc_year < target_year:
+        # Показываем в год увольнения и на следующий год (исключаем только если прошло 2 года и более)
+        if exc_year < target_year - 1:
             return True
     else:
         is_exc = int(emp.get("is_excluded") or 0)
@@ -498,7 +499,7 @@ async def get_vacations(year: int = 2026):
             "carried_over_vacations": carried_over,
             "exclude_date": exc_date_str,
             "is_excluded": int(emp.get("is_excluded") or 0) == 1,
-            "is_quitting_this_year": bool(exc_year is not None and exc_year == year),
+            "is_quitting_this_year": bool(exc_year is not None and exc_year in (year, year - 1)),
         })
 
     # Only add archive entries for year if they belong to a completely NEW person not matched above
@@ -733,7 +734,7 @@ async def get_history_matrix(year: int = 2026):
 
         # Проверяем статус увольнения/исключения сотрудника
         is_exc = False
-        is_quitting = bool(exc_year is not None and exc_year == year)
+        is_quitting = bool(exc_year is not None and exc_year in (year, year - 1))
         if emp.get("from_archive"):
             is_exc = True
         elif is_employee_excluded_for_year(emp, year):

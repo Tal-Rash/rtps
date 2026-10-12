@@ -8,6 +8,7 @@ import os
 import secrets
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from threading import Lock
 from urllib.parse import unquote
@@ -30,6 +31,7 @@ APP_PREFIX = "/alsn"
 APP_VERSION = "web-alsn-1.2"
 DB_LOCK = Lock()
 MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "/login")
+MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
 
 
 def load_web_secret() -> str:
@@ -152,9 +154,14 @@ app.mount(f"{APP_PREFIX}/static", StaticFiles(directory=str(ROOT / "static")), n
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", include_in_schema=False)
+async def root_redirect(request: Request):
+    """При переходе на корень перенаправляем на главную страницу портала."""
+    return RedirectResponse(f"{MAIN_SITE_URL}/", status_code=303)
+
+
 @app.get(f"{APP_PREFIX}", include_in_schema=False)
-@app.get(f"{APP_PREFIX}/", response_class=HTMLResponse, include_in_schema=False)
+@app.get(f"{APP_PREFIX}/", response_class=HTMLResponse)
 async def index(request: Request):
     session = get_session(request)
     if not session:
@@ -163,6 +170,7 @@ async def index(request: Request):
         "request": request,
         "APP_PREFIX": APP_PREFIX,
         "APP_VERSION": APP_VERSION,
+        "MAIN_SITE_URL": MAIN_SITE_URL,
         "CAN_EDIT": "true" if session["can_edit"] else "false",
         "USER_NAME": session["full_name"],
     }
@@ -335,6 +343,7 @@ def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
 @app.post(f"{APP_PREFIX}/api/state", include_in_schema=False)
 async def api_save_state(request: Request):
     """Сохранение состояния АЛСН с поддержкой gzip-сжатия и асинхронного выполнения."""
+    t0 = time.perf_counter()
     session = get_session(request)
     if not session or not session["can_edit"]:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
@@ -354,6 +363,8 @@ async def api_save_state(request: Request):
 
     # Выполняем сохранение в SQLite в пуле потоков, чтобы не блокировать event loop
     await asyncio.to_thread(save_state_to_db, locomotives, warehouse)
+    elapsed = time.perf_counter() - t0
+    print(f"[SAVE_ALSN] Успешно сохранено за {elapsed:.3f}с")
     return {"ok": True}
 
 

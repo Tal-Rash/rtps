@@ -762,3 +762,16 @@ async function saveState() {
     if (btn) btn.disabled = false;
   }
 }
+
+/* Переход на главную страницу портала с проверкой несохраненных изменений */
+function requestHomeClick(event) {
+  if (isDirty) {
+    if (!confirm("Есть несохранённые изменения. Вы уверены, что хотите перейти на главную страницу без сохранения?")) {
+      if (event) event.preventDefault();
+      return false;
+    }
+  }
+  const mainUrl = (window.APP_CONFIG && window.APP_CONFIG.MAIN_SITE_URL) ? window.APP_CONFIG.MAIN_SITE_URL : "http://yrtps.ru";
+  window.location.href = mainUrl + "/";
+  return true;
+}

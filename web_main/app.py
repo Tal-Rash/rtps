@@ -31,7 +31,8 @@ LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
-ALSN_SITE_URL = os.environ.get("ALSN_SITE_URL", "http://yrtps.ru:8008")
+# Адрес АЛСН теперь унифицирован с общим порталом через обратный прокси Nginx
+ALSN_SITE_URL = os.environ.get("ALSN_SITE_URL", MAIN_SITE_URL)
 OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru/otpusk")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
@@ -254,8 +255,8 @@ async def home_page(request: Request):
 
     def link_for(mod_name, url):
         if has_access_to(mod_name):
-            target_base = ALSN_SITE_URL if mod_name == "alsn" else MAIN_SITE_URL
-            return f'<a href="{target_base}{url}">Открыть модуль</a>'
+            # Все модули открываются через единый Nginx прокси на главном домене портала
+            return f'<a href="{MAIN_SITE_URL}{url}">Открыть модуль</a>'
         return '<a class="disabled" href="#">Нет доступа</a>'
         
     context = {
@@ -579,7 +580,7 @@ async def redir_zamer():
 @app.get("/alsn")
 @app.get("/alsn/")
 async def redir_alsn():
-    return RedirectResponse(f"{ALSN_SITE_URL}/alsn", status_code=303)
+    return RedirectResponse(f"{MAIN_SITE_URL}/alsn", status_code=303)
 
 import urllib.request
 import urllib.error

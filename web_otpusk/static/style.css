@@ -925,3 +925,18 @@ body.hide-badges .overflow-tag {
     margin-left: 8px;
     vertical-align: middle;
 }
+
+/* Стили для визуального приглушения исключенного сотрудника без скрытия строки */
+tr.row-excluded {
+    opacity: 0.55;
+    background-color: rgba(241, 245, 249, 0.6) !important;
+}
+
+tr.row-excluded .employee-name span {
+    text-decoration: line-through;
+    color: #94a3b8;
+}
+
+tr.row-excluded .employee-pos {
+    color: #cbd5e1;
+}
