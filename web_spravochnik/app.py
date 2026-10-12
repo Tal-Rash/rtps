@@ -947,7 +947,7 @@ function renderTable(name, rows, editableRows){
       } else if (name === 'employees' && (c === 6 || c === 7)) {
         html += `<td><input type="date" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.value)"` : 'disabled'}></td>`;
       } else if (name === 'employees' && c === 8) {
-        html += `<td><input class="num" type="number" min="0" max="100" value="${escapeHtml(val || 28)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},parseInt(this.value)||28)"` : 'readonly'}></td>`;
+        html += `<td><input class="num" type="number" min="0" max="100" value="${escapeHtml(val !== '' && val !== null && val !== undefined ? val : 28)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value===''?28:(parseInt(this.value)||0))"` : 'readonly'}></td>`;
       } else if (name === 'employees') {
         const cls = c < 3 ? 'left' : '';
         html += `<td><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autoResizeTextarea(this);" oninput="setCell('${name}',${r},${c},this.value); autoResizeTextarea(this);" onmousedown="event.stopPropagation()"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
@@ -1065,7 +1065,9 @@ function addRow(name){
     return;
   }
   const cols = headers[name].length;
-  state[name].push(Array(cols).fill(''));
+  const newRow = Array(cols).fill('');
+  if (name === 'employees' && cols > 8) newRow[8] = 28;
+  state[name].push(newRow);
   renderTable(name, state[name], true);
   updateSaveButton();
 }

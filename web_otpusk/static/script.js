@@ -57,6 +57,37 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const toggleQuitting = document.getElementById('toggleQuitting');
+    if (toggleQuitting) {
+        const savedHideQuitting = localStorage.getItem('rtps_hide_quitting');
+        toggleQuitting.checked = (savedHideQuitting === '1');
+
+        toggleQuitting.addEventListener('change', (e) => {
+            localStorage.setItem('rtps_hide_quitting', e.target.checked ? '1' : '0');
+            applyQuittingFilter();
+        });
+    }
+
+    // Применение фильтрации и исключения увольняемых сотрудников
+    function applyQuittingFilter() {
+        const hideQuitting = toggleQuitting && toggleQuitting.checked;
+        const rows = tableBody ? tableBody.querySelectorAll('tr[data-emp-id]') : [];
+        rows.forEach(tr => {
+            const isQuitting = tr.dataset.isQuitting === "true";
+            const rowChk = tr.querySelector('.exclude-row-checkbox');
+            const rowExcluded = rowChk && rowChk.checked;
+
+            if ((isQuitting && hideQuitting) || rowExcluded) {
+                tr.classList.add('row-excluded');
+                tr.style.display = 'none';
+            } else {
+                tr.classList.remove('row-excluded');
+                tr.style.display = '';
+            }
+        });
+        updateTotals();
+    }
+
     let allData = [];
 
     function escapeHtml(val) {
@@ -988,17 +1019,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const empPos = escapeHtml(employee.position || '');
             const allowedVal = employee.vacation_days ?? employee.allowedDays ?? 28;
 
-            // Employee info
+            const isQuitting = Boolean(employee.is_quitting_this_year || (employee.exclude_date && String(employee.exclude_date).startsWith(String(currentYear))));
+            tr.dataset.isQuitting = isQuitting ? "true" : "false";
+            tr.dataset.excludeDate = employee.exclude_date || "";
+            const excFormatted = employee.exclude_date ? formatDateRu(employee.exclude_date) : '';
+
+            // Информация о сотруднике и бейдж увольнения с возможностью исключения
             const tdInfo = document.createElement('td');
             tdInfo.className = 'col-sticky-1';
             tdInfo.style.width = '250px';
             tdInfo.style.minWidth = '250px';
             tdInfo.style.maxWidth = '250px';
             tdInfo.innerHTML = `
-                <div class="employee-name">${empName}</div>
-                <div class="employee-pos">${empPos}</div>
+                <div class="employee-name" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <span>${empName}</span>
+                    ${isQuitting ? `<span class="badge-quitting" title="Дата увольнения: ${excFormatted}" style="font-size: 0.72rem; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 1px 6px; border-radius: 4px; font-weight: 600; white-space: nowrap;">🚪 Увольнение: ${excFormatted}</span>` : ''}
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 2px;">
+                    <div class="employee-pos">${empPos}</div>
+                    ${isQuitting ? `
+                        <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; color: #64748b; cursor: pointer; user-select: none; white-space: nowrap;" title="Исключить увольняемого сотрудника из расчета графика">
+                            <input type="checkbox" class="exclude-row-checkbox" style="width: 13px; height: 13px; cursor: pointer;">
+                            <span>исключить</span>
+                        </label>
+                    ` : ''}
+                </div>
             `;
             tr.appendChild(tdInfo);
+
+            const rowChk = tdInfo.querySelector('.exclude-row-checkbox');
+            if (rowChk) {
+                rowChk.addEventListener('change', () => {
+                    applyQuittingFilter();
+                });
+            }
 
             const tdAllowed = document.createElement('td');
             tdAllowed.className = 'col-sticky-2';
@@ -1193,6 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tableBody.appendChild(trSumDiff);
 
         updateTotals();
+        applyQuittingFilter();
     }
 
     // Расчет даты окончания отпуска с учетом нерабочих праздничных дней (ст. 120 ТК РФ)
@@ -1495,6 +1550,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const empRows = tableBody.querySelectorAll('tr[data-emp-id]');
         empRows.forEach(tr => {
+            if (tr.classList.contains('row-excluded') || tr.style.display === 'none') {
+                return;
+            }
             const allowedInp = tr.querySelector('.allowed-days-input');
             if (allowedInp) {
                 allowedSum += (parseInt(allowedInp.value) || 0);

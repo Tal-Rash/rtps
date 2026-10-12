@@ -495,7 +495,10 @@ async def get_vacations(year: int = 2026):
             "position": disp_pos,
             "vacation_days": v_days,
             "vacations": vacations,
-            "carried_over_vacations": carried_over
+            "carried_over_vacations": carried_over,
+            "exclude_date": exc_date_str,
+            "is_excluded": int(emp.get("is_excluded") or 0) == 1,
+            "is_quitting_this_year": bool(exc_year is not None and exc_year == year),
         })
 
     # Only add archive entries for year if they belong to a completely NEW person not matched above
@@ -613,9 +616,14 @@ MONTH_NAMES_RU = {
     7: "июль", 8: "авг", 9: "сент", 10: "окт", 11: "нояб", 12: "дек"
 }
 
-def get_season(month: int) -> str:
-    """Определяет сезон месяца: лето (Май, Июнь, Июль, Август), зима (Ноябрь, Декабрь, Январь, Февраль) или демисезон"""
-    if month in (5, 6, 7, 8):
+def get_season(month: int, start_day: int = 1) -> str:
+    """Определяет сезон месяца: лето (Май, Июнь, Июль, Август до 15 числа), зима (Ноябрь, Декабрь, Январь, Февраль) или демисезон"""
+    if month in (5, 6, 7):
+        return "summer"
+    elif month == 8:
+        # Если отпуск начинается с середины августа (с 15-го числа и позже), не считать его летним
+        if start_day >= 15:
+            return "other"
         return "summer"
     elif month in (11, 12, 1, 2):
         return "winter"
@@ -714,19 +722,7 @@ async def get_history_matrix(year: int = 2026):
 
     sorted_years = sorted(list(years_set))
     result_emp_list = []
-
     for emp in employees:
-        # Проверяем статус увольнения/исключения сотрудника
-        is_exc = False
-        if emp.get("from_archive"):
-            is_exc = True
-        elif int(emp.get("is_excluded") or 0) == 1:
-            is_exc = True
-        elif is_employee_excluded_for_year(emp, year):
-            is_exc = True
-        elif emp.get("exclude_date"):
-            is_exc = True
-
         hire_date_str = str(emp.get("hire_date") or "").strip()
         hire_year = extract_year_from_date(hire_date_str)
         hire_iso = format_date_to_iso(hire_date_str)
@@ -734,6 +730,16 @@ async def get_history_matrix(year: int = 2026):
         exc_date_str = str(emp.get("exclude_date") or "").strip()
         exc_year = extract_year_from_date(exc_date_str)
         exc_iso = format_date_to_iso(exc_date_str)
+
+        # Проверяем статус увольнения/исключения сотрудника
+        is_exc = False
+        is_quitting = bool(exc_year is not None and exc_year == year)
+        if emp.get("from_archive"):
+            is_exc = True
+        elif is_employee_excluded_for_year(emp, year):
+            is_exc = True
+        elif int(emp.get("is_excluded") or 0) == 1 and not is_quitting:
+            is_exc = True
 
         # Если сотрудник ещё не был принят на работу к целевому году, пропускаем
         if not is_exc and hire_year is not None and hire_year > year:
@@ -784,13 +790,26 @@ async def get_history_matrix(year: int = 2026):
                 seen_keys.add(key)
 
                 month_num = 0
-                if s_iso and "-" in s_iso:
-                    try:
-                        month_num = int(s_iso.split("-")[1])
-                    except Exception:
-                        pass
+                start_day = 1
+                if s_iso:
+                    if "-" in s_iso:
+                        parts = s_iso.split("-")
+                        try:
+                            month_num = int(parts[1])
+                            if len(parts) >= 3:
+                                start_day = int(parts[2])
+                        except Exception:
+                            pass
+                    elif "." in s_iso:
+                        parts = s_iso.split(".")
+                        try:
+                            if len(parts) >= 2:
+                                start_day = int(parts[0])
+                                month_num = int(parts[1])
+                        except Exception:
+                            pass
 
-                season = get_season(month_num) if month_num else "other"
+                season = get_season(month_num, start_day) if month_num else "other"
                 m_name = MONTH_NAMES_RU.get(month_num, "")
 
                 emp_history[ay].append({
@@ -873,6 +892,7 @@ async def get_history_matrix(year: int = 2026):
             "position": disp_pos,
             "vacation_days": v_days,
             "is_excluded": is_exc,
+            "is_quitting_this_year": is_quitting,
             "exclude_date": exc_date_str,
             "stats": {
                 "summer_count": summer_count,

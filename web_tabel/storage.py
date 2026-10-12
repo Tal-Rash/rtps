@@ -193,11 +193,19 @@ def load_state(year: int, month: int) -> dict:
                 connection.commit()
             except Exception:
                 pass
+        try:
+            cur.execute("SELECT vacation_days FROM employees LIMIT 1")
+        except sqlite3.OperationalError:
+            try:
+                cur.execute("ALTER TABLE employees ADD COLUMN vacation_days INT DEFAULT 28")
+                connection.commit()
+            except Exception:
+                pass
 
         employees = []
         try:
             emp_rows = cur.execute(
-                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded, hire_date, exclude_date FROM employees WHERE y=? ORDER BY rowid",
+                "SELECT pos, name, tab_num, milk, milk_issue, full_name, milk_note, is_excluded, hire_date, exclude_date, vacation_days FROM employees WHERE y=? ORDER BY rowid",
                 (year,),
             ).fetchall()
             for idx, r in enumerate(emp_rows, start=1):
@@ -213,6 +221,9 @@ def load_state(year: int, month: int) -> dict:
                 anon_full = f"СотрудникПолн №{num_part}"
                 anon_pos = f"Должность №{num_part}"
 
+                row_dict = dict(r)
+                v_days = int(row_dict.get("vacation_days") or 28) if row_dict.get("vacation_days") is not None else 28
+
                 employees.append(
                     {
                         "pos": anon_pos,
@@ -222,9 +233,10 @@ def load_state(year: int, month: int) -> dict:
                         "milk_issue": int(r["milk_issue"] or 0),
                         "full_name": anon_full,
                         "milk_note": text(r["milk_note"]),
-                        "is_excluded": int(dict(r).get("is_excluded", 0) or 0),
-                        "hire_date": text(dict(r).get("hire_date", "")),
-                        "exclude_date": text(dict(r).get("exclude_date", "")),
+                        "is_excluded": int(row_dict.get("is_excluded", 0) or 0),
+                        "hire_date": text(row_dict.get("hire_date", "")),
+                        "exclude_date": text(row_dict.get("exclude_date", "")),
+                        "vacation_days": v_days,
                     }
                 )
         except Exception:
@@ -305,9 +317,50 @@ def save_state(payload: dict) -> dict:
                 cur.executemany("INSERT INTO timesheet(y, m, tab_num, c, v) VALUES(?,?,?,?,?)", insert_ts)
 
             if employees is not None:
+                # Читаем существующие метаданные (отпуск, признак исключения) из БД,
+                # чтобы не потерять дни отпуска, настроенные в Справочнике
+                existing_meta = {}
+                for er in cur.execute("SELECT tab_num, name, vacation_days, is_excluded FROM employees WHERE y=?", (year,)).fetchall():
+                    t_key = text(er["tab_num"]).strip()
+                    n_key = text(er["name"]).strip()
+                    row_data = (er["vacation_days"], er["is_excluded"])
+                    if t_key:
+                        existing_meta[t_key] = row_data
+                    if n_key:
+                        existing_meta[n_key] = row_data
+
                 cur.execute("DELETE FROM employees WHERE y=?", (year,))
                 insert_emp = []
                 for emp in employees:
+                    tab_val = text(emp.get("tab_num", "")).strip()
+                    name_val = text(emp.get("name", "")).strip()
+
+                    # Сохраняем vacation_days (из переданного объекта или сохраняем текущее из БД)
+                    v_days = emp.get("vacation_days")
+                    if v_days is None:
+                        meta = existing_meta.get(tab_val) or existing_meta.get(name_val)
+                        if meta and meta[0] is not None:
+                            v_days = meta[0]
+                        else:
+                            v_days = 28
+                    try:
+                        v_days = int(v_days)
+                    except Exception:
+                        v_days = 28
+
+                    # Сохраняем is_excluded
+                    is_exc = emp.get("is_excluded")
+                    if is_exc is None:
+                        meta = existing_meta.get(tab_val) or existing_meta.get(name_val)
+                        if meta and meta[1] is not None:
+                            is_exc = meta[1]
+                        else:
+                            is_exc = 0
+                    try:
+                        is_exc = int(is_exc)
+                    except Exception:
+                        is_exc = 0
+
                     insert_emp.append(
                         (
                             year,
@@ -320,10 +373,12 @@ def save_state(payload: dict) -> dict:
                             emp.get("milk_note", ""),
                             emp.get("hire_date", ""),
                             emp.get("exclude_date", ""),
+                            v_days,
+                            is_exc,
                         )
                     )
                 cur.executemany(
-                    "INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note, hire_date, exclude_date) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO employees(y, pos, name, tab_num, milk, milk_issue, full_name, milk_note, hire_date, exclude_date, vacation_days, is_excluded) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                     insert_emp,
                 )
 
