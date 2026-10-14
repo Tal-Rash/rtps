@@ -106,6 +106,25 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/"/g, '&quot;');
     }
 
+    // Вспомогательная функция: извлечение номера дня из строки (поддерживает как "22", так и "22.03")
+    function parseDayNumber(val) {
+        if (val === null || val === undefined) return NaN;
+        const str = String(val).trim();
+        if (!str) return NaN;
+        const match = str.match(/^(\d{1,2})/);
+        return match ? parseInt(match[1], 10) : NaN;
+    }
+
+    // Вспомогательная функция: форматирование дня с добавлением месяца (например, 22 в марте -> 22.03)
+    function formatDayWithMonth(day, monthIdx) {
+        const d = parseInt(day, 10);
+        if (isNaN(d) || d < 1) return '';
+        const m = parseInt(monthIdx, 10);
+        const monthStr = (m === 12) ? '01' : String(m + 1).padStart(2, '0');
+        const dayStr = String(d).padStart(2, '0');
+        return `${dayStr}.${monthStr}`;
+    }
+
     // Helper: Parse date string into Set of holiday day numbers
     function parseHolidayDates(datesStr, maxDays) {
         if (!datesStr) return new Set();
@@ -893,8 +912,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
                         if (!cInp || !poInp) continue;
 
-                        const c_val = parseInt(cInp.value);
-                        const po_val = parseInt(poInp.value);
+                        const c_val = parseDayNumber(cInp.value);
+                        const po_val = parseDayNumber(poInp.value);
 
                         if (!isNaN(c_val) && !isNaN(po_val)) {
                             if (currentStart !== null) {
@@ -1114,13 +1133,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 let endM = (eYear === currentYear + 1 && eMonth === 0) ? 12 : eMonth;
 
                 const cInput = tr.querySelector(`.c-input[data-month="${startM}"]`);
-                if (cInput) cInput.value = startD;
+                if (cInput) cInput.value = formatDayWithMonth(startD, startM);
 
                 const poInput = tr.querySelector(`.po-input[data-month="${endM}"]`);
-                if (poInput) poInput.value = endD;
+                if (poInput) poInput.value = formatDayWithMonth(endD, endM);
             });
 
-            // Populate carried over vacations from previous year (January)
+            // Заполнение отпусков, перешедших с прошлого года (Январь)
             (employee.carried_over_vacations || []).forEach(cov => {
                 if (!cov || !cov.start || !cov.end) return;
                 const sParts = String(cov.start).split('-');
@@ -1134,44 +1153,79 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cInput = tr.querySelector('.c-input[data-month="0"]');
                 const poInput = tr.querySelector('.po-input[data-month="0"]');
 
-                if (cInput && poInput && (!cInput.value || (parseInt(cInput.value) === covStartD && parseInt(poInput.value) === covEndD))) {
-                    cInput.value = String(cov.start).startsWith(janPrefix) ? covStartD : '';
-                    poInput.value = covEndD;
+                if (cInput && poInput && (!cInput.value || (parseDayNumber(cInput.value) === covStartD && parseDayNumber(poInput.value) === covEndD))) {
+                    cInput.value = String(cov.start).startsWith(janPrefix) ? formatDayWithMonth(covStartD, 0) : '';
+                    poInput.value = formatDayWithMonth(covEndD, 0);
                     tr.dataset.carriedOverJan = "true";
                     tr.dataset.carriedOverStartD = covStartD;
                     tr.dataset.carriedOverEndD = covEndD;
                 }
             });
 
-            // Calculate and draw row
+            // Расчет и отрисовка строки
             calculateRow(tr);
 
-            // Привязка обработчиков фокуса ко всем полям (для сохранения истории отмены действий)
+            // Привязка обработчиков фокуса ко всем полям (автовыделение текста и история отмены)
             const inputs = tr.querySelectorAll('.day-input, .allowed-days-input');
             inputs.forEach(input => {
                 input.addEventListener('focus', () => {
                     pushUndoState();
+                    setTimeout(() => {
+                        if (document.activeElement === input) {
+                            input.select();
+                        }
+                    }, 20);
                 });
             });
 
-            // Обработка ввода даты начала отпуска (c-input) с автоматическим расчетом окончания
+            // Навигация по клавише Enter в строке
+            tr.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const inp = e.target;
+                    if (inp && inp.classList.contains('c-input')) {
+                        e.preventDefault();
+                        inp.blur();
+                        const m = parseInt(inp.dataset.month);
+                        const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                        if (poInp) poInp.focus();
+                    } else if (inp && inp.classList.contains('po-input')) {
+                        e.preventDefault();
+                        inp.blur();
+                        const m = parseInt(inp.dataset.month);
+                        if (m < 12) {
+                            const nextC = tr.querySelector(`.c-input[data-month="${m + 1}"]`);
+                            if (nextC) nextC.focus();
+                        }
+                    }
+                }
+            });
+
+            // Обработка ввода даты начала отпуска (c-input) с добавлением месяца и автоматическим расчетом окончания
             let rowAutoCalcTimeout = null;
             tr.querySelectorAll('.c-input').forEach(cInput => {
-                const triggerAutoCalc = () => {
+                const startM = parseInt(cInput.dataset.month);
+
+                const triggerAutoCalc = (shouldFormat = false) => {
                     if (rowAutoCalcTimeout) {
                         clearTimeout(rowAutoCalcTimeout);
                         rowAutoCalcTimeout = null;
                     }
-                    const startM = parseInt(cInput.dataset.month);
                     const val = cInput.value.trim();
                     if (val === '') {
                         clearAssociatedVacationEnd(tr, startM);
                         calculateRow(tr);
                         return;
                     }
-                    const startD = parseInt(val);
+                    const startD = parseDayNumber(val);
                     if (!isNaN(startD) && startD >= 1 && startD <= calendarDaysInMonths[startM]) {
+                        if (shouldFormat) {
+                            cInput.value = formatDayWithMonth(startD, startM);
+                        }
                         autoCompleteVacation(tr, startM, startD);
+                    } else if (shouldFormat && isNaN(startD)) {
+                        cInput.value = '';
+                        clearAssociatedVacationEnd(tr, startM);
+                        calculateRow(tr);
                     }
                 };
 
@@ -1181,28 +1235,49 @@ document.addEventListener('DOMContentLoaded', () => {
                         rowAutoCalcTimeout = null;
                     }
                     const val = cInput.value.trim();
-                    const num = parseInt(val);
-
-                    // Если поле очищено, введено 2 цифры, либо цифра >= 4 — рассчитываем сразу
-                    if (val === '' || val.length >= 2 || (!isNaN(num) && num >= 4)) {
-                        triggerAutoCalc();
+                    if (val === '') {
+                        triggerAutoCalc(false);
+                        return;
+                    }
+                    // Если значение уже содержит точку (например "22.03")
+                    if (val.includes('.')) {
+                        triggerAutoCalc(false);
+                        return;
+                    }
+                    const num = parseInt(val, 10);
+                    // Если введено 2 цифры (например 22) или цифра >= 4 (например 5), форматируем сразу с добавлением месяца
+                    if (val.length >= 2 || (!isNaN(num) && num >= 4)) {
+                        triggerAutoCalc(true);
                     } else {
-                        // Для цифр 1, 2, 3 даем паузу 250мс для возможного ввода второй цифры
-                        rowAutoCalcTimeout = setTimeout(triggerAutoCalc, 250);
+                        // Для цифр 1, 2, 3 даем паузу 350мс для возможного ввода второй цифры
+                        rowAutoCalcTimeout = setTimeout(() => triggerAutoCalc(true), 350);
                     }
                 });
 
-                cInput.addEventListener('change', () => {
-                    triggerAutoCalc();
-                });
+                cInput.addEventListener('change', () => triggerAutoCalc(true));
+                cInput.addEventListener('blur', () => triggerAutoCalc(true));
             });
 
-            // Обработка ручной корректировки окончания отпуска (po-input)
+            // Обработка ручной корректировки окончания отпуска (po-input) с добавлением месяца
+            let poCalcTimeout = null;
             tr.querySelectorAll('.po-input').forEach(poInput => {
-                poInput.addEventListener('input', () => {
-                    const m = parseInt(poInput.dataset.month);
+                const m = parseInt(poInput.dataset.month);
+
+                const triggerPoUpdate = (shouldFormat = false) => {
+                    if (poCalcTimeout) {
+                        clearTimeout(poCalcTimeout);
+                        poCalcTimeout = null;
+                    }
                     const val = poInput.value.trim();
-                    if (val !== '') {
+                    if (val === '') {
+                        calculateRow(tr);
+                        return;
+                    }
+                    const endD = parseDayNumber(val);
+                    if (!isNaN(endD) && endD >= 1 && endD <= calendarDaysInMonths[m]) {
+                        if (shouldFormat) {
+                            poInput.value = formatDayWithMonth(endD, m);
+                        }
                         // При установке даты окончания в текущем месяце очищаем висящие хвосты в последующих месяцах
                         for (let f = m + 1; f < 13; f++) {
                             const fC = tr.querySelector(`.c-input[data-month="${f}"]`);
@@ -1212,9 +1287,36 @@ document.addEventListener('DOMContentLoaded', () => {
                                 fPo.value = '';
                             }
                         }
+                    } else if (shouldFormat && isNaN(endD)) {
+                        poInput.value = '';
                     }
                     calculateRow(tr);
+                };
+
+                poInput.addEventListener('input', () => {
+                    if (poCalcTimeout) {
+                        clearTimeout(poCalcTimeout);
+                        poCalcTimeout = null;
+                    }
+                    const val = poInput.value.trim();
+                    if (val === '') {
+                        triggerPoUpdate(false);
+                        return;
+                    }
+                    if (val.includes('.')) {
+                        triggerPoUpdate(false);
+                        return;
+                    }
+                    const num = parseInt(val, 10);
+                    if (val.length >= 2 || (!isNaN(num) && num >= 4)) {
+                        triggerPoUpdate(true);
+                    } else {
+                        poCalcTimeout = setTimeout(() => triggerPoUpdate(true), 350);
+                    }
                 });
+
+                poInput.addEventListener('change', () => triggerPoUpdate(true));
+                poInput.addEventListener('blur', () => triggerPoUpdate(true));
             });
 
             tr.querySelectorAll('.allowed-days-input').forEach(allowedInput => {
@@ -1305,8 +1407,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const cValStr = cInput.value.trim();
             const poValStr = poInput.value.trim();
 
-            const c_val = parseInt(cValStr);
-            const po_val = parseInt(poValStr);
+            const c_val = parseDayNumber(cValStr);
+            const po_val = parseDayNumber(poValStr);
 
             if (!isNaN(c_val) && !isNaN(po_val)) {
                 if (currentStart !== null) {
@@ -1424,10 +1526,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Устанавливаем рассчитанную дату окончания
+        // Устанавливаем рассчитанную дату окончания с добавлением месяца
         const targetPo = tr.querySelector(`.po-input[data-month="${endM}"]`);
         if (targetPo) {
-            targetPo.value = endD;
+            targetPo.value = formatDayWithMonth(endD, endM);
         }
 
         calculateRow(tr);
@@ -1669,8 +1771,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
                     if (!cInp || !poInp) continue;
 
-                    const c_val = parseInt(cInp.value);
-                    const po_val = parseInt(poInp.value);
+                    const c_val = parseDayNumber(cInp.value);
+                    const po_val = parseDayNumber(poInp.value);
 
                     if (!isNaN(c_val) && !isNaN(po_val)) {
                         if (currentStart !== null) {
@@ -1854,8 +1956,8 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let m = 0; m < 13; m++) {
                 const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
                 const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
-                const cVal = cInp && cInp.value.trim() !== '' ? parseInt(cInp.value.trim()) : null;
-                const poVal = poInp && poInp.value.trim() !== '' ? parseInt(poInp.value.trim()) : null;
+                const cVal = cInp && cInp.value.trim() !== '' ? parseDayNumber(cInp.value.trim()) : null;
+                const poVal = poInp && poInp.value.trim() !== '' ? parseDayNumber(poInp.value.trim()) : null;
                 monthsData.push({
                     month: m,
                     c: (!isNaN(cVal) && cVal > 0) ? cVal : null,

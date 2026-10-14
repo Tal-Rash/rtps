@@ -1560,8 +1560,13 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             val_c = m_c_vals[m]
             val_po = m_po_vals[m]
 
-            cell_c = ws.cell(row=current_row, column=col_c, value=val_c if val_c is not None else "")
-            cell_po = ws.cell(row=current_row, column=col_po, value=val_po if val_po is not None else "")
+            # Форматирование отображения дня с добавлением месяца (например, 22.03)
+            m_code = "01" if m == 12 else f"{m + 1:02d}"
+            display_c = f"{val_c:02d}.{m_code}" if val_c is not None else ""
+            display_po = f"{val_po:02d}.{m_code}" if val_po is not None else ""
+
+            cell_c = ws.cell(row=current_row, column=col_c, value=display_c)
+            cell_po = ws.cell(row=current_row, column=col_po, value=display_po)
 
             cell_c.font = data_font
             cell_c.alignment = center_align
@@ -1755,7 +1760,7 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         4: 12,  # Отпуск (дней)
     }
     for col_c in range(5, 31):
-        col_widths[col_c] = 5.5
+        col_widths[col_c] = 6.8
 
     for c_idx, width in col_widths.items():
         ws.column_dimensions[get_column_letter(c_idx)].width = width
