@@ -1371,6 +1371,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateTotals();
         applyQuittingFilter();
+        // Автоматическая подстановка реальных ФИО сотрудников из локального хранилища браузера
+        if (typeof window.applyCustomLabels === 'function') {
+            window.applyCustomLabels();
+            setTimeout(window.applyCustomLabels, 20);
+        }
     }
 
     // Расчет даты окончания отпуска с учетом нерабочих праздничных дней (ст. 120 ТК РФ)
@@ -1878,6 +1883,107 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Поиск и определение реальных данных сотрудника из локального хранилища браузера
+    function resolveEmployeePrivateData(empId, empTab, empName, domName, domPos) {
+        let resolvedName = domName || empName || '';
+        let resolvedFullName = domName || empName || '';
+        let resolvedPos = domPos || '';
+        let resolvedTab = empTab || '';
+
+        // Определение числового номера сотрудника (1, 2, ...)
+        let num = null;
+        const candidates = [empTab, empName, domName, String(empId)];
+        for (let i = 0; i < candidates.length; i++) {
+            const c = candidates[i];
+            if (!c) continue;
+            const clean = String(c).replace(/ID_/gi, '').replace(/[^\d]/g, '').trim();
+            if (clean) {
+                const parsed = parseInt(clean, 10);
+                if (!isNaN(parsed) && parsed > 0 && parsed < 1000) {
+                    num = parsed;
+                    break;
+                }
+            }
+        }
+        if (num === null && typeof empId === 'number') num = empId;
+
+        // 1. Поиск в детальном массиве rtps_employees_full_dict
+        try {
+            const rawFull = localStorage.getItem('rtps_employees_full_dict');
+            if (rawFull) {
+                const arr = JSON.parse(rawFull);
+                if (Array.isArray(arr) && arr.length > 0) {
+                    let found = null;
+                    if (num !== null) {
+                        found = arr.find((rec, idx) => {
+                            const recNum = parseInt(String(rec.id || '').replace(/[^\d]/g, ''), 10);
+                            return recNum === num || (idx + 1) === num;
+                        });
+                    }
+                    if (!found && empTab) {
+                        found = arr.find(rec => rec.id === empTab || rec.tab === empTab || rec.tab_num === empTab);
+                    }
+                    if (found) {
+                        const candFio = found.fullFio || found.full_name || found.fio || found.name || found.shortFio || '';
+                        if (candFio && !/^\d+$/.test(String(candFio).trim())) {
+                            resolvedName = String(candFio).trim();
+                            resolvedFullName = String(found.fullFio || found.full_name || candFio).trim();
+                        }
+                        if (found.pos || found.position) {
+                            resolvedPos = String(found.pos || found.position).trim();
+                        }
+                        if (found.tab || found.tab_num) {
+                            resolvedTab = String(found.tab || found.tab_num).trim();
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // 2. Поиск в словаре замен rtps_emp_dict
+        try {
+            const rawDict = localStorage.getItem('rtps_emp_dict');
+            if (rawDict) {
+                const map = JSON.parse(rawDict);
+                if (map && typeof map === 'object' && num !== null) {
+                    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+                    const nameCand = map["СотрудникПолн №" + num] || map["Сотрудник №" + num] || map["Работник №" + num] || map["Сотрудник №" + pNum] || map["Работник №" + pNum];
+                    if (nameCand && !/^\d+$/.test(String(nameCand).trim())) {
+                        resolvedName = String(nameCand).trim();
+                        resolvedFullName = String(map["СотрудникПолн №" + num] || map["Сотрудник №" + num] || nameCand).trim();
+                    }
+                    const posCand = map["Должность №" + num] || map["Должность №" + pNum];
+                    if (posCand) resolvedPos = String(posCand).trim();
+                    const tabCand = map["ID_" + pNum] || map["ID_" + num];
+                    if (tabCand) resolvedTab = String(tabCand).trim();
+                }
+            }
+        } catch (e) {}
+
+        // 3. Защита от попадания численных табельных номеров или анонимных меток в ФИО
+        const isInvalid = !resolvedName || /^\d+$/.test(String(resolvedName).trim()) || String(resolvedName).startsWith('Работник №') || String(resolvedName).startsWith('ID_');
+        if (isInvalid) {
+            const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+            for (let i = 0; i < pairs.length; i++) {
+                const p = pairs[i];
+                if (num !== null && (p.from === ("Работник №" + num) || p.from === ("Сотрудник №" + num) || p.from === ("СотрудникПолн №" + num))) {
+                    if (p.to && !/^\d+$/.test(p.to.trim())) {
+                        resolvedName = p.to.trim();
+                        resolvedFullName = p.to.trim();
+                        break;
+                    }
+                }
+            }
+        }
+
+        return {
+            name: resolvedName,
+            full_name: resolvedFullName || resolvedName,
+            position: resolvedPos,
+            tab_num: resolvedTab
+        };
+    }
+
     // Сбор данных текущего графика из таблицы на странице для выгрузки в Excel
     function captureScheduleExportData() {
         const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
@@ -1924,6 +2030,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     displayTab = displayTab.split(repPairs[p].from).join(repPairs[p].to);
                 }
             }
+
+            // Надежное извлечение реальных персональных данных из localStorage браузера
+            const privData = resolveEmployeePrivateData(empId, empTab, empName, displayName, displayPos);
+            displayName = privData.name || displayName;
+            const displayFullName = privData.full_name || displayName;
+            displayPos = privData.position || displayPos;
+            displayTab = privData.tab_num || displayTab;
 
             // Сбор значений месяцев с и по
             const monthsData = [];
@@ -1980,7 +2093,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 id: empId,
                 tab_num: displayTab,
                 name: displayName,
-                full_name: employee ? (employee.full_name || displayName) : displayName,
+                full_name: displayFullName,
                 position: displayPos,
                 vacation_days: allowedVal,
                 months_data: monthsData,
@@ -2010,28 +2123,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     items: exportItems
                 };
 
-                // Прямой запрос сформированного сервером файла Excel без повторного искажения ячеек
-                const response = await fetch(
+                // Разанонимизация и сохранение файла Excel в браузере через JSZip / SheetJS
+                await downloadAndUnAnonymizeExcel(
                     `${APP_PREFIX}/api/vacations/schedule/export?year=${currentYear}`,
+                    `grafik_otpuskov_${currentYear}.xlsx`,
                     {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     }
                 );
-
-                if (!response.ok) {
-                    throw new Error('Ошибка сервера: ' + response.statusText);
-                }
-
-                const blob = await response.blob();
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `grafik_otpuskov_${currentYear}.xlsx`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                setTimeout(() => URL.revokeObjectURL(link.href), 60000);
             } catch (err) {
                 console.error('Ошибка экспорта графика в Excel:', err);
                 alert('Не удалось выгрузить график в Excel: ' + (err.message || err));
@@ -2813,12 +2914,6 @@ document.addEventListener('DOMContentLoaded', () => {
  * Получает словарь замен из localStorage для автоподстановки реальных ФИО и табельных номеров.
  */
 function getEmpReplacementPairs() {
-  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
-  let map = null;
-  if (raw) {
-    try { map = JSON.parse(raw); } catch (e) { map = null; }
-  }
-
   const flatMap = {};
 
   // Извлекает порядковый номер из строки вида ID_001, Работник №1 и т.д.
@@ -2837,6 +2932,7 @@ function getEmpReplacementPairs() {
 
   // Добавляет варианты написания текстового поля (Работник №1, Работник №001 и т.д.)
   function addFieldVariants(prefix, num, val) {
+    if (!val || /^\d+$/.test(String(val).trim())) return; // Защита от записи табельного номера
     const sNum = String(num);
     const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
     const valStr = String(val);
@@ -2859,55 +2955,96 @@ function getEmpReplacementPairs() {
     flatMap["ID_" + num] = valStr;
   }
 
+  // 1. Сначала обрабатываем подробный массив rtps_employees_full_dict
+  try {
+    const rawFull = localStorage.getItem('rtps_employees_full_dict');
+    if (rawFull) {
+      const arr = JSON.parse(rawFull);
+      if (Array.isArray(arr)) {
+        for (let i = 0; i < arr.length; i++) {
+          const rec = arr[i];
+          if (!rec) continue;
+          let num = extractNum(rec.id || rec.tab || rec.tab_num);
+          if (num === null) num = i + 1;
 
-  if (Array.isArray(map)) {
-    for (let i = 0; i < map.length; i++) {
-      let rec = map[i];
-      if (!rec) continue;
+          let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
+          let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
+          let pos = rec.pos || rec.position || '';
+          let tab = rec.tab || rec.tab_num || rec.id || '';
 
-      let num = extractNum(rec.id || rec.tab || rec.tab_num);
-      if (num === null) num = i + 1;
+          if (shortF && /^\d+$/.test(String(shortF).trim())) {
+            shortF = (fullF && !/^\d+$/.test(String(fullF).trim())) ? fullF : '';
+          }
+          if (fullF && /^\d+$/.test(String(fullF).trim())) {
+            fullF = (shortF && !/^\d+$/.test(String(shortF).trim())) ? shortF : '';
+          }
 
-      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
-      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
-      let pos = rec.pos || rec.position || '';
-      let tab = rec.tab || rec.tab_num || rec.id || '';
-
-      if (shortF) addFieldVariants("Работник", num, shortF);
-      if (fullF) {
-        addFieldVariants("СотрудникПолн", num, fullF);
-        addFieldVariants("Сотрудник", num, fullF);
-      }
-      if (pos) addFieldVariants("Должность", num, pos);
-      if (tab) {
-        addIdVariants(num, tab);
-        if (rec.id) flatMap[String(rec.id)] = String(tab);
-      }
-    }
-  } else if (map && typeof map === 'object') {
-    for (let k in map) {
-      if (map.hasOwnProperty(k) && k && map[k]) {
-        const valStr = String(map[k]);
-        flatMap[k] = valStr;
-        let num = extractNum(k);
-        if (num !== null) {
-          if (k.startsWith("Работник")) {
-            addFieldVariants("Работник", num, valStr);
-          } else if (k.startsWith("СотрудникПолн")) {
-            addFieldVariants("СотрудникПолн", num, valStr);
-            addFieldVariants("Сотрудник", num, valStr);
-          } else if (k.startsWith("Сотрудник")) {
-            addFieldVariants("Сотрудник", num, valStr);
-            addFieldVariants("СотрудникПолн", num, valStr);
-          } else if (k.startsWith("Должность")) {
-            addFieldVariants("Должность", num, valStr);
-          } else if (k.startsWith("ID_")) {
-            addIdVariants(num, valStr);
+          if (shortF) addFieldVariants("Работник", num, shortF);
+          if (fullF) {
+            addFieldVariants("СотрудникПолн", num, fullF);
+            addFieldVariants("Сотрудник", num, fullF);
+          }
+          if (pos) addFieldVariants("Должность", num, pos);
+          if (tab) {
+            addIdVariants(num, tab);
+            if (rec.id) flatMap[String(rec.id)] = String(tab);
           }
         }
       }
     }
-  }
+  } catch (e) {}
+
+  // 2. Затем обрабатываем словарь замен rtps_emp_dict
+  try {
+    const rawDict = localStorage.getItem('rtps_emp_dict');
+    if (rawDict) {
+      const map = JSON.parse(rawDict);
+      if (map && typeof map === 'object') {
+        for (let k in map) {
+          if (map.hasOwnProperty(k) && k && map[k]) {
+            let valStr = String(map[k]).trim();
+            let num = extractNum(k);
+            if (num !== null) {
+              if (k.startsWith("Работник")) {
+                if (/^\d+$/.test(valStr)) {
+                  const altFio = String(map["СотрудникПолн №" + num] || map["Сотрудник №" + num] || '').trim();
+                  if (altFio && !/^\d+$/.test(altFio)) {
+                    valStr = altFio;
+                  }
+                }
+                if (!/^\d+$/.test(valStr)) {
+                  addFieldVariants("Работник", num, valStr);
+                  flatMap[k] = valStr;
+                }
+              } else if (k.startsWith("СотрудникПолн")) {
+                if (!/^\d+$/.test(valStr)) {
+                  addFieldVariants("СотрудникПолн", num, valStr);
+                  addFieldVariants("Сотрудник", num, valStr);
+                  flatMap[k] = valStr;
+                }
+              } else if (k.startsWith("Сотрудник")) {
+                if (!/^\d+$/.test(valStr)) {
+                  addFieldVariants("Сотрудник", num, valStr);
+                  addFieldVariants("СотрудникПолн", num, valStr);
+                  flatMap[k] = valStr;
+                }
+              } else if (k.startsWith("Должность")) {
+                addFieldVariants("Должность", num, valStr);
+                flatMap[k] = valStr;
+              } else if (k.startsWith("ID_")) {
+                addIdVariants(num, valStr);
+                flatMap[k] = valStr;
+              } else {
+                flatMap[k] = valStr;
+              }
+            } else {
+              flatMap[k] = valStr;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
 
   const pairs = [];
   for (let k in flatMap) {
@@ -2967,8 +3104,16 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename, fetchOptions = 
 
             for (let p = 0; p < pairs.length; p++) {
               const item = pairs[p];
+              // Исключаем замену, если искомая строка состоит только из цифр
+              if (!item.from || /^\d+$/.test(item.from.trim())) continue;
               if (content.includes(item.from)) {
-                content = content.split(item.from).join(item.to);
+                // Экранирование спецсимволов для XML
+                const xmlTo = String(item.to)
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;');
+                content = content.split(item.from).join(xmlTo);
                 fileChanged = true;
                 modified = true;
               }

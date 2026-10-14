@@ -112,15 +112,49 @@
                             if (!row || row.length < 3) continue;
                             var id = String(row[0] || '').trim();
                             var pos = String(row[1] || '').trim();
-                            var fio = String(row[2] || '').trim();
-                            var tab = String(row[3] || row[0] || '').trim();
+                            var fullFio = '';
+                            var shortFio = '';
+                            var tab = '';
 
-                            if (id && fio && id.indexOf('ID') !== -1) {
+                            if (row.length === 4) {
+                                fullFio = String(row[2] || '').trim();
+                                shortFio = fullFio;
+                                tab = String(row[3] || row[0] || '').trim();
+                            } else if (row.length >= 5) {
+                                fullFio = String(row[2] || '').trim();
+                                var col3 = String(row[3] || '').trim();
+                                var col4 = String(row[4] || '').trim();
+                                if (col3 && /^\d+$/.test(col3) && !col4) {
+                                    shortFio = fullFio;
+                                    tab = col3;
+                                } else {
+                                    shortFio = col3 || fullFio;
+                                    tab = col4 || col3 || id;
+                                }
+                            } else {
+                                fullFio = String(row[2] || '').trim();
+                                shortFio = fullFio;
+                                tab = String(row[3] || row[0] || '').trim();
+                            }
+
+                            if (shortFio && /^\d+$/.test(shortFio)) {
+                                shortFio = (fullFio && !/^\d+$/.test(fullFio)) ? fullFio : '';
+                            }
+                            if (fullFio && /^\d+$/.test(fullFio)) {
+                                fullFio = (shortFio && !/^\d+$/.test(shortFio)) ? shortFio : '';
+                            }
+
+                            if (id && fullFio && id.indexOf('ID') !== -1) {
                                 records.push({
                                     id: id,
                                     pos: pos,
-                                    fio: fio,
-                                    tab: tab
+                                    fio: shortFio || fullFio,
+                                    fullFio: fullFio,
+                                    shortFio: shortFio,
+                                    name: shortFio || fullFio,
+                                    full_name: fullFio,
+                                    tab: tab,
+                                    tab_num: tab
                                 });
                             }
                         }

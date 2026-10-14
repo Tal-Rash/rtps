@@ -1084,12 +1084,20 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
     mapping = {}
 
     def register_entry(anon_id: str, pos: str, full_fio: str, short_fio: str, real_tab: str):
+        # Гарантируем, что табельный номер (число) никогда не попадет в ФИО
+        s_fio = short_fio.strip() if short_fio else ""
+        f_fio = full_fio.strip() if full_fio else ""
+        if s_fio.isdigit():
+            s_fio = f_fio if (f_fio and not f_fio.isdigit()) else ""
+        if f_fio.isdigit():
+            f_fio = s_fio if (s_fio and not s_fio.isdigit()) else ""
+
         # Формируем объект сведений о сотруднике
         info = {
-            "name": short_fio or full_fio,
-            "full_name": full_fio or short_fio,
-            "position": pos,
-            "tab_num": real_tab or anon_id
+            "name": s_fio or f_fio,
+            "full_name": f_fio or s_fio,
+            "position": pos.strip() if pos else "",
+            "tab_num": real_tab.strip() if real_tab else anon_id
         }
 
         # Регистрация по ID и табельному номеру
@@ -1104,13 +1112,13 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
             mapping[f"Сотрудник № {real_tab}"] = info
             mapping[f"Работник № {real_tab}"] = info
 
-        # Регистрация по ФИО
-        if short_fio:
-            mapping[short_fio] = info
-            mapping[short_fio.lower()] = info
-        if full_fio:
-            mapping[full_fio] = info
-            mapping[full_fio.lower()] = info
+        # Регистрация по ФИО (только если это не чистое число)
+        if s_fio and not s_fio.isdigit():
+            mapping[s_fio] = info
+            mapping[s_fio.lower()] = info
+        if f_fio and not f_fio.isdigit():
+            mapping[f_fio] = info
+            mapping[f_fio.lower()] = info
 
         # Регистрация по порядковому номеру и шаблонам анонимизации
         num_str = "".join(ch for ch in anon_id if ch.isdigit())
@@ -1147,9 +1155,22 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
                         continue
                     anon_id = row[0].strip()
                     pos = row[1].strip() if len(row) > 1 else ""
-                    full_fio = row[2].strip() if len(row) > 2 else ""
-                    short_fio = row[3].strip() if len(row) > 3 else full_fio
-                    real_tab = row[4].strip() if len(row) > 4 else anon_id
+                    # Если файл имеет 4 колонки: ID; Должность; ФИО; Табельный
+                    if len(row) == 4:
+                        full_fio = row[2].strip()
+                        short_fio = row[2].strip()
+                        real_tab = row[3].strip()
+                    else:
+                        full_fio = row[2].strip() if len(row) > 2 else ""
+                        c3 = row[3].strip() if len(row) > 3 else ""
+                        c4 = row[4].strip() if len(row) > 4 else ""
+                        if c3.isdigit() and not c4:
+                            # 3-я колонка числовая — это табельный номер
+                            short_fio = full_fio
+                            real_tab = c3
+                        else:
+                            short_fio = c3 or full_fio
+                            real_tab = c4 or anon_id
                     register_entry(anon_id, pos, full_fio, short_fio, real_tab)
         except Exception:
             pass
@@ -1162,9 +1183,20 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
                     continue
                 anon_id = str(row[0]).strip()
                 pos = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-                full_fio = str(row[2]).strip() if len(row) > 2 and row[2] else ""
-                short_fio = str(row[3]).strip() if len(row) > 3 and row[3] else full_fio
-                real_tab = str(row[4]).strip() if len(row) > 4 and row[4] else anon_id
+                if len(row) == 4:
+                    full_fio = str(row[2]).strip() if row[2] else ""
+                    short_fio = full_fio
+                    real_tab = str(row[3]).strip() if row[3] else anon_id
+                else:
+                    full_fio = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+                    c3 = str(row[3]).strip() if len(row) > 3 and row[3] else ""
+                    c4 = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+                    if c3.isdigit() and not c4:
+                        short_fio = full_fio
+                        real_tab = c3
+                    else:
+                        short_fio = c3 or full_fio
+                        real_tab = c4 or anon_id
                 register_entry(anon_id, pos, full_fio, short_fio, real_tab)
         except Exception:
             pass
@@ -1262,8 +1294,10 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
 
     th1_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     th2_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    vacation_fill = PatternFill(start_color="E0EDFE", end_color="E0EDFE", fill_type="solid")
-    carried_fill = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")
+    # Черная заливка для ячеек отпусков с белым шрифтом по требованию пользователя
+    vacation_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+    vacation_font = Font(name="Segoe UI", size=9, bold=True, color="FFFFFF")
+    carried_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
     summary1_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
     summary2_fill = PatternFill(start_color="EFF6FF", end_color="EFF6FF", fill_type="solid")
     summary3_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
@@ -1378,11 +1412,25 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
 
         # Определение финальных значений ФИО, должности и табельного
         if priv:
-            emp_name = priv.get("name") or priv.get("full_name") or raw_name or raw_full
+            p_name = priv.get("name") or priv.get("full_name") or ""
+            if p_name and not p_name.isdigit():
+                emp_name = p_name
+            elif raw_full and not raw_full.isdigit() and not raw_full.startswith("СотрудникПолн №"):
+                emp_name = raw_full
+            else:
+                emp_name = raw_name or f"Сотрудник {idx}"
             emp_pos = priv.get("position") or raw_pos or priv.get("pos", "")
             emp_tab = priv.get("tab_num") or raw_tab or priv.get("tab", "")
         else:
-            emp_name = raw_name or raw_full or f"Сотрудник {idx}"
+            # Если прямое имя является табельным номером, но raw_full содержит ФИО
+            if raw_name.isdigit() and raw_full and not raw_full.isdigit() and not raw_full.startswith("СотрудникПолн №"):
+                emp_name = raw_full
+            elif raw_name and not raw_name.isdigit():
+                emp_name = raw_name
+            elif raw_full and not raw_full.isdigit():
+                emp_name = raw_full
+            else:
+                emp_name = raw_name or raw_full or f"Сотрудник {idx}"
             emp_pos = raw_pos
             emp_tab = raw_tab
 
@@ -1396,9 +1444,22 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             or not clean_name
         )
         if is_invalid_fio:
-            digits = "".join(ch for ch in clean_name if ch.isdigit())
-            if digits and digits in private_map:
-                emp_name = private_map[digits].get("name") or private_map[digits].get("full_name")
+            # Проверяем raw_full, если он содержит настоящее ФИО
+            if raw_full and not raw_full.strip().isdigit() and not raw_full.startswith("СотрудникПолн №") and not raw_full.startswith("Работник №"):
+                emp_name = raw_full.strip()
+            else:
+                for cand_key in search_candidates:
+                    if cand_key and cand_key in private_map:
+                        pm_entry = private_map[cand_key]
+                        p_cand_name = pm_entry.get("name") or pm_entry.get("full_name")
+                        if p_cand_name and not p_cand_name.strip().isdigit():
+                            emp_name = p_cand_name.strip()
+                            break
+
+        # Если после всех проверок имя всё ещё числовое (табельный номер) или пустое,
+        # устанавливаем маркер "Работник №{idx}", чтобы клиентский JSZip в браузере мог гарантированно подставить реальное ФИО
+        if emp_name.strip().isdigit() or not emp_name.strip() or emp_name.strip().startswith("ID_"):
+            emp_name = f"Работник №{idx}"
 
         # Подготовка данных по месяцам
         m_c_vals = [None] * 13
@@ -1542,12 +1603,12 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_po.alignment = center_align
             cell_po.border = thin_border
 
-            if m_is_cov[m]:
-                cell_c.fill = carried_fill
-                cell_po.fill = carried_fill
-            elif m_is_vac[m]:
+            # Оформление ячеек отпусков (черный фон, белый шрифт)
+            if m_is_cov[m] or m_is_vac[m]:
                 cell_c.fill = vacation_fill
                 cell_po.fill = vacation_fill
+                cell_c.font = vacation_font
+                cell_po.font = vacation_font
 
         current_row += 1
 

@@ -95,9 +95,41 @@
                     if (parts.length >= 2) {
                         var id = parts[0] ? parts[0].trim() : '';
                         var pos = parts[1] ? parts[1].trim() : '';
-                        var fullFio = parts[2] ? parts[2].trim() : parts[1].trim();
-                        var shortFio = parts[3] ? parts[3].trim() : fullFio;
-                        var tab = parts[4] ? parts[4].trim() : (parts[3] || id);
+                        var fullFio = '';
+                        var shortFio = '';
+                        var tab = '';
+
+                        // Корректное определение колонок в зависимости от формата (4 или 5 колонок)
+                        if (parts.length === 4) {
+                            // Формат: ID; Должность; ФИО; Табельный
+                            fullFio = parts[2] ? parts[2].trim() : '';
+                            shortFio = fullFio;
+                            tab = parts[3] ? parts[3].trim() : id;
+                        } else if (parts.length >= 5) {
+                            // Формат: ID; Должность; ФИО полное; ФИО краткое; Табельный
+                            fullFio = parts[2] ? parts[2].trim() : '';
+                            var col3 = parts[3] ? parts[3].trim() : '';
+                            var col4 = parts[4] ? parts[4].trim() : '';
+                            if (col3 && /^\d+$/.test(col3) && !col4) {
+                                shortFio = fullFio;
+                                tab = col3;
+                            } else {
+                                shortFio = col3 || fullFio;
+                                tab = col4 || col3 || id;
+                            }
+                        } else {
+                            fullFio = parts[2] ? parts[2].trim() : (parts[1] ? parts[1].trim() : '');
+                            shortFio = fullFio;
+                            tab = parts[3] ? parts[3].trim() : id;
+                        }
+
+                        // Защита: ФИО никогда не должно быть числовым табельным номером
+                        if (shortFio && /^\d+$/.test(shortFio.trim())) {
+                            shortFio = (fullFio && !/^\d+$/.test(fullFio.trim())) ? fullFio : '';
+                        }
+                        if (fullFio && /^\d+$/.test(fullFio.trim())) {
+                            fullFio = (shortFio && !/^\d+$/.test(shortFio.trim())) ? shortFio : '';
+                        }
 
                         if (id && fullFio && id.indexOf('Код') === -1 && id.indexOf('Табельный') === -1) {
                             var numStr = id.replace('ID_', '');
@@ -122,7 +154,6 @@
                     }
                 }
 
-                localStorage.removeItem('rtps_employees_full_dict');
                 localStorage.setItem(KEY, JSON.stringify(map));
 
                 alert("Новый файл загружен! Записей сотрудников: " + loaded);
