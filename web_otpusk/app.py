@@ -1274,20 +1274,20 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 if fill:
                     cell.fill = fill
 
-    # 1. Заголовок таблицы
-    ws.merge_cells("A1:AE1")
+    # 1. Заголовок таблицы (ширина 30 колонок A-AD)
+    ws.merge_cells("A1:AD1")
     ws["A1"] = f"ГРАФИК ОТПУСКОВ РАБОТНИКОВ НА {year} ГОД"
     ws["A1"].font = title_font
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 32
 
-    ws.merge_cells("A2:AE2")
+    ws.merge_cells("A2:AD2")
     ws["A2"] = f"Дата выгрузки: {datetime.now().strftime('%d.%m.%Y %H:%M')}  |  Всего работников: {len(items)}"
     ws["A2"].font = meta_font
     ws["A2"].alignment = Alignment(horizontal="left", vertical="center")
     ws.row_dimensions[2].height = 18
 
-    # 2. Шапка таблицы (строки 3 и 4)
+    # 2. Шапка графической таблицы (строки 3 и 4)
     ws.row_dimensions[3].height = 28
     ws.row_dimensions[4].height = 20
 
@@ -1327,20 +1327,14 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         cell_po.fill = th2_fill
         cell_po.border = header_border
 
-    # Колонка 31 (AE): Периоды отпусков
-    ws.merge_cells("AE3:AE4")
-    ws["AE3"] = "Периоды отпусков (даты и дни)"
-    ws["AE3"].font = th1_font
-    ws["AE3"].alignment = center_align
-    apply_range_border(3, 31, 4, 31, border=header_border, fill=th1_fill)
-
-    # 3. Данные сотрудников (начиная со строки 5)
+    # 3. Данные сотрудников в графической таблице (начиная со строки 5)
     start_data_row = 5
     current_row = start_data_row
     month_fact_sums = [0] * 13
+    periods_table_data = []
 
     for idx, emp in enumerate(items, 1):
-        ws.row_dimensions[current_row].height = 22
+        ws.row_dimensions[current_row].height = 20
 
         raw_tab = str(emp.get("tab_num") or "").strip()
         raw_name = str(emp.get("name") or emp.get("full_name") or "").strip()
@@ -1449,6 +1443,14 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cov_mark = " (перенос с прошл. г.)" if is_cov else ""
             vac_periods_desc.append(f"{s_ru} - {e_ru} ({v_days} дн.){cov_mark}")
 
+        # Сохранение периодов для вывода в секции под графической таблицей
+        periods_table_data.append({
+            "idx": idx,
+            "name": emp_name,
+            "pos": emp_pos,
+            "periods": vac_periods_desc
+        })
+
         # Запись базовых колонок
         # Колонка 1: № п/п
         c_num = ws.cell(row=current_row, column=1, value=idx)
@@ -1500,16 +1502,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 cell_c.fill = vacation_fill
                 cell_po.fill = vacation_fill
 
-        # Запись колонки AE (31): периоды отпусков
-        desc_text = "\n".join(vac_periods_desc)
-        c_desc = ws.cell(row=current_row, column=31, value=desc_text)
-        c_desc.font = small_desc_font
-        c_desc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        c_desc.border = thin_border
-
-        if len(vac_periods_desc) > 1:
-            ws.row_dimensions[current_row].height = max(22, 16 * len(vac_periods_desc))
-
         current_row += 1
 
     last_data_row = current_row - 1
@@ -1542,10 +1534,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_m.alignment = center_align
             apply_range_border(r_sum1, c_s, r_sum1, c_e, border=thin_border, fill=summary1_fill)
 
-        cell_s1_ae = ws.cell(row=r_sum1, column=31, value="")
-        cell_s1_ae.fill = summary1_fill
-        cell_s1_ae.border = thin_border
-
         # Итоговая строка 2: Занесено (факт)
         r_sum2 = current_row + 1
         ws.row_dimensions[r_sum2].height = 24
@@ -1569,10 +1557,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_m.font = bold_data_font
             cell_m.alignment = center_align
             apply_range_border(r_sum2, c_s, r_sum2, c_e, border=thin_border, fill=summary2_fill)
-
-        cell_s2_ae = ws.cell(row=r_sum2, column=31, value="")
-        cell_s2_ae.fill = summary2_fill
-        cell_s2_ae.border = thin_border
 
         # Итоговая строка 3: Отклонение (%)
         r_sum3 = current_row + 2
@@ -1615,11 +1599,79 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_m.alignment = center_align
             apply_range_border(r_sum3, c_s, r_sum3, c_e, border=thin_border, fill=summary3_fill)
 
-        cell_s3_ae = ws.cell(row=r_sum3, column=31, value="")
-        cell_s3_ae.fill = summary3_fill
-        cell_s3_ae.border = thin_border
+    # 5. Секция подробных периодов отпусков (расположена под графической таблицей)
+    current_row = (r_sum3 + 2) if last_data_row >= start_data_row else current_row + 2
 
-    # 5. Ширина колонок
+    # Заголовок секции периодов отпусков
+    ws.row_dimensions[current_row].height = 26
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=30)
+    sec_title_cell = ws.cell(row=current_row, column=1, value="ПЕРИОДЫ ОТПУСКОВ РАБОТНИКОВ (ДАТЫ И КОЛИЧЕСТВО ДНЕЙ)")
+    sec_title_cell.font = Font(name="Segoe UI", size=11, bold=True, color="1F4E78")
+    sec_title_cell.alignment = Alignment(horizontal="left", vertical="center")
+    apply_range_border(current_row, 1, current_row, 30, border=header_border, fill=th2_fill)
+    current_row += 1
+
+    # Шапка таблицы периодов
+    ws.row_dimensions[current_row].height = 24
+    c_p_num = ws.cell(row=current_row, column=1, value="№\nп/п")
+    c_p_num.font = th1_font
+    c_p_num.alignment = center_align
+    c_p_num.fill = th1_fill
+    c_p_num.border = header_border
+
+    c_p_name = ws.cell(row=current_row, column=2, value="Сотрудник (ФИО)")
+    c_p_name.font = th1_font
+    c_p_name.alignment = center_align
+    c_p_name.fill = th1_fill
+    c_p_name.border = header_border
+
+    c_p_pos = ws.cell(row=current_row, column=3, value="Должность")
+    c_p_pos.font = th1_font
+    c_p_pos.alignment = center_align
+    c_p_pos.fill = th1_fill
+    c_p_pos.border = header_border
+
+    ws.merge_cells(start_row=current_row, start_column=4, end_row=current_row, end_column=30)
+    c_p_desc = ws.cell(row=current_row, column=4, value="Запланированные периоды отпусков")
+    c_p_desc.font = th1_font
+    c_p_desc.alignment = center_align
+    apply_range_border(current_row, 4, current_row, 30, border=header_border, fill=th1_fill)
+    current_row += 1
+
+    # Заполнение строк периодов отпусков
+    for p_item in periods_table_data:
+        p_count = len(p_item["periods"])
+        ws.row_dimensions[current_row].height = max(20, 18 * p_count) if p_count > 1 else 20
+
+        # № п/п
+        c_num = ws.cell(row=current_row, column=1, value=p_item["idx"])
+        c_num.font = data_font
+        c_num.alignment = center_align
+        c_num.border = thin_border
+
+        # Сотрудник (ФИО)
+        c_name = ws.cell(row=current_row, column=2, value=p_item["name"])
+        c_name.font = bold_data_font
+        c_name.alignment = left_align
+        c_name.border = thin_border
+
+        # Должность
+        c_pos = ws.cell(row=current_row, column=3, value=p_item["pos"])
+        c_pos.font = data_font
+        c_pos.alignment = left_align
+        c_pos.border = thin_border
+
+        # Периоды отпусков (колонки 4..30)
+        ws.merge_cells(start_row=current_row, start_column=4, end_row=current_row, end_column=30)
+        desc_val = ",  ".join(p_item["periods"]) if p_item["periods"] else "—"
+        c_desc = ws.cell(row=current_row, column=4, value=desc_val)
+        c_desc.font = data_font
+        c_desc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        apply_range_border(current_row, 4, current_row, 30, border=thin_border)
+
+        current_row += 1
+
+    # 6. Ширина колонок
     col_widths = {
         1: 6,   # № п/п
         2: 32,  # Сотрудник (ФИО)
@@ -1628,13 +1680,24 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
     }
     for col_c in range(5, 31):
         col_widths[col_c] = 5.5
-    col_widths[31] = 38  # Периоды отпусков (даты и дни)
 
     for c_idx, width in col_widths.items():
         ws.column_dimensions[get_column_letter(c_idx)].width = width
 
     # Закрепление областей: фиксируем первые 4 строки и колонки A-D
     ws.freeze_panes = "E5"
+
+    # Настройки страницы для печати на листе А4 в альбомной ориентации
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.print_title_rows = '3:4'
+    ws.page_margins.left = 0.4
+    ws.page_margins.right = 0.4
+    ws.page_margins.top = 0.5
+    ws.page_margins.bottom = 0.5
 
     buffer = BytesIO()
     wb.save(buffer)
