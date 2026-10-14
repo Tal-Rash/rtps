@@ -1275,13 +1275,13 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                     cell.fill = fill
 
     # 1. Заголовок таблицы
-    ws.merge_cells("A1:AH1")
+    ws.merge_cells("A1:AE1")
     ws["A1"] = f"ГРАФИК ОТПУСКОВ РАБОТНИКОВ НА {year} ГОД"
     ws["A1"].font = title_font
-    ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
-    ws.row_dimensions[1].height = 30
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 32
 
-    ws.merge_cells("A2:AH2")
+    ws.merge_cells("A2:AE2")
     ws["A2"] = f"Дата выгрузки: {datetime.now().strftime('%d.%m.%Y %H:%M')}  |  Всего работников: {len(items)}"
     ws["A2"].font = meta_font
     ws["A2"].alignment = Alignment(horizontal="left", vertical="center")
@@ -1294,11 +1294,8 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
     headers_fixed = [
         (1, "№\nп/п"),
         (2, "Сотрудник (ФИО)"),
-        (3, "Таб. №"),
-        (4, "Должность"),
-        (5, "Положено\n(дней)"),
-        (6, "Занесено\n(факт)"),
-        (7, "Отклон.\n(дней)")
+        (3, "Должность"),
+        (4, "Отпуск\n(дней)")
     ]
 
     for col_idx, title in headers_fixed:
@@ -1308,10 +1305,10 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         cell.alignment = center_align
         apply_range_border(3, col_idx, 4, col_idx, border=header_border, fill=th1_fill)
 
-    # Заголовки месяцев (колонки 8 .. 33)
+    # Заголовки месяцев (колонки 5 .. 30)
     for m in range(13):
-        c_start = 8 + 2 * m
-        c_end = 9 + 2 * m
+        c_start = 5 + 2 * m
+        c_end = 6 + 2 * m
         ws.merge_cells(start_row=3, start_column=c_start, end_row=3, end_column=c_end)
         cell = ws.cell(row=3, column=c_start, value=f"{month_names[m]}\n({days_in_months[m]} дн.)")
         cell.font = th1_font
@@ -1330,12 +1327,12 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         cell_po.fill = th2_fill
         cell_po.border = header_border
 
-    # Колонка 34: Периоды отпусков
-    ws.merge_cells("AH3:AH4")
-    ws["AH3"] = "Периоды отпусков (даты и дни)"
-    ws["AH3"].font = th1_font
-    ws["AH3"].alignment = center_align
-    apply_range_border(3, 34, 4, 34, border=header_border, fill=th1_fill)
+    # Колонка 31 (AE): Периоды отпусков
+    ws.merge_cells("AE3:AE4")
+    ws["AE3"] = "Периоды отпусков (даты и дни)"
+    ws["AE3"].font = th1_font
+    ws["AE3"].alignment = center_align
+    apply_range_border(3, 31, 4, 31, border=header_border, fill=th1_fill)
 
     # 3. Данные сотрудников (начиная со строки 5)
     start_data_row = 5
@@ -1453,6 +1450,7 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             vac_periods_desc.append(f"{s_ru} - {e_ru} ({v_days} дн.){cov_mark}")
 
         # Запись базовых колонок
+        # Колонка 1: № п/п
         c_num = ws.cell(row=current_row, column=1, value=idx)
         c_num.font = data_font
         c_num.alignment = center_align
@@ -1464,38 +1462,22 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         c_name.alignment = left_align
         c_name.border = thin_border
 
-        # Колонка 3: Табельный номер
-        c_tab = ws.cell(row=current_row, column=3, value=emp_tab)
-        c_tab.font = data_font
-        c_tab.alignment = center_align
-        c_tab.border = thin_border
-
-        # Колонка 4: Должность
-        c_pos = ws.cell(row=current_row, column=4, value=emp_pos)
+        # Колонка 3: Должность
+        c_pos = ws.cell(row=current_row, column=3, value=emp_pos)
         c_pos.font = data_font
         c_pos.alignment = left_align
         c_pos.border = thin_border
 
-        c_all = ws.cell(row=current_row, column=5, value=allowed_val)
+        # Колонка 4: Отпуск (дней)
+        c_all = ws.cell(row=current_row, column=4, value=allowed_val)
         c_all.font = bold_data_font
         c_all.alignment = center_align
         c_all.border = thin_border
 
-        c_fct = ws.cell(row=current_row, column=6, value=emp_fact_days)
-        c_fct.font = bold_data_font
-        c_fct.alignment = center_align
-        c_fct.border = thin_border
-
-        diff_formula = f"=F{current_row}-E{current_row}"
-        c_dif = ws.cell(row=current_row, column=7, value=diff_formula)
-        c_dif.font = bold_data_font
-        c_dif.alignment = center_align
-        c_dif.border = thin_border
-
-        # Запись ячеек месяцев
+        # Запись ячеек месяцев (колонки 5 .. 30)
         for m in range(13):
-            col_c = 8 + 2 * m
-            col_po = 9 + 2 * m
+            col_c = 5 + 2 * m
+            col_po = 6 + 2 * m
 
             val_c = m_c_vals[m]
             val_po = m_po_vals[m]
@@ -1518,9 +1500,9 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 cell_c.fill = vacation_fill
                 cell_po.fill = vacation_fill
 
-        # Запись колонки AH: периоды отпусков
+        # Запись колонки AE (31): периоды отпусков
         desc_text = "\n".join(vac_periods_desc)
-        c_desc = ws.cell(row=current_row, column=34, value=desc_text)
+        c_desc = ws.cell(row=current_row, column=31, value=desc_text)
         c_desc.font = small_desc_font
         c_desc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         c_desc.border = thin_border
@@ -1539,25 +1521,20 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         # Итоговая строка 1: Всего положено
         r_sum1 = current_row
         ws.row_dimensions[r_sum1].height = 24
-        ws.merge_cells(start_row=r_sum1, start_column=1, end_row=r_sum1, end_column=4)
+        ws.merge_cells(start_row=r_sum1, start_column=1, end_row=r_sum1, end_column=3)
         ws.cell(row=r_sum1, column=1, value="Всего положено:").font = bold_data_font
         ws.cell(row=r_sum1, column=1).alignment = right_align
-        apply_range_border(r_sum1, 1, r_sum1, 4, border=thin_border, fill=summary1_fill)
+        apply_range_border(r_sum1, 1, r_sum1, 3, border=thin_border, fill=summary1_fill)
 
-        c_s1_all = ws.cell(row=r_sum1, column=5, value=f"=SUM(E{start_data_row}:E{last_data_row})")
+        c_s1_all = ws.cell(row=r_sum1, column=4, value=f"=SUM(D{start_data_row}:D{last_data_row})")
         c_s1_all.font = bold_data_font
         c_s1_all.alignment = center_align
         c_s1_all.fill = summary1_fill
         c_s1_all.border = thin_border
 
-        for c_empty in (6, 7):
-            cell_e = ws.cell(row=r_sum1, column=c_empty, value="")
-            cell_e.fill = summary1_fill
-            cell_e.border = thin_border
-
         for m in range(13):
-            c_s = 8 + 2 * m
-            c_e = 9 + 2 * m
+            c_s = 5 + 2 * m
+            c_e = 6 + 2 * m
             ws.merge_cells(start_row=r_sum1, start_column=c_s, end_row=r_sum1, end_column=c_e)
             m_norm = round((total_allowed_days / total_year_working_days) * days_in_months[m])
             cell_m = ws.cell(row=r_sum1, column=c_s, value=m_norm)
@@ -1565,62 +1542,46 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_m.alignment = center_align
             apply_range_border(r_sum1, c_s, r_sum1, c_e, border=thin_border, fill=summary1_fill)
 
-        cell_s1_ah = ws.cell(row=r_sum1, column=34, value="")
-        cell_s1_ah.fill = summary1_fill
-        cell_s1_ah.border = thin_border
+        cell_s1_ae = ws.cell(row=r_sum1, column=31, value="")
+        cell_s1_ae.fill = summary1_fill
+        cell_s1_ae.border = thin_border
 
         # Итоговая строка 2: Занесено (факт)
         r_sum2 = current_row + 1
         ws.row_dimensions[r_sum2].height = 24
-        ws.merge_cells(start_row=r_sum2, start_column=1, end_row=r_sum2, end_column=4)
+        ws.merge_cells(start_row=r_sum2, start_column=1, end_row=r_sum2, end_column=3)
         ws.cell(row=r_sum2, column=1, value="Занесено (факт):").font = bold_data_font
         ws.cell(row=r_sum2, column=1).alignment = right_align
-        apply_range_border(r_sum2, 1, r_sum2, 4, border=thin_border, fill=summary2_fill)
+        apply_range_border(r_sum2, 1, r_sum2, 3, border=thin_border, fill=summary2_fill)
 
-        cell_s2_all = ws.cell(row=r_sum2, column=5, value="")
-        cell_s2_all.fill = summary2_fill
-        cell_s2_all.border = thin_border
-
-        c_s2_fct = ws.cell(row=r_sum2, column=6, value=f"=SUM(F{start_data_row}:F{last_data_row})")
+        grand_fact_sum = sum(month_fact_sums)
+        c_s2_fct = ws.cell(row=r_sum2, column=4, value=grand_fact_sum)
         c_s2_fct.font = bold_data_font
         c_s2_fct.alignment = center_align
         c_s2_fct.fill = summary2_fill
         c_s2_fct.border = thin_border
 
-        cell_s2_dif = ws.cell(row=r_sum2, column=7, value="")
-        cell_s2_dif.fill = summary2_fill
-        cell_s2_dif.border = thin_border
-
         for m in range(13):
-            c_s = 8 + 2 * m
-            c_e = 9 + 2 * m
+            c_s = 5 + 2 * m
+            c_e = 6 + 2 * m
             ws.merge_cells(start_row=r_sum2, start_column=c_s, end_row=r_sum2, end_column=c_e)
             cell_m = ws.cell(row=r_sum2, column=c_s, value=month_fact_sums[m])
             cell_m.font = bold_data_font
             cell_m.alignment = center_align
             apply_range_border(r_sum2, c_s, r_sum2, c_e, border=thin_border, fill=summary2_fill)
 
-        cell_s2_ah = ws.cell(row=r_sum2, column=34, value="")
-        cell_s2_ah.fill = summary2_fill
-        cell_s2_ah.border = thin_border
+        cell_s2_ae = ws.cell(row=r_sum2, column=31, value="")
+        cell_s2_ae.fill = summary2_fill
+        cell_s2_ae.border = thin_border
 
         # Итоговая строка 3: Отклонение (%)
         r_sum3 = current_row + 2
         ws.row_dimensions[r_sum3].height = 24
-        ws.merge_cells(start_row=r_sum3, start_column=1, end_row=r_sum3, end_column=4)
+        ws.merge_cells(start_row=r_sum3, start_column=1, end_row=r_sum3, end_column=3)
         ws.cell(row=r_sum3, column=1, value="Отклонение (%):").font = bold_data_font
         ws.cell(row=r_sum3, column=1).alignment = right_align
-        apply_range_border(r_sum3, 1, r_sum3, 4, border=thin_border, fill=summary3_fill)
+        apply_range_border(r_sum3, 1, r_sum3, 3, border=thin_border, fill=summary3_fill)
 
-        cell_s3_all = ws.cell(row=r_sum3, column=5, value="")
-        cell_s3_all.fill = summary3_fill
-        cell_s3_all.border = thin_border
-
-        cell_s3_fct = ws.cell(row=r_sum3, column=6, value="")
-        cell_s3_fct.fill = summary3_fill
-        cell_s3_fct.border = thin_border
-
-        grand_fact_sum = sum(month_fact_sums)
         grand_diff = grand_fact_sum - total_allowed_days
         grand_pct_str = "0%"
         if total_allowed_days > 0:
@@ -1628,15 +1589,15 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             sign = "+" if pct > 0 else ""
             grand_pct_str = f"{sign}{pct}%"
 
-        cell_s3_dif = ws.cell(row=r_sum3, column=7, value=grand_pct_str)
+        cell_s3_dif = ws.cell(row=r_sum3, column=4, value=grand_pct_str)
         cell_s3_dif.font = bold_data_font
         cell_s3_dif.alignment = center_align
         cell_s3_dif.fill = summary3_fill
         cell_s3_dif.border = thin_border
 
         for m in range(13):
-            c_s = 8 + 2 * m
-            c_e = 9 + 2 * m
+            c_s = 5 + 2 * m
+            c_e = 6 + 2 * m
             ws.merge_cells(start_row=r_sum3, start_column=c_s, end_row=r_sum3, end_column=c_e)
             m_norm = round((total_allowed_days / total_year_working_days) * days_in_months[m])
             m_fact = month_fact_sums[m]
@@ -1654,23 +1615,20 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_m.alignment = center_align
             apply_range_border(r_sum3, c_s, r_sum3, c_e, border=thin_border, fill=summary3_fill)
 
-        cell_s3_ah = ws.cell(row=r_sum3, column=34, value="")
-        cell_s3_ah.fill = summary3_fill
-        cell_s3_ah.border = thin_border
+        cell_s3_ae = ws.cell(row=r_sum3, column=31, value="")
+        cell_s3_ae.fill = summary3_fill
+        cell_s3_ae.border = thin_border
 
     # 5. Ширина колонок
     col_widths = {
         1: 6,   # № п/п
         2: 32,  # Сотрудник (ФИО)
-        3: 13,  # Таб. №
-        4: 28,  # Должность
-        5: 13,  # Положено
-        6: 13,  # Факт
-        7: 13,  # Отклонение
+        3: 28,  # Должность
+        4: 12,  # Отпуск (дней)
     }
-    for col_c in range(8, 34):
+    for col_c in range(5, 31):
         col_widths[col_c] = 5.5
-    col_widths[34] = 38
+    col_widths[31] = 38  # Периоды отпусков (даты и дни)
 
     for c_idx, width in col_widths.items():
         ws.column_dimensions[get_column_letter(c_idx)].width = width
