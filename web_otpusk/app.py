@@ -1410,8 +1410,15 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 priv = private_map[cand.lower()]
                 break
 
-        # Определение финальных значений ФИО, должности и табельного
-        if priv:
+        # Определение финальных значений ФИО, должности и табельного с приоритетом реальных данных
+        is_raw_real = raw_name and not raw_name.isdigit() and not raw_name.startswith("Работник №") and not raw_name.startswith("Сотрудник №") and not raw_name.startswith("ID_")
+        is_full_real = raw_full and not raw_full.isdigit() and not raw_full.startswith("СотрудникПолн №") and not raw_full.startswith("Работник №") and not raw_full.startswith("ID_")
+
+        if is_raw_real:
+            emp_name = raw_name
+        elif is_full_real:
+            emp_name = raw_full
+        elif priv:
             p_name = priv.get("name") or priv.get("full_name") or ""
             if p_name and not p_name.isdigit():
                 emp_name = p_name
@@ -1419,8 +1426,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 emp_name = raw_full
             else:
                 emp_name = raw_name or f"Сотрудник {idx}"
-            emp_pos = priv.get("position") or raw_pos or priv.get("pos", "")
-            emp_tab = priv.get("tab_num") or raw_tab or priv.get("tab", "")
         else:
             # Если прямое имя является табельным номером, но raw_full содержит ФИО
             if raw_name.isdigit() and raw_full and not raw_full.isdigit() and not raw_full.startswith("СотрудникПолн №"):
@@ -1431,8 +1436,22 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 emp_name = raw_full
             else:
                 emp_name = raw_name or raw_full or f"Сотрудник {idx}"
+
+        if priv:
+            emp_pos = priv.get("position") or raw_pos or priv.get("pos", "")
+            emp_tab = priv.get("tab_num") or raw_tab or priv.get("tab", "")
+        else:
             emp_pos = raw_pos
             emp_tab = raw_tab
+
+        # Гарантированная замена устаревшей фамилии Ханин на Бопхоев М. М.
+        if "Ханин" in emp_name:
+            emp_name = (
+                emp_name.replace("Ханин Дмитрий Викторович", "Бопхоев М. М.")
+                .replace("Ханин Д. В.", "Бопхоев М. М.")
+                .replace("Ханин Д.В.", "Бопхоев М. М.")
+                .replace("Ханин", "Бопхоев М. М.")
+            )
 
         # Гарантированная защита: исключаем попадание чисел (табельного номера) или анонимных меток в ФИО
         clean_name = emp_name.strip()
