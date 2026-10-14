@@ -392,3 +392,15 @@ button.dirty:hover,
   cursor: wait;
 }
 
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  margin-top: 4px;
+}
+

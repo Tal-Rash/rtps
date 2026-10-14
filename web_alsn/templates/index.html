@@ -20,6 +20,9 @@
     <div class="topbar">
       <div class="titlebox">
         <h1>АЛСН</h1>
+        {% if USER_NAME %}
+        <span class="user-badge" title="Текущий пользователь">{{ USER_NAME }} · {{ USER_ROLE }}</span>
+        {% endif %}
       </div>
       <div class="controls">
         <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>

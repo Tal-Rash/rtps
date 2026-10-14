@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import datetime as dt
 import gzip
@@ -6,11 +8,9 @@ import hmac
 import json
 import os
 import secrets
-import sqlite3
 import sys
 import time
 from pathlib import Path
-from threading import Lock
 from urllib.parse import unquote
 
 from fastapi import FastAPI, Request
@@ -18,34 +18,37 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT.parent))
-from rtps_common import connect_sqlite, module_has_access, resolve_user_access
+# Обеспечиваем доступность корня проекта для системных импортов
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_ROOT.parent))
 
-DATA_DIR = ROOT / "data"
-DB_FILE = DATA_DIR / "alsn.db"
-WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
-WEB_SECRET_FILE = ROOT.parent / "data" / "web_secret.txt"
-SESSION_COOKIE = "rtps_session"
-APP_PREFIX = "/alsn"
-APP_VERSION = "web-alsn-1.2"
-DB_LOCK = Lock()
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "/login")
-MAIN_SITE_URL = os.environ.get("MAIN_SITE_URL", "http://yrtps.ru")
+from rtps_common import module_has_access, resolve_user_access
 
-
-def load_web_secret() -> str:
-    if WEB_SECRET_FILE.exists():
-        return WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-    return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
-
-
-WEB_SECRET = load_web_secret()
+from .constants import (
+    APP_PREFIX,
+    APP_VERSION,
+    MAIN_LOGIN_URL,
+    MAIN_SITE_URL,
+    ROOT,
+    SESSION_COOKIE,
+    WEB_USERS_DB,
+    get_web_secret,
+)
+from .storage import (
+    init_db,
+    load_state_from_db,
+    normalize_locomotives,
+    normalize_warehouse_rows,
+    save_state_to_db,
+)
 
 
 def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
+    """Проверка криптографической подписи куки авторизации и срока её действия."""
     if not value:
         return None
+    secret = get_web_secret()
     for sep in (":", "|"):
         parts = value.rsplit(sep, 5)
         if len(parts) == 6:
@@ -57,7 +60,7 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
             expiry_text = "2000000000"
         else:
             continue
-        exp_sig = hmac.new(WEB_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
+        exp_sig = hmac.new(secret.encode(), raw.encode(), hashlib.sha256).hexdigest()
         if not secrets.compare_digest(sig, exp_sig):
             continue
         if float(expiry_text) < dt.datetime.now().timestamp():
@@ -66,7 +69,8 @@ def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
     return None
 
 
-def get_session(request: Request):
+def get_session(request: Request) -> dict | None:
+    """Извлечение и валидация текущей сессии пользователя с проверкой прав доступа к модулю АЛСН."""
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
         return None
@@ -95,74 +99,26 @@ def get_session(request: Request):
     }
 
 
-def init_db() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with connect_sqlite(DB_FILE) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS locomotives (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sort_order INTEGER NOT NULL,
-                series TEXT NOT NULL DEFAULT '',
-                number TEXT NOT NULL DEFAULT '',
-                inventory_num TEXT NOT NULL DEFAULT '',
-                note TEXT NOT NULL DEFAULT '',
-                devices_json TEXT NOT NULL DEFAULT '[]'
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS warehouse (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sort_order INTEGER NOT NULL,
-                type TEXT NOT NULL DEFAULT '',
-                number TEXT NOT NULL DEFAULT '',
-                verification_date TEXT NOT NULL DEFAULT '',
-                periodicity TEXT NOT NULL DEFAULT '',
-                next_verification_date TEXT NOT NULL DEFAULT '',
-                location TEXT NOT NULL DEFAULT ''
-            )
-            """
-        )
-
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM locomotives")
-        if int(cur.fetchone()[0] or 0) == 0:
-            conn.execute(
-                "INSERT INTO locomotives(sort_order, series, number, inventory_num, note, devices_json) VALUES(?,?,?,?,?,?)",
-                (1, "", "", "", "", "[]"),
-            )
-
-        cur.execute("SELECT COUNT(*) FROM warehouse")
-        if int(cur.fetchone()[0] or 0) == 0:
-            conn.execute(
-                "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
-                (1, "", "", "", "", "", ""),
-            )
-        conn.commit()
-
-
+# Инициализируем структуру базы данных при старте
 init_db()
 
-
-app = FastAPI(title="RTPS ALSN")
+# Создаем приложение FastAPI
+app = FastAPI(title="RTPS ALSN", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="alsn_static")
 app.mount(f"{APP_PREFIX}/static", StaticFiles(directory=str(ROOT / "static")), name="alsn_static_prefixed")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
 
 
 @app.get("/", include_in_schema=False)
-async def root_redirect(request: Request):
-    """При переходе на корень перенаправляем на главную страницу портала."""
+async def root_redirect():
+    """При обращении к корню перенаправляем на главную страницу портала."""
     return RedirectResponse(f"{MAIN_SITE_URL}/", status_code=303)
 
 
 @app.get(f"{APP_PREFIX}", include_in_schema=False)
 @app.get(f"{APP_PREFIX}/", response_class=HTMLResponse)
 async def index(request: Request):
+    """Главная страница модуля АЛСН с отображением текущей сессии."""
     session = get_session(request)
     if not session:
         return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/alsn", status_code=303)
@@ -173,170 +129,21 @@ async def index(request: Request):
         "MAIN_SITE_URL": MAIN_SITE_URL,
         "CAN_EDIT": "true" if session["can_edit"] else "false",
         "USER_NAME": session["full_name"],
+        "USER_ROLE": "Редактор" if session["can_edit"] else "Просмотр",
     }
     return templates.TemplateResponse(request=request, name="index.html", context=context)
-
-
-def _blank_device_rows(count: int = 5) -> list[dict[str, str]]:
-    """Создание пустых строк для приборов локомотива."""
-    return [{"type": "", "number": ""} for _ in range(max(1, count))]
-
-
-def _parse_devices_json(value) -> list[dict[str, str]]:
-    """Разбор JSON со списком приборов локомотива."""
-    try:
-        parsed = json.loads(str(value or "[]"))
-    except Exception:
-        parsed = []
-    if not isinstance(parsed, list):
-        parsed = []
-    normalized = []
-    for row in parsed:
-        if not isinstance(row, dict):
-            continue
-        normalized.append({
-            "type": str(row.get("type", "") or "").strip(),
-            "number": str(row.get("number", "") or "").strip(),
-        })
-    return normalized or _blank_device_rows()
-
-
-def _normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
-    """Нормализация строк склада приборов."""
-    normalized = []
-    if isinstance(rows, list):
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            normalized.append({
-                "type": str(row.get("type", "") or "").strip(),
-                "number": str(row.get("number", "") or "").strip(),
-                "verification_date": str(row.get("verification_date", "") or "").strip(),
-                "periodicity": str(row.get("periodicity", "") or "").strip(),
-                "next_verification_date": str(row.get("next_verification_date", "") or "").strip(),
-                "location": str(row.get("location", "") or "").strip(),
-            })
-    if not normalized:
-        normalized.append({
-            "type": "",
-            "number": "",
-            "verification_date": "",
-            "periodicity": "",
-            "next_verification_date": "",
-            "location": "",
-        })
-    return normalized
-
-
-def _normalize_locomotives(rows: list | None) -> list[dict]:
-    """Нормализация строк локомотивов и их приборов."""
-    normalized = []
-    if isinstance(rows, list):
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            devices = row.get("devices")
-            if not isinstance(devices, list):
-                devices = []
-            normalized.append({
-                "series": str(row.get("series", "") or "").strip(),
-                "number": str(row.get("number", "") or "").strip(),
-                "inventory_num": str(row.get("inventory_num", "") or "").strip(),
-                "note": str(row.get("note", "") or "").strip(),
-                "devices": [
-                    {
-                        "type": str(d.get("type", "") or "").strip(),
-                        "number": str(d.get("number", "") or "").strip(),
-                    }
-                    for d in devices
-                    if isinstance(d, dict)
-                ] or _blank_device_rows(),
-            })
-    if not normalized:
-        normalized.append({
-            "series": "",
-            "number": "",
-            "inventory_num": "",
-            "note": "",
-            "devices": _blank_device_rows(),
-        })
-    return normalized
 
 
 @app.get("/api/state")
 @app.get(f"{APP_PREFIX}/api/state", include_in_schema=False)
 async def api_state(request: Request):
+    """Асинхронное чтение состояния локомотивов и склада без блокировки event loop."""
     session = get_session(request)
     if not session:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    with DB_LOCK, connect_sqlite(DB_FILE) as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        locomotives = [
-            {
-                "series": row["series"],
-                "number": row["number"],
-                "inventory_num": row["inventory_num"],
-                "note": row["note"],
-                "devices": _parse_devices_json(row["devices_json"]),
-            }
-            for row in cur.execute("SELECT series, number, inventory_num, note, devices_json FROM locomotives ORDER BY sort_order, id").fetchall()
-        ]
-        warehouse = [
-            {
-                "type": row["type"],
-                "number": row["number"],
-                "verification_date": row["verification_date"],
-                "periodicity": row["periodicity"],
-                "next_verification_date": row["next_verification_date"],
-                "location": row["location"],
-            }
-            for row in cur.execute(
-                "SELECT type, number, verification_date, periodicity, next_verification_date, location FROM warehouse ORDER BY sort_order, id"
-            ).fetchall()
-        ]
-    return {"locomotives": locomotives, "warehouse": warehouse}
-
-
-def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
-    """Атомарное сохранение локомотивов и склада в БД с WAL-режимом."""
-    with DB_LOCK, connect_sqlite(DB_FILE) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        cur = conn.cursor()
-        cur.execute("DELETE FROM locomotives")
-        cur.execute("DELETE FROM warehouse")
-        cur.executemany(
-            "INSERT INTO locomotives(sort_order, series, number, inventory_num, note, devices_json) VALUES(?,?,?,?,?,?)",
-            [
-                (
-                    idx + 1,
-                    row["series"],
-                    row["number"],
-                    row["inventory_num"],
-                    row["note"],
-                    json.dumps(row["devices"], ensure_ascii=False),
-                )
-                for idx, row in enumerate(locomotives)
-            ],
-        )
-        cur.executemany(
-            "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
-            [
-                (
-                    idx + 1,
-                    row["type"],
-                    row["number"],
-                    row["verification_date"],
-                    row["periodicity"],
-                    row["next_verification_date"],
-                    row["location"],
-                )
-                for idx, row in enumerate(warehouse)
-            ],
-        )
-        conn.commit()
+    state = await asyncio.to_thread(load_state_from_db)
+    return state
 
 
 @app.post("/api/state")
@@ -349,7 +156,6 @@ async def api_save_state(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     try:
-        # Поддержка gzip для моментальной передачи через защитник Windows и сетевые фильтры
         if request.headers.get("content-encoding") == "gzip":
             raw_body = await request.body()
             payload = json.loads(gzip.decompress(raw_body).decode("utf-8"))
@@ -358,10 +164,10 @@ async def api_save_state(request: Request):
     except Exception as exc:
         return JSONResponse({"error": f"Некорректный JSON в теле запроса: {exc}"}, status_code=400)
 
-    locomotives = _normalize_locomotives(payload.get("locomotives"))
-    warehouse = _normalize_warehouse_rows(payload.get("warehouse"))
+    locomotives = normalize_locomotives(payload.get("locomotives"))
+    warehouse = normalize_warehouse_rows(payload.get("warehouse"))
 
-    # Выполняем сохранение в SQLite в пуле потоков, чтобы не блокировать event loop
+    # Выполняем строго атомарное сохранение в SQLite в пуле потоков
     await asyncio.to_thread(save_state_to_db, locomotives, warehouse)
     elapsed = time.perf_counter() - t0
     print(f"[SAVE_ALSN] Успешно сохранено за {elapsed:.3f}с")
