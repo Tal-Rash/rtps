@@ -33,9 +33,9 @@
         for (var i = 0; i < records.length; i++) {
             var rec = records[i];
             var anonId = rec.id;           // e.g. ID_001
-            var realPos = rec.pos;         // e.g. Слесарь...
-            var realFio = rec.fio;         // e.g. Цюрко...
-            var realTab = rec.tab;         // e.g. 4004236
+            var realPos = rec.pos;         // e.g. Должность...
+            var realFio = rec.fio;         // e.g. Иванов И. И.
+            var realTab = rec.tab;         // e.g. 1234567
             var num = anonId.replace('ID_', '').replace(/^0+/, '');
 
             // 1. Замена имен

@@ -17,20 +17,26 @@ def make_short_fio(full_name: str) -> str:
         return f"{parts[0]} {parts[1][0]}."
     return full_name
 
-REAL_EMPLOYEES = [
-    {"tab": "4004236", "fio": "Цюрко Геннадий Васильевич", "pos": "Слесарь по ремонту подвижного состава"},
-    {"tab": "4604571", "fio": "Бопхоев Дмитрий Викторович", "pos": "Слесарь по ремонту подвижного состава"},
-    {"tab": "4601556", "fio": "Тимин Игорь Витальевич", "pos": "Слесарь по ремонту подвижного состава"},
-    {"tab": "4607514", "fio": "Будзинский Никита Андреевич", "pos": "Слесарь по ремонту подвижного состава"},
-    {"tab": "4611025", "fio": "Александров Вадим Николаевич", "pos": "Слесарь по ремонту подвижного состава"},
-    {"tab": "4016004", "fio": "Степанов Илья Борисович", "pos": "Слесарь-электрик по ремонту электрооборудования"},
-    {"tab": "4610209", "fio": "Сивов Александр Сергеевич", "pos": "Слесарь-электрик по ремонту электрооборудования"},
-    {"tab": "4004080", "fio": "Комлев Дмитрий Александрович", "pos": "Аккумуляторщик"},
-    {"tab": "4610497", "fio": "Спиридонов Константин Герольдович", "pos": "Токарь"},
-    {"tab": "4004267", "fio": "Щербакова Ирина Станиславовна", "pos": "Машинист крана"},
-    {"tab": "4015690", "fio": "Цюрко Ирина Ивановна", "pos": "Машинист по стирке спецодежды"},
-    {"tab": "4015696", "fio": "Шварчков Сергей Александрович", "pos": "Начальник участка"}
-]
+def load_real_employees(root_dir: Path) -> list:
+    """Загружает список сотрудников из локального файла employees_private.csv / xlsx при его наличии."""
+    csv_path = root_dir / "employees_private.csv"
+    if csv_path.exists():
+        res = []
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.reader(f, delimiter=";")
+            for row in reader:
+                if not row or len(row) < 3 or str(row[0]).startswith("Код"):
+                    continue
+                tab = row[4].strip() if len(row) > 4 else (row[3].strip() if len(row) > 3 and row[3].strip().isdigit() else row[0].strip())
+                res.append({
+                    "tab": tab,
+                    "fio": row[2].strip() if len(row) > 2 else "",
+                    "pos": row[1].strip() if len(row) > 1 else ""
+                })
+        return res
+    return []
+
+REAL_EMPLOYEES = []
 
 def main():
     root_dir = Path(__file__).resolve().parent.parent
@@ -52,8 +58,9 @@ def main():
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
+    employees = load_real_employees(root_dir) or REAL_EMPLOYEES
     rows = []
-    for i, emp in enumerate(REAL_EMPLOYEES, start=1):
+    for i, emp in enumerate(employees, start=1):
         anon_id = f"ID_{i:03d}"
         short_fio = make_short_fio(emp["fio"])
         row = [anon_id, emp["pos"], emp["fio"], short_fio, emp["tab"]]
