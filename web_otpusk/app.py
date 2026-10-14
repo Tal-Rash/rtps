@@ -1513,9 +1513,13 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                     seg_e = e_d if m_i == end_month_idx else cal_days[m_i]
                     month_fact_sums[m_i] += get_working_vacation_days(m_i, seg_s, m_i, seg_e, holidays_data, cal_days)
 
-            # Форматирование текстового описания периода
-            s_ru = f"{s_parts[2]}.{s_parts[1]}" + (f".{s_y}" if s_y != year else "")
-            e_ru = f"{e_parts[2]}.{e_parts[1]}" + (f".{e_y}" if e_y != year else "")
+            # Форматирование текстового описания периода с ведущими нулями (01..09)
+            s_d_val = int(s_parts[2])
+            s_m_val = int(s_parts[1])
+            e_d_val = int(e_parts[2])
+            e_m_val = int(e_parts[1])
+            s_ru = f"{s_d_val:02d}.{s_m_val:02d}" + (f".{s_y}" if s_y != year else "")
+            e_ru = f"{e_d_val:02d}.{e_m_val:02d}" + (f".{e_y}" if e_y != year else "")
             cov_mark = " (перенос с прошл. г.)" if is_cov else ""
             vac_periods_desc.append(f"{s_ru} - {e_ru} ({v_days} дн.){cov_mark}")
 

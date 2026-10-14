@@ -1239,18 +1239,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         triggerAutoCalc(false);
                         return;
                     }
-                    // Если значение уже содержит точку (например "22.03")
+                    // Если значение содержит точку (например "5.03" или "22.03")
                     if (val.includes('.')) {
+                        const parts = val.split('.');
+                        // Если день указан и введен месяц — форматируем день с добавлением ведущего нуля (01..09)
+                        if (parts[0] && parts.length > 1 && parts[1].length >= 2) {
+                            triggerAutoCalc(true);
+                            return;
+                        }
                         triggerAutoCalc(false);
                         return;
                     }
                     const num = parseInt(val, 10);
-                    // Если введено 2 цифры (например 22) или цифра >= 4 (например 5), форматируем сразу с добавлением месяца
+                    // Если введено 2 цифры (например 05 или 22) или цифра >= 4 (например 5), форматируем сразу с добавлением нуля и месяца
                     if (val.length >= 2 || (!isNaN(num) && num >= 4)) {
                         triggerAutoCalc(true);
                     } else {
-                        // Для цифр 1, 2, 3 даем паузу 350мс для возможного ввода второй цифры
-                        rowAutoCalcTimeout = setTimeout(() => triggerAutoCalc(true), 350);
+                        // Для цифр 1, 2, 3 даем короткую паузу 250мс для возможного ввода второй цифры
+                        rowAutoCalcTimeout = setTimeout(() => triggerAutoCalc(true), 250);
                     }
                 });
 
@@ -1304,6 +1310,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     if (val.includes('.')) {
+                        const parts = val.split('.');
+                        if (parts[0] && parts.length > 1 && parts[1].length >= 2) {
+                            triggerPoUpdate(true);
+                            return;
+                        }
                         triggerPoUpdate(false);
                         return;
                     }
@@ -1311,7 +1322,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (val.length >= 2 || (!isNaN(num) && num >= 4)) {
                         triggerPoUpdate(true);
                     } else {
-                        poCalcTimeout = setTimeout(() => triggerPoUpdate(true), 350);
+                        poCalcTimeout = setTimeout(() => triggerPoUpdate(true), 250);
                     }
                 });
 
@@ -2750,7 +2761,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isoStr || isoStr === 'Архив') return isoStr || '';
         const parts = isoStr.split('-');
         if (parts.length === 3) {
-            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+            const d = String(parts[2]).padStart(2, '0');
+            const m = String(parts[1]).padStart(2, '0');
+            return `${d}.${m}.${parts[0]}`;
         }
         return isoStr;
     }
