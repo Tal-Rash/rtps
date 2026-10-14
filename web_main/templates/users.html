@@ -108,6 +108,11 @@
                 <option value="view" {% if u.a_r == 'view' %}selected{% endif %}>Зритель</option>
                 <option value="edit" {% if u.a_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_alsn" value="yes" title="Скрыть текст на карточке" {{ u.h_a }}></div></label>
+              <label class="mod-label">Отпуск: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_otpusk">
+                <option value="none" {% if u.o_r == 'none' %}selected{% endif %}>Нет доступа</option>
+                <option value="view" {% if u.o_r == 'view' %}selected{% endif %}>Зритель</option>
+                <option value="edit" {% if u.o_r == 'edit' %}selected{% endif %}>Редактор</option>
+              </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_otpusk" value="yes" title="Скрыть текст на карточке" {{ u.h_o }}></div></label>
             </div>
           </td>
           <td>

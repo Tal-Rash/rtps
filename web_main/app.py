@@ -104,7 +104,7 @@ def init_db() -> None:
             if cur.fetchone()[0] == 0:
                 conn.execute(
                     "INSERT INTO users (password, full_name, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,edu,alsn,admin")
+                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,edu,alsn,otpusk,admin")
                 )
                 print("Создан администратор по умолчанию. Пароль: 12345")
             else:
@@ -393,12 +393,14 @@ async def users_page(request: Request):
                     "t_r": "edit" if is_admin else get_mod_role(mods, "tabel", u[3]),
                     "e_r": "edit" if is_admin else get_mod_role(mods, "edu", u[3]),
                     "a_r": "edit" if is_admin else get_mod_role(mods, "alsn", u[3]),
+                    "o_r": "edit" if is_admin else get_mod_role(mods, "otpusk", u[3]),
                     "h_g": "checked" if "hide_grafik_ppr:yes" in (u[4] or "") else "",
                     "h_z": "checked" if "hide_zamer_kp:yes" in (u[4] or "") else "",
                     "h_s": "checked" if "hide_spravochnik:yes" in (u[4] or "") else "",
                     "h_t": "checked" if "hide_tabel:yes" in (u[4] or "") else "",
                     "h_e": "checked" if "hide_edu:yes" in (u[4] or "") else "",
-                    "h_a": "checked" if "hide_alsn:yes" in (u[4] or "") else ""
+                    "h_a": "checked" if "hide_alsn:yes" in (u[4] or "") else "",
+                    "h_o": "checked" if "hide_otpusk:yes" in (u[4] or "") else ""
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
