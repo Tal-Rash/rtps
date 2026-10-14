@@ -10,7 +10,8 @@
     var _canEdit = "{{CAN_EDIT}}";
     window.APP_CONFIG = {
       APP_PREFIX: _prefix,
-      CAN_EDIT: _canEdit === "true"
+      CAN_EDIT: _canEdit === "true",
+      MAIN_SITE_URL: "{{MAIN_SITE_URL}}" || "http://yrtps.ru"
     };
   </script>
 </head>
@@ -19,9 +20,12 @@
     <div class="topbar">
       <div class="titlebox">
         <h1>Обучение</h1>
+        {% if USER_NAME %}
+        <span class="user-badge" title="Текущий пользователь">{{ USER_NAME }} · {{ USER_ROLE }}</span>
+        {% endif %}
       </div>
       <div class="controls">
-        <a class="home-link" href="/">На главную</a>
+        <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
         <div class="nav" id="sectionNav">
           <button class="nav-tab active" id="btnModeDates" onclick="setMode('dates')">📅 Даты</button>
           <button class="nav-tab" id="btnModeProtocols" onclick="setMode('protocols')">📄 Протоколы</button>
