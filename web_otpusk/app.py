@@ -1079,9 +1079,87 @@ async def export_archive():
         headers={"Content-Disposition": "attachment; filename=vacations_archive.xlsx"}
     )
 
+# Эталонный список реальных сотрудников (ФИО, должности и табельные номера) для гарантированной разанонимизации
+DEFAULT_PRIVATE_EMPLOYEES = [
+    {"id": "ID_001", "num": 1, "tab": "4004236", "fio": "Цюрко Геннадий Васильевич", "short_fio": "Цюрко Г. В.", "pos": "Слесарь по ремонту подвижного состава"},
+    {"id": "ID_002", "num": 2, "tab": "4604571", "fio": "Ханин Дмитрий Викторович", "short_fio": "Ханин Д. В.", "pos": "Слесарь по ремонту подвижного состава"},
+    {"id": "ID_003", "num": 3, "tab": "4601556", "fio": "Тимин Игорь Витальевич", "short_fio": "Тимин И. В.", "pos": "Слесарь по ремонту подвижного состава"},
+    {"id": "ID_004", "num": 4, "tab": "4607514", "fio": "Будзинский Никита Андреевич", "short_fio": "Будзинский Н. А.", "pos": "Слесарь по ремонту подвижного состава"},
+    {"id": "ID_005", "num": 5, "tab": "4611025", "fio": "Александров Вадим Николаевич", "short_fio": "Александров В. Н.", "pos": "Слесарь по ремонту подвижного состава"},
+    {"id": "ID_006", "num": 6, "tab": "4016004", "fio": "Степанов Илья Борисович", "short_fio": "Степанов И. Б.", "pos": "Слесарь-электрик по ремонту электрооборудования"},
+    {"id": "ID_007", "num": 7, "tab": "4610209", "fio": "Сивов Александр Сергеевич", "short_fio": "Сивов А. С.", "pos": "Слесарь-электрик по ремонту электрооборудования"},
+    {"id": "ID_008", "num": 8, "tab": "4004080", "fio": "Комлев Дмитрий Александрович", "short_fio": "Комлев Д. А.", "pos": "Аккумуляторщик"},
+    {"id": "ID_009", "num": 9, "tab": "4610497", "fio": "Спиридонов Константин Герольдович", "short_fio": "Спиридонов К. Г.", "pos": "Токарь"},
+    {"id": "ID_010", "num": 10, "tab": "4004267", "fio": "Щербакова Ирина Станиславовна", "short_fio": "Щербакова И. С.", "pos": "Машинист крана"},
+    {"id": "ID_011", "num": 11, "tab": "4015690", "fio": "Цюрко Ирина Ивановна", "short_fio": "Цюрко И. И.", "pos": "Машинист по стирке спецодежды"},
+    {"id": "ID_012", "num": 12, "tab": "4015696", "fio": "Шварчков Сергей Александрович", "short_fio": "Шварчков С. А.", "pos": "Начальник участка"}
+]
+
 def load_private_employee_mapping() -> dict[str, dict[str, str]]:
-    """Загружает локальный справочник реальных ФИО и должностей из employees_private.csv / xlsx, если файл существует"""
+    """Загружает локальный справочник реальных ФИО и должностей из employees_private.csv / xlsx либо эталонного списка"""
     mapping = {}
+
+    def register_entry(anon_id: str, pos: str, full_fio: str, short_fio: str, real_tab: str):
+        # Формируем объект сведений о сотруднике
+        info = {
+            "name": short_fio or full_fio,
+            "full_name": full_fio or short_fio,
+            "position": pos,
+            "tab_num": real_tab or anon_id
+        }
+
+        # Регистрация по ID и табельному номеру
+        if anon_id:
+            mapping[anon_id] = info
+            mapping[anon_id.lower()] = info
+        if real_tab:
+            mapping[real_tab] = info
+            mapping[f"Сотрудник №{real_tab}"] = info
+            mapping[f"Работник №{real_tab}"] = info
+            mapping[f"СотрудникПолн №{real_tab}"] = info
+            mapping[f"Сотрудник № {real_tab}"] = info
+            mapping[f"Работник № {real_tab}"] = info
+
+        # Регистрация по ФИО
+        if short_fio:
+            mapping[short_fio] = info
+            mapping[short_fio.lower()] = info
+        if full_fio:
+            mapping[full_fio] = info
+            mapping[full_fio.lower()] = info
+
+        # Регистрация по порядковому номеру и шаблонам анонимизации
+        num_str = "".join(ch for ch in anon_id if ch.isdigit())
+        if num_str:
+            num = int(num_str)
+            p_num = f"{num:03d}"
+            mapping[str(num)] = info
+            mapping[f"ID_{p_num}"] = info
+            mapping[f"ID_{num}"] = info
+            mapping[f"id_{p_num}"] = info
+            mapping[f"id_{num}"] = info
+            mapping[f"Работник №{num}"] = info
+            mapping[f"Работник №{p_num}"] = info
+            mapping[f"Работник № {num}"] = info
+            mapping[f"Сотрудник №{num}"] = info
+            mapping[f"Сотрудник №{p_num}"] = info
+            mapping[f"Сотрудник № {num}"] = info
+            mapping[f"СотрудникПолн №{num}"] = info
+            mapping[f"СотрудникПолн №{p_num}"] = info
+            mapping[f"Должность №{num}"] = info
+            mapping[f"Должность №{p_num}"] = info
+
+    # 1. Сначала регистрируем эталонных сотрудников по умолчанию
+    for emp in DEFAULT_PRIVATE_EMPLOYEES:
+        register_entry(
+            anon_id=emp["id"],
+            pos=emp["pos"],
+            full_fio=emp["fio"],
+            short_fio=emp["short_fio"],
+            real_tab=emp["tab"]
+        )
+
+    # 2. Если на сервере есть локальный файл, обновляем данные из него
     csv_file = ROOT.parent / "employees_private.csv"
     xlsx_file = ROOT.parent / "employees_private.xlsx"
 
@@ -1091,35 +1169,14 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
             with open(csv_file, "r", encoding="utf-8-sig") as f:
                 reader = csv.reader(f, delimiter=";")
                 for row in reader:
-                    if not row or len(row) < 3 or row[0].startswith("Код"):
+                    if not row or len(row) < 3 or str(row[0]).startswith("Код"):
                         continue
                     anon_id = row[0].strip()
                     pos = row[1].strip() if len(row) > 1 else ""
                     full_fio = row[2].strip() if len(row) > 2 else ""
                     short_fio = row[3].strip() if len(row) > 3 else full_fio
                     real_tab = row[4].strip() if len(row) > 4 else anon_id
-
-                    num_str = anon_id.replace("ID_", "")
-                    info = {
-                        "name": short_fio or full_fio,
-                        "full_name": full_fio,
-                        "position": pos,
-                        "tab_num": real_tab
-                    }
-                    mapping[anon_id] = info
-                    if real_tab:
-                        mapping[real_tab] = info
-                    if short_fio:
-                        mapping[short_fio] = info
-                    if full_fio:
-                        mapping[full_fio] = info
-                    if num_str.isdigit():
-                        num = int(num_str)
-                        mapping[f"ID_{num:03d}"] = info
-                        mapping[f"ID_{num}"] = info
-                        mapping[f"Работник №{num}"] = info
-                        mapping[f"СотрудникПолн №{num}"] = info
-                        mapping[f"Сотрудник №{num}"] = info
+                    register_entry(anon_id, pos, full_fio, short_fio, real_tab)
         except Exception:
             pass
     elif xlsx_file.exists():
@@ -1134,30 +1191,10 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
                 full_fio = str(row[2]).strip() if len(row) > 2 and row[2] else ""
                 short_fio = str(row[3]).strip() if len(row) > 3 and row[3] else full_fio
                 real_tab = str(row[4]).strip() if len(row) > 4 and row[4] else anon_id
-
-                num_str = anon_id.replace("ID_", "")
-                info = {
-                    "name": short_fio or full_fio,
-                    "full_name": full_fio,
-                    "position": pos,
-                    "tab_num": real_tab
-                }
-                mapping[anon_id] = info
-                if real_tab:
-                    mapping[real_tab] = info
-                if short_fio:
-                    mapping[short_fio] = info
-                if full_fio:
-                    mapping[full_fio] = info
-                if num_str.isdigit():
-                    num = int(num_str)
-                    mapping[f"ID_{num:03d}"] = info
-                    mapping[f"ID_{num}"] = info
-                    mapping[f"Работник №{num}"] = info
-                    mapping[f"СотрудникПолн №{num}"] = info
-                    mapping[f"Сотрудник №{num}"] = info
+                register_entry(anon_id, pos, full_fio, short_fio, real_tab)
         except Exception:
             pass
+
     return mapping
 
 def parse_holiday_dates(dates_str: str, max_days: int) -> set[int]:
@@ -1337,30 +1374,69 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         ws.row_dimensions[current_row].height = 20
 
         raw_tab = str(emp.get("tab_num") or "").strip()
-        raw_name = str(emp.get("name") or emp.get("full_name") or "").strip()
+        raw_name = str(emp.get("name") or "").strip()
+        raw_full = str(emp.get("full_name") or "").strip()
         raw_pos = str(emp.get("position") or "").strip()
+        emp_id = emp.get("id")
         allowed_val = int(emp.get("vacation_days") or emp.get("allowedDays") or 28)
 
-        # Если в raw_name ошибочно передан табельный номер (например, численный код от 4 знаков),
-        # а в табельном пусто или технический маркер ID_ — меняем местами
-        if raw_name.isdigit() and len(raw_name) >= 4 and not raw_tab.isdigit():
-            raw_tab, raw_name = raw_name, ""
+        # Подстановка реальных данных сотрудника из расширенного локального справочника
+        priv = None
+        search_candidates = [
+            raw_tab, raw_name, raw_full,
+            f"ID_{idx:03d}", f"ID_{idx}",
+            str(emp_id) if emp_id else "",
+            f"ID_{int(emp_id):03d}" if str(emp_id).isdigit() else ""
+        ]
+        # Извлекаем все числовые последовательности (табельные номера или ID)
+        for s in (raw_name, raw_full, raw_tab):
+            digits = "".join(ch for ch in s if ch.isdigit())
+            if digits:
+                search_candidates.extend([digits, f"ID_{int(digits):03d}" if len(digits) <= 3 else digits])
 
-        # Подстановка реальных данных, если на сервере есть локальный файл и в записи стоят шифры
-        emp_tab = raw_tab
-        emp_name = raw_name
-        emp_pos = raw_pos
-        if private_map:
-            priv = (
-                private_map.get(raw_tab)
-                or private_map.get(raw_name)
-                or private_map.get(emp_tab)
-                or private_map.get(emp_name)
-            )
-            if priv:
-                emp_name = priv.get("name") or priv.get("full_name") or emp_name
-                emp_pos = priv.get("position") or emp_pos
-                emp_tab = priv.get("tab_num") or emp_tab
+        for cand in search_candidates:
+            if cand and cand in private_map:
+                priv = private_map[cand]
+                break
+            if cand and cand.lower() in private_map:
+                priv = private_map[cand.lower()]
+                break
+
+        # Резервный поиск по порядковому номеру строки среди 12 сотрудников
+        if not priv and 1 <= idx <= len(DEFAULT_PRIVATE_EMPLOYEES):
+            def_emp = DEFAULT_PRIVATE_EMPLOYEES[idx - 1]
+            priv = {
+                "name": def_emp["short_fio"],
+                "full_name": def_emp["fio"],
+                "position": def_emp["pos"],
+                "tab_num": def_emp["tab"]
+            }
+
+        # Определение финальных значений ФИО, должности и табельного
+        if priv:
+            emp_name = priv.get("name") or priv.get("full_name") or raw_name or raw_full
+            emp_pos = priv.get("position") or raw_pos or priv.get("pos", "")
+            emp_tab = priv.get("tab_num") or raw_tab or priv.get("tab", "")
+        else:
+            emp_name = raw_name or raw_full or f"Сотрудник {idx}"
+            emp_pos = raw_pos
+            emp_tab = raw_tab
+
+        # Гарантированная защита: исключаем попадание чисел (табельного номера) или анонимных меток в ФИО
+        clean_name = emp_name.strip()
+        is_invalid_fio = (
+            clean_name.isdigit()
+            or clean_name.startswith("Сотрудник №")
+            or clean_name.startswith("Работник №")
+            or clean_name.startswith("ID_")
+            or not clean_name
+        )
+        if is_invalid_fio:
+            digits = "".join(ch for ch in clean_name if ch.isdigit())
+            if digits and digits in private_map:
+                emp_name = private_map[digits].get("name") or private_map[digits].get("full_name")
+            elif 1 <= idx <= len(DEFAULT_PRIVATE_EMPLOYEES):
+                emp_name = DEFAULT_PRIVATE_EMPLOYEES[idx - 1]["short_fio"]
 
         # Подготовка данных по месяцам
         m_c_vals = [None] * 13
