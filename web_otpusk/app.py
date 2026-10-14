@@ -1604,7 +1604,8 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             cell_po.border = thin_border
 
             # Оформление ячеек отпусков (черный фон, белый шрифт)
-            if m_is_cov[m] or m_is_vac[m]:
+            is_vac = m_is_cov[m] or m_is_vac[m] or (val_c is not None) or (val_po is not None)
+            if is_vac:
                 cell_c.fill = vacation_fill
                 cell_po.fill = vacation_fill
                 cell_c.font = vacation_font
