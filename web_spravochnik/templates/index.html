@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Справочник</title>
+  <style>
+    :root{--line:#d9e2ef;--text:#102033;--muted:#66758a;--blue:#276ef1;--bg:#f4f7fb}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{padding:16px;max-width:1500px;margin:0 auto}
+    .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px 16px;margin-bottom:14px}
+    h1{margin:0;font-size:22px}.muted{color:var(--muted);font-size:13px}
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      margin-top: 4px;
+    }
+    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 12px;background:#fff;color:#1f57d6;font-weight:400;text-decoration:none;font:inherit}
+    button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
+    button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+    button.primary:disabled{opacity:.78}
+    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:17px;position:relative;z-index:2}
+    .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:400;cursor:pointer;color:#1f57d6}
+    .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
+    .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
+    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px;overflow:auto;position:relative;z-index:1}
+    .table-shell{margin-top:12px;background:#fff;border:1px solid #2f6fed;border-radius:18px;overflow:hidden}
+    .panel.active{display:block}
+    table{border-collapse:collapse;width:100%;min-width:760px}
+    table.norms-table{table-layout:fixed}
+    table.employees-table{table-layout:fixed}
+    th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
+    th{background:#eef4fb;font-weight:700}
+    table.employees-table td{height:auto;vertical-align:middle;position:relative}
+    table.employees-table th{height:34px;vertical-align:middle}
+    table.norms-table th, table.norms-table td{white-space:nowrap}
+    table.employees-table th, table.employees-table td{white-space:normal}
+    td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
+    td textarea{width:100%;min-height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent;resize:none;overflow:hidden;display:block;line-height:1.25;box-sizing:border-box}
+    td input[type=checkbox]{width:auto;height:auto}
+    table.employees-table td input[type=checkbox]{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+    .left{text-align:left!important}
+    .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
+    .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
+    .selected-row{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
+    .deleted-row{opacity:.55}
+    .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
+    td input:focus,
+    td input:focus-visible{
+      outline:none;
+      box-shadow:none;
+    }
+    .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+    .modal-backdrop.show{display:flex}
+    .modal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(16,32,51,.2)}
+    .modal h2{margin:0 0 12px;font-size:22px}
+    .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .modal-grid label{display:flex;flex-direction:column;gap:6px;font-weight:700}
+    .modal-grid input{padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+    .modal-actions button{min-width:120px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="titlebox">
+      <h1>Справочник</h1>
+      {% if USER_NAME %}
+      <span class="user-badge" title="Текущий пользователь">{{ USER_NAME }} · {{ USER_ROLE }}</span>
+      {% endif %}
+    </div>
+    <div class="actions">
+      <a href="{{MAIN_SITE_URL}}/">На главную</a>
+      <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+      <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+      <label>Год <select id="year"></select></label>
+      <button id="saveBtn" onclick="saveAll()">Сохранить</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('norms', this)">Нормы времени</button>
+    <button class="tab" onclick="showTab('employees', this)">Сотрудники</button>
+    <button class="tab" onclick="showTab('inventory', this)">Локомотивы</button>
+  </div>
+  <div id="norms" class="panel active"></div>
+  <div id="employees" class="panel"></div>
+  <div id="inventory" class="panel"></div>
+</div>
+<div id="addLocoModal" class="modal-backdrop" onclick="closeAddLocomotiveModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>Добавить локомотив</h2>
+  <div class="modal-grid">
+      <label>Серия
+        <input id="newLocoSeries" autocomplete="off">
+      </label>
+      <label>Номер
+        <input id="newLocoNumber" autocomplete="off">
+      </label>
+      <label>Год выпуска
+        <input id="newLocoYear" type="number" min="1900" max="2100" step="1" autocomplete="off" placeholder="2026">
+      </label>
+      <label>Срок службы
+        <input id="newLocoServiceLife" type="number" min="1" step="1" autocomplete="off" placeholder="25">
+      </label>
+      <label>Кол-во к. пар
+        <input id="newLocoWheelPairs" type="number" min="1" step="1" value="6">
+      </label>
+      <label>Кол-во секций
+        <input id="newLocoSections" type="number" min="1" step="1" value="1">
+      </label>
+      <label>Инвентарный №
+        <input id="newLocoInv" autocomplete="off">
+      </label>
+      <label style="grid-column:1 / -1">8-значный номер
+        <input id="newLocoEight" autocomplete="off" inputmode="numeric" maxlength="8" placeholder="00000000">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" onclick="closeAddLocomotiveModal()">Отмена</button>
+      <button type="button" class="primary" onclick="submitAddLocomotive()">Добавить</button>
+    </div>
+  </div>
+</div>
+<script src="{{APP_PREFIX}}/static/jszip.min.js?v={{APP_VERSION}}"></script>
+<script src="{{APP_PREFIX}}/static/xlsx.full.min.js?v={{APP_VERSION}}"></script>
+<script>
+const API = '{{APP_PREFIX}}';
+const CAN_EDIT = {{CAN_EDIT}};
+let state = null;
+let savedState = null;
+let canceledState = null;
+  const headers = {
+    norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
+    employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Дата приема','Дата искл.','Отпуск (дней)','Молоко прим.'],
+    inventory: ['Серия','Номер','Инвентарный №','Кол-во КП','Ко-во секций','8-значный номер','Год выпуска','Срок службы']
+  };
+
+function fillYears(){
+  const select = document.getElementById('year');
+  const now = new Date().getFullYear();
+  for(let y = now - 3; y <= now + 5; y++){
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if(y === now) opt.selected = true;
+    select.appendChild(opt);
+  }
+  select.onchange = loadState;
+}
+
+async function loadState(){
+  const year = document.getElementById('year').value;
+  const res = await fetch(`${API}/api/state?year=${year}`, {cache:'no-store'});
+  if(!res.ok){ alert('Не удалось загрузить справочник'); return; }
+  state = await res.json();
+  savedState = cloneState(state);
+  canceledState = null;
+  renderAll();
+}
+
+function renderAll(){
+  renderTable('norms', state.norms, false);
+  renderTable('employees', state.employees, true);
+  renderTable('inventory', state.inventory, true);
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.style.display = CAN_EDIT ? '' : 'none';
+  }
+  updateHistoryButtons();
+  updateSaveButton();
+  syncInventoryActionButtons();
+}
+
+function renderTable(name, rows, editableRows){
+  const panel = document.getElementById(name);
+  const rowbar = (editableRows && CAN_EDIT)
+    ? (
+      name === 'inventory'
+        ? (() => {
+            const selectedRow = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
+            const isDeleted = selectedRow ? Number(selectedRow[8] || 0) > 0 : false;
+            return `<div class="rowbar">
+              <button type="button" onclick="openAddLocomotiveModal()">Добавить локомотив</button>
+              <button id="inventoryDeleteBtn" type="button" onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
+              <button id="inventoryRestoreBtn" type="button" onclick="restoreInventoryRow()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
+              <button id="inventoryPurgeBtn" type="button" onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
+            </div>`;
+          })()
+        : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
+    )
+    : '';
+  const tableClass = name === 'norms' ? ' class="norms-table"' : '';
+  const employeesTableClass = name === 'employees' ? ' class="employees-table"' : '';
+  const colGroup = name === 'norms'
+    ? `<colgroup>
+        <col style="width:42px">
+        <col style="width:150px">
+        <col style="width:120px">
+        <col style="width:120px">
+        <col style="width:120px">
+        <col style="width:120px">
+        <col style="width:120px">
+        <col style="width:200px">
+        <col>
+      </colgroup>`
+    : name === 'employees'
+      ? `<colgroup>
+          <col style="width:42px">
+          <col style="width:240px">
+          <col style="width:160px">
+          <col style="width:200px">
+          <col style="width:110px">
+          <col style="width:100px">
+          <col style="width:100px">
+          <col style="width:120px">
+          <col style="width:120px">
+          <col style="width:110px">
+          <col>
+        </colgroup>`
+    : name === 'inventory'
+      ? `<colgroup>
+          <col style="width:42px">
+          <col style="width:170px">
+          <col style="width:170px">
+          <col style="width:150px">
+          <col style="width:120px">
+          <col style="width:120px">
+          <col style="width:150px">
+          <col style="width:120px">
+          <col style="width:120px">
+        </colgroup>`
+    : '';
+  let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + '<thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach((row, r) => {
+    const isDeleted = name === 'inventory' && Number(row[8] || 0) > 0;
+    const isDraggable = (name === 'inventory' || name === 'employees') && CAN_EDIT;
+    const draggable = isDraggable
+      ? ` draggable="true" ondragstart="dragStartRow(event, '${name}', ${r})" ondragover="dragOverRow(event, '${name}', ${r})" ondrop="dropRow(event, '${name}', ${r})" ondragend="dragEndRow(event)"`
+      : '';
+    const isSelected = selected[name] === r;
+    const rowClass = [
+      isDeleted ? 'deleted-row' : '',
+      isSelected ? 'selected-row' : '',
+    ].filter(Boolean).join(' ');
+    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${draggable}><td style="${isDraggable ? 'cursor:grab;' : ''}">${r + 1}</td>`;
+    headers[name].forEach((_, c) => {
+      const val = row[c] ?? '';
+      if(name === 'employees' && (c === 4 || c === 5)){
+        html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
+      } else if (name === 'employees' && (c === 6 || c === 7)) {
+        html += `<td><input type="date" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.value)"` : 'disabled'}></td>`;
+      } else if (name === 'employees' && c === 8) {
+        html += `<td><input class="num" type="number" min="0" max="100" value="${escapeHtml(val !== '' && val !== null && val !== undefined ? val : 28)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value===''?28:(parseInt(this.value)||0))"` : 'readonly'}></td>`;
+      } else if (name === 'employees') {
+        const cls = c < 3 ? 'left' : '';
+        html += `<td><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autoResizeTextarea(this);" oninput="setCell('${name}',${r},${c},this.value); autoResizeTextarea(this);" onmousedown="event.stopPropagation()"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
+      } else if (name === 'inventory' && c === 2) {
+        const cls = 'left';
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 3) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 4) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 5) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 6) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else if (name === 'inventory' && c === 7) {
+        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      } else {
+        const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 2) ? 'left' : '';
+        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  panel.innerHTML = html;
+  if (name === 'employees') {
+    resizeEmployeeTable(panel);
+  }
+}
+
+let selected = {employees: -1, inventory: -1};
+let draggedTable = '';
+let draggedRowIndex = -1;
+function selectRow(name, row){
+  selected[name] = row;
+  if (name === 'inventory') {
+    syncInventoryActionButtons();
+    updateInventorySelectionHighlight();
+  }
+}
+function selectInventoryRow(row){
+  selected.inventory = row;
+  syncInventoryActionButtons();
+  updateInventorySelectionHighlight();
+}
+function syncInventoryActionButtons(){
+  const current = getSelectedInventoryRow();
+  const isDeleted = current ? Number(current[8] || 0) > 0 : false;
+  const deleteBtn = document.getElementById('inventoryDeleteBtn');
+  const restoreBtn = document.getElementById('inventoryRestoreBtn');
+  const purgeBtn = document.getElementById('inventoryPurgeBtn');
+  if (deleteBtn) deleteBtn.disabled = selected.inventory < 0 || isDeleted;
+  if (restoreBtn) restoreBtn.disabled = selected.inventory < 0 || !isDeleted;
+  if (purgeBtn) purgeBtn.disabled = selected.inventory < 0 || !isDeleted;
+}
+function updateInventorySelectionHighlight(){
+  const panel = document.getElementById('inventory');
+  if (!panel) return;
+  panel.querySelectorAll('tbody tr').forEach((tr, index) => {
+    tr.classList.toggle('selected-row', index === selected.inventory);
+  });
+}
+function autoResizeTextarea(el){
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+function resizeEmployeeTable(panel){
+  const target = panel || document.getElementById('employees');
+  if (!target) return;
+  const run = () => target.querySelectorAll('textarea').forEach(autoResizeTextarea);
+  requestAnimationFrame(() => {
+    run();
+    requestAnimationFrame(run);
+  });
+}
+window.addEventListener('resize', () => {
+  const panel = document.getElementById('employees');
+  if (!panel || !panel.classList.contains('active')) return;
+  resizeEmployeeTable(panel);
+});
+let lookupTimer = null;
+function setCell(name, row, col, value){
+  if (!CAN_EDIT) return;
+  state[name][row][col] = value;
+  updateSaveButton();
+
+  // Автоматическое подтягивание ФИО и Должности из CSV при вводе ID в столбце Таб. № (col 3)
+  if (name === 'employees' && col === 3 && value && String(value).trim()) {
+    if (lookupTimer) clearTimeout(lookupTimer);
+    lookupTimer = setTimeout(() => {
+      const query = String(value).trim();
+      fetch(`${API}/api/employee-lookup?id=${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(info => {
+          if (info && info.tab_num) {
+            state.employees[row][3] = info.tab_num;
+            if (info.found) {
+              if (info.pos) state.employees[row][0] = info.pos;
+              if (info.name) state.employees[row][1] = info.name;
+              if (info.full_name) state.employees[row][2] = info.full_name;
+            }
+            renderTable('employees', state.employees, true);
+            updateSaveButton();
+          }
+        })
+        .catch(() => {});
+    }, 400);
+  }
+}
+function addRow(name){
+  if (!CAN_EDIT) return;
+  if (name === 'inventory') {
+    openAddLocomotiveModal();
+    return;
+  }
+  const cols = headers[name].length;
+  const newRow = Array(cols).fill('');
+  if (name === 'employees' && cols > 8) newRow[8] = 28;
+  state[name].push(newRow);
+  renderTable(name, state[name], true);
+  updateSaveButton();
+}
+function deleteRow(name){
+  if (!CAN_EDIT) return;
+  if (name === 'inventory') {
+    softDeleteInventory();
+    return;
+  }
+  const row = selected[name] >= 0 ? selected[name] : state[name].length - 1;
+  if(row >= 0) state[name].splice(row, 1);
+  selected[name] = -1;
+  renderTable(name, state[name], true);
+  updateSaveButton();
+}
+function getSelectedInventoryRow(){
+  if (selected.inventory < 0 || !state.inventory[selected.inventory]) return null;
+  return state.inventory[selected.inventory];
+}
+function softDeleteInventory(row){
+  if (!CAN_EDIT) return;
+  const targetRow = Number.isInteger(row) ? row : selected.inventory;
+  if (targetRow < 0) return;
+  const current = state.inventory[targetRow];
+  if (Number(current[8] || 0) > 0) return;
+  current[8] = Date.now();
+  selected.inventory = targetRow;
+  renderTable('inventory', state.inventory, true);
+  syncInventoryActionButtons();
+  updateSaveButton();
+}
+function restoreInventoryRow(row){
+  if (!CAN_EDIT) return;
+  const targetRow = Number.isInteger(row) ? row : selected.inventory;
+  const current = targetRow >= 0 ? state.inventory[targetRow] : null;
+  if (!current || Number(current[8] || 0) <= 0) return;
+  current[8] = 0;
+  selected.inventory = targetRow;
+  renderTable('inventory', state.inventory, true);
+  syncInventoryActionButtons();
+  updateSaveButton();
+}
+async function purgeSelectedInventory(row){
+  if (!CAN_EDIT) return;
+  const targetRowIndex = Number.isInteger(row) ? row : selected.inventory;
+  const targetRow = targetRowIndex >= 0 ? state.inventory[targetRowIndex] : null;
+  if (!targetRow || Number(targetRow[8] || 0) <= 0) return;
+  if (!confirm('Удалить окончательно выбранный локомотив?')) return;
+  const target = targetRow;
+  const year = Number(document.getElementById('year').value);
+  const res = await fetch(`${API}/api/purge_inventory_row`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({year, ser: target[0], num: target[1]})
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || data.ok === false){
+    alert(data.error || 'Не удалось удалить окончательно');
+    return;
+  }
+  state.inventory.splice(targetRowIndex, 1);
+  selected.inventory = state.inventory.length ? Math.min(targetRowIndex, state.inventory.length - 1) : -1;
+  renderTable('inventory', state.inventory, true);
+  syncInventoryActionButtons();
+  updateInventorySelectionHighlight();
+  updateSaveButton();
+  return;
+}
+function dragStartRow(event, name, row){
+  if (!CAN_EDIT) return;
+  if (name === 'inventory' && state.inventory[row] && Number(state.inventory[row][8] || 0) > 0) {
+    event.preventDefault();
+    return;
+  }
+  draggedTable = name;
+  draggedRowIndex = row;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', String(row));
+}
+function dragOverRow(event, name, row){
+  if (!CAN_EDIT) return;
+  if (draggedTable !== name || draggedRowIndex < 0 || draggedRowIndex === row) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+}
+function dropRow(event, name, row){
+  if (!CAN_EDIT) return;
+  event.preventDefault();
+  const from = draggedRowIndex;
+  if (draggedTable !== name || from < 0 || from === row) return;
+  const rows = state[name];
+  if (!rows) return;
+  const [moved] = rows.splice(from, 1);
+  rows.splice(row, 0, moved);
+  selected[name] = row;
+  draggedRowIndex = -1;
+  draggedTable = '';
+  renderTable(name, rows, true);
+  updateSaveButton();
+}
+function dragEndRow(){
+  draggedRowIndex = -1;
+  draggedTable = '';
+}
+async function saveAll(){
+  if (!CAN_EDIT) return;
+  if (!hasUnsavedChanges()) return;
+  state.year = Number(document.getElementById('year').value);
+  const res = await fetch(`${API}/api/save`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
+  if(!res.ok){ alert('Ошибка сохранения'); return; }
+  savedState = cloneState(state);
+  canceledState = null;
+  updateHistoryButtons();
+  updateSaveButton();
+}
+function cloneState(value){
+  return value ? JSON.parse(JSON.stringify(value)) : null;
+}
+function hasUnsavedChanges(){
+  return JSON.stringify(state) !== JSON.stringify(savedState);
+}
+function updateSaveButton(){
+  const saveBtn = document.getElementById('saveBtn');
+  if (!saveBtn) return;
+  const dirty = CAN_EDIT && hasUnsavedChanges();
+  saveBtn.classList.toggle('primary', dirty);
+  saveBtn.disabled = !CAN_EDIT;
+  saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Изменений нет';
+}
+window.addEventListener('beforeunload', (event) => {
+  if (!CAN_EDIT || !hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+function updateHistoryButtons(){
+  const cancelBtn = document.getElementById('cancelBtn');
+  const restoreBtn = document.getElementById('restoreBtn');
+  if (cancelBtn) cancelBtn.style.display = '';
+  if (restoreBtn) restoreBtn.style.display = '';
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
+  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
+}
+function cancelChanges(){
+  if (!CAN_EDIT || !savedState) return;
+  canceledState = cloneState(state);
+  state = cloneState(savedState);
+  selected = {employees:-1, inventory:-1};
+  renderAll();
+  alert('Отменено');
+}
+function restoreChanges(){
+  if (!CAN_EDIT || !canceledState) return;
+  state = cloneState(canceledState);
+  canceledState = null;
+  selected = {employees:-1, inventory:-1};
+  renderAll();
+  alert('Восстановлено');
+}
+async function purgeDeleted(){
+  if (!CAN_EDIT) return;
+  if (!confirm('Удалить окончательно все помеченные как удалённые локомотивы?')) return;
+  const res = await fetch(`${API}/api/purge_deleted_inventory`, {method:'POST'});
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || data.ok === false){
+    alert(data.error || 'Не удалось удалить окончательно');
+    return;
+  }
+  await loadState();
+}
+function openAddLocomotiveModal(){
+  if (!CAN_EDIT) return;
+  document.getElementById('newLocoSeries').value = '';
+  document.getElementById('newLocoNumber').value = '';
+  document.getElementById('newLocoServiceLife').value = '';
+  document.getElementById('newLocoWheelPairs').value = '6';
+  document.getElementById('newLocoSections').value = '1';
+  document.getElementById('newLocoInv').value = '';
+  document.getElementById('newLocoEight').value = '';
+  document.getElementById('newLocoYear').value = '';
+  document.getElementById('addLocoModal').classList.add('show');
+  setTimeout(() => document.getElementById('newLocoSeries').focus(), 0);
+}
+function closeAddLocomotiveModal(event){
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('addLocoModal').classList.remove('show');
+}
+function submitAddLocomotive(){
+  if (!CAN_EDIT) return;
+  const series = document.getElementById('newLocoSeries').value.trim();
+  const number = document.getElementById('newLocoNumber').value.trim();
+  const wheelPairs = Math.max(1, Number(document.getElementById('newLocoWheelPairs').value) || 1);
+  const sections = Math.max(1, Number(document.getElementById('newLocoSections').value) || 1);
+  const inv = document.getElementById('newLocoInv').value.trim();
+  const eightDigit = document.getElementById('newLocoEight').value.trim();
+  const yearBuilt = document.getElementById('newLocoYear').value.trim();
+  const serviceLife = document.getElementById('newLocoServiceLife').value.trim();
+  if (!series || !number) {
+    alert('Заполните серию и номер локомотива');
+    return;
+  }
+  const exists = state.inventory.some(row => (row[0] || '').trim() === series && (row[1] || '').trim() === number);
+  if (exists) {
+    alert('Такой локомотив уже есть в справочнике');
+    return;
+  }
+  state.inventory.push([series, number, inv, wheelPairs, sections, eightDigit, yearBuilt, serviceLife, 0]);
+  selected.inventory = state.inventory.length - 1;
+  closeAddLocomotiveModal();
+  renderTable('inventory', state.inventory, true);
+  updateSaveButton();
+}
+function showTab(id, btn){
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'employees') {
+    resizeEmployeeTable(document.getElementById('employees'));
+  }
+}
+function escapeHtml(value){
+  return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+}
+fillYears();
+const params = new URLSearchParams(window.location.search);
+const activeTab = params.get('tab');
+if (activeTab) {
+  const btn = document.querySelector(`.tab[onclick="showTab('${activeTab}', this)"]`);
+  if (btn) {
+    showTab(activeTab, btn);
+  }
+}
+/* Автоматическая инициализация пользовательских меток таблиц */
+(function initTableCustomLabels() {
+  function applyCustomLabels() {
+    try {
+      const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+      if (!pairs || !pairs.length) return;
+
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      while ((node = walker.nextNode())) {
+        let val = node.nodeValue;
+        if (!val || !val.trim()) continue;
+        let newVal = val;
+        for (let p = 0; p < pairs.length; p++) {
+          if (newVal.indexOf(pairs[p].from) !== -1) {
+            newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+          }
+        }
+        if (newVal !== val) node.nodeValue = newVal;
+      }
+
+      const inputs = document.querySelectorAll('input, select, option, textarea');
+      for (let i = 0; i < inputs.length; i++) {
+        let el = inputs[i];
+        if (el.tagName === 'OPTION' || el.tagName === 'option') {
+          if (el.textContent) {
+            let val = el.textContent, newVal = val;
+            for (let p = 0; p < pairs.length; p++) {
+              if (newVal.indexOf(pairs[p].from) !== -1) {
+                newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+              }
+            }
+            if (newVal !== val) el.textContent = newVal;
+          }
+        }
+        if (el.value) {
+          let val = el.value, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.value = newVal;
+        }
+        if (el.title) {
+          let val = el.title, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.title = newVal;
+        }
+        if (el.placeholder) {
+          let val = el.placeholder, newVal = val;
+          for (let p = 0; p < pairs.length; p++) {
+            if (newVal.indexOf(pairs[p].from) !== -1) {
+              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
+            }
+          }
+          if (newVal !== val) el.placeholder = newVal;
+        }
+      }
+    } catch (e) {}
+  }
+
+  window.applyCustomLabels = applyCustomLabels;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    applyCustomLabels();
+    let timer = null;
+    const observer = new MutationObserver(function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(applyCustomLabels, 10);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+})();
+
+/* ==========================================================================
+ * Утилиты автоматической разанонимизации (расшифровки) отчетов Excel в браузере.
+ * Комментарии к коду на русском языке.
+ * ========================================================================== */
+
+function getEmpReplacementPairs() {
+  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
+  if (!raw) return [];
+  
+  let map = null;
+  try { map = JSON.parse(raw); } catch (e) { return []; }
+  if (!map) return [];
+
+  const flatMap = {};
+
+  // Извлекает порядковый номер из строки вида ID_001, Работник №1 и т.д.
+  function extractNum(idStr) {
+    if (!idStr) return null;
+    const clean = String(idStr)
+      .replace(/ID_/g, '')
+      .replace(/Работник\\s*№?\\s*/g, '')
+      .replace(/СотрудникПолн\\s*№?\\s*/g, '')
+      .replace(/Сотрудник\\s*№?\\s*/g, '')
+      .replace(/Должность\\s*№?\\s*/g, '')
+      .trim();
+    const num = parseInt(clean, 10);
+    return isNaN(num) ? null : num;
+  }
+
+  // Добавляет варианты написания текстового поля (Работник №1, Работник №001 и т.д.)
+  function addFieldVariants(prefix, num, val) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+    const valStr = String(val);
+
+    flatMap[prefix + " №" + num] = valStr;
+    flatMap[prefix + " №" + sNum] = valStr;
+    flatMap[prefix + " №" + pNum] = valStr;
+    flatMap[prefix + " № " + sNum] = valStr;
+    flatMap[prefix + " № " + pNum] = valStr;
+  }
+
+  // Добавляет варианты написания ID (ID_001, ID_1 и т.д.)
+  function addIdVariants(num, val) {
+    const sNum = String(num);
+    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+    const valStr = String(val);
+
+    flatMap["ID_" + pNum] = valStr;
+    flatMap["ID_" + sNum] = valStr;
+    flatMap["ID_" + num] = valStr;
+  }
+
+  if (Array.isArray(map)) {
+    for (let i = 0; i < map.length; i++) {
+      let rec = map[i];
+      if (!rec) continue;
+
+      let num = extractNum(rec.id || rec.tab || rec.tab_num);
+      if (num === null) num = i + 1;
+
+      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
+      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
+      let pos = rec.pos || rec.position || '';
+      let tab = rec.tab || rec.tab_num || rec.id || '';
+
+      if (shortF) addFieldVariants("Работник", num, shortF);
+      if (fullF) {
+        addFieldVariants("СотрудникПолн", num, fullF);
+        addFieldVariants("Сотрудник", num, fullF);
+      }
+      if (pos) addFieldVariants("Должность", num, pos);
+      if (tab) {
+        addIdVariants(num, tab);
+        if (rec.id) flatMap[String(rec.id)] = String(tab);
+      }
+    }
+  } else if (typeof map === 'object') {
+    for (let k in map) {
+      if (map.hasOwnProperty(k) && k && map[k]) {
+        const valStr = String(map[k]);
+        flatMap[k] = valStr;
+        let num = extractNum(k);
+        if (num !== null) {
+          if (k.startsWith("Работник")) {
+            addFieldVariants("Работник", num, valStr);
+          } else if (k.startsWith("СотрудникПолн")) {
+            addFieldVariants("СотрудникПолн", num, valStr);
+            addFieldVariants("Сотрудник", num, valStr);
+          } else if (k.startsWith("Сотрудник")) {
+            addFieldVariants("Сотрудник", num, valStr);
+            addFieldVariants("СотрудникПолн", num, valStr);
+          } else if (k.startsWith("Должность")) {
+            addFieldVariants("Должность", num, valStr);
+          } else if (k.startsWith("ID_") || /^\\d+$/.test(k)) {
+            addIdVariants(num, valStr);
+          }
+        }
+      }
+    }
+  }
+
+  const pairs = [];
+  for (let k in flatMap) {
+    if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
+      pairs.push({ from: k, to: String(flatMap[k]) });
+    }
+  }
+
+  pairs.sort((a, b) => b.from.length - a.from.length);
+  return pairs;
+}
+
+async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      alert("Ошибка скачивания файла: " + response.statusText);
+      return;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+
+    let filename = defaultFilename || "Отчет.xlsx";
+    const disposition = response.headers.get('Content-Disposition');
+    if (disposition) {
+      const matchUtf = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
+      if (matchUtf && matchUtf[1]) {
+        filename = decodeURIComponent(matchUtf[1]);
+      } else {
+        const matchNorm = disposition.match(/filename="?([^";]+)"?/i);
+        if (matchNorm && matchNorm[1]) {
+          filename = matchNorm[1];
+        }
+      }
+    }
+
+    const pairs = getEmpReplacementPairs();
+    let finalBuffer = arrayBuffer;
+
+    if (pairs.length > 0) {
+      if (window.JSZip) {
+        try {
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          let modified = false;
+
+          const xmlFiles = Object.keys(zip.files).filter(name => name.endsWith('.xml') || name.endsWith('.rels'));
+          
+          for (let i = 0; i < xmlFiles.length; i++) {
+            const fileName = xmlFiles[i];
+            let content = await zip.files[fileName].async('string');
+            let fileChanged = false;
+
+            for (let p = 0; p < pairs.length; p++) {
+              const item = pairs[p];
+              if (content.includes(item.from)) {
+                content = content.split(item.from).join(item.to);
+                fileChanged = true;
+                modified = true;
+              }
+            }
+
+            if (fileChanged) {
+              zip.file(fileName, content);
+            }
+          }
+
+          if (modified) {
+            finalBuffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+          }
+        } catch (zipErr) {
+          console.error("Ошибка при ZIP разанонимизации:", zipErr);
+        }
+      }
+
+      if (finalBuffer === arrayBuffer && window.XLSX) {
+        try {
+          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellFormulas: true, cellDates: true });
+          let modified = false;
+
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) return;
+
+            for (let cellRef in sheet) {
+              if (cellRef.startsWith('!')) continue;
+              const cell = sheet[cellRef];
+              if (!cell) continue;
+
+              if (cell.v !== undefined && cell.v !== null) {
+                let valStr = String(cell.v);
+                let changed = false;
+
+                for (let i = 0; i < pairs.length; i++) {
+                  const item = pairs[i];
+                  if (valStr.includes(item.from)) {
+                    valStr = valStr.split(item.from).join(item.to);
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  cell.v = valStr;
+                  delete cell.w;
+                  delete cell.r;
+                  delete cell.h;
+                  modified = true;
+                }
+              }
+            }
+          });
+
+          if (modified) {
+            finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+          }
+        } catch (err) {
+          console.error("Ошибка при расшифровке ячеек Excel:", err);
+        }
+      }
+    }
+
+    const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+  } catch (err) {
+    console.error("Ошибка при загрузке отчета:", err);
+    alert("Не удалось скачать отчет: " + err.message);
+  }
+}
+
+loadState();
+</script>
+</body>
+</html>

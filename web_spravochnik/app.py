@@ -1,1842 +1,279 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import hashlib
 import hmac
-import json
 import os
 import secrets
-import sqlite3
 import sys
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Lock
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import unquote
 
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT.parent))
-from rtps_common import connect_sqlite, module_role, resolve_user_access
+# Обеспечиваем системные пути для гарантированного импорта модулей
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+if str(_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_ROOT.parent))
 
-DATA_DIR = ROOT / "data"
-DB_FILE = ROOT.parent / "base" / "common_database.db"
-APP_PREFIX = "/spravochnik"
-SESSION_COOKIE = "rtps_session"
-SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
-SHARED_DATA_DIR = ROOT.parent / "data"
-AUTH_FILE = SHARED_DATA_DIR / "web_auth.json"
-WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
-LEGACY_WEB_SECRET_FILE = DATA_DIR / "web_secret.txt"
-DB_LOCK = Lock()
-MAIN_LOGIN_URL = os.environ.get("MAIN_LOGIN_URL", "http://yrtps.ru/login")
+from rtps_common import module_role, resolve_user_access
 
-MONTHS = [
-    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
-]
-
-
-def load_web_secret() -> str:
-    if WEB_SECRET_FILE.exists():
-        return WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-    return "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"
-
-
-def load_legacy_web_secret() -> str:
-    try:
-        if LEGACY_WEB_SECRET_FILE.exists():
-            return LEGACY_WEB_SECRET_FILE.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    return ""
-
-
-WEB_SECRET = load_web_secret()
-LEGACY_WEB_SECRET = load_legacy_web_secret()
-
-
-def load_auth_config() -> tuple[str, str, str]:
-    user = os.environ.get("WEB_USER", "admin").strip() or "admin"
-    view_password = os.environ.get("WEB_VIEW_PASSWORD", "").strip()
-    edit_password = (
-        os.environ.get("WEB_EDIT_PASSWORD", "").strip()
-        or os.environ.get("WEB_PASSWORD", "").strip()
+# Универсальный импорт для поддержки запуска как пакета, так и напрямую через systemd
+try:
+    from .constants import (
+        APP_PREFIX,
+        APP_VERSION,
+        MAIN_LOGIN_URL,
+        MAIN_SITE_URL,
+        ROOT,
+        SESSION_COOKIE,
+        WEB_USERS_DB,
+        get_legacy_web_secret,
+        get_web_secret,
     )
-    if view_password and edit_password:
-        return user, view_password, edit_password
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if AUTH_FILE.exists():
-        try:
-            payload = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
-            file_user = str(payload.get("user", user)).strip() or user
-            legacy_password = str(payload.get("password", "")).strip()
-            file_view = str(payload.get("view_password", legacy_password)).strip()
-            file_edit = str(payload.get("edit_password", "")).strip()
-            if not file_edit and legacy_password and not payload.get("view_password"):
-                file_edit = secrets.token_urlsafe(8)
-            if not file_edit:
-                file_edit = legacy_password
-            if file_view and not file_edit:
-                file_edit = secrets.token_urlsafe(8)
-            if file_edit and not file_view:
-                file_view = secrets.token_urlsafe(8)
-            if file_view and file_edit and file_view == file_edit:
-                file_edit = secrets.token_urlsafe(8)
-            if file_view and file_edit:
-                AUTH_FILE.write_text(
-                    json.dumps(
-                        {"user": file_user, "view_password": file_view, "edit_password": file_edit},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-                return file_user, file_view, file_edit
-        except Exception:
-            pass
-    if not view_password:
-        view_password = secrets.token_urlsafe(8)
-    if not edit_password:
-        edit_password = secrets.token_urlsafe(8)
-    AUTH_FILE.write_text(
-        json.dumps({"user": user, "view_password": view_password, "edit_password": edit_password}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    from .storage import (
+        ensure_db,
+        load_state,
+        lookup_private_employee,
+        purge_deleted_inventory,
+        purge_inventory_row,
+        save_state,
     )
-    return user, view_password, edit_password
+except (ImportError, ValueError):
+    from constants import (
+        APP_PREFIX,
+        APP_VERSION,
+        MAIN_LOGIN_URL,
+        MAIN_SITE_URL,
+        ROOT,
+        SESSION_COOKIE,
+        WEB_USERS_DB,
+        get_legacy_web_secret,
+        get_web_secret,
+    )
+    from storage import (
+        ensure_db,
+        load_state,
+        lookup_private_employee,
+        purge_deleted_inventory,
+        purge_inventory_row,
+        save_state,
+    )
 
 
-WEB_USER, WEB_VIEW_PASSWORD, WEB_EDIT_PASSWORD = load_auth_config()
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Асинхронный контекст жизненного цикла сервиса: инициализация базы данных при старте."""
+    await asyncio.to_thread(ensure_db)
+    yield
 
 
-def ensure_db() -> None:
-    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_FILE) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS employees (
-                y INT, pos TEXT, name TEXT, tab_num TEXT,
-                milk INT DEFAULT 0, milk_issue INT DEFAULT 0,
-                exclude_date TEXT DEFAULT '',
-                full_name TEXT DEFAULT '', milk_note TEXT DEFAULT '',
-                PRIMARY KEY(y,pos,name)
-            )
-            """
-        )
-        emp_cols = {row[1] for row in cur.execute("PRAGMA table_info(employees)").fetchall()}
-        if "exclude_date" not in emp_cols:
-            cur.execute("ALTER TABLE employees ADD COLUMN exclude_date TEXT DEFAULT ''")
-        if "hire_date" not in emp_cols:
-            cur.execute("ALTER TABLE employees ADD COLUMN hire_date TEXT DEFAULT ''")
-        if "vacation_days" not in emp_cols:
-            cur.execute("ALTER TABLE employees ADD COLUMN vacation_days INT DEFAULT 28")
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS inventory (
-                y INT, ser TEXT, num TEXT, inv TEXT,
-                PRIMARY KEY(y,ser,num)
-            )
-            """
-        )
-        existing_inventory_cols = {row[1] for row in cur.execute("PRAGMA table_info(inventory)").fetchall()}
-        if "sort_order" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN sort_order INT")
-        if "updated_at" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN updated_at INT NOT NULL DEFAULT 0")
-        if "deleted_at" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN deleted_at INT NOT NULL DEFAULT 0")
-        if "wheel_pair_count" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN wheel_pair_count INT")
-        if "section_count" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN section_count INT")
-        if "eight_digit_number" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN eight_digit_number TEXT")
-        if "manufacture_year" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN manufacture_year TEXT")
-        if "service_life" not in existing_inventory_cols:
-            cur.execute("ALTER TABLE inventory ADD COLUMN service_life TEXT")
-        cur.execute("UPDATE inventory SET sort_order = rowid WHERE sort_order IS NULL OR sort_order <= 0")
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS ts_norms_data (
-                y INT, r INT, c INT, v TEXT,
-                PRIMARY KEY(y,r,c)
-            )
-            """
-        )
+app = FastAPI(title="RTPS Справочник", lifespan=lifespan)
 
-        conn.commit()
+# Монтирование статических файлов для стандартного и префиксного путей
+app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
+app.mount(f"{APP_PREFIX}/static", StaticFiles(directory=str(ROOT / "static")), name="spravochnik_static")
 
+templates = Jinja2Templates(directory=str(ROOT / "templates"))
 
-def connect() -> sqlite3.Connection:
-    ensure_db()
-    return connect_sqlite(DB_FILE)
-
-ensure_db()
-
-
-def text(value) -> str:
-    return "" if value is None else str(value)
-
-
-
-def parse_cookie_values(handler, name: str) -> list[str]:
-    raw = handler.headers.get("Cookie", "")
-    values = []
-    for part in raw.split(";"):
-        if "=" not in part: continue
-        k, v = part.split("=", 1)
-        if k.strip() == name: values.append(v.strip())
-    return values
 
 def verify_cookie(value: str) -> tuple[str, str, str, str] | None:
+    """Проверка валидности подписи сессионной куки с поддержкой как актуального, так и легаси ключа."""
+    if not value:
+        return None
+
+    secrets_to_try = [get_web_secret()]
+    legacy = get_legacy_web_secret()
+    if legacy and legacy not in secrets_to_try:
+        secrets_to_try.append(legacy)
+
     for sep in (":", "|"):
+        parts = value.rsplit(sep, 5)
+        if len(parts) == 6:
+            user_id, role, mods, full_name, expiry_text, sig = parts
+            raw = f"{user_id}{sep}{role}{sep}{mods}{sep}{full_name}{sep}{expiry_text}"
+        elif len(parts) == 5:
+            user_id, role, mods, full_name, sig = parts
+            raw = f"{user_id}{sep}{role}{sep}{mods}{sep}{full_name}"
+            expiry_text = "2000000000"
+        else:
+            continue
+
+        matched = False
+        for secret_key in secrets_to_try:
+            exp_sig = hmac.new(secret_key.encode("utf-8"), raw.encode("utf-8"), hashlib.sha256).hexdigest()
+            if secrets.compare_digest(sig, exp_sig):
+                matched = True
+                break
+
+        if not matched:
+            continue
         try:
-            parts = value.rsplit(sep, 5)
-            if len(parts) == 6:
-                user_id, role, modules, safe_name, expiry_text, sig = parts
-                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
-            elif len(parts) == 5:
-                user_id, role, modules, safe_name, sig = parts
-                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
-                expiry_text = "2000000000"
-            else:
-                continue
-                
-            secrets_to_try = [WEB_SECRET]
-            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-                secrets_to_try.append(LEGACY_WEB_SECRET)
-                
-            matched = False
-            import hmac
-            import hashlib
-            for secret in secrets_to_try:
-                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-                if hmac.compare_digest(expected, sig):
-                    matched = True
-                    break
-                    
-            if not matched:
-                continue
-            import datetime as dt
             if float(expiry_text) < dt.datetime.now().timestamp():
                 return None
-                
-            import urllib.parse
-            return urllib.parse.unquote(user_id), urllib.parse.unquote(role), urllib.parse.unquote(modules), urllib.parse.unquote(safe_name)
         except Exception:
-            continue
+            return None
+
+        return unquote(user_id), unquote(role), unquote(mods), unquote(full_name)
+
     return None
 
-def current_session(handler) -> tuple[str, str, str, str] | None:
-    for token in parse_cookie_values(handler, SESSION_COOKIE):
-        session = verify_cookie(token)
-        if session:
-            return session
-    return None
 
-def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> str | None:
-    if not session: return None
-    username = session[0]
-    role = session[1]
-    modules = session[2]
-
-    resolved = resolve_user_access(ROOT.parent / "base" / "web_users.db", username, role, modules)
-    if not resolved:
-        return None
-    role, modules = resolved
-    return module_role(role, modules, mod_name)
-
-def require_auth(handler, need_edit: bool = False) -> tuple[str, str, str, str] | None:
-    session = current_session(handler)
-    if not session:
-        try:
-            raw_cookie = handler.headers.get("Cookie", "")
-            with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
-                f.write(f"No session. Cookie header: {raw_cookie}\n")
-        except Exception:
-            pass
-        handler.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
-        return None
-        
-    mod_role = get_mod_role(session, "spravochnik")
-    if not mod_role:
-        try:
-            with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
-                f.write(f"Forbidden: spravochnik mod_role is none\n")
-        except Exception:
-            pass
-        handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
-        return None
-        
-    if need_edit and mod_role not in ("edit", "editor", "admin"):
-        try:
-            with open(ROOT.parent / "data" / "spravochnik_auth.log", "a", encoding="utf-8") as f:
-                f.write(f"Forbidden edit: role {mod_role} not allowed\n")
-        except Exception:
-            pass
-        handler.send_error(HTTPStatus.FORBIDDEN, "Forbidden")
-        return None
-    return session
-
-def send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
-    data = body.encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "text/html; charset=utf-8")
-    handler.send_header("Cache-Control", "no-store")
-    handler.send_header("Content-Length", str(len(data)))
-    handler.end_headers()
-    handler.wfile.write(data)
-
-
-def send_json(handler: BaseHTTPRequestHandler, payload, status: int = 200) -> None:
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Cache-Control", "no-store")
-    handler.send_header("X-Content-Type-Options", "nosniff")
-    handler.send_header("Content-Length", str(len(data)))
-    handler.end_headers()
-    handler.wfile.write(data)
-
-
-def redirect(handler: BaseHTTPRequestHandler, location: str) -> None:
-    handler.send_response(HTTPStatus.SEE_OTHER)
-    handler.send_header("Location", location)
-    handler.send_header("Cache-Control", "no-store")
-    handler.end_headers()
-
-
-def login_cookie(username: str) -> str:
-    expiry = int(dt.datetime.now().timestamp()) + SESSION_TTL_SECONDS
-    payload = f"{username}|edit|{expiry}"
-    sig = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token = f"{payload}|{sig}"
-    return f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_TTL_SECONDS}"
-
-
-def route_path(raw_path: str) -> str:
-    path = urlparse(raw_path).path
-    if path == APP_PREFIX:
-        return "/"
-    if path.startswith(APP_PREFIX + "/"):
-        return path[len(APP_PREFIX):]
-    return path
-
-
-def load_state(year: int) -> dict:
-    norms = [[MONTHS[r], "", "", "", "", "", "", ""] for r in range(12)]
-    employees = []
-    inventory = []
-    with DB_LOCK, connect() as conn:
-        cur = conn.cursor()
-        for row in cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)):
-            r, c = int(row["r"]), int(row["c"])
-            if 0 <= r < 12 and 0 <= c < 8:
-                norms[r][c] = text(row["v"])
-        emp_idx = 0
-        for row in cur.execute(
-            "SELECT pos, name, full_name, tab_num, milk, milk_issue, hire_date, exclude_date, vacation_days, milk_note FROM employees WHERE y=? ORDER BY rowid",
-            (year,),
-        ):
-            emp_idx += 1
-            v_days = int(row["vacation_days"]) if row["vacation_days"] is not None else 28
-
-            raw_pos = text(row["pos"])
-            raw_name = text(row["name"])
-            raw_full = text(row["full_name"])
-            raw_tab = text(row["tab_num"])
-
-            num_part = emp_idx
-            if raw_tab and raw_tab.startswith("ID_"):
-                digits = "".join(ch for ch in raw_tab if ch.isdigit())
-                if digits:
-                    num_part = int(digits)
-
-            anon_id = f"ID_{num_part:03d}"
-            anon_short = f"Работник №{num_part}"
-            anon_full = f"СотрудникПолн №{num_part}"
-            anon_pos = f"Должность №{num_part}"
-
-            disp_pos = anon_pos
-            disp_name = anon_short
-            disp_full = anon_full
-            disp_tab = anon_id
-
-            employees.append([disp_pos, disp_name, disp_full, disp_tab, int(row["milk"] or 0), int(row["milk_issue"] or 0), text(row["hire_date"]), text(row["exclude_date"]), v_days, text(row["milk_note"])])
-        inventory_rows = cur.execute(
-            """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(service_life, '') AS service_life, rowid
-            FROM inventory
-            WHERE y=?
-            ORDER BY COALESCE(sort_order, 0) ASC, COALESCE(updated_at, 0) DESC, rowid
-            """,
-            (year,),
-        ).fetchall()
-        best_inventory_rows: dict[str, sqlite3.Row] = {}
-        for row in inventory_rows:
-            ser = text(row["ser"]).strip()
-            num = text(row["num"]).strip()
-            if not (ser or num):
-                continue
-            key = f"{ser.upper()}|{num}"
-            current = best_inventory_rows.get(key)
-            if current is None or (
-                int(row["updated_at"] or 0),
-                int(row["deleted_at"] or 0),
-                int(row["sort_order"] or 0),
-                int(row["rowid"] or 0),
-            ) > (
-                int(current["updated_at"] or 0),
-                int(current["deleted_at"] or 0),
-                int(current["sort_order"] or 0),
-                int(current["rowid"] or 0),
-            ):
-                best_inventory_rows[key] = row
-        for row in sorted(
-            best_inventory_rows.values(),
-            key=lambda item: (
-                int(item["sort_order"] or 0),
-                -int(item["updated_at"] or 0),
-                -int(item["deleted_at"] or 0),
-                text(item["ser"]),
-                text(item["num"]),
-            ),
-        ):
-            inventory.append([
-                text(row["ser"]),
-                text(row["num"]),
-                text(row["inv"]),
-                int(row["wheel_pair_count"] or 0),
-                int(row["section_count"] or 0),
-                text(row["eight_digit_number"]),
-                text(row["manufacture_year"]),
-                text(row["service_life"]),
-                int(row["deleted_at"] or 0),
-            ])
-    return {"year": year, "norms": norms, "employees": employees, "inventory": inventory}
-
-
-# Функция автоподтягивания данных сотрудника из локального файла employees_private.csv / employees_private.xlsx по ID, табельному или ФИО
-def lookup_private_employee(id_input: str) -> dict:
-    raw = text(id_input).strip()
-    if not raw:
-        return {}
-
-    raw_lower = raw.lower()
-    raw_digits = "".join(c for c in raw if c.isdigit())
-    raw_int = int(raw_digits) if raw_digits else None
-
-    csv_file = ROOT.parent / "employees_private.csv"
-    xlsx_file = ROOT.parent / "employees_private.xlsx"
-
-    rows = []
-    if csv_file.exists():
-        try:
-            import csv
-            with open(csv_file, "r", encoding="utf-8-sig") as f:
-                for r in csv.reader(f, delimiter=";"):
-                    if r and not r[0].startswith("Код"):
-                        rows.append([text(x).strip() for x in r])
-        except Exception:
-            pass
-    elif xlsx_file.exists():
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(xlsx_file)
-            ws = wb.active
-            for r in ws.iter_rows(values_only=True):
-                if r and r[0] and not text(r[0]).startswith("Код"):
-                    rows.append([text(x).strip() for x in r])
-        except Exception:
-            pass
-
-    for r in rows:
-        r_id = r[0] if len(r) > 0 else ""
-        r_pos = r[1] if len(r) > 1 else ""
-        r_full = r[2] if len(r) > 2 else ""
-        r_short = r[3] if len(r) > 3 else r_full
-        r_tab = r[4] if len(r) > 4 else ""
-
-        r_num_digits = "".join(c for c in r_id if c.isdigit())
-        r_int = int(r_num_digits) if r_num_digits else None
-        r_tab_digits = "".join(c for c in r_tab if c.isdigit())
-        r_tab_int = int(r_tab_digits) if r_tab_digits else None
-
-        # 1. Точное совпадение по анонимному ID (ID_001)
-        if raw.upper() == r_id.upper():
-            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
-
-        # 2. Совпадение по реальному табельному номеру (например 4004236 или 4601556)
-        if r_tab and (raw == r_tab or (raw_int is not None and r_tab_int is not None and raw_int == r_tab_int)):
-            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
-
-        # 3. Совпадение по порядковому номеру (1, 001, ID_1)
-        if raw_int is not None and r_int is not None and raw_int == r_int:
-            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
-
-        # 4. Совпадение по ФИО
-        if raw_lower and (raw_lower in r_short.lower() or raw_lower in r_full.lower()):
-            return {"pos": r_pos, "name": r_short, "full_name": r_full, "tab_num": r_id, "found": True}
-
-    # Если в CSV записи нет, но передано число < 1000 — возвращаем канонический ID_00X
-    if raw_int is not None and raw_int < 1000:
-        canon_id = f"ID_{raw_int:03d}"
-        return {
-            "pos": "",
-            "name": "",
-            "full_name": "",
-            "tab_num": canon_id,
-            "found": False,
-        }
-
-    return {"tab_num": raw, "name": raw, "full_name": raw, "pos": "", "found": False}
-
-
-def save_state(payload: dict) -> None:
-    year = int(payload.get("year") or dt.date.today().year)
-    norms = payload.get("norms") or []
-    employees = payload.get("employees") or []
-    inventory = payload.get("inventory") or []
-    with DB_LOCK, connect() as conn:
-        cur = conn.cursor()
-        cur.execute("BEGIN")
-        cur.execute("DELETE FROM ts_norms_data WHERE y=?", (year,))
-        norm_rows = []
-        for r, row in enumerate(norms[:12]):
-            for c, value in enumerate((row or [])[:8]):
-                value = text(value).strip()
-                if value:
-                    norm_rows.append((year, r, c, value))
-        cur.executemany("INSERT INTO ts_norms_data VALUES (?,?,?,?)", norm_rows)
-
-        cur.execute("DELETE FROM employees WHERE y=?", (year,))
-        emp_rows = []
-        for row in employees:
-            row = list(row or []) + [""] * 10
-            pos, name, full_name, tab_num = [text(v).strip() for v in row[:4]]
-
-            # Если заполнен только ID (табельный номер) или пропущены ФИО/должность — подтягиваем из CSV
-            search_key = tab_num or name or full_name
-            if search_key:
-                info = lookup_private_employee(search_key)
-                if info:
-                    if not pos or pos.startswith("Должность №"): pos = info.get("pos") or pos
-                    if not name or name.startswith("Работник №"): name = info.get("name") or name
-                    if not full_name or full_name.startswith("СотрудникПолн №"): full_name = info.get("full_name") or full_name
-                    if not tab_num or tab_num.isdigit(): tab_num = info.get("tab_num") or tab_num
-
-            milk = 1 if row[4] else 0
-            milk_issue = 1 if row[5] else 0
-            hire_date = text(row[6]).strip()
-            exclude_date = text(row[7]).strip()
-            try:
-                v_str = text(row[8]).strip()
-                vacation_days = int(v_str) if v_str != "" else 28
-            except Exception:
-                vacation_days = 28
-            milk_note = text(row[9]).strip()
-            if pos or name or tab_num:
-                emp_rows.append((year, pos, name, full_name, tab_num, milk, milk_issue, hire_date, exclude_date, vacation_days, milk_note))
-        cur.executemany(
-            """
-            INSERT INTO employees (y, pos, name, full_name, tab_num, milk, milk_issue, hire_date, exclude_date, vacation_days, milk_note)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            emp_rows,
-        )
-
-        existing_rows = cur.execute(
-            """
-            SELECT ser, num, inv, COALESCE(sort_order, 0) AS sort_order, COALESCE(updated_at, 0) AS updated_at, COALESCE(deleted_at, 0) AS deleted_at, COALESCE(wheel_pair_count, 0) AS wheel_pair_count, COALESCE(section_count, 0) AS section_count, COALESCE(eight_digit_number, '') AS eight_digit_number, COALESCE(manufacture_year, '') AS manufacture_year, COALESCE(service_life, '') AS service_life, rowid
-            FROM inventory
-            WHERE y=?
-            """,
-            (year,),
-        ).fetchall()
-        existing_map: dict[tuple[str, str], sqlite3.Row] = {}
-        duplicate_rowids: list[int] = []
-        for row in sorted(
-            existing_rows,
-            key=lambda item: (
-                -int(item["updated_at"] or 0),
-                -int(item["deleted_at"] or 0),
-                int(item["sort_order"] or 0),
-                int(item["rowid"] or 0),
-            ),
-        ):
-            ser = text(row["ser"]).strip()
-            num = text(row["num"]).strip()
-            if not (ser or num):
-                continue
-            key = (ser.upper(), num)
-            if key in existing_map:
-                duplicate_rowids.append(int(row["rowid"]))
-                continue
-            existing_map[key] = row
-        if duplicate_rowids:
-            placeholders = ",".join("?" for _ in duplicate_rowids)
-            cur.execute(f"DELETE FROM inventory WHERE rowid IN ({placeholders})", duplicate_rowids)
-        submitted_keys: set[tuple[str, str]] = set()
-        now = int(dt.datetime.now().timestamp() * 1000)
-        for order_index, row in enumerate(inventory, start=1):
-            raw_row = list(row or [])
-            legacy_format = len(raw_row) < 9
-            row = raw_row + [""] * max(0, 9 - len(raw_row))
-            ser, num = [text(v).strip() for v in row[:2]]
-            try:
-                wheel_pair_count = int(row[3] or 0)
-            except Exception:
-                wheel_pair_count = 0
-            try:
-                section_count = int(row[4] or 0)
-            except Exception:
-                section_count = 0
-            inv = text(row[2]).strip()
-            eight_digit_number = text(row[5]).strip()
-            manufacture_year = "" if legacy_format else text(row[6]).strip()
-            service_life = "" if legacy_format else text(row[7]).strip()
-            try:
-                deleted_at = int((row[7] if legacy_format else row[8]) or 0)
-            except Exception:
-                deleted_at = 0
-            if not (ser or num):
-                continue
-            key = (ser.upper(), num)
-            submitted_keys.add(key)
-            if key in existing_map:
-                existing_inv = text(existing_map[key]["inv"]).strip()
-                inv_value = inv if inv else existing_inv
-                cur.execute(
-                    """
-                    UPDATE inventory
-                    SET inv=?, wheel_pair_count=?, section_count=?, eight_digit_number=?, manufacture_year=?, service_life=?, sort_order=?, updated_at=?, deleted_at=?
-                    WHERE y=? AND ser=? AND num=?
-                    """,
-                    (
-                        inv_value,
-                        wheel_pair_count or None,
-                        section_count or None,
-                        eight_digit_number,
-                        manufacture_year,
-                        service_life,
-                        order_index,
-                        now,
-                        deleted_at,
-                        year,
-                        text(existing_map[key]["ser"]).strip(),
-                        num,
-                    ),
-                )
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO inventory (y, ser, num, inv, wheel_pair_count, section_count, eight_digit_number, manufacture_year, service_life, sort_order, updated_at, deleted_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (year, ser.upper(), num, inv, wheel_pair_count or None, section_count or None, eight_digit_number, manufacture_year, service_life, order_index, now, deleted_at),
-                )
-        for (ser_key, num_key), row in existing_map.items():
-            if (ser_key, num_key) in submitted_keys:
-                continue
-            if int(row["deleted_at"] or 0) > 0:
-                continue
-            cur.execute(
-                """
-                UPDATE inventory
-                SET updated_at=?, deleted_at=?, sort_order=COALESCE(sort_order, ?)
-                WHERE y=? AND ser=? AND num=?
-                """,
-                (now, now, len(inventory) + 1, year, text(row["ser"]).strip(), text(row["num"]).strip()),
-            )
-        conn.commit()
-
-
-def purge_deleted_inventory() -> dict:
-    with DB_LOCK, connect() as conn:
-        cur = conn.cursor()
-        deleted_rows = cur.execute(
-            """
-            SELECT y, ser, num
-            FROM inventory
-            WHERE COALESCE(deleted_at, 0) > 0
-            """
-        ).fetchall()
-        if not deleted_rows:
-            return {"ok": True, "purged": 0}
-        numbers = [text(row["num"]).strip() for row in deleted_rows if text(row["num"]).strip()]
-        cur.execute("DELETE FROM inventory WHERE COALESCE(deleted_at, 0) > 0")
-        if numbers:
-            placeholders = ",".join("?" for _ in numbers)
-            cur.execute(f"DELETE FROM kp_data WHERE TRIM(COALESCE(locomotive, '')) IN ({placeholders})", numbers)
-        conn.commit()
-        return {"ok": True, "purged": len(deleted_rows)}
-
-
-def purge_inventory_row(year: int, ser: str, num: str) -> dict:
-    year = int(year)
-    ser = text(ser).strip()
-    num = text(num).strip()
-    if not ser or not num:
-        return {"ok": False, "error": "Некорректные данные локомотива."}
-    with DB_LOCK, connect() as conn:
-        cur = conn.cursor()
-        row = cur.execute(
-            """
-            SELECT y, ser, num
-            FROM inventory
-            WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=?
-            LIMIT 1
-            """,
-            (year, ser, num),
-        ).fetchone()
-        if not row:
-            return {"ok": True, "purged": 0}
-        cur.execute(
-            "DELETE FROM inventory WHERE y=? AND TRIM(COALESCE(ser, ''))=? AND TRIM(COALESCE(num, ''))=?",
-            (year, ser, num),
-        )
-        cur.execute("DELETE FROM kp_data WHERE TRIM(COALESCE(locomotive, ''))=?", (num,))
-        conn.commit()
-        return {"ok": True, "purged": 1}
-
-
-HTML = """<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Справочник</title>
-  <style>
-    :root{--line:#d9e2ef;--text:#102033;--muted:#66758a;--blue:#276ef1;--bg:#f4f7fb}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{padding:16px;max-width:1500px;margin:0 auto}
-    .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px 16px;margin-bottom:14px}
-    h1{margin:0;font-size:22px}.muted{color:var(--muted);font-size:13px}
-    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 12px;background:#fff;color:#1f57d6;font-weight:400;text-decoration:none;font:inherit}
-    button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
-    button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-    button.primary:disabled{opacity:.78}
-    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:17px;position:relative;z-index:2}
-    .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:400;cursor:pointer;color:#1f57d6}
-    .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
-    .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
-    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px;overflow:auto;position:relative;z-index:1}
-    .table-shell{margin-top:12px;background:#fff;border:1px solid #2f6fed;border-radius:18px;overflow:hidden}
-    .panel.active{display:block}
-    table{border-collapse:collapse;width:100%;min-width:760px}
-    table.norms-table{table-layout:fixed}
-    table.employees-table{table-layout:fixed}
-    th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
-    th{background:#eef4fb;font-weight:700}
-    table.employees-table td{height:auto;vertical-align:middle;position:relative}
-    table.employees-table th{height:34px;vertical-align:middle}
-    table.norms-table th, table.norms-table td{white-space:nowrap}
-    table.employees-table th, table.employees-table td{white-space:normal}
-    td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
-    td textarea{width:100%;min-height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent;resize:none;overflow:hidden;display:block;line-height:1.25;box-sizing:border-box}
-    td input[type=checkbox]{width:auto;height:auto}
-    table.employees-table td input[type=checkbox]{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
-    .left{text-align:left!important}
-    .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
-    .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
-    .selected-row{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
-    .deleted-row{opacity:.55}
-    .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
-    td input:focus,
-    td input:focus-visible{
-      outline:none;
-      box-shadow:none;
-    }
-    .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
-    .modal-backdrop.show{display:flex}
-    .modal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(16,32,51,.2)}
-    .modal h2{margin:0 0 12px;font-size:22px}
-    .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .modal-grid label{display:flex;flex-direction:column;gap:6px;font-weight:700}
-    .modal-grid input{padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
-    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-    .modal-actions button{min-width:120px}
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="top">
-    <div>
-      <h1>Справочник</h1>
-    </div>
-  <div class="actions">
-      <a href="http://yrtps.ru/">На главную</a>
-      <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
-      <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-      <label>Год <select id="year"></select></label>
-      <button id="saveBtn" onclick="saveAll()">Сохранить</button>
-    </div>
-  </div>
-  <div class="tabs">
-    <button class="tab active" onclick="showTab('norms', this)">Нормы времени</button>
-    <button class="tab" onclick="showTab('employees', this)">Сотрудники</button>
-    <button class="tab" onclick="showTab('inventory', this)">Локомотивы</button>
-  </div>
-  <div id="norms" class="panel active"></div>
-  <div id="employees" class="panel"></div>
-  <div id="inventory" class="panel"></div>
-</div>
-<div id="addLocoModal" class="modal-backdrop" onclick="closeAddLocomotiveModal(event)">
-  <div class="modal" onclick="event.stopPropagation()">
-    <h2>Добавить локомотив</h2>
-  <div class="modal-grid">
-      <label>Серия
-        <input id="newLocoSeries" autocomplete="off">
-      </label>
-      <label>Номер
-        <input id="newLocoNumber" autocomplete="off">
-      </label>
-      <label>Год выпуска
-        <input id="newLocoYear" type="number" min="1900" max="2100" step="1" autocomplete="off" placeholder="2026">
-      </label>
-      <label>Срок службы
-        <input id="newLocoServiceLife" type="number" min="1" step="1" autocomplete="off" placeholder="25">
-      </label>
-      <label>Кол-во к. пар
-        <input id="newLocoWheelPairs" type="number" min="1" step="1" value="6">
-      </label>
-      <label>Кол-во секций
-        <input id="newLocoSections" type="number" min="1" step="1" value="1">
-      </label>
-      <label>Инвентарный №
-        <input id="newLocoInv" autocomplete="off">
-      </label>
-      <label style="grid-column:1 / -1">8-значный номер
-        <input id="newLocoEight" autocomplete="off" inputmode="numeric" maxlength="8" placeholder="00000000">
-      </label>
-    </div>
-    <div class="modal-actions">
-      <button type="button" onclick="closeAddLocomotiveModal()">Отмена</button>
-      <button type="button" class="primary" onclick="submitAddLocomotive()">Добавить</button>
-    </div>
-  </div>
-<script src="/spravochnik/static/jszip.min.js"></script>
-<script src="/spravochnik/static/xlsx.full.min.js"></script>
-<script>
-const API = '/spravochnik';
-const CAN_EDIT = {{CAN_EDIT}};
-let state = null;
-let savedState = null;
-let canceledState = null;
-  const headers = {
-    norms: ['Месяц','Кал. дни','Раб. дни','Вых и празд.','40-ч','36-ч','Переносы дней','Праздники'],
-    employees: ['Должность','ФИО','ФИО полное','Таб. №','Молоко комп','Молоко выдача','Дата приема','Дата искл.','Отпуск (дней)','Молоко прим.'],
-    inventory: ['Серия','Номер','Инвентарный №','Кол-во КП','Ко-во секций','8-значный номер','Год выпуска','Срок службы']
-  };
-
-function fillYears(){
-  const select = document.getElementById('year');
-  const now = new Date().getFullYear();
-  for(let y = now - 3; y <= now + 5; y++){
-    const opt = document.createElement('option');
-    opt.value = y; opt.textContent = y;
-    if(y === now) opt.selected = true;
-    select.appendChild(opt);
-  }
-  select.onchange = loadState;
-}
-
-async function loadState(){
-  const year = document.getElementById('year').value;
-  const res = await fetch(`${API}/api/state?year=${year}`, {cache:'no-store'});
-  if(!res.ok){ alert('Не удалось загрузить справочник'); return; }
-  state = await res.json();
-  savedState = cloneState(state);
-  canceledState = null;
-  renderAll();
-}
-
-function renderAll(){
-  renderTable('norms', state.norms, false);
-  renderTable('employees', state.employees, true);
-  renderTable('inventory', state.inventory, true);
-  const saveBtn = document.getElementById('saveBtn');
-  if (saveBtn) {
-    saveBtn.style.display = CAN_EDIT ? '' : 'none';
-  }
-  updateHistoryButtons();
-  updateSaveButton();
-  syncInventoryActionButtons();
-}
-
-function renderTable(name, rows, editableRows){
-  const panel = document.getElementById(name);
-  const rowbar = (editableRows && CAN_EDIT)
-    ? (
-      name === 'inventory'
-        ? (() => {
-            const selectedRow = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
-            const isDeleted = selectedRow ? Number(selectedRow[8] || 0) > 0 : false;
-            return `<div class="rowbar">
-              <button type="button" onclick="openAddLocomotiveModal()">Добавить локомотив</button>
-              <button id="inventoryDeleteBtn" type="button" onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
-              <button id="inventoryRestoreBtn" type="button" onclick="restoreInventoryRow()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
-              <button id="inventoryPurgeBtn" type="button" onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
-            </div>`;
-          })()
-        : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
-    )
-    : '';
-  const tableClass = name === 'norms' ? ' class="norms-table"' : '';
-  const employeesTableClass = name === 'employees' ? ' class="employees-table"' : '';
-  const colGroup = name === 'norms'
-    ? `<colgroup>
-        <col style="width:42px">
-        <col style="width:150px">
-        <col style="width:120px">
-        <col style="width:120px">
-        <col style="width:120px">
-        <col style="width:120px">
-        <col style="width:120px">
-        <col style="width:200px">
-        <col>
-      </colgroup>`
-    : name === 'employees'
-      ? `<colgroup>
-          <col style="width:42px">
-          <col style="width:240px">
-          <col style="width:160px">
-          <col style="width:200px">
-          <col style="width:110px">
-          <col style="width:100px">
-          <col style="width:100px">
-          <col style="width:120px">
-          <col style="width:120px">
-          <col style="width:110px">
-          <col>
-        </colgroup>`
-    : name === 'inventory'
-      ? `<colgroup>
-          <col style="width:42px">
-          <col style="width:170px">
-          <col style="width:170px">
-          <col style="width:150px">
-          <col style="width:120px">
-          <col style="width:120px">
-          <col style="width:150px">
-          <col style="width:120px">
-          <col style="width:120px">
-        </colgroup>`
-    : '';
-  let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + '<thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
-  rows.forEach((row, r) => {
-    const isDeleted = name === 'inventory' && Number(row[8] || 0) > 0;
-    const isDraggable = (name === 'inventory' || name === 'employees') && CAN_EDIT;
-    const draggable = isDraggable
-      ? ` draggable="true" ondragstart="dragStartRow(event, '${name}', ${r})" ondragover="dragOverRow(event, '${name}', ${r})" ondrop="dropRow(event, '${name}', ${r})" ondragend="dragEndRow(event)"`
-      : '';
-    const isSelected = selected[name] === r;
-    const rowClass = [
-      isDeleted ? 'deleted-row' : '',
-      isSelected ? 'selected-row' : '',
-    ].filter(Boolean).join(' ');
-    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${draggable}><td style="${isDraggable ? 'cursor:grab;' : ''}">${r + 1}</td>`;
-    headers[name].forEach((_, c) => {
-      const val = row[c] ?? '';
-      if(name === 'employees' && (c === 4 || c === 5)){
-        html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
-      } else if (name === 'employees' && (c === 6 || c === 7)) {
-        html += `<td><input type="date" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.value)"` : 'disabled'}></td>`;
-      } else if (name === 'employees' && c === 8) {
-        html += `<td><input class="num" type="number" min="0" max="100" value="${escapeHtml(val !== '' && val !== null && val !== undefined ? val : 28)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value===''?28:(parseInt(this.value)||0))"` : 'readonly'}></td>`;
-      } else if (name === 'employees') {
-        const cls = c < 3 ? 'left' : '';
-        html += `<td><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autoResizeTextarea(this);" oninput="setCell('${name}',${r},${c},this.value); autoResizeTextarea(this);" onmousedown="event.stopPropagation()"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
-      } else if (name === 'inventory' && c === 2) {
-        const cls = 'left';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      } else if (name === 'inventory' && c === 3) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      } else if (name === 'inventory' && c === 4) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      } else if (name === 'inventory' && c === 5) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      } else if (name === 'inventory' && c === 6) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      } else if (name === 'inventory' && c === 7) {
-        html += `<td><input class="num" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      } else {
-        const cls = c === 0 || (name === 'employees' && c < 3) || (name === 'inventory' && c === 2) ? 'left' : '';
-        html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
-      }
-    });
-    html += '</tr>';
-  });
-  html += '</tbody></table></div>';
-  panel.innerHTML = html;
-  if (name === 'employees') {
-    resizeEmployeeTable(panel);
-  }
-}
-
-let selected = {employees: -1, inventory: -1};
-let draggedTable = '';
-let draggedRowIndex = -1;
-function selectRow(name, row){
-  selected[name] = row;
-  if (name === 'inventory') {
-    syncInventoryActionButtons();
-    updateInventorySelectionHighlight();
-  }
-}
-function selectInventoryRow(row){
-  selected.inventory = row;
-  syncInventoryActionButtons();
-  updateInventorySelectionHighlight();
-}
-function syncInventoryActionButtons(){
-  const current = getSelectedInventoryRow();
-  const isDeleted = current ? Number(current[8] || 0) > 0 : false;
-  const deleteBtn = document.getElementById('inventoryDeleteBtn');
-  const restoreBtn = document.getElementById('inventoryRestoreBtn');
-  const purgeBtn = document.getElementById('inventoryPurgeBtn');
-  if (deleteBtn) deleteBtn.disabled = selected.inventory < 0 || isDeleted;
-  if (restoreBtn) restoreBtn.disabled = selected.inventory < 0 || !isDeleted;
-  if (purgeBtn) purgeBtn.disabled = selected.inventory < 0 || !isDeleted;
-}
-function updateInventorySelectionHighlight(){
-  const panel = document.getElementById('inventory');
-  if (!panel) return;
-  panel.querySelectorAll('tbody tr').forEach((tr, index) => {
-    tr.classList.toggle('selected-row', index === selected.inventory);
-  });
-}
-function autoResizeTextarea(el){
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = el.scrollHeight + 'px';
-}
-function resizeEmployeeTable(panel){
-  const target = panel || document.getElementById('employees');
-  if (!target) return;
-  const run = () => target.querySelectorAll('textarea').forEach(autoResizeTextarea);
-  requestAnimationFrame(() => {
-    run();
-    requestAnimationFrame(run);
-  });
-}
-window.addEventListener('resize', () => {
-  const panel = document.getElementById('employees');
-  if (!panel || !panel.classList.contains('active')) return;
-  resizeEmployeeTable(panel);
-});
-let lookupTimer = null;
-function setCell(name, row, col, value){
-  if (!CAN_EDIT) return;
-  state[name][row][col] = value;
-  updateSaveButton();
-
-  // Автоматическое подтягивание ФИО и Должности из CSV при вводе ID в столбце Таб. № (col 3)
-  if (name === 'employees' && col === 3 && value && String(value).trim()) {
-    if (lookupTimer) clearTimeout(lookupTimer);
-    lookupTimer = setTimeout(() => {
-      const query = String(value).trim();
-      fetch(`${API}/api/employee-lookup?id=${encodeURIComponent(query)}`)
-        .then(res => res.json())
-        .then(info => {
-          if (info && info.tab_num) {
-            state.employees[row][3] = info.tab_num;
-            if (info.found) {
-              if (info.pos) state.employees[row][0] = info.pos;
-              if (info.name) state.employees[row][1] = info.name;
-              if (info.full_name) state.employees[row][2] = info.full_name;
-            }
-            renderTable('employees', state.employees, true);
-            updateSaveButton();
-          }
-        })
-        .catch(() => {});
-    }, 400);
-  }
-}
-function addRow(name){
-  if (!CAN_EDIT) return;
-  if (name === 'inventory') {
-    openAddLocomotiveModal();
-    return;
-  }
-  const cols = headers[name].length;
-  const newRow = Array(cols).fill('');
-  if (name === 'employees' && cols > 8) newRow[8] = 28;
-  state[name].push(newRow);
-  renderTable(name, state[name], true);
-  updateSaveButton();
-}
-function deleteRow(name){
-  if (!CAN_EDIT) return;
-  if (name === 'inventory') {
-    softDeleteInventory();
-    return;
-  }
-  const row = selected[name] >= 0 ? selected[name] : state[name].length - 1;
-  if(row >= 0) state[name].splice(row, 1);
-  selected[name] = -1;
-  renderTable(name, state[name], true);
-  updateSaveButton();
-}
-function getSelectedInventoryRow(){
-  if (selected.inventory < 0 || !state.inventory[selected.inventory]) return null;
-  return state.inventory[selected.inventory];
-}
-function softDeleteInventory(row){
-  if (!CAN_EDIT) return;
-  const targetRow = Number.isInteger(row) ? row : selected.inventory;
-  if (targetRow < 0) return;
-  const current = state.inventory[targetRow];
-  if (Number(current[8] || 0) > 0) return;
-  current[8] = Date.now();
-  selected.inventory = targetRow;
-  renderTable('inventory', state.inventory, true);
-  syncInventoryActionButtons();
-  updateSaveButton();
-}
-function restoreInventoryRow(row){
-  if (!CAN_EDIT) return;
-  const targetRow = Number.isInteger(row) ? row : selected.inventory;
-  const current = targetRow >= 0 ? state.inventory[targetRow] : null;
-  if (!current || Number(current[8] || 0) <= 0) return;
-  current[8] = 0;
-  selected.inventory = targetRow;
-  renderTable('inventory', state.inventory, true);
-  syncInventoryActionButtons();
-  updateSaveButton();
-}
-async function purgeSelectedInventory(row){
-  if (!CAN_EDIT) return;
-  const targetRowIndex = Number.isInteger(row) ? row : selected.inventory;
-  const targetRow = targetRowIndex >= 0 ? state.inventory[targetRowIndex] : null;
-  if (!targetRow || Number(targetRow[8] || 0) <= 0) return;
-  if (!confirm('Удалить окончательно выбранный локомотив?')) return;
-  const target = targetRow;
-  const year = Number(document.getElementById('year').value);
-  const res = await fetch(`${API}/api/purge_inventory_row`, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({year, ser: target[0], num: target[1]})
-  });
-  const data = await res.json().catch(() => ({}));
-  if(!res.ok || data.ok === false){
-    alert(data.error || 'Не удалось удалить окончательно');
-    return;
-  }
-  state.inventory.splice(targetRowIndex, 1);
-  selected.inventory = state.inventory.length ? Math.min(targetRowIndex, state.inventory.length - 1) : -1;
-  renderTable('inventory', state.inventory, true);
-  syncInventoryActionButtons();
-  updateInventorySelectionHighlight();
-  updateSaveButton();
-  return;
-}
-function dragStartRow(event, name, row){
-  if (!CAN_EDIT) return;
-  if (name === 'inventory' && state.inventory[row] && Number(state.inventory[row][8] || 0) > 0) {
-    event.preventDefault();
-    return;
-  }
-  draggedTable = name;
-  draggedRowIndex = row;
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', String(row));
-}
-function dragOverRow(event, name, row){
-  if (!CAN_EDIT) return;
-  if (draggedTable !== name || draggedRowIndex < 0 || draggedRowIndex === row) return;
-  event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
-}
-function dropRow(event, name, row){
-  if (!CAN_EDIT) return;
-  event.preventDefault();
-  const from = draggedRowIndex;
-  if (draggedTable !== name || from < 0 || from === row) return;
-  const rows = state[name];
-  if (!rows) return;
-  const [moved] = rows.splice(from, 1);
-  rows.splice(row, 0, moved);
-  selected[name] = row;
-  draggedRowIndex = -1;
-  draggedTable = '';
-  renderTable(name, rows, true);
-  updateSaveButton();
-}
-function dragEndRow(){
-  draggedRowIndex = -1;
-  draggedTable = '';
-}
-async function saveAll(){
-  if (!CAN_EDIT) return;
-  if (!hasUnsavedChanges()) return;
-  state.year = Number(document.getElementById('year').value);
-  const res = await fetch(`${API}/api/save`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
-  if(!res.ok){ alert('Ошибка сохранения'); return; }
-  savedState = cloneState(state);
-  canceledState = null;
-  updateHistoryButtons();
-  updateSaveButton();
-}
-function cloneState(value){
-  return value ? JSON.parse(JSON.stringify(value)) : null;
-}
-function hasUnsavedChanges(){
-  return JSON.stringify(state) !== JSON.stringify(savedState);
-}
-function updateSaveButton(){
-  const saveBtn = document.getElementById('saveBtn');
-  if (!saveBtn) return;
-  const dirty = CAN_EDIT && hasUnsavedChanges();
-  saveBtn.classList.toggle('primary', dirty);
-  saveBtn.disabled = !CAN_EDIT;
-  saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Изменений нет';
-}
-window.addEventListener('beforeunload', (event) => {
-  if (!CAN_EDIT || !hasUnsavedChanges()) return;
-  event.preventDefault();
-  event.returnValue = '';
-});
-function updateHistoryButtons(){
-  const cancelBtn = document.getElementById('cancelBtn');
-  const restoreBtn = document.getElementById('restoreBtn');
-  if (cancelBtn) cancelBtn.style.display = '';
-  if (restoreBtn) restoreBtn.style.display = '';
-  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
-  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
-}
-function cancelChanges(){
-  if (!CAN_EDIT || !savedState) return;
-  canceledState = cloneState(state);
-  state = cloneState(savedState);
-  selected = {employees:-1, inventory:-1};
-  renderAll();
-  alert('Отменено');
-}
-function restoreChanges(){
-  if (!CAN_EDIT || !canceledState) return;
-  state = cloneState(canceledState);
-  canceledState = null;
-  selected = {employees:-1, inventory:-1};
-  renderAll();
-  alert('Восстановлено');
-}
-async function purgeDeleted(){
-  if (!CAN_EDIT) return;
-  if (!confirm('Удалить окончательно все помеченные как удалённые локомотивы?')) return;
-  const res = await fetch(`${API}/api/purge_deleted_inventory`, {method:'POST'});
-  const data = await res.json().catch(() => ({}));
-  if(!res.ok || data.ok === false){
-    alert(data.error || 'Не удалось удалить окончательно');
-    return;
-  }
-  await loadState();
-}
-function openAddLocomotiveModal(){
-  if (!CAN_EDIT) return;
-  document.getElementById('newLocoSeries').value = '';
-  document.getElementById('newLocoNumber').value = '';
-  document.getElementById('newLocoServiceLife').value = '';
-  document.getElementById('newLocoWheelPairs').value = '6';
-  document.getElementById('newLocoSections').value = '1';
-  document.getElementById('newLocoInv').value = '';
-  document.getElementById('newLocoEight').value = '';
-  document.getElementById('newLocoYear').value = '';
-  document.getElementById('addLocoModal').classList.add('show');
-  setTimeout(() => document.getElementById('newLocoSeries').focus(), 0);
-}
-function closeAddLocomotiveModal(event){
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('addLocoModal').classList.remove('show');
-}
-function submitAddLocomotive(){
-  if (!CAN_EDIT) return;
-  const series = document.getElementById('newLocoSeries').value.trim();
-  const number = document.getElementById('newLocoNumber').value.trim();
-  const wheelPairs = Math.max(1, Number(document.getElementById('newLocoWheelPairs').value) || 1);
-  const sections = Math.max(1, Number(document.getElementById('newLocoSections').value) || 1);
-  const inv = document.getElementById('newLocoInv').value.trim();
-  const eightDigit = document.getElementById('newLocoEight').value.trim();
-  const yearBuilt = document.getElementById('newLocoYear').value.trim();
-  const serviceLife = document.getElementById('newLocoServiceLife').value.trim();
-  if (!series || !number) {
-    alert('Заполните серию и номер локомотива');
-    return;
-  }
-  const exists = state.inventory.some(row => (row[0] || '').trim() === series && (row[1] || '').trim() === number);
-  if (exists) {
-    alert('Такой локомотив уже есть в справочнике');
-    return;
-  }
-  state.inventory.push([series, number, inv, wheelPairs, sections, eightDigit, yearBuilt, serviceLife, 0]);
-  selected.inventory = state.inventory.length - 1;
-  closeAddLocomotiveModal();
-  renderTable('inventory', state.inventory, true);
-  updateSaveButton();
-}
-function showTab(id, btn){
-  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  btn.classList.add('active');
-  if (id === 'employees') {
-    resizeEmployeeTable(document.getElementById('employees'));
-  }
-}
-function escapeHtml(value){
-  return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-}
-fillYears();
-const params = new URLSearchParams(window.location.search);
-const activeTab = params.get('tab');
-if (activeTab) {
-  const btn = document.querySelector(`.tab[onclick="showTab('${activeTab}', this)"]`);
-  if (btn) {
-    showTab(activeTab, btn);
-  }
-}
-/* Автоматическая инициализация пользовательских меток таблиц */
-(function initTableCustomLabels() {
-  function applyCustomLabels() {
-    try {
-      const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
-      if (!pairs || !pairs.length) return;
-
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-      let node;
-      while ((node = walker.nextNode())) {
-        let val = node.nodeValue;
-        if (!val || !val.trim()) continue;
-        let newVal = val;
-        for (let p = 0; p < pairs.length; p++) {
-          if (newVal.indexOf(pairs[p].from) !== -1) {
-            newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-          }
-        }
-        if (newVal !== val) node.nodeValue = newVal;
-      }
-
-      const inputs = document.querySelectorAll('input, select, option, textarea');
-      for (let i = 0; i < inputs.length; i++) {
-        let el = inputs[i];
-        if (el.tagName === 'OPTION' || el.tagName === 'option') {
-          if (el.textContent) {
-            let val = el.textContent, newVal = val;
-            for (let p = 0; p < pairs.length; p++) {
-              if (newVal.indexOf(pairs[p].from) !== -1) {
-                newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-              }
-            }
-            if (newVal !== val) el.textContent = newVal;
-          }
-        }
-        if (el.value) {
-          let val = el.value, newVal = val;
-          for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) {
-              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-            }
-          }
-          if (newVal !== val) el.value = newVal;
-        }
-        if (el.title) {
-          let val = el.title, newVal = val;
-          for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) {
-              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-            }
-          }
-          if (newVal !== val) el.title = newVal;
-        }
-        if (el.placeholder) {
-          let val = el.placeholder, newVal = val;
-          for (let p = 0; p < pairs.length; p++) {
-            if (newVal.indexOf(pairs[p].from) !== -1) {
-              newVal = newVal.split(pairs[p].from).join(pairs[p].to);
-            }
-          }
-          if (newVal !== val) el.placeholder = newVal;
-        }
-      }
-    } catch (e) {}
-  }
-
-  window.applyCustomLabels = applyCustomLabels;
-
-  document.addEventListener("DOMContentLoaded", function () {
-    applyCustomLabels();
-    let timer = null;
-    const observer = new MutationObserver(function () {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(applyCustomLabels, 10);
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  });
-})();
-
-/* ==========================================================================
- * Утилиты автоматической разанонимизации (расшифровки) отчетов Excel в браузере.
- * Комментарии к коду на русском языке.
- * ========================================================================== */
-
-function getEmpReplacementPairs() {
-  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
-  if (!raw) return [];
-  
-  let map = null;
-  try { map = JSON.parse(raw); } catch (e) { return []; }
-  if (!map) return [];
-
-  const flatMap = {};
-
-  // Извлекает порядковый номер из строки вида ID_001, Работник №1 и т.д.
-  function extractNum(idStr) {
-    if (!idStr) return null;
-    const clean = String(idStr)
-      .replace(/ID_/g, '')
-      .replace(/Работник\\s*№?\\s*/g, '')
-      .replace(/СотрудникПолн\\s*№?\\s*/g, '')
-      .replace(/Сотрудник\\s*№?\\s*/g, '')
-      .replace(/Должность\\s*№?\\s*/g, '')
-      .trim();
-    const num = parseInt(clean, 10);
-    return isNaN(num) ? null : num;
-  }
-
-  // Добавляет варианты написания текстового поля (Работник №1, Работник №001 и т.д.)
-  function addFieldVariants(prefix, num, val) {
-    const sNum = String(num);
-    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
-    const valStr = String(val);
-
-    flatMap[prefix + " №" + num] = valStr;
-    flatMap[prefix + " №" + sNum] = valStr;
-    flatMap[prefix + " №" + pNum] = valStr;
-    flatMap[prefix + " № " + sNum] = valStr;
-    flatMap[prefix + " № " + pNum] = valStr;
-  }
-
-  // Добавляет варианты написания ID (ID_001, ID_1 и т.д.)
-  function addIdVariants(num, val) {
-    const sNum = String(num);
-    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
-    const valStr = String(val);
-
-    flatMap["ID_" + pNum] = valStr;
-    flatMap["ID_" + sNum] = valStr;
-    flatMap["ID_" + num] = valStr;
-  }
-
-  if (Array.isArray(map)) {
-    for (let i = 0; i < map.length; i++) {
-      let rec = map[i];
-      if (!rec) continue;
-
-      let num = extractNum(rec.id || rec.tab || rec.tab_num);
-      if (num === null) num = i + 1;
-
-      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
-      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
-      let pos = rec.pos || rec.position || '';
-      let tab = rec.tab || rec.tab_num || rec.id || '';
-
-      if (shortF) addFieldVariants("Работник", num, shortF);
-      if (fullF) {
-        addFieldVariants("СотрудникПолн", num, fullF);
-        addFieldVariants("Сотрудник", num, fullF);
-      }
-      if (pos) addFieldVariants("Должность", num, pos);
-      if (tab) {
-        addIdVariants(num, tab);
-        if (rec.id) flatMap[String(rec.id)] = String(tab);
-      }
-    }
-  } else if (typeof map === 'object') {
-    for (let k in map) {
-      if (map.hasOwnProperty(k) && k && map[k]) {
-        const valStr = String(map[k]);
-        flatMap[k] = valStr;
-        let num = extractNum(k);
-        if (num !== null) {
-          if (k.startsWith("Работник")) {
-            addFieldVariants("Работник", num, valStr);
-          } else if (k.startsWith("СотрудникПолн")) {
-            addFieldVariants("СотрудникПолн", num, valStr);
-            addFieldVariants("Сотрудник", num, valStr);
-          } else if (k.startsWith("Сотрудник")) {
-            addFieldVariants("Сотрудник", num, valStr);
-            addFieldVariants("СотрудникПолн", num, valStr);
-          } else if (k.startsWith("Должность")) {
-            addFieldVariants("Должность", num, valStr);
-          } else if (k.startsWith("ID_") || /^\\d+$/.test(k)) {
-            addIdVariants(num, valStr);
-          }
-        }
-      }
-    }
-  }
-
-  const pairs = [];
-  for (let k in flatMap) {
-    if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
-      pairs.push({ from: k, to: String(flatMap[k]) });
-    }
-  }
-
-  pairs.sort((a, b) => b.from.length - a.from.length);
-  return pairs;
-}
-
-async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      alert("Ошибка скачивания файла: " + response.statusText);
-      return;
-    }
-    const arrayBuffer = await response.arrayBuffer();
-
-    let filename = defaultFilename || "Отчет.xlsx";
-    const disposition = response.headers.get('Content-Disposition');
-    if (disposition) {
-      const matchUtf = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
-      if (matchUtf && matchUtf[1]) {
-        filename = decodeURIComponent(matchUtf[1]);
-      } else {
-        const matchNorm = disposition.match(/filename="?([^";]+)"?/i);
-        if (matchNorm && matchNorm[1]) {
-          filename = matchNorm[1];
-        }
-      }
-    }
-
-    const pairs = getEmpReplacementPairs();
-    let finalBuffer = arrayBuffer;
-
-    if (pairs.length > 0) {
-      if (window.JSZip) {
-        try {
-          const zip = await JSZip.loadAsync(arrayBuffer);
-          let modified = false;
-
-          const xmlFiles = Object.keys(zip.files).filter(name => name.endsWith('.xml') || name.endsWith('.rels'));
-          
-          for (let i = 0; i < xmlFiles.length; i++) {
-            const fileName = xmlFiles[i];
-            let content = await zip.files[fileName].async('string');
-            let fileChanged = false;
-
-            for (let p = 0; p < pairs.length; p++) {
-              const item = pairs[p];
-              if (content.includes(item.from)) {
-                content = content.split(item.from).join(item.to);
-                fileChanged = true;
-                modified = true;
-              }
-            }
-
-            if (fileChanged) {
-              zip.file(fileName, content);
-            }
-          }
-
-          if (modified) {
-            finalBuffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
-          }
-        } catch (zipErr) {
-          console.error("Ошибка при ZIP разанонимизации:", zipErr);
-        }
-      }
-
-      if (finalBuffer === arrayBuffer && window.XLSX) {
-        try {
-          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellFormulas: true, cellDates: true });
-          let modified = false;
-
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            if (!sheet) return;
-
-            for (let cellRef in sheet) {
-              if (cellRef.startsWith('!')) continue;
-              const cell = sheet[cellRef];
-              if (!cell) continue;
-
-              if (cell.v !== undefined && cell.v !== null) {
-                let valStr = String(cell.v);
-                let changed = false;
-
-                for (let i = 0; i < pairs.length; i++) {
-                  const item = pairs[i];
-                  if (valStr.includes(item.from)) {
-                    valStr = valStr.split(item.from).join(item.to);
-                    changed = true;
-                  }
-                }
-
-                if (changed) {
-                  cell.v = valStr;
-                  delete cell.w;
-                  delete cell.r;
-                  delete cell.h;
-                  modified = true;
-                }
-              }
-            }
-          });
-
-          if (modified) {
-            finalBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-          }
-        } catch (err) {
-          console.error("Ошибка при расшифровке ячеек Excel:", err);
-        }
-      }
-    }
-
-    const blob = new Blob([finalBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
-  } catch (err) {
-    console.error("Ошибка при загрузке отчета:", err);
-    alert("Не удалось скачать отчет: " + err.message);
-  }
-}
-
-loadState();
-</script>
-</body>
-</html>
-"""
-
-LOGIN_HTML = """<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Вход - Справочник</title>
-  <style>
-    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#f4f7fb;color:#102033}
-    .card{max-width:420px;margin:10vh auto;background:#fff;border:1px solid #d9e2ef;border-radius:18px;padding:24px;box-shadow:0 12px 32px rgba(16,32,51,.08)}
-    input,button{width:100%;padding:12px;border-radius:8px;border:1px solid #d9e2ef;font:inherit}
-    button{background:#276ef1;color:#fff;font-weight:400;cursor:pointer;border:0}
-    .muted{color:#607086;font-size:13px}
-  </style>
-</head>
-<body>
-  <form class="card" method="post" action="/spravochnik/login">
-    <h1 style="margin-top:0;">Вход</h1>
-    <p class="muted">Введите пароль для входа.</p>
-    <input name="user" placeholder="Логин" value="{{USER}}" style="margin-bottom:10px;">
-    <input name="password" type="password" placeholder="Пароль" style="margin-bottom:12px;">
-    <button type="submit">Войти</button>
-  </form>
-</body>
-</html>
-"""
-
-
-
-from fastapi import FastAPI, Request, Response, Depends, Form, HTTPException, Cookie, status
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-import urllib.parse
-import traceback
-
-app = FastAPI(title="RTPS Spravochnik")
-
-@app.middleware("http")
-async def strip_prefix(request: Request, call_next):
-    if request.scope["path"].startswith(APP_PREFIX + "/"):
-        request.scope["path"] = request.scope["path"][len(APP_PREFIX):]
-    return await call_next(request)
-
-def _cookie_value_fastapi(username: str, role: str) -> str:
-    payload = f"{username}:{role}:{int(dt.datetime.now().timestamp())}"
-    signature = hmac.new(WEB_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}:{signature}"
-
-def _verify_cookie_fastapi(value: str) -> tuple[str, str, str, str] | None:
-    for sep in (":", "|"):
-        try:
-            parts = value.rsplit(sep, 5)
-            if len(parts) == 6:
-                user_id, role, modules, safe_name, expiry_text, sig = parts
-                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}{sep}{expiry_text}"
-            elif len(parts) == 5:
-                user_id, role, modules, safe_name, sig = parts
-                payload = f"{user_id}{sep}{role}{sep}{modules}{sep}{safe_name}"
-                expiry_text = "2000000000"
-            else:
-                continue
-                
-            secrets_to_try = [WEB_SECRET]
-            if LEGACY_WEB_SECRET and LEGACY_WEB_SECRET not in secrets_to_try:
-                secrets_to_try.append(LEGACY_WEB_SECRET)
-                
-            matched = False
-            for secret in secrets_to_try:
-                expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-                if hmac.compare_digest(expected, sig):
-                    matched = True
-                    break
-                    
-            if not matched:
-                continue
-            if float(expiry_text) < dt.datetime.now().timestamp():
-                return None
-                
-            return urllib.parse.unquote(user_id), urllib.parse.unquote(role), urllib.parse.unquote(modules), urllib.parse.unquote(safe_name)
-        except Exception:
-            continue
-    return None
-
-def get_current_session_fastapi(request: Request):
+def get_session(request: Request) -> dict | None:
+    """Извлечение и проверка прав текущей пользовательской сессии для модуля справочника."""
     cookie = request.cookies.get(SESSION_COOKIE)
-    if cookie:
-        return _verify_cookie_fastapi(cookie)
-    return None
-
-def get_mod_role_fastapi(session: tuple[str, str, str, str] | None, module: str) -> str:
+    if not cookie:
+        return None
+    session = verify_cookie(cookie)
     if not session:
-        return ""
-    username = session[0]
-    role = session[1]
-    modules = session[2]
-
-    resolved = resolve_user_access(ROOT.parent / "base" / "web_users.db", username, role, modules)
+        return None
+    user_id, role, mods, full_name = session
+    resolved = resolve_user_access(WEB_USERS_DB, user_id, role, mods)
     if not resolved:
-        return ""
-    role, modules = resolved
-    return module_role(role, modules, module) or ""
+        return None
+    role, mods = resolved
+    mod_role = module_role(role, mods, "spravochnik") or ""
+    if not mod_role:
+        return None
+    can_edit = mod_role in ("edit", "editor", "admin")
+    return {
+        "user_id": user_id,
+        "role": role,
+        "mod_role": mod_role,
+        "modules": mods,
+        "full_name": full_name,
+        "can_edit": can_edit,
+    }
 
-def require_auth_fastapi(request: Request, need_edit: bool = False):
-    session = get_current_session_fastapi(request)
-    role = get_mod_role_fastapi(session, "spravochnik")
-    if not role:
-        return False, None
-    if need_edit and role not in ("edit", "editor", "admin"):
-        return False, None
-    return True, session
 
-def json_response(data: dict | list, status_code: int = 200) -> JSONResponse:
-    return JSONResponse(content=data, status_code=status_code)
+@app.get(f"{APP_PREFIX}", include_in_schema=False)
+async def prefixed_index_redirect():
+    """Перенаправление со слеша префикса на главную страницу модуля."""
+    return RedirectResponse(f"{APP_PREFIX}/", status_code=303)
 
-@app.get("/spravochnik", response_class=HTMLResponse)
+
 @app.get("/", response_class=HTMLResponse)
-async def home_route(request: Request):
-    session = get_current_session_fastapi(request)
-    mod_role = get_mod_role_fastapi(session, "spravochnik") if session else None
-    
-    if not session or not mod_role:
-        return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/spravochnik", status_code=303)
-        
-    auth_badge = "Редактирование" if mod_role in ("edit", "editor", "admin") else "Просмотр"
-    html_content = HTML.replace("{{USER}}", WEB_USER).replace("{{AUTH_BADGE}}", auth_badge).replace("{{CAN_EDIT}}", "true" if mod_role in ("edit", "editor", "admin") else "false")
-    
-    response = HTMLResponse(content=html_content)
+@app.get(f"{APP_PREFIX}/", response_class=HTMLResponse, include_in_schema=False)
+async def index(request: Request):
+    """Главная страница интерфейса справочника."""
+    session = get_session(request)
+    if not session:
+        return RedirectResponse(f"{MAIN_LOGIN_URL}?next={APP_PREFIX}", status_code=303)
+
+    context = {
+        "request": request,
+        "APP_PREFIX": APP_PREFIX,
+        "APP_VERSION": APP_VERSION,
+        "USER_NAME": session["full_name"],
+        "USER_ROLE": session["mod_role"],
+        "CAN_EDIT": "true" if session["can_edit"] else "false",
+        "MAIN_SITE_URL": MAIN_SITE_URL,
+    }
+    response = templates.TemplateResponse(request=request, name="index.html", context=context)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
-    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
+
 @app.get("/login")
-async def login_get(request: Request):
-    return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/spravochnik", status_code=303)
+@app.post("/login")
+async def login_redirect():
+    """Перенаправление на единую страницу входа."""
+    return RedirectResponse(f"{MAIN_LOGIN_URL}?next={APP_PREFIX}", status_code=303)
+
 
 @app.get("/logout")
 async def logout_route():
+    """Выход из системы с очисткой авторизационной куки."""
     response = RedirectResponse(MAIN_LOGIN_URL, status_code=303)
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax")
     return response
 
+
 @app.get("/api/state")
-async def get_state(request: Request, year: int = None):
-    auth_ok, session = require_auth_fastapi(request)
-    if not auth_ok:
-        return Response("Unauthorized", status_code=401)
-    if year is None:
-        year = dt.date.today().year
-    return json_response(load_state(year))
+@app.get(f"{APP_PREFIX}/api/state", include_in_schema=False)
+async def api_get_state(request: Request, year: int = None):
+    """Получение текущего состояния справочника (нормы, сотрудники, локомотивы)."""
+    session = get_session(request)
+    if not session:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    target_year = year if year is not None else dt.date.today().year
+    state = await asyncio.to_thread(load_state, target_year)
+    return JSONResponse(state)
+
 
 @app.get("/api/employee-lookup")
-async def get_employee_lookup(request: Request, id: str = ""):
-    auth_ok, session = require_auth_fastapi(request)
-    if not auth_ok:
-        return json_response({"error": "Unauthorized"}, status_code=401)
-    return json_response(lookup_private_employee(id))
+@app.get(f"{APP_PREFIX}/api/employee-lookup", include_in_schema=False)
+async def api_employee_lookup(request: Request, id: str = ""):
+    """Поиск данных сотрудника по табельному номеру или коду."""
+    session = get_session(request)
+    if not session:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-@app.post("/login")
-async def login_post(request: Request):
-    return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/spravochnik", status_code=303)
+    result = await asyncio.to_thread(lookup_private_employee, id)
+    return JSONResponse(result)
+
 
 @app.post("/api/save")
-async def post_save(request: Request):
-    auth_ok, session = require_auth_fastapi(request, need_edit=True)
-    if not auth_ok:
-        return json_response({"error": "Unauthorized"}, status_code=401)
+@app.post(f"{APP_PREFIX}/api/save", include_in_schema=False)
+async def api_post_save(request: Request):
+    """Сохранение изменений в справочнике."""
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     try:
         payload = await request.json()
-        save_state(payload)
-        return json_response({"ok": True})
+        await asyncio.to_thread(save_state, payload)
+        return JSONResponse({"ok": True})
     except Exception as exc:
-        return json_response({"ok": False, "error": str(exc)}, status_code=400)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
 
 @app.post("/api/purge_deleted_inventory")
-async def post_purge_deleted(request: Request):
-    auth_ok, session = require_auth_fastapi(request, need_edit=True)
-    if not auth_ok:
-        return json_response({"error": "Unauthorized"}, status_code=401)
+@app.post(f"{APP_PREFIX}/api/purge_deleted_inventory", include_in_schema=False)
+async def api_purge_deleted(request: Request):
+    """Очистка всех помеченных к удалению локомотивов."""
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     try:
-        return json_response(purge_deleted_inventory())
+        result = await asyncio.to_thread(purge_deleted_inventory)
+        return JSONResponse(result)
     except Exception as exc:
-        return json_response({"ok": False, "error": str(exc)}, status_code=400)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
 
 @app.post("/api/purge_inventory_row")
-async def post_purge_row(request: Request):
-    auth_ok, session = require_auth_fastapi(request, need_edit=True)
-    if not auth_ok:
-        return json_response({"error": "Unauthorized"}, status_code=401)
+@app.post(f"{APP_PREFIX}/api/purge_inventory_row", include_in_schema=False)
+async def api_purge_row(request: Request):
+    """Удаление одного конкретного локомотива."""
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     try:
         payload = await request.json()
         y = payload.get("year", dt.date.today().year)
         ser = payload.get("ser", "")
         num = payload.get("num", "")
-        return json_response(purge_inventory_row(y, ser, num))
+        result = await asyncio.to_thread(purge_inventory_row, y, ser, num)
+        return JSONResponse(result)
     except Exception as exc:
-        return json_response({"ok": False, "error": str(exc)}, status_code=400)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
-@app.get("/debug_nginx")
-def debug_nginx():
-    import subprocess
-    from fastapi import Response
-    try:
-        res = subprocess.run(["cat", "/etc/nginx/sites-enabled/grafik-ppr"], capture_output=True, text=True)
-        return Response(content=res.stdout + "\nSTDERR:\n" + res.stderr, media_type="text/plain")
-    except Exception as e:
-        return Response(content=str(e), media_type="text/plain")
-
-def main() -> None:
-    ensure_db()
-    host = os.environ.get("WEB_HOST", "127.0.0.1")
-    port = int(os.environ.get("WEB_PORT", "8002"))
-    url = f"http://{host}:{port}{APP_PREFIX}"
-    print(f"Справочник ready (FastAPI): {url}")
-    if host in {"127.0.0.1", "localhost", "0.0.0.0"}:
-        import threading, webbrowser
-        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    uvicorn.run("app:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    host = os.environ.get("WEB_HOST", "127.0.0.1")
+    port = int(os.environ.get("WEB_PORT", 8002))
+    uvicorn.run("app:app", host=host, port=port, reload=False)
