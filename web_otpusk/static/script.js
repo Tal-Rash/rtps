@@ -1904,61 +1904,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const allowedVal = allowedInp ? (parseInt(allowedInp.value) || 28) : 28;
 
-            // Эталонный справочник сотрудников для надежной разанонимизации в браузере
-            const CLIENT_REAL_EMPLOYEES = [
-                { id: "ID_001", num: 1, tab: "4004236", name: "Цюрко Г. В.", full_name: "Цюрко Геннадий Васильевич", pos: "Слесарь по ремонту подвижного состава" },
-                { id: "ID_002", num: 2, tab: "4604571", name: "Ханин Д. В.", full_name: "Ханин Дмитрий Викторович", pos: "Слесарь по ремонту подвижного состава" },
-                { id: "ID_003", num: 3, tab: "4601556", name: "Тимин И. В.", full_name: "Тимин Игорь Витальевич", pos: "Слесарь по ремонту подвижного состава" },
-                { id: "ID_004", num: 4, tab: "4607514", name: "Будзинский Н. А.", full_name: "Будзинский Никита Андреевич", pos: "Слесарь по ремонту подвижного состава" },
-                { id: "ID_005", num: 5, tab: "4611025", name: "Александров В. Н.", full_name: "Александров Вадим Николаевич", pos: "Слесарь по ремонту подвижного состава" },
-                { id: "ID_006", num: 6, tab: "4016004", name: "Степанов И. Б.", full_name: "Степанов Илья Борисович", pos: "Слесарь-электрик по ремонту электрооборудования" },
-                { id: "ID_007", num: 7, tab: "4610209", name: "Сивов А. С.", full_name: "Сивов Александр Сергеевич", pos: "Слесарь-электрик по ремонту электрооборудования" },
-                { id: "ID_008", num: 8, tab: "4004080", name: "Комлев Д. А.", full_name: "Комлев Дмитрий Александрович", pos: "Аккумуляторщик" },
-                { id: "ID_009", num: 9, tab: "4610497", name: "Спиридонов К. Г.", full_name: "Спиридонов Константин Герольдович", pos: "Токарь" },
-                { id: "ID_010", num: 10, tab: "4004267", name: "Щербакова И. С.", full_name: "Щербакова Ирина Станиславовна", pos: "Машинист крана" },
-                { id: "ID_011", num: 11, tab: "4015690", name: "Цюрко И. И.", full_name: "Цюрко Ирина Ивановна", pos: "Машинист по стирке спецодежды" },
-                { id: "ID_012", num: 12, tab: "4015696", name: "Шварчков С. А.", full_name: "Шварчков Сергей Александрович", pos: "Начальник участка" }
-            ];
-
-            // Справочник замен из localStorage для разанонимизации
+            // Справочник замен из localStorage для разанонимизации в браузере
             const repPairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
 
-            // Определяем отображаемое ФИО и должность
+            // Определяем отображаемое ФИО и должность из DOM таблицы
             let displayName = (nameSpan ? nameSpan.textContent.trim() : '') || empName || (employee ? (employee.name || employee.full_name) : '');
             let displayPos = (posDiv ? posDiv.textContent.trim() : '') || (employee ? employee.position : '');
             let displayTab = (employee ? employee.tab_num : '') || empTab;
 
-            // Извлекаем все цифры (табельный номер или ID) для точного поиска
-            const rowDigits = (displayName + ' ' + displayTab + ' ' + empTab + ' ' + empName).replace(/\D+/g, ' ').trim().split(/\s+/).filter(Boolean);
-            let matchedClientEmp = CLIENT_REAL_EMPLOYEES.find(c => {
-                if (c.tab && (c.tab === displayTab || c.tab === empTab)) return true;
-                if (c.id && (c.id === displayTab || c.id === empTab)) return true;
-                if (c.num && (c.num === empId)) return true;
-                if (rowDigits.includes(c.tab)) return true;
-                return false;
-            });
-
-            // Если не найден по табельному, берем по порядковому номеру строки
-            if (!matchedClientEmp && index < CLIENT_REAL_EMPLOYEES.length) {
-                matchedClientEmp = CLIENT_REAL_EMPLOYEES[index];
-            }
-
-            if (matchedClientEmp) {
-                displayName = matchedClientEmp.name;
-                displayPos = matchedClientEmp.pos;
-                displayTab = matchedClientEmp.tab;
-            } else {
-                // Если остался анонимный маркер, расшифровываем через пары замен
-                for (let p = 0; p < repPairs.length; p++) {
-                    if (displayName && displayName.indexOf(repPairs[p].from) !== -1) {
-                        displayName = displayName.split(repPairs[p].from).join(repPairs[p].to);
-                    }
-                    if (displayPos && displayPos.indexOf(repPairs[p].from) !== -1) {
-                        displayPos = displayPos.split(repPairs[p].from).join(repPairs[p].to);
-                    }
-                    if (displayTab && displayTab.indexOf(repPairs[p].from) !== -1) {
-                        displayTab = displayTab.split(repPairs[p].from).join(repPairs[p].to);
-                    }
+            // Если применены локальные замены из localStorage
+            for (let p = 0; p < repPairs.length; p++) {
+                if (displayName && displayName.indexOf(repPairs[p].from) !== -1) {
+                    displayName = displayName.split(repPairs[p].from).join(repPairs[p].to);
+                }
+                if (displayPos && displayPos.indexOf(repPairs[p].from) !== -1) {
+                    displayPos = displayPos.split(repPairs[p].from).join(repPairs[p].to);
+                }
+                if (displayTab && displayTab.indexOf(repPairs[p].from) !== -1) {
+                    displayTab = displayTab.split(repPairs[p].from).join(repPairs[p].to);
                 }
             }
 
@@ -2017,7 +1980,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 id: empId,
                 tab_num: displayTab,
                 name: displayName,
-                full_name: matchedClientEmp ? matchedClientEmp.full_name : (employee ? (employee.full_name || displayName) : displayName),
+                full_name: employee ? (employee.full_name || displayName) : displayName,
                 position: displayPos,
                 vacation_days: allowedVal,
                 months_data: monthsData,
@@ -2847,24 +2810,9 @@ document.addEventListener('DOMContentLoaded', () => {
  * Получает словарь замен из localStorage для автоподстановки реальных ФИО и табельных номеров.
  */
 /**
- * Получает словарь замен из localStorage либо эталонного списка для автоподстановки реальных ФИО и табельных номеров.
+ * Получает словарь замен из localStorage для автоподстановки реальных ФИО и табельных номеров.
  */
 function getEmpReplacementPairs() {
-  const DEFAULT_CLIENT_LIST = [
-    { id: "ID_001", num: 1, tab: "4004236", name: "Цюрко Г. В.", full_name: "Цюрко Геннадий Васильевич", pos: "Слесарь по ремонту подвижного состава" },
-    { id: "ID_002", num: 2, tab: "4604571", name: "Ханин Д. В.", full_name: "Ханин Дмитрий Викторович", pos: "Слесарь по ремонту подвижного состава" },
-    { id: "ID_003", num: 3, tab: "4601556", name: "Тимин И. В.", full_name: "Тимин Игорь Витальевич", pos: "Слесарь по ремонту подвижного состава" },
-    { id: "ID_004", num: 4, tab: "4607514", name: "Будзинский Н. А.", full_name: "Будзинский Никита Андреевич", pos: "Слесарь по ремонту подвижного состава" },
-    { id: "ID_005", num: 5, tab: "4611025", name: "Александров В. Н.", full_name: "Александров Вадим Николаевич", pos: "Слесарь по ремонту подвижного состава" },
-    { id: "ID_006", num: 6, tab: "4016004", name: "Степанов И. Б.", full_name: "Степанов Илья Борисович", pos: "Слесарь-электрик по ремонту электрооборудования" },
-    { id: "ID_007", num: 7, tab: "4610209", name: "Сивов А. С.", full_name: "Сивов Александр Сергеевич", pos: "Слесарь-электрик по ремонту электрооборудования" },
-    { id: "ID_008", num: 8, tab: "4004080", name: "Комлев Д. А.", full_name: "Комлев Дмитрий Александрович", pos: "Аккумуляторщик" },
-    { id: "ID_009", num: 9, tab: "4610497", name: "Спиридонов К. Г.", full_name: "Спиридонов Константин Герольдович", pos: "Токарь" },
-    { id: "ID_010", num: 10, tab: "4004267", name: "Щербакова И. С.", full_name: "Щербакова Ирина Станиславовна", pos: "Машинист крана" },
-    { id: "ID_011", num: 11, tab: "4015690", name: "Цюрко И. И.", full_name: "Цюрко Ирина Ивановна", pos: "Машинист по стирке спецодежды" },
-    { id: "ID_012", num: 12, tab: "4015696", name: "Шварчков С. А.", full_name: "Шварчков Сергей Александрович", pos: "Начальник участка" }
-  ];
-
   const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
   let map = null;
   if (raw) {
@@ -2911,21 +2859,6 @@ function getEmpReplacementPairs() {
     flatMap["ID_" + num] = valStr;
   }
 
-  // Базовое наполнение из эталонного списка
-  for (let i = 0; i < DEFAULT_CLIENT_LIST.length; i++) {
-    const emp = DEFAULT_CLIENT_LIST[i];
-    addFieldVariants("Работник", emp.num, emp.name);
-    addFieldVariants("СотрудникПолн", emp.num, emp.full_name);
-    addFieldVariants("Сотрудник", emp.num, emp.full_name);
-    addFieldVariants("Должность", emp.num, emp.pos);
-    addIdVariants(emp.num, emp.tab);
-    flatMap["Сотрудник №" + emp.tab] = emp.full_name;
-    flatMap["Работник №" + emp.tab] = emp.name;
-    flatMap["СотрудникПолн №" + emp.tab] = emp.full_name;
-    flatMap["Сотрудник № " + emp.tab] = emp.full_name;
-    flatMap["Работник № " + emp.tab] = emp.name;
-    flatMap[emp.id] = emp.tab;
-  }
 
   if (Array.isArray(map)) {
     for (let i = 0; i < map.length; i++) {

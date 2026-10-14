@@ -1079,24 +1079,8 @@ async def export_archive():
         headers={"Content-Disposition": "attachment; filename=vacations_archive.xlsx"}
     )
 
-# Эталонный список реальных сотрудников (ФИО, должности и табельные номера) для гарантированной разанонимизации
-DEFAULT_PRIVATE_EMPLOYEES = [
-    {"id": "ID_001", "num": 1, "tab": "4004236", "fio": "Цюрко Геннадий Васильевич", "short_fio": "Цюрко Г. В.", "pos": "Слесарь по ремонту подвижного состава"},
-    {"id": "ID_002", "num": 2, "tab": "4604571", "fio": "Ханин Дмитрий Викторович", "short_fio": "Ханин Д. В.", "pos": "Слесарь по ремонту подвижного состава"},
-    {"id": "ID_003", "num": 3, "tab": "4601556", "fio": "Тимин Игорь Витальевич", "short_fio": "Тимин И. В.", "pos": "Слесарь по ремонту подвижного состава"},
-    {"id": "ID_004", "num": 4, "tab": "4607514", "fio": "Будзинский Никита Андреевич", "short_fio": "Будзинский Н. А.", "pos": "Слесарь по ремонту подвижного состава"},
-    {"id": "ID_005", "num": 5, "tab": "4611025", "fio": "Александров Вадим Николаевич", "short_fio": "Александров В. Н.", "pos": "Слесарь по ремонту подвижного состава"},
-    {"id": "ID_006", "num": 6, "tab": "4016004", "fio": "Степанов Илья Борисович", "short_fio": "Степанов И. Б.", "pos": "Слесарь-электрик по ремонту электрооборудования"},
-    {"id": "ID_007", "num": 7, "tab": "4610209", "fio": "Сивов Александр Сергеевич", "short_fio": "Сивов А. С.", "pos": "Слесарь-электрик по ремонту электрооборудования"},
-    {"id": "ID_008", "num": 8, "tab": "4004080", "fio": "Комлев Дмитрий Александрович", "short_fio": "Комлев Д. А.", "pos": "Аккумуляторщик"},
-    {"id": "ID_009", "num": 9, "tab": "4610497", "fio": "Спиридонов Константин Герольдович", "short_fio": "Спиридонов К. Г.", "pos": "Токарь"},
-    {"id": "ID_010", "num": 10, "tab": "4004267", "fio": "Щербакова Ирина Станиславовна", "short_fio": "Щербакова И. С.", "pos": "Машинист крана"},
-    {"id": "ID_011", "num": 11, "tab": "4015690", "fio": "Цюрко Ирина Ивановна", "short_fio": "Цюрко И. И.", "pos": "Машинист по стирке спецодежды"},
-    {"id": "ID_012", "num": 12, "tab": "4015696", "fio": "Шварчков Сергей Александрович", "short_fio": "Шварчков С. А.", "pos": "Начальник участка"}
-]
-
 def load_private_employee_mapping() -> dict[str, dict[str, str]]:
-    """Загружает локальный справочник реальных ФИО и должностей из employees_private.csv / xlsx либо эталонного списка"""
+    """Загружает локальный справочник реальных ФИО и должностей исключительно из локального файла employees_private.csv / xlsx, если он существует"""
     mapping = {}
 
     def register_entry(anon_id: str, pos: str, full_fio: str, short_fio: str, real_tab: str):
@@ -1148,16 +1132,6 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
             mapping[f"СотрудникПолн №{p_num}"] = info
             mapping[f"Должность №{num}"] = info
             mapping[f"Должность №{p_num}"] = info
-
-    # 1. Сначала регистрируем эталонных сотрудников по умолчанию
-    for emp in DEFAULT_PRIVATE_EMPLOYEES:
-        register_entry(
-            anon_id=emp["id"],
-            pos=emp["pos"],
-            full_fio=emp["fio"],
-            short_fio=emp["short_fio"],
-            real_tab=emp["tab"]
-        )
 
     # 2. Если на сервере есть локальный файл, обновляем данные из него
     csv_file = ROOT.parent / "employees_private.csv"
@@ -1402,16 +1376,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
                 priv = private_map[cand.lower()]
                 break
 
-        # Резервный поиск по порядковому номеру строки среди 12 сотрудников
-        if not priv and 1 <= idx <= len(DEFAULT_PRIVATE_EMPLOYEES):
-            def_emp = DEFAULT_PRIVATE_EMPLOYEES[idx - 1]
-            priv = {
-                "name": def_emp["short_fio"],
-                "full_name": def_emp["fio"],
-                "position": def_emp["pos"],
-                "tab_num": def_emp["tab"]
-            }
-
         # Определение финальных значений ФИО, должности и табельного
         if priv:
             emp_name = priv.get("name") or priv.get("full_name") or raw_name or raw_full
@@ -1435,8 +1399,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             digits = "".join(ch for ch in clean_name if ch.isdigit())
             if digits and digits in private_map:
                 emp_name = private_map[digits].get("name") or private_map[digits].get("full_name")
-            elif 1 <= idx <= len(DEFAULT_PRIVATE_EMPLOYEES):
-                emp_name = DEFAULT_PRIVATE_EMPLOYEES[idx - 1]["short_fio"]
 
         # Подготовка данных по месяцам
         m_c_vals = [None] * 13
