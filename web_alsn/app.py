@@ -18,30 +18,51 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# Обеспечиваем доступность корня проекта для системных импортов
+# Обеспечиваем доступность директории модуля и корня проекта для системных импортов
 _ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 if str(_ROOT.parent) not in sys.path:
     sys.path.insert(0, str(_ROOT.parent))
 
 from rtps_common import module_has_access, resolve_user_access
 
-from .constants import (
-    APP_PREFIX,
-    APP_VERSION,
-    MAIN_LOGIN_URL,
-    MAIN_SITE_URL,
-    ROOT,
-    SESSION_COOKIE,
-    WEB_USERS_DB,
-    get_web_secret,
-)
-from .storage import (
-    init_db,
-    load_state_from_db,
-    normalize_locomotives,
-    normalize_warehouse_rows,
-    save_state_to_db,
-)
+try:
+    from .constants import (
+        APP_PREFIX,
+        APP_VERSION,
+        MAIN_LOGIN_URL,
+        MAIN_SITE_URL,
+        ROOT,
+        SESSION_COOKIE,
+        WEB_USERS_DB,
+        get_web_secret,
+    )
+    from .storage import (
+        init_db,
+        load_state_from_db,
+        normalize_locomotives,
+        normalize_warehouse_rows,
+        save_state_to_db,
+    )
+except (ImportError, ValueError):
+    from constants import (
+        APP_PREFIX,
+        APP_VERSION,
+        MAIN_LOGIN_URL,
+        MAIN_SITE_URL,
+        ROOT,
+        SESSION_COOKIE,
+        WEB_USERS_DB,
+        get_web_secret,
+    )
+    from storage import (
+        init_db,
+        load_state_from_db,
+        normalize_locomotives,
+        normalize_warehouse_rows,
+        save_state_to_db,
+    )
 
 
 def _verify_cookie(value: str) -> tuple[str, str, str, str] | None:
