@@ -77,15 +77,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const rowChk = tr.querySelector('.exclude-row-checkbox');
             const rowExcluded = Boolean(rowChk && rowChk.checked);
 
-            // Если сотрудник исключен индивидуально, визуально приглушаем строку (не скрывая её намертво)
+            // Если сотрудник исключен индивидуально, визуально приглушаем строку
             if (rowExcluded) {
                 tr.classList.add('row-excluded');
             } else {
                 tr.classList.remove('row-excluded');
             }
 
-            // Полное скрытие применяется только когда включен верхний тумблер скрытия увольняемых
-            if (isQuitting && hideQuitting) {
+            // Скрытие применяется только когда включен верхний тумблер скрытия увольняемых И у сотрудника отмечен чекбокс
+            if (hideQuitting && rowExcluded) {
                 tr.style.display = 'none';
             } else {
                 tr.style.display = '';
@@ -1765,6 +1765,139 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Сбор данных текущего графика из таблицы на странице для выгрузки в Excel
+    function captureScheduleExportData() {
+        const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
+        const items = [];
+        const hideQuitting = Boolean(toggleQuitting && toggleQuitting.checked);
+
+        rows.forEach((tr, index) => {
+            // Пропускаем скрытые по фильтру строки увольняемых и индивидуально исключенные
+            const isQuitting = tr.dataset.isQuitting === "true";
+            const rowChk = tr.querySelector('.exclude-row-checkbox');
+            const rowExcluded = Boolean(rowChk && rowChk.checked);
+
+            // Пропускаем скрытые по фильтру строки увольняемых с чекбоксом и исключенные строки
+            if (tr.style.display === 'none' || (hideQuitting && rowExcluded) || tr.classList.contains('row-excluded')) return;
+
+            const empId = parseInt(tr.dataset.empId) || (index + 1);
+            const empTab = tr.dataset.empTab || '';
+            const empName = tr.dataset.empName || '';
+            const nameSpan = tr.querySelector('.employee-name span');
+            const posDiv = tr.querySelector('.employee-pos');
+            const allowedInp = tr.querySelector('.allowed-days-input');
+
+            const employee = (typeof findEmp === 'function' ? findEmp({ tab_num: empTab, name: empName }) : null) || allData.find(e => e.id === empId);
+
+            const allowedVal = allowedInp ? (parseInt(allowedInp.value) || 28) : 28;
+            const displayName = (employee ? (employee.name || employee.full_name) : '') || (nameSpan ? nameSpan.textContent.trim() : empName);
+            const displayPos = (employee ? employee.position : '') || (posDiv ? posDiv.textContent.trim() : '');
+            const displayTab = (employee ? employee.tab_num : '') || empTab;
+
+            // Сбор значений месяцев с и по
+            const monthsData = [];
+            for (let m = 0; m < 13; m++) {
+                const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
+                const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                const cVal = cInp && cInp.value.trim() !== '' ? parseInt(cInp.value.trim()) : null;
+                const poVal = poInp && poInp.value.trim() !== '' ? parseInt(poInp.value.trim()) : null;
+                monthsData.push({
+                    month: m,
+                    c: (!isNaN(cVal) && cVal > 0) ? cVal : null,
+                    po: (!isNaN(poVal) && poVal > 0) ? poVal : null
+                });
+            }
+
+            // Разбор отпусков из строки
+            const parsedVacations = parseVacationsFromRow(tr);
+            const vacationsList = [];
+            const carriedList = [];
+
+            parsedVacations.forEach(vac => {
+                const totalDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+                const sYear = vac.startMonth === 12 ? (currentYear + 1) : currentYear;
+                const realSMonth = vac.startMonth === 12 ? 1 : (vac.startMonth + 1);
+                const sDay = String(vac.startDay).padStart(2, '0');
+                const sMonth = String(realSMonth).padStart(2, '0');
+                const startIso = `${sYear}-${sMonth}-${sDay}`;
+
+                const eYear = vac.endMonth === 12 ? (currentYear + 1) : currentYear;
+                const realEMonth = vac.endMonth === 12 ? 1 : (vac.endMonth + 1);
+                const eDay = String(vac.endDay).padStart(2, '0');
+                const eMonth = String(realEMonth).padStart(2, '0');
+                const endIso = `${eYear}-${eMonth}-${eDay}`;
+
+                const vacObj = {
+                    start: startIso,
+                    end: endIso,
+                    startMonth: vac.startMonth,
+                    startDay: vac.startDay,
+                    endMonth: vac.endMonth,
+                    endDay: vac.endDay,
+                    days: totalDays,
+                    is_carried_over: Boolean(vac.is_carried_over)
+                };
+
+                if (vac.is_carried_over) {
+                    carriedList.push(vacObj);
+                } else {
+                    vacationsList.push(vacObj);
+                }
+            });
+
+            items.push({
+                id: empId,
+                tab_num: displayTab,
+                name: displayName,
+                full_name: employee ? (employee.full_name || displayName) : displayName,
+                position: displayPos,
+                vacation_days: allowedVal,
+                months_data: monthsData,
+                vacations: vacationsList,
+                carried_over_vacations: carriedList,
+                is_quitting: isQuitting,
+                is_excluded: rowExcluded
+            });
+        });
+
+        return items;
+    }
+
+    // Выгрузка текущего графика отпусков в Excel
+    const exportScheduleBtn = document.getElementById('exportScheduleBtn');
+    if (exportScheduleBtn) {
+        exportScheduleBtn.addEventListener('click', async () => {
+            try {
+                exportScheduleBtn.textContent = '⏳ Выгрузка...';
+                exportScheduleBtn.disabled = true;
+
+                const exportItems = captureScheduleExportData();
+                const payload = {
+                    year: currentYear,
+                    hide_quitting: Boolean(toggleQuitting && toggleQuitting.checked),
+                    include_carried: Boolean(toggleCarriedOverFact && toggleCarriedOverFact.checked),
+                    items: exportItems
+                };
+
+                await downloadAndUnAnonymizeExcel(
+                    `${APP_PREFIX}/api/vacations/schedule/export?year=${currentYear}`,
+                    `grafik_otpuskov_${currentYear}.xlsx`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }
+                );
+            } catch (err) {
+                console.error('Ошибка экспорта графика в Excel:', err);
+                alert('Не удалось выгрузить график в Excel: ' + (err.message || err));
+            } finally {
+                exportScheduleBtn.textContent = '📊 Экспорт в Excel';
+                exportScheduleBtn.disabled = false;
+            }
+        });
+    }
+
     // Excel-like keyboard navigation
     tableBody.addEventListener('keydown', (e) => {
         if (!e.target.classList.contains('day-input')) return;
@@ -2641,10 +2774,11 @@ function getEmpReplacementPairs() {
 /**
  * Перехватывает скачивание файла Excel, подставляет реальные данные работников и отдает файл пользователю.
  * Использует гибрид JSZip (100% сохранение форматирования openpyxl) и SheetJS.
+ * Поддерживает как GET, так и POST запросы через необязательный параметр fetchOptions.
  */
-async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
+async function downloadAndUnAnonymizeExcel(url, defaultFilename, fetchOptions = {}) {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, fetchOptions);
     if (!response.ok) {
       alert("Ошибка скачивания файла: " + response.statusText);
       return;

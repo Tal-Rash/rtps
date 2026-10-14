@@ -145,6 +145,20 @@ button.primary:hover, .btn-primary:hover {
     box-shadow: 0 4px 12px rgba(39, 110, 241, 0.3);
 }
 
+/* Кнопка экспорта в Excel */
+button.export-btn, .btn-export-excel {
+    background: #107c41;
+    border-color: #0b5a2f;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+button.export-btn:hover, .btn-export-excel:hover {
+    background: #0b5a2f;
+    border-color: #084222;
+    box-shadow: 0 4px 12px rgba(16, 124, 65, 0.3);
+}
+
 /* Toggle Switch Control */
 .toggle-control {
     display: flex;
