@@ -1,0 +1,1203 @@
+from __future__ import annotations
+
+import csv
+import datetime as dt
+from datetime import datetime, date, timedelta
+from io import BytesIO
+import json
+import re
+import sqlite3
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Generator
+
+import openpyxl
+
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_ROOT.parent))
+
+from rtps_common import connect_sqlite
+
+try:
+    from .constants import DB_FILE, DB_LOCK, DEFAULT_HOLIDAYS, ROOT
+except (ImportError, ValueError):
+    from constants import DB_FILE, DB_LOCK, DEFAULT_HOLIDAYS, ROOT
+
+
+@contextmanager
+def conn_ctx() -> Generator[sqlite3.Connection, None, None]:
+    """Безопасный контекстный менеджер SQLite соединения с оптимизированными настройками."""
+    connection = connect_sqlite(DB_FILE)
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=NORMAL")
+        connection.execute("PRAGMA busy_timeout=5000")
+        yield connection
+    finally:
+        connection.close()
+
+
+def init_db():
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with DB_LOCK, conn_ctx() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vacations_schedule (
+                y INTEGER NOT NULL,
+                tab_num TEXT NOT NULL,
+                name TEXT NOT NULL,
+                vacations_json TEXT NOT NULL,
+                PRIMARY KEY (y, tab_num)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vacation_holidays (
+                y INTEGER PRIMARY KEY,
+                holidays_json TEXT NOT NULL
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vacations_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                y INTEGER NOT NULL,
+                tab_num TEXT DEFAULT '',
+                name TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                days INTEGER DEFAULT 0,
+                note TEXT DEFAULT ''
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vacation_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                y INTEGER NOT NULL,
+                version_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                data_json TEXT NOT NULL
+            )
+        """)
+        # Гарантируем наличие колонки is_active в таблице vacation_versions
+        try:
+            ver_cols = [c[1] for c in cur.execute("PRAGMA table_info(vacation_versions)").fetchall()]
+            if "is_active" not in ver_cols:
+                cur.execute("ALTER TABLE vacation_versions ADD COLUMN is_active INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        conn.commit()
+
+        # Migrate existing JSON files into SQLite if DB table is empty
+        cur.execute("SELECT COUNT(*) FROM vacations_schedule WHERE y=2026")
+        if cur.fetchone()[0] == 0:
+            saved_file = ROOT / "data" / "vacations.json"
+            if not saved_file.exists():
+                saved_file = ROOT / "data" / "mock_data.json"
+            if saved_file.exists():
+                try:
+                    with open(saved_file, "r", encoding="utf-8") as f:
+                        items = json.load(f)
+                        for item in items:
+                            t_num = str(item.get("tab_num") or item.get("name") or "")
+                            e_name = str(item.get("name") or "")
+                            v_json = json.dumps(item.get("vacations", []), ensure_ascii=False)
+                            if t_num:
+                                cur.execute(
+                                    "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
+                                    (2026, t_num, e_name, v_json)
+                                )
+                    conn.commit()
+                except Exception as e:
+                    print("Migration error for vacations:", e)
+
+        cur.execute("SELECT COUNT(*) FROM vacation_holidays WHERE y=2026")
+        if cur.fetchone()[0] == 0:
+            holidays_file = ROOT / "data" / "holidays.json"
+            h_data = DEFAULT_HOLIDAYS
+            if holidays_file.exists():
+                try:
+                    with open(holidays_file, "r", encoding="utf-8") as f:
+                        h_data = json.load(f)
+                except Exception:
+                    pass
+            cur.execute(
+                "INSERT OR REPLACE INTO vacation_holidays (y, holidays_json) VALUES (?, ?)",
+                (2026, json.dumps(h_data, ensure_ascii=False))
+            )
+            conn.commit()
+
+
+def extract_year_from_date(date_str: str) -> int | None:
+    """Извлекает 4-значный год из строки даты (поддерживает форматы YYYY-MM-DD, DD.MM.YYYY и др.)"""
+    if not date_str:
+        return None
+    d_str = str(date_str).strip()
+    parts = d_str.replace("/", ".").replace("-", ".").split(".")
+    for part in parts:
+        part = part.strip()
+        if len(part) == 4 and part.isdigit():
+            return int(part)
+    return None
+
+def is_employee_excluded_for_year(emp: dict, target_year: int) -> bool:
+    """Проверяет, был ли сотрудник уволен более года назад относительно целевого года (показываем в год увольнения и на следующий год)"""
+    exc_date_str = str(emp.get("exclude_date") or "").strip()
+    exc_year = extract_year_from_date(exc_date_str)
+
+    if exc_year is not None:
+        # Показываем в год увольнения и на следующий год (исключаем только если прошло 2 года и более)
+        if exc_year < target_year - 1:
+            return True
+    else:
+        is_exc = int(emp.get("is_excluded") or 0)
+        if is_exc == 1:
+            return True
+
+    return False
+
+def format_date_to_iso(val) -> str:
+    """Универсально преобразует любые варианты значения даты из Excel (datetime, date, serial float, тексты DD.MM.YYYY, YYYY-MM-DD и др.) в формат YYYY-MM-DD"""
+    if val is None or val == "":
+        return ""
+
+    if isinstance(val, (datetime, date)):
+        return val.strftime("%Y-%m-%d")
+
+    # Перевод числовых серийных дат Excel (например, 45443)
+    if isinstance(val, (int, float)):
+        try:
+            if 30000 <= val <= 70000:
+                dt = datetime(1899, 12, 30) + timedelta(days=float(val))
+                return dt.strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+    s = str(val).strip()
+    if not s:
+        return ""
+
+    # Если передан численный серийный номер в виде строки, например "45443" или "45443.0"
+    try:
+        f_val = float(s)
+        if 30000 <= f_val <= 70000:
+            dt = datetime(1899, 12, 30) + timedelta(days=f_val)
+            return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+
+    # Приведение разделителей к точкам
+    s_clean = s.replace("/", ".").replace("-", ".").replace(" ", "")
+    parts = s_clean.split(".")
+
+    if len(parts) == 3:
+        p1, p2, p3 = parts[0].strip(), parts[1].strip(), parts[2].strip()
+
+        # Формат YYYY.MM.DD
+        if len(p1) == 4 and p1.isdigit():
+            y = p1
+            m = p2.zfill(2)
+            d = p3.zfill(2)
+            return f"{y}-{m}-{d}"
+
+        # Формат DD.MM.YYYY или DD.MM.YY
+        if len(p3) in (2, 4) and p3.isdigit():
+            d = p1.zfill(2)
+            m = p2.zfill(2)
+            y = p3
+            if len(y) == 2:
+                y = "20" + y
+            return f"{y}-{m}-{d}"
+
+    return s
+
+def normalize_tab(tab: str) -> str:
+    if not tab:
+        return ""
+    return str(tab).strip().lstrip('0')
+
+def is_same_person(name1: str, name2: str, tab1: str = "", tab2: str = "") -> bool:
+    s1 = str(name1 or "").strip()
+    s2 = str(name2 or "").strip()
+    t1 = normalize_tab(tab1)
+    t2 = normalize_tab(tab2)
+
+    l1 = s1.lower()
+    l2 = s2.lower()
+
+    # Если заданы оба имени, проверяем, не разные ли это реальные люди
+    if l1 and l2:
+        is_anon1 = ("№" in l1 or "id_" in l1 or l1.isdigit())
+        is_anon2 = ("№" in l2 or "id_" in l2 or l2.isdigit())
+        if not is_anon1 and not is_anon2:
+            p1 = l1.replace('.', ' ').split()
+            p2 = l2.replace('.', ' ').split()
+            if p1 and p2 and p1[0] != p2[0]:
+                return False
+
+    if t1 and t2:
+        # Для шифров ID_00X проверяем также несовпадение реальных имен
+        if t1.lower().startswith("id_") or t2.lower().startswith("id_"):
+            if l1 and l2:
+                is_anon1 = ("№" in l1 or "id_" in l1 or l1.isdigit())
+                is_anon2 = ("№" in l2 or "id_" in l2 or l2.isdigit())
+                if not is_anon1 and not is_anon2:
+                    p1 = l1.replace('.', ' ').split()
+                    p2 = l2.replace('.', ' ').split()
+                    if p1 and p2 and p1[0] != p2[0]:
+                        return False
+            return t1 == t2
+        return t1 == t2
+
+    if not l1 or not l2:
+        return False
+
+    if l1 == l2:
+        return True
+
+    # Для плейсхолдеров анонимизации (Работник №1, СотрудникПолн №1, Сотрудник №1, ID_001)
+    if ("№" in l1 or "id_" in l1) and ("№" in l2 or "id_" in l2):
+        num1 = "".join(ch for ch in l1 if ch.isdigit())
+        num2 = "".join(ch for ch in l2 if ch.isdigit())
+        if num1 and num2:
+            return int(num1) == int(num2)
+
+    n1 = s1.replace('.', ' ').split()
+    n2 = s2.replace('.', ' ').split()
+
+    if not n1 or not n2:
+        return False
+
+    if n1[0] != n2[0]:
+        return False
+
+    if len(n1) > 1 and len(n2) > 1:
+        if len(n1[1]) == 1 or len(n2[1]) == 1:
+            if n1[1][0] != n2[1][0]:
+                return False
+        else:
+            if n1[1] != n2[1]:
+                return False
+
+    if len(n1) > 2 and len(n2) > 2:
+        if len(n1[2]) == 1 or len(n2[2]) == 1:
+            if n1[2][0] != n2[2][0]:
+                return False
+        else:
+            if n1[2] != n2[2]:
+                return False
+
+    return True
+
+
+
+def load_vacations(year: int = 2026) -> list[dict]:
+    employees = []
+    saved_vacations = {}
+    with DB_LOCK, conn_ctx() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        try:
+            emp_rows = cur.execute(
+                "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
+            ).fetchall()
+        except Exception:
+            emp_rows = cur.execute(
+                "SELECT rowid, * FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
+            ).fetchall()
+
+        if not emp_rows:
+            try:
+                emp_rows = cur.execute(
+                    "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees ORDER BY rowid"
+                ).fetchall()
+            except Exception:
+                emp_rows = cur.execute(
+                    "SELECT rowid, * FROM employees ORDER BY rowid"
+                ).fetchall()
+
+        # Объединяем со всеми актуальными сотрудниками из справочника (чтобы новые сотрудники сразу появлялись)
+        existing_tabs = {str(r["tab_num"]) for r in emp_rows if r["tab_num"]}
+        try:
+            latest_rows = cur.execute("""
+                SELECT e.rowid, e.pos, e.name, e.full_name, e.tab_num, e.vacation_days, e.is_excluded, e.exclude_date, e.hire_date
+                FROM employees e
+                INNER JOIN (
+                    SELECT tab_num, MAX(y) as max_y FROM employees GROUP BY tab_num
+                ) m ON e.tab_num = m.tab_num AND e.y = m.max_y
+                ORDER BY e.rowid
+            """).fetchall()
+            combined = list(emp_rows)
+            for r in latest_rows:
+                t = str(r["tab_num"] or "")
+                if t and t not in existing_tabs:
+                    combined.append(r)
+                    existing_tabs.add(t)
+            emp_rows = combined
+        except Exception:
+            pass
+
+        employees = [dict(r) for r in emp_rows]
+
+        vac_rows = cur.execute(
+            "SELECT tab_num, name, vacations_json FROM vacations_schedule WHERE y=?",
+            (year,)
+        ).fetchall()
+        for v_row in vac_rows:
+            try:
+                v_list = json.loads(v_row["vacations_json"] or "[]")
+            except Exception:
+                v_list = []
+            if v_row["tab_num"]:
+                saved_vacations[str(v_row["tab_num"])] = v_list
+            if v_row["name"]:
+                saved_vacations[str(v_row["name"])] = v_list
+
+        prev_vac_rows = cur.execute(
+            "SELECT tab_num, name, vacations_json FROM vacations_schedule WHERE y=?",
+            (year - 1,)
+        ).fetchall()
+        prev_saved_vacations = {}
+        for p_row in prev_vac_rows:
+            try:
+                p_list = json.loads(p_row["vacations_json"] or "[]")
+            except Exception:
+                p_list = []
+            if p_row["tab_num"]:
+                prev_saved_vacations[str(p_row["tab_num"])] = p_list
+            if p_row["name"]:
+                prev_saved_vacations[str(p_row["name"])] = p_list
+
+        # Query vacations_archive for current year (year) and previous year (year - 1)
+        archive_rows = cur.execute(
+            "SELECT y, tab_num, name, start_date, end_date, days FROM vacations_archive WHERE y=? OR y=?",
+            (year, year - 1)
+        ).fetchall()
+
+        archive_items = []
+        prev_archive_items = []
+        for a_row in archive_rows:
+            a_dict = dict(a_row)
+            ay = a_dict.get("y")
+            t_num = str(a_dict.get("tab_num") or "")
+            a_name = str(a_dict.get("name") or "")
+            s_iso = format_date_to_iso(a_dict.get("start_date") or "")
+            e_iso = format_date_to_iso(a_dict.get("end_date") or "")
+            days = int(a_dict.get("days") or 0)
+
+            if s_iso and e_iso:
+                entry = {
+                    "name": a_name,
+                    "tab_num": t_num,
+                    "vacation": {"start": s_iso, "end": e_iso, "days": days}
+                }
+                if ay == year:
+                    archive_items.append(entry)
+                else:
+                    prev_archive_items.append(entry)
+
+    result = []
+    jan_prefix = f"{year}-01-"
+    processed_archive_keys = set()
+
+    for emp in employees:
+        if is_employee_excluded_for_year(emp, year):
+            continue
+
+        emp_name = emp.get("name") or emp.get("full_name") or ""
+        emp_full = emp.get("full_name") or ""
+        tab_num = str(emp.get("tab_num") or "")
+        pkey = tab_num or emp_name
+        hire_date_str = str(emp.get("hire_date") or "").strip()
+        hire_year = extract_year_from_date(hire_date_str)
+        hire_iso = format_date_to_iso(hire_date_str)
+
+        exc_date_str = str(emp.get("exclude_date") or "").strip()
+        exc_year = extract_year_from_date(exc_date_str)
+        exc_iso = format_date_to_iso(exc_date_str)
+
+        vacations = saved_vacations.get(tab_num) or saved_vacations.get(emp_name) or []
+        if not vacations:
+            for ai in archive_items:
+                s_iso = format_date_to_iso(ai["vacation"].get("start") or "")
+                if hire_iso and s_iso and s_iso < hire_iso:
+                    continue
+                if exc_iso and s_iso and s_iso > exc_iso:
+                    continue
+                if is_same_person(emp_name, ai["name"], tab_num, ai["tab_num"]) or \
+                   (emp_full and is_same_person(emp_full, ai["name"], tab_num, ai["tab_num"])):
+                    vacations.append(ai["vacation"])
+                    processed_archive_keys.add((ai["tab_num"], ai["name"]))
+
+        # Проверяем дату приема на работу:
+        # В предыдущие годы (до года приема) и в текущий год приема (если нет запланированного отпуска) сотрудник не отображается, только в следующих годах
+        if hire_year is not None:
+            if hire_year > year:
+                continue
+            if hire_year == year and not vacations:
+                continue
+
+        prev_vacs = prev_saved_vacations.get(pkey) or prev_saved_vacations.get(tab_num) or prev_saved_vacations.get(emp_name) or []
+        
+        prev_arc_vacs = []
+        for pai in prev_archive_items:
+            s_iso = format_date_to_iso(pai["vacation"].get("start") or "")
+            if hire_iso and s_iso and s_iso < hire_iso:
+                continue
+            if exc_iso and s_iso and s_iso > exc_iso:
+                continue
+            if is_same_person(emp_name, pai["name"], tab_num, pai["tab_num"]) or \
+               (emp_full and is_same_person(emp_full, pai["name"], tab_num, pai["tab_num"])):
+                prev_arc_vacs.append(pai["vacation"])
+
+        all_prev_vacs = prev_vacs + prev_arc_vacs
+
+        carried_over = []
+        seen_cov = set()
+        for pv in all_prev_vacs:
+            s_date = str(pv.get("start") or "")
+            e_date = str(pv.get("end") or "")
+            if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
+                key = f"{s_date}_{e_date}"
+                if key not in seen_cov:
+                    seen_cov.add(key)
+                    carried_over.append(pv)
+
+        v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 28
+        
+        # Гарантированная защита от сбоя названий и привязка номера к табельному ID
+        num_part = None
+        if tab_num and tab_num.startswith("ID_"):
+            digits = "".join(ch for ch in tab_num if ch.isdigit())
+            if digits:
+                num_part = int(digits)
+        if num_part is None:
+            num_part = len(result) + 1
+
+        disp_tab = f"ID_{num_part:03d}"
+        disp_name = f"Работник №{num_part}"
+        disp_full = f"СотрудникПолн №{num_part}"
+        disp_pos = f"Должность №{num_part}"
+
+        result.append({
+            "id": num_part,
+            "tab_num": disp_tab,
+            "name": disp_name,
+            "full_name": disp_full,
+            "position": disp_pos,
+            "vacation_days": v_days,
+            "vacations": vacations,
+            "carried_over_vacations": carried_over,
+            "exclude_date": exc_date_str,
+            "is_excluded": int(emp.get("is_excluded") or 0) == 1,
+            "is_quitting_this_year": bool(exc_year is not None and exc_year in (year, year - 1)),
+        })
+
+    # Only add archive entries for year if they belong to a completely NEW person not matched above
+    for ai in archive_items:
+        a_name = ai["name"]
+        a_tab = ai["tab_num"]
+        
+        already_matched = False
+        for emp in employees:
+            e_name = emp.get("name") or emp.get("full_name") or ""
+            e_full = emp.get("full_name") or ""
+            e_tab = str(emp.get("tab_num") or "")
+            if is_same_person(e_name, a_name, e_tab, a_tab) or \
+               (e_full and is_same_person(e_full, a_name, e_tab, a_tab)):
+                already_matched = True
+                break
+
+        if not already_matched and (a_tab, a_name) not in processed_archive_keys:
+            processed_archive_keys.add((a_tab, a_name))
+            person_vacs = [x["vacation"] for x in archive_items if is_same_person(a_name, x["name"], a_tab, x["tab_num"])]
+            
+            carried_over = []
+            seen_cov = set()
+            for pai in prev_archive_items:
+                if is_same_person(a_name, pai["name"], a_tab, pai["tab_num"]):
+                    pv = pai["vacation"]
+                    s_date = str(pv.get("start") or "")
+                    e_date = str(pv.get("end") or "")
+                    if s_date.startswith(jan_prefix) or e_date.startswith(jan_prefix):
+                        key = f"{s_date}_{e_date}"
+                        if key not in seen_cov:
+                            seen_cov.add(key)
+                            carried_over.append(pv)
+
+            result.append({
+                "id": len(result) + 1,
+                "tab_num": a_tab if a_tab.isdigit() else "",
+                "name": a_name,
+                "full_name": a_name,
+                "position": "",
+                "vacation_days": 28,
+                "vacations": person_vacs,
+                "carried_over_vacations": carried_over
+            })
+
+    if not result:
+        mock_file = ROOT / "data" / "mock_data.json"
+        if mock_file.exists():
+            try:
+                with open(mock_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
+    return result
+
+
+def save_vacations(year: int, items: list) -> dict:
+    with DB_LOCK, conn_ctx() as conn:
+        cur = conn.cursor()
+        emp_rows = cur.execute("SELECT tab_num, name, full_name FROM employees WHERE y=?", (year,)).fetchall()
+        for item in items:
+            t_num = str(item.get("tab_num") or "")
+            e_name = str(item.get("name") or "")
+            v_json = json.dumps(item.get("vacations", []), ensure_ascii=False)
+            
+            target_tab = t_num or e_name
+            target_name = e_name
+
+            for emp in emp_rows:
+                if is_same_person(emp[1], e_name, emp[0], t_num) or is_same_person(emp[2], e_name, emp[0], t_num):
+                    target_tab = emp[0]
+                    target_name = emp[1]
+                    break
+
+            if target_tab:
+                cur.execute(
+                    "INSERT OR REPLACE INTO vacations_schedule (y, tab_num, name, vacations_json) VALUES (?, ?, ?, ?)",
+                    (year, target_tab, target_name, v_json)
+                )
+        conn.commit()
+    return {"status": "success"}
+
+def load_holidays(year: int = 2026) -> list[dict]:
+    """Загрузка праздничных дней за выбранный год."""
+    with DB_LOCK, conn_ctx() as conn:
+        cur = conn.cursor()
+        row = cur.execute("SELECT holidays_json FROM vacation_holidays WHERE y=?", (year,)).fetchone()
+        if row and row["holidays_json"]:
+            try:
+                return json.loads(row["holidays_json"])
+            except Exception:
+                pass
+    return DEFAULT_HOLIDAYS
+
+def save_holidays(year: int, holidays_list: list) -> dict:
+    """Сохранение праздничных дней за выбранный год."""
+    h_json = json.dumps(holidays_list, ensure_ascii=False)
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT OR REPLACE INTO vacation_holidays (y, holidays_json) VALUES (?, ?)",
+                (year, h_json)
+            )
+    return {"status": "success"}
+
+def get_season(month: int, start_day: int = 1) -> str:
+    """Определяет сезон месяца: лето (Май, Июнь, Июль, Август до 15 числа), зима (Ноябрь, Декабрь, Январь, Февраль) или демисезон"""
+    if month in (5, 6, 7):
+        return "summer"
+    elif month == 8:
+        # Если отпуск начинается с середины августа (с 15-го числа и позже), не считать его летним
+        if start_day >= 15:
+            return "other"
+        return "summer"
+    elif month in (11, 12, 1, 2):
+        return "winter"
+    else:
+        return "other"
+
+def load_history_matrix(year: int = 2026) -> dict:
+    """Возвращает матрицу отпусков по годам для визуального анализа летних и сезонных отпусков сотрудников"""
+    with DB_LOCK, conn_ctx() as conn:
+        conn.row_factory = sqlite3.Row
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        try:
+            emp_rows = cur.execute(
+                "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
+            ).fetchall()
+        except Exception:
+            emp_rows = cur.execute(
+                "SELECT rowid, * FROM employees WHERE y=? ORDER BY rowid",
+                (year,)
+            ).fetchall()
+
+        if not emp_rows:
+            try:
+                emp_rows = cur.execute(
+                    "SELECT rowid, pos, name, full_name, tab_num, vacation_days, is_excluded, exclude_date, hire_date FROM employees ORDER BY rowid"
+                ).fetchall()
+            except Exception:
+                emp_rows = cur.execute(
+                    "SELECT rowid, * FROM employees ORDER BY rowid"
+                ).fetchall()
+
+        # Объединяем со всеми актуальными сотрудниками из справочника (чтобы новые сотрудники сразу появлялись)
+        existing_tabs = {str(r["tab_num"]) for r in emp_rows if r["tab_num"]}
+        try:
+            latest_rows = cur.execute("""
+                SELECT e.rowid, e.pos, e.name, e.full_name, e.tab_num, e.vacation_days, e.is_excluded, e.exclude_date, e.hire_date
+                FROM employees e
+                INNER JOIN (
+                    SELECT tab_num, MAX(y) as max_y FROM employees GROUP BY tab_num
+                ) m ON e.tab_num = m.tab_num AND e.y = m.max_y
+                ORDER BY e.rowid
+            """).fetchall()
+            combined = list(emp_rows)
+            for r in latest_rows:
+                t = str(r["tab_num"] or "")
+                if t and t not in existing_tabs:
+                    combined.append(r)
+                    existing_tabs.add(t)
+            emp_rows = combined
+        except Exception:
+            pass
+
+        employees = [dict(r) for r in emp_rows]
+
+        arc_rows = cur.execute(
+            "SELECT y, tab_num, name, start_date, end_date, days FROM vacations_archive ORDER BY y ASC, start_date ASC"
+        ).fetchall()
+
+        sched_rows = cur.execute(
+            "SELECT y, tab_num, name, vacations_json FROM vacations_schedule ORDER BY y ASC"
+        ).fetchall()
+
+    years_set = set()
+    archive_items = []
+
+    for r in arc_rows:
+        y = int(r["y"] or 0)
+        if y > 0:
+            years_set.add(y)
+        archive_items.append(dict(r))
+
+    for s in sched_rows:
+        y = int(s["y"] or 0)
+        if y > 0:
+            years_set.add(y)
+            try:
+                v_list = json.loads(s["vacations_json"] or "[]")
+                for v in v_list:
+                    archive_items.append({
+                        "y": y,
+                        "tab_num": s["tab_num"],
+                        "name": s["name"],
+                        "start_date": v.get("start") or "",
+                        "end_date": v.get("end") or "",
+                        "days": v.get("days") or 0
+                    })
+            except Exception:
+                pass
+
+    if not years_set:
+        years_set = {2024, 2025, 2026}
+
+    sorted_years = sorted(list(years_set))
+    result_emp_list = []
+    for emp in employees:
+        hire_date_str = str(emp.get("hire_date") or "").strip()
+        hire_year = extract_year_from_date(hire_date_str)
+        hire_iso = format_date_to_iso(hire_date_str)
+
+        exc_date_str = str(emp.get("exclude_date") or "").strip()
+        exc_year = extract_year_from_date(exc_date_str)
+        exc_iso = format_date_to_iso(exc_date_str)
+
+        # Проверяем статус увольнения/исключения сотрудника
+        is_exc = False
+        is_quitting = bool(exc_year is not None and exc_year in (year, year - 1))
+        if emp.get("from_archive"):
+            is_exc = True
+        elif is_employee_excluded_for_year(emp, year):
+            is_exc = True
+        elif int(emp.get("is_excluded") or 0) == 1 and not is_quitting:
+            is_exc = True
+
+        # Если сотрудник ещё не был принят на работу к целевому году, пропускаем
+        if not is_exc and hire_year is not None and hire_year > year:
+            continue
+
+        emp_name = emp.get("name") or emp.get("full_name") or ""
+        emp_full = emp.get("full_name") or ""
+        tab_num = str(emp.get("tab_num") or "")
+
+        emp_history = {str(y): [] for y in sorted_years}
+        seen_keys = set()
+
+        for ai in archive_items:
+            ay = str(ai.get("y"))
+            if ay not in emp_history:
+                continue
+
+            try:
+                ay_int = int(ay)
+            except Exception:
+                ay_int = 0
+
+            # Сотрудник не мог ходить в отпуск до года своего трудоустройства
+            if hire_year is not None and ay_int > 0 and ay_int < hire_year:
+                continue
+
+            s_iso = format_date_to_iso(ai.get("start_date") or "")
+            e_iso = format_date_to_iso(ai.get("end_date") or "")
+
+            # Отпуск до даты приёма на работу не относится к новому сотруднику
+            if hire_iso and s_iso and s_iso < hire_iso:
+                continue
+
+            # Отпуск после даты увольнения не относится к сотруднику
+            if exc_year is not None and ay_int > 0 and ay_int > exc_year:
+                continue
+            if exc_iso and s_iso and s_iso > exc_iso:
+                continue
+
+            a_name = str(ai.get("name") or "")
+            a_tab = str(ai.get("tab_num") or "")
+
+            if is_same_person(emp_name, a_name, tab_num, a_tab) or \
+               (emp_full and is_same_person(emp_full, a_name, tab_num, a_tab)):
+                key = f"{ay}_{s_iso}_{e_iso}"
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                month_num = 0
+                start_day = 1
+                if s_iso:
+                    if "-" in s_iso:
+                        parts = s_iso.split("-")
+                        try:
+                            month_num = int(parts[1])
+                            if len(parts) >= 3:
+                                start_day = int(parts[2])
+                        except Exception:
+                            pass
+                    elif "." in s_iso:
+                        parts = s_iso.split(".")
+                        try:
+                            if len(parts) >= 2:
+                                start_day = int(parts[0])
+                                month_num = int(parts[1])
+                        except Exception:
+                            pass
+
+                season = get_season(month_num, start_day) if month_num else "other"
+                m_name = MONTH_NAMES_RU.get(month_num, "")
+
+                emp_history[ay].append({
+                    "month_num": month_num,
+                    "month_name": m_name,
+                    "start": s_iso,
+                    "end": e_iso,
+                    "days": int(ai.get("days") or 0),
+                    "season": season
+                })
+
+        # Вычисление итоговой статистики сезонов отпусков только за прошлые года (не считая планируемый/будущий год)
+        summer_count = 0
+        summer_days = 0
+        winter_count = 0
+        winter_days = 0
+        other_count = 0
+        other_days = 0
+
+        for y_str, v_list in emp_history.items():
+            try:
+                y_val = int(y_str)
+            except Exception:
+                y_val = 0
+
+            # Учитываем статистику за все года включительно до просматриваемого года (y_val <= year)
+            if y_val > 0 and y_val <= year:
+                for v in v_list:
+                    s_type = v.get("season")
+                    d_cnt = int(v.get("days") or 0)
+                    if s_type == "summer":
+                        summer_count += 1
+                        summer_days += d_cnt
+                    elif s_type == "winter":
+                        winter_count += 1
+                        winter_days += d_cnt
+                    else:
+                        other_count += 1
+                        other_days += d_cnt
+
+        total_vacations = summer_count + winter_count + other_count
+        total_days = summer_days + winter_days + other_days
+
+        summer_pct = round((summer_days / total_days * 100), 1) if total_days > 0 else 0.0
+        winter_pct = round((winter_days / total_days * 100), 1) if total_days > 0 else 0.0
+        other_pct = round((other_days / total_days * 100), 1) if total_days > 0 else 0.0
+
+        dominant_season = "balanced"
+        if summer_days > winter_days:
+            dominant_season = "summer"
+        elif winter_days > summer_days:
+            dominant_season = "winter"
+
+        # Новые сотрудники в год приёма без запланированных отпусков не показываются в графике текущего года
+        has_any_vacation = any(len(v_list) > 0 for v_list in emp_history.values())
+        if hire_year is not None and hire_year == year and not has_any_vacation:
+            continue
+
+        v_days = int(emp.get("vacation_days")) if emp.get("vacation_days") is not None else 52
+
+        # Гарантированная защита от сбоя названий и привязка номера к табельному ID
+        num_part = None
+        if tab_num and tab_num.startswith("ID_"):
+            digits = "".join(ch for ch in tab_num if ch.isdigit())
+            if digits:
+                num_part = int(digits)
+        if num_part is None:
+            num_part = len(result_emp_list) + 1
+
+        disp_tab = f"ID_{num_part:03d}"
+        disp_name = f"Работник №{num_part}"
+        disp_full = f"СотрудникПолн №{num_part}"
+        disp_pos = f"Должность №{num_part}"
+
+        result_emp_list.append({
+            "id": num_part,
+            "tab_num": disp_tab,
+            "name": disp_name,
+            "full_name": disp_full,
+            "position": disp_pos,
+            "vacation_days": v_days,
+            "is_excluded": is_exc,
+            "is_quitting_this_year": is_quitting,
+            "exclude_date": exc_date_str,
+            "stats": {
+                "summer_count": summer_count,
+                "summer_days": summer_days,
+                "summer_pct": summer_pct,
+                "winter_count": winter_count,
+                "winter_days": winter_days,
+                "winter_pct": winter_pct,
+                "other_count": other_count,
+                "other_days": other_days,
+                "other_pct": other_pct,
+                "total_count": total_vacations,
+                "total_days": total_days,
+                "dominant_season": dominant_season
+            },
+            "history": emp_history
+        })
+
+    # Общая статистика по сезонам рассчитывается по активным сотрудникам (или по всем, если активных нет)
+    active_emps = [e for e in result_emp_list if not e.get("is_excluded")]
+    stats_base = active_emps if active_emps else result_emp_list
+
+    tot_summer_count = sum(e["stats"]["summer_count"] for e in stats_base)
+    tot_summer_days = sum(e["stats"]["summer_days"] for e in stats_base)
+    tot_winter_count = sum(e["stats"]["winter_count"] for e in stats_base)
+    tot_winter_days = sum(e["stats"]["winter_days"] for e in stats_base)
+    tot_other_count = sum(e["stats"]["other_count"] for e in stats_base)
+    tot_other_days = sum(e["stats"]["other_days"] for e in stats_base)
+    tot_all_count = tot_summer_count + tot_winter_count + tot_other_count
+    tot_all_days = tot_summer_days + tot_winter_days + tot_other_days
+
+    tot_summer_pct = round((tot_summer_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
+    tot_winter_pct = round((tot_winter_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
+    tot_other_pct = round((tot_other_days / tot_all_days * 100), 1) if tot_all_days > 0 else 0.0
+
+    overall_stats = {
+        "total_employees": len(stats_base),
+        "total_vacations": tot_all_count,
+        "total_days": tot_all_days,
+        "summer_count": tot_summer_count,
+        "summer_days": tot_summer_days,
+        "summer_pct": tot_summer_pct,
+        "winter_count": tot_winter_count,
+        "winter_days": tot_winter_days,
+        "winter_pct": tot_winter_pct,
+        "other_count": tot_other_count,
+        "other_days": tot_other_days,
+        "other_pct": tot_other_pct
+    }
+
+    return {
+        "years": sorted_years,
+        "overall_stats": overall_stats,
+        "employees": result_emp_list
+    }
+
+
+def load_archive(year: int | None = None) -> list[dict]:
+    """Загрузка записей архива отпусков."""
+    with DB_LOCK, conn_ctx() as conn:
+        cur = conn.cursor()
+        if year:
+            rows = cur.execute(
+                "SELECT id, y, tab_num, name, start_date, end_date, days, note FROM vacations_archive WHERE y=? ORDER BY y DESC, name ASC",
+                (year,)
+            ).fetchall()
+        else:
+            rows = cur.execute(
+                "SELECT id, y, tab_num, name, start_date, end_date, days, note FROM vacations_archive ORDER BY y DESC, name ASC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_archive(rows: list) -> dict:
+    """Сохранение отредактированного архива отпусков."""
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM vacations_archive")
+            for r in rows:
+                cur.execute(
+                    """
+                    INSERT INTO vacations_archive (y, tab_num, name, start_date, end_date, days, note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        r.get("y", 2025),
+                        r.get("tab_num", ""),
+                        r.get("name", ""),
+                        r.get("start_date", ""),
+                        r.get("end_date", ""),
+                        r.get("days", 0),
+                        r.get("note", "")
+                    )
+                )
+    return {"status": "success"}
+
+def import_archive_file(contents: bytes, mode: str = "append") -> dict:
+    """Импорт записей архива отпусков из загруженного файла Excel."""
+    buffer = BytesIO(contents)
+    wb = openpyxl.load_workbook(buffer, data_only=True)
+    ws = wb.active
+
+    imported_items = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not any(row):
+            continue
+
+        def val(idx, default=""):
+            if idx < len(row) and row[idx] is not None:
+                return str(row[idx]).strip()
+            return str(default)
+
+        def date_val(idx):
+            if idx < len(row) and row[idx] is not None:
+                return format_date_to_iso(row[idx])
+            return ""
+
+        def int_val(idx, default=0):
+            try:
+                v = val(idx, default)
+                return int(float(v))
+            except Exception:
+                return default
+
+        s_date = date_val(3)
+        e_date = date_val(4)
+
+        y_val = int_val(0, 0)
+        if not y_val and s_date and len(s_date) >= 4:
+            try:
+                y_val = int(s_date.split("-")[0])
+            except Exception:
+                pass
+        if not y_val:
+            y_val = 2025
+
+        name_val = val(1, "")
+        tab_val = val(2, "")
+        days_val = int_val(5, 0)
+        note_val = val(6, "")
+
+        if days_val == 0 and s_date and e_date:
+            try:
+                d1 = datetime.strptime(s_date, "%Y-%m-%d")
+                d2 = datetime.strptime(e_date, "%Y-%m-%d")
+                days_val = (d2 - d1).days + 1
+            except Exception:
+                pass
+
+        if name_val or tab_val or s_date:
+            imported_items.append({
+                "y": y_val,
+                "name": name_val,
+                "tab_num": tab_val,
+                "start_date": s_date,
+                "end_date": e_date,
+                "days": days_val,
+                "note": note_val
+            })
+
+    if not imported_items:
+        raise ValueError("В файле не найдено строк с данными.")
+
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            if mode == "replace":
+                cur.execute("DELETE FROM vacations_archive")
+
+            existing_rows = []
+            if mode == "append":
+                existing_rows = [dict(r) for r in cur.execute("SELECT y, tab_num, name, start_date, end_date FROM vacations_archive").fetchall()]
+
+            inserted_count = 0
+            skipped_count = 0
+
+            for item in imported_items:
+                if mode == "append":
+                    is_duplicate = False
+                    for ex in existing_rows:
+                        if int(ex.get("y") or 0) == int(item.get("y") or 0):
+                            ex_s = format_date_to_iso(ex.get("start_date") or "")
+                            ex_e = format_date_to_iso(ex.get("end_date") or "")
+                            it_s = format_date_to_iso(item.get("start_date") or "")
+                            it_e = format_date_to_iso(item.get("end_date") or "")
+                            if ex_s == it_s and ex_e == it_e:
+                                if is_same_person(item.get("name") or "", ex.get("name") or "", item.get("tab_num") or "", ex.get("tab_num") or ""):
+                                    is_duplicate = True
+                                    break
+                    if is_duplicate:
+                        skipped_count += 1
+                        continue
+
+                cur.execute(
+                    """
+                    INSERT INTO vacations_archive (y, tab_num, name, start_date, end_date, days, note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        item["y"],
+                        item["tab_num"],
+                        item["name"],
+                        item["start_date"],
+                        item["end_date"],
+                        item["days"],
+                        item["note"]
+                    )
+                )
+                inserted_count += 1
+                if mode == "append":
+                    existing_rows.append(item)
+
+            cur.execute("DELETE FROM vacations_schedule")
+    return {"status": "success", "imported_count": inserted_count, "skipped_count": skipped_count}
+
+def load_versions(year: int = 2026) -> list[dict]:
+    """Загрузка списка сохраненных версий графика отпусков."""
+    with DB_LOCK, conn_ctx() as conn:
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT id, y, version_name, created_at, COALESCE(is_active, 0) as is_active FROM vacation_versions WHERE y=? ORDER BY id DESC",
+            (year,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def map_version_data_to_ciphers(data_list):
+    if not isinstance(data_list, list):
+        return data_list
+
+    tab_mapping = {}
+    csv_file = ROOT.parent / "employees_private.csv"
+    xlsx_file = ROOT.parent / "employees_private.xlsx"
+
+    if csv_file.exists():
+        try:
+            import csv
+            with open(csv_file, "r", encoding="utf-8-sig") as f:
+                reader = csv.reader(f, delimiter=";")
+                for row in reader:
+                    if not row or len(row) < 5 or row[0].startswith("Код"):
+                        continue
+                    anon_id = row[0].strip()
+                    real_tab = row[4].strip()
+                    if anon_id and real_tab:
+                        tab_mapping[real_tab] = anon_id
+        except Exception:
+            pass
+    elif xlsx_file.exists():
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(xlsx_file)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                if not row or len(row) < 5 or str(row[0]).startswith("Код"):
+                    continue
+                anon_id = str(row[0]).strip()
+                real_tab = str(row[4]).strip()
+                if anon_id and real_tab:
+                    tab_mapping[real_tab] = anon_id
+        except Exception:
+            pass
+
+    for item in data_list:
+        if isinstance(item, dict):
+            saved_tab = str(item.get("tab_num") or "").strip()
+            if saved_tab in tab_mapping:
+                item["tab_num"] = tab_mapping[saved_tab]
+
+    return data_list
+
+
+def load_version_by_id(version_id: int) -> dict | None:
+    """Загрузка полной информации о версии графика отпусков по ID."""
+    with DB_LOCK, conn_ctx() as conn:
+        cur = conn.cursor()
+        row = cur.execute("SELECT * FROM vacation_versions WHERE id=?", (version_id,)).fetchone()
+        if not row:
+            return None
+        res = dict(row)
+        try:
+            res["data"] = json.loads(res.get("data_json") or "[]")
+        except Exception:
+            res["data"] = []
+        return res
+
+
+def create_version(year: int, version_name: str, data: list) -> dict:
+    """Создание новой сохраненной версии графика отпусков."""
+    created_at = datetime.now().strftime("%d.%m.%Y %H:%M")
+    name = (version_name or f"Версия от {created_at}").strip()
+    data_json = json.dumps(data, ensure_ascii=False)
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO vacation_versions (y, version_name, created_at, data_json, is_active) VALUES (?, ?, ?, ?, 0)",
+                (year, name, created_at, data_json)
+            )
+            v_id = cur.lastrowid
+    return {"status": "success", "id": v_id, "version_name": name, "created_at": created_at, "is_active": 0}
+
+
+def activate_version(version_id: int) -> dict:
+    """Активация выбранной версии графика отпусков."""
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            row = cur.execute("SELECT y FROM vacation_versions WHERE id=?", (version_id,)).fetchone()
+            if not row:
+                raise ValueError("Версия не найдена")
+            y = row["y"]
+            cur.execute("UPDATE vacation_versions SET is_active=0 WHERE y=?", (y,))
+            cur.execute("UPDATE vacation_versions SET is_active=1 WHERE id=?", (version_id,))
+    return {"status": "success"}
+
+
+def delete_version(version_id: int) -> dict:
+    """Удаление сохраненной версии графика отпусков."""
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM vacation_versions WHERE id=?", (version_id,))
+    return {"status": "success"}

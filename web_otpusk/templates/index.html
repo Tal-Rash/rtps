@@ -4,13 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>График отпусков</title>
-    <link rel="stylesheet" href="/otpusk/static/style.css?v=rtps_v39">
+    <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
+    <script>
+        window.APP_CONFIG = {
+            APP_PREFIX: "{{APP_PREFIX}}",
+            CAN_EDIT: {{CAN_EDIT}},
+            MAIN_SITE_URL: "{{MAIN_SITE_URL}}" || "http://yrtps.ru"
+        };
+    </script>
 </head>
 <body>
     <div class="wrap">
         <div class="top">
             <div class="titlebox">
                 <h1>График отпусков</h1>
+                {% if USER_NAME %}
+                <span class="user-badge" title="Текущий пользователь">{{ USER_NAME }} · {{ USER_ROLE }}</span>
+                {% endif %}
                 <div class="year-selector">
                     <label for="yearSelect"><strong>Год:</strong></label>
                     <select id="yearSelect" class="year-select">
@@ -25,7 +35,7 @@
                 </div>
             </div>
             <div class="actions">
-                <a class="home-link" href="/">На главную</a>
+                <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
                 <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↩️ Отменить</button>
                 <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↪️ Повторить</button>
                 <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>🗑️ Очистить</button>
@@ -249,8 +259,8 @@
             </div>
         </div>
     </div>
-    <script src="/otpusk/static/jszip.min.js"></script>
-    <script src="/otpusk/static/xlsx.full.min.js"></script>
-    <script src="/otpusk/static/script.js?v=rtps_v41"></script>
+    <script src="{{APP_PREFIX}}/static/jszip.min.js?v={{APP_VERSION}}"></script>
+    <script src="{{APP_PREFIX}}/static/xlsx.full.min.js?v={{APP_VERSION}}"></script>
+    <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
 </body>
 </html>
