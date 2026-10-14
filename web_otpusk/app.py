@@ -1021,11 +1021,21 @@ def create_archive_excel(rows_data: list, title: str = "Архив отпуск�
 
     data_font = Font(name="Segoe UI", size=10)
     
+    private_map = load_private_employee_mapping()
+
     for row_idx, r in enumerate(rows_data, 2):
+        row_name = str(r.get("name") or "").strip()
+        row_tab = str(r.get("tab_num") or "").strip()
+        if private_map:
+            priv = private_map.get(row_tab) or private_map.get(row_name)
+            if priv:
+                row_name = priv.get("name") or priv.get("full_name") or row_name
+                row_tab = priv.get("tab_num") or row_tab
+
         ws.append([
             r.get("y", 2025),
-            r.get("name", ""),
-            r.get("tab_num", ""),
+            row_name,
+            row_tab,
             r.get("start_date", ""),
             r.get("end_date", ""),
             r.get("days", 0),
@@ -1097,9 +1107,16 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
                         "tab_num": real_tab
                     }
                     mapping[anon_id] = info
+                    if real_tab:
+                        mapping[real_tab] = info
+                    if short_fio:
+                        mapping[short_fio] = info
+                    if full_fio:
+                        mapping[full_fio] = info
                     if num_str.isdigit():
                         num = int(num_str)
                         mapping[f"ID_{num:03d}"] = info
+                        mapping[f"ID_{num}"] = info
                         mapping[f"Работник №{num}"] = info
                         mapping[f"СотрудникПолн №{num}"] = info
                         mapping[f"Сотрудник №{num}"] = info
@@ -1126,9 +1143,16 @@ def load_private_employee_mapping() -> dict[str, dict[str, str]]:
                     "tab_num": real_tab
                 }
                 mapping[anon_id] = info
+                if real_tab:
+                    mapping[real_tab] = info
+                if short_fio:
+                    mapping[short_fio] = info
+                if full_fio:
+                    mapping[full_fio] = info
                 if num_str.isdigit():
                     num = int(num_str)
                     mapping[f"ID_{num:03d}"] = info
+                    mapping[f"ID_{num}"] = info
                     mapping[f"Работник №{num}"] = info
                     mapping[f"СотрудникПолн №{num}"] = info
                     mapping[f"Сотрудник №{num}"] = info
@@ -1269,8 +1293,8 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
 
     headers_fixed = [
         (1, "№\nп/п"),
-        (2, "Таб. №"),
-        (3, "Сотрудник (ФИО)"),
+        (2, "Сотрудник (ФИО)"),
+        (3, "Таб. №"),
         (4, "Должность"),
         (5, "Положено\n(дней)"),
         (6, "Занесено\n(факт)"),
@@ -1326,14 +1350,24 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         raw_pos = str(emp.get("position") or "").strip()
         allowed_val = int(emp.get("vacation_days") or emp.get("allowedDays") or 28)
 
+        # Если в raw_name ошибочно передан табельный номер (например, численный код от 4 знаков),
+        # а в табельном пусто или технический маркер ID_ — меняем местами
+        if raw_name.isdigit() and len(raw_name) >= 4 and not raw_tab.isdigit():
+            raw_tab, raw_name = raw_name, ""
+
         # Подстановка реальных данных, если на сервере есть локальный файл и в записи стоят шифры
         emp_tab = raw_tab
         emp_name = raw_name
         emp_pos = raw_pos
         if private_map:
-            priv = private_map.get(raw_tab) or private_map.get(raw_name)
+            priv = (
+                private_map.get(raw_tab)
+                or private_map.get(raw_name)
+                or private_map.get(emp_tab)
+                or private_map.get(emp_name)
+            )
             if priv:
-                emp_name = priv.get("name") or emp_name
+                emp_name = priv.get("name") or priv.get("full_name") or emp_name
                 emp_pos = priv.get("position") or emp_pos
                 emp_tab = priv.get("tab_num") or emp_tab
 
@@ -1424,16 +1458,19 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
         c_num.alignment = center_align
         c_num.border = thin_border
 
-        c_tab = ws.cell(row=current_row, column=2, value=emp_tab)
-        c_tab.font = data_font
-        c_tab.alignment = center_align
-        c_tab.border = thin_border
-
-        c_name = ws.cell(row=current_row, column=3, value=emp_name)
+        # Колонка 2: Сотрудник (ФИО)
+        c_name = ws.cell(row=current_row, column=2, value=emp_name)
         c_name.font = bold_data_font
         c_name.alignment = left_align
         c_name.border = thin_border
 
+        # Колонка 3: Табельный номер
+        c_tab = ws.cell(row=current_row, column=3, value=emp_tab)
+        c_tab.font = data_font
+        c_tab.alignment = center_align
+        c_tab.border = thin_border
+
+        # Колонка 4: Должность
         c_pos = ws.cell(row=current_row, column=4, value=emp_pos)
         c_pos.font = data_font
         c_pos.alignment = left_align
@@ -1623,13 +1660,13 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
 
     # 5. Ширина колонок
     col_widths = {
-        1: 6,
-        2: 13,
-        3: 32,
-        4: 26,
-        5: 13,
-        6: 13,
-        7: 13,
+        1: 6,   # № п/п
+        2: 32,  # Сотрудник (ФИО)
+        3: 13,  # Таб. №
+        4: 28,  # Должность
+        5: 13,  # Положено
+        6: 13,  # Факт
+        7: 13,  # Отклонение
     }
     for col_c in range(8, 34):
         col_widths[col_c] = 5.5

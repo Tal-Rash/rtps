@@ -1790,9 +1790,39 @@ document.addEventListener('DOMContentLoaded', () => {
             const employee = (typeof findEmp === 'function' ? findEmp({ tab_num: empTab, name: empName }) : null) || allData.find(e => e.id === empId);
 
             const allowedVal = allowedInp ? (parseInt(allowedInp.value) || 28) : 28;
-            const displayName = (employee ? (employee.name || employee.full_name) : '') || (nameSpan ? nameSpan.textContent.trim() : empName);
-            const displayPos = (employee ? employee.position : '') || (posDiv ? posDiv.textContent.trim() : '');
-            const displayTab = (employee ? employee.tab_num : '') || empTab;
+
+            // Справочник замен из localStorage для разанонимизации
+            const repPairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+
+            // Определяем отображаемое ФИО: приоритет за реальным видимым текстом в DOM
+            let displayName = (nameSpan ? nameSpan.textContent.trim() : '') || empName || (employee ? (employee.name || employee.full_name) : '');
+            let displayPos = (posDiv ? posDiv.textContent.trim() : '') || (employee ? employee.position : '');
+            let displayTab = (employee ? employee.tab_num : '') || empTab;
+
+            // Если в ФИО остался анонимный маркер "Работник №...", расшифровываем через пары замен
+            if (displayName.startsWith('Работник') && repPairs.length) {
+                const pair = repPairs.find(p => p.from === displayName);
+                if (pair && pair.to) displayName = pair.to;
+            }
+
+            // Если в должности остался анонимный маркер "Должность №...", расшифровываем через пары замен
+            if (displayPos.startsWith('Должность') && repPairs.length) {
+                const pair = repPairs.find(p => p.from === displayPos);
+                if (pair && pair.to) displayPos = pair.to;
+            }
+
+            // Если в табельном номере остался ID_..., расшифровываем настоящий табельный номер
+            if (displayTab.startsWith('ID_') && repPairs.length) {
+                const pair = repPairs.find(p => p.from === displayTab);
+                if (pair && pair.to) displayTab = pair.to;
+            }
+
+            // Защита: если по какой-то причине в поле имени попали только цифры табельного номера, меняем местами
+            if (/^\d{4,8}$/.test(displayName) && !/^\d{4,8}$/.test(displayTab)) {
+                const tmp = displayName;
+                displayName = displayTab;
+                displayTab = tmp;
+            }
 
             // Сбор значений месяцев с и по
             const monthsData = [];
