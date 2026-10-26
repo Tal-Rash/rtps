@@ -633,6 +633,57 @@ def get_all_employee_names() -> list[str]:
         return []
 
 
+def get_employee_dates() -> dict[str, dict]:
+    """Возвращает информацию о датах приема и увольнения сотрудников."""
+    try:
+        if not SOURCE_DB.exists():
+            return {}
+        db = connect_sqlite(SOURCE_DB)
+        try:
+            db.row_factory = sqlite3.Row
+            rows = db.execute(
+                """
+                SELECT rowid, name, full_name, tab_num, hire_date, exclude_date, is_excluded
+                FROM employees
+                ORDER BY rowid
+                """
+            ).fetchall()
+        finally:
+            db.close()
+
+        result = {}
+        for idx, r in enumerate(rows, start=1):
+            raw_tab = s(r["tab_num"]).strip()
+            num_part = idx
+            if raw_tab.startswith("ID_"):
+                digits = "".join(ch for ch in raw_tab if ch.isdigit())
+                if digits:
+                    num_part = int(digits)
+
+            info = {
+                "tab_num": raw_tab,
+                "hire_date": s(r["hire_date"]).strip(),
+                "exclude_date": s(r["exclude_date"]).strip(),
+                "is_excluded": int(r["is_excluded"] or 0),
+            }
+
+            # Сохраняем информацию под всеми возможными ключами сотрудника
+            result[f"Работник №{num_part}"] = info
+            result[f"Работник №{idx}"] = info
+            if raw_tab:
+                result[raw_tab] = info
+            name_val = s(r["name"]).strip()
+            if name_val:
+                result[name_val] = info
+            full_name_val = s(r["full_name"]).strip()
+            if full_name_val:
+                result[full_name_val] = info
+
+        return result
+    except Exception:
+        return {}
+
+
 def _parse_tabel_date(value: str, year: int | None = None) -> dt.date | None:
     text = s(value).strip()
     if not text:
@@ -660,7 +711,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
             db.row_factory = sqlite3.Row
             rows = db.execute(
                 """
-                SELECT e.y, e.name, e.full_name, e.tab_num, v.c, v.v
+                SELECT e.y, e.name, e.full_name, e.tab_num, e.hire_date, e.exclude_date, v.c, v.v
                 FROM employees e
                 JOIN vacations v ON v.y=e.y AND v.tab_num=e.tab_num
                 WHERE TRIM(COALESCE(e.tab_num, '')) <> ''
@@ -675,6 +726,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
 
     grouped: dict[tuple[int, str], dict[int, str]] = {}
     names: dict[tuple[int, str], set[str]] = {}
+    emp_meta: dict[tuple[int, str], tuple[str, str]] = {}
     for row in rows:
         try:
             year = int(row["y"])
@@ -686,6 +738,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
             continue
         key = (year, tab_num)
         grouped.setdefault(key, {})[col] = s(row["v"]).strip()
+        emp_meta[key] = (s(row["hire_date"]).strip(), s(row["exclude_date"]).strip())
         name_values = {s(row["name"]).strip(), s(row["full_name"]).strip()}
         digits = "".join(ch for ch in tab_num if ch.isdigit())
         if digits:
@@ -697,6 +750,10 @@ def get_employee_vacations() -> dict[str, list[dict]]:
 
     result: dict[str, list[dict]] = {}
     for (year, _tab_num), cells in grouped.items():
+        hire_str, exc_str = emp_meta.get((year, _tab_num), ("", ""))
+        exc_date = _parse_tabel_date(exc_str, year) if exc_str else None
+        hire_date = _parse_tabel_date(hire_str, year) if hire_str else None
+
         for start_col, end_col in ((1, 2), (5, 6), (9, 10)):
             start = _parse_tabel_date(cells.get(start_col, ""), year)
             end = _parse_tabel_date(cells.get(end_col, ""), year)
@@ -704,6 +761,13 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                 continue
             if end < start:
                 start, end = end, start
+
+            # Пропускаем отпуск, если сотрудник уже был уволен до начала отпуска или еще не был принят
+            if exc_date and start >= exc_date:
+                continue
+            if hire_date and end < hire_date:
+                continue
+
             item = {
                 "start": start.isoformat(),
                 "end": end.isoformat(),
@@ -718,7 +782,7 @@ def get_employee_vacations() -> dict[str, list[dict]]:
             db.row_factory = sqlite3.Row
             ts_rows = db.execute(
                 """
-                SELECT e.y, e.name, e.full_name, t.m, t.c, t.v
+                SELECT e.y, e.name, e.full_name, e.tab_num, e.hire_date, e.exclude_date, t.m, t.c, t.v
                 FROM employees e
                 JOIN timesheet t ON t.y=e.y AND t.tab_num=e.tab_num
                 WHERE TRIM(COALESCE(e.tab_num, '')) <> ''
@@ -740,12 +804,34 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                     date_obj = dt.date(year, month_index, day)
                 except ValueError:
                     continue
+
+                # Исключаем отметки отсутствия, если на эту дату сотрудник уже был уволен или еще не принят
+                exc_str = s(row["exclude_date"]).strip()
+                if exc_str:
+                    exc_date = _parse_tabel_date(exc_str, year)
+                    if exc_date and date_obj >= exc_date:
+                        continue
+
+                hire_str = s(row["hire_date"]).strip()
+                if hire_str:
+                    hire_date = _parse_tabel_date(hire_str, year)
+                    if hire_date and date_obj < hire_date:
+                        continue
+
                 item = {
                     "start": date_obj.isoformat(),
                     "end": date_obj.isoformat(),
                     "label": f"Отсутствует: {v} ({date_obj.strftime('%d.%m.%Y')})",
                 }
+                tab_num = s(row["tab_num"]).strip()
                 name_values = {s(row["name"]).strip(), s(row["full_name"]).strip()}
+                digits = "".join(ch for ch in tab_num if ch.isdigit())
+                if digits:
+                    num = int(digits)
+                    name_values.add(f"Работник №{num}")
+                    name_values.add(f"СотрудникПолн №{num}")
+                    name_values.add(f"ID_{num:03d}")
+
                 for name in name_values:
                     if name:
                         result.setdefault(name, []).append(item)

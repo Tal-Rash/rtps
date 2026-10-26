@@ -1,6 +1,7 @@
 const BOOT_VERSION = window.APP_CONFIG.APP_VERSION;
 let appState = window.APP_CONFIG.STATE_JSON;
 const EMPLOYEE_NAMES = window.APP_CONFIG.EMPLOYEE_NAMES;
+const EMPLOYEE_DATES = window.APP_CONFIG.EMPLOYEE_DATES || {};
 const EMPLOYEE_VACATIONS = window.APP_CONFIG.EMPLOYEE_VACATIONS || {};
 let ui = {
   section: 'months',
@@ -2230,10 +2231,82 @@ function tu28RepairRange(row, month){
   const end = new Date(year, monthNumber - 1, days[days.length - 1]);
   return { start, end };
 }
+// Парсинг даты в формате ISO (YYYY-MM-DD) или RU (DD.MM.YYYY)
+function parseIsoOrRuDate(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  if (s.includes('-')) {
+    const p = s.split('-');
+    if (p.length === 3) {
+      const y = parseInt(p[0], 10);
+      const m = parseInt(p[1], 10) - 1;
+      const d = parseInt(p[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return new Date(y, m, d);
+    }
+  } else if (s.includes('.')) {
+    const p = s.split('.');
+    if (p.length === 3) {
+      const d = parseInt(p[0], 10);
+      const m = parseInt(p[1], 10) - 1;
+      const y = parseInt(p[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return new Date(y, m, d);
+    }
+  }
+  return null;
+}
+
+// Проверка, работал ли сотрудник в период проведения ремонта
+function isEmployeeActiveDuringRange(name, range) {
+  if (!name || !range || !range.start) return true;
+  const meta = EMPLOYEE_DATES[name];
+  if (!meta) return true;
+
+  const repairStart = new Date(range.start);
+  repairStart.setHours(0, 0, 0, 0);
+  const repairEnd = new Date(range.end || range.start);
+  repairEnd.setHours(23, 59, 59, 999);
+
+  // Проверка увольнения: дата ремонта должна быть строго до даты увольнения
+  if (meta.exclude_date) {
+    const exDate = parseIsoOrRuDate(meta.exclude_date);
+    if (exDate) {
+      exDate.setHours(0, 0, 0, 0);
+      if (repairStart >= exDate) {
+        return false;
+      }
+    }
+  } else if (meta.is_excluded) {
+    return false;
+  }
+
+  // Проверка приема: дата ремонта не должна быть раньше даты приема на работу
+  if (meta.hire_date) {
+    const hireDate = parseIsoOrRuDate(meta.hire_date);
+    if (hireDate) {
+      hireDate.setHours(0, 0, 0, 0);
+      if (repairEnd < hireDate) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 function selectedTu28RepairRange(){
   const month = tu28Month();
   const row = month && ui.tu28RowIndex != null ? month.fact?.[ui.tu28RowIndex] : null;
-  return tu28RepairRange(row, month);
+  let range = tu28RepairRange(row, month);
+  if (!range && month && ui.tu28RowIndex != null) {
+    const candidates = tu28CandidatesForMonth(ui.tu28MonthIndex);
+    const cand = candidates.find((x) => x.rowIndex === ui.tu28RowIndex);
+    if (cand && cand.dateFrom) {
+      const pStart = parseRepairDate(cand.dateFrom);
+      const pEnd = parseRepairDate(cand.dateTo || cand.dateFrom);
+      if (pStart) range = { start: pStart, end: pEnd || pStart };
+    }
+  }
+  return range;
 }
 function employeeVacationHit(name, range){
   const cleanName = String(name || '').trim();
@@ -2339,12 +2412,17 @@ function renderTu28Staff(){
   ];
   const range = selectedTu28RepairRange();
   const currentStaff = ui.tu28Staff[ui.tu28RowIndex] || [];
-  const optionHtml = (current) => ['<option value=""></option>'].concat(EMPLOYEE_NAMES.map((name) => {
-    const vacation = employeeVacationHit(name, range);
-    const selected = name === current ? ' selected' : '';
-    const label = vacation ? `${name} - отпуск ${vacation.label || ''}` : name;
-    return `<option value="${esc(name)}"${selected}>${esc(label)}</option>`;
-  })).join('');
+  const optionHtml = (current) => ['<option value=""></option>'].concat(
+    EMPLOYEE_NAMES.filter((name) => {
+      // Исключаем работников, которые уже уволены или еще не приняты на дату ремонта
+      return name === current || isEmployeeActiveDuringRange(name, range);
+    }).map((name) => {
+      const vacation = employeeVacationHit(name, range);
+      const selected = name === current ? ' selected' : '';
+      const label = vacation ? `${name} - отпуск ${vacation.label || ''}` : name;
+      return `<option value="${esc(name)}"${selected}>${esc(label)}</option>`;
+    })
+  ).join('');
   const tableRows = rows.map((label, idx) => {
     const current = currentStaff[idx] || '';
     const vacation = employeeVacationHit(current, range);

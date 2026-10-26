@@ -55,6 +55,7 @@ try:
         conn,
         DB_LOCK,
         get_all_employee_names,
+        get_employee_dates,
         get_employee_vacations,
         build_repair_summary_state,
     )
@@ -91,6 +92,7 @@ except (ImportError, ValueError):
         conn,
         DB_LOCK,
         get_all_employee_names,
+        get_employee_dates,
         get_employee_vacations,
         build_repair_summary_state,
     )
@@ -194,6 +196,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
     employee_vacations_json = json.dumps(get_employee_vacations(), ensure_ascii=False).replace("</", "<\\/")
+    employee_dates_json = json.dumps(get_employee_dates(), ensure_ascii=False).replace("</", "<\\/")
     started_at = SERVER_STARTED_AT.strftime("%H:%M:%S %d.%m.%Y") if SERVER_STARTED_AT else "неизвестно"
     toolbar = EDIT_TOOLBAR if can_edit else READONLY_TOOLBAR
     with open(ROOT / "templates" / "index.html", "r", encoding="utf-8") as f:
@@ -201,6 +204,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
     return (
         html_template.replace("{{STATE_JSON}}", state_json)
         .replace("{{EMPLOYEE_NAMES}}", employees_json)
+        .replace("{{EMPLOYEE_DATES}}", employee_dates_json)
         .replace("{{EMPLOYEE_VACATIONS}}", employee_vacations_json)
         .replace("{{STARTED_AT}}", started_at)
         .replace("{{APP_VERSION}}", APP_VERSION)
