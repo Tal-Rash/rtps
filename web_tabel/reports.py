@@ -851,7 +851,7 @@ def build_sick_email_bytes(emp: str, op_type: str, start: str, end: str, email: 
             </tr>
             <tr>
                 <td>Структурное подразделение</td>
-                <td>3040 Рудник Таймырский</td>
+                <td>3040 Открыт ЭЛН/Без документа</td>
             </tr>
         </table>
         <br>
