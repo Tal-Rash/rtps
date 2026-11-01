@@ -49,6 +49,7 @@ TRANSFER_HOLIDAYS_BY_YEAR = {
 
 # Пути к директориям и базам данных
 ROOT = Path(__file__).resolve().parent
+RESOURCES_DIR = ROOT / "resourses" if (ROOT / "resourses").exists() else ROOT / "resources"
 DATA_DIR = ROOT / "data"
 DB_FILE = DATA_DIR / "grafik_ppr_web.db"
 SHARED_DATA_DIR = ROOT.parent / "data"

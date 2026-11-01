@@ -77,40 +77,31 @@ except (ImportError, ValueError):
 
 # Модуль формирования Excel отчетов (Отчет, Акт, ТУ-28) через openpyxl
 
-def find_act_template_path() -> Path | None:
+# Поиск файлов шаблонов Excel в папке ресурсов или корне проекта
+def find_template_path(template_name: str) -> Path | None:
     candidates = [
-        ROOT / ACT_TEMPLATE_NAME,
-        SOURCE_DIR / ACT_TEMPLATE_NAME,
-        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / ACT_TEMPLATE_NAME,
+        ROOT / "resourses" / template_name,
+        ROOT / "resources" / template_name,
+        ROOT / template_name,
+        SOURCE_DIR / template_name,
+        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / template_name,
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
     return None
+
+
+def find_act_template_path() -> Path | None:
+    return find_template_path(ACT_TEMPLATE_NAME)
 
 
 def find_report_template_path() -> Path | None:
-    candidates = [
-        ROOT / REPORT_TEMPLATE_NAME,
-        SOURCE_DIR / REPORT_TEMPLATE_NAME,
-        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / REPORT_TEMPLATE_NAME,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    return find_template_path(REPORT_TEMPLATE_NAME)
 
 
 def find_tu28_template_path() -> Path | None:
-    candidates = [
-        ROOT / TU28_TEMPLATE_NAME,
-        SOURCE_DIR / TU28_TEMPLATE_NAME,
-        ROOT.parent / "dist" / "РТПС" / "_internal" / "График ППР" / TU28_TEMPLATE_NAME,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    return find_template_path(TU28_TEMPLATE_NAME)
 
 
 def build_report_workbook(year: int, month_name: str, state: dict | None = None) -> tuple[bytes, str]:

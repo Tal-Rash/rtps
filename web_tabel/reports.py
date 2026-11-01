@@ -617,7 +617,7 @@ def build_milk_report_excel(year: int, month: int, report_type: str) -> tuple[st
     tmp.close()
     wb.save(tmp.name)
 
-    filename_formatted = f"Отчет_Молоко_{report_type}_{m_str}_{year}.xlsx"
+    filename_formatted = f"Отчет_Молоко_{report_type}_УРТПС_{m_str}_{year}.xlsx"
     return tmp.name, filename_formatted
 
 
