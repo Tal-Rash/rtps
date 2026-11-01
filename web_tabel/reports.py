@@ -444,7 +444,8 @@ def build_milk_report_excel(year: int, month: int, report_type: str) -> tuple[st
         if not val:
             return False
         compact = spacing_re.sub(",", val).replace(" ", "")
-        if "М" in compact:
+        # Смены с буквой М или Э считаются рабочими сменами с вредностью
+        if "М" in compact or "Э" in compact:
             return True
         if compact in non_shift_codes:
             return False
@@ -514,7 +515,8 @@ def build_milk_report_excel(year: int, month: int, report_type: str) -> tuple[st
 
                     val = emp_ts.get(d, "").strip().upper()
                     if report_type == "компенсация":
-                        if "М" in val or "M" in val:
+                        # Засчитываем смены с отметкой М (молоко) или Э (электрослесари)
+                        if "М" in val or "M" in val or "Э" in val:
                             count += 1
                         elif val:
                             missed_days.append(f"{d:02d}.{month:02d} {val}")
@@ -696,7 +698,8 @@ def build_milk_details_html(year: int, month: int, report_type: str) -> str:
         if not val:
             return False
         compact = spacing_re.sub(",", val).replace(" ", "")
-        if "М" in compact:
+        # Смены с буквой М или Э считаются рабочими сменами с вредностью
+        if "М" in compact or "Э" in compact:
             return True
         if compact in non_shift_codes:
             return False
@@ -750,7 +753,8 @@ def build_milk_details_html(year: int, month: int, report_type: str) -> str:
                 continue
             val = emp_ts.get(d, "").strip().upper()
             if report_type == "компенсация":
-                if "М" in val or "M" in val:
+                # Засчитываем смены с отметкой М (молоко) или Э (электрослесари)
+                if "М" in val or "M" in val or "Э" in val:
                     count += 1
                 elif val:
                     missed_days.append(f"{d:02d}.{month:02d} — {val}")
