@@ -1967,14 +1967,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {}
 
-        // Гарантированная замена устаревшей фамилии Ханин на актуальную Бопхоев М. М.
-        if (resolvedName && resolvedName.includes("Ханин")) {
-            resolvedName = resolvedName.replace(/Ханин Дмитрий Викторович|Ханин Д\. ?В\.|Ханин/g, "Бопхоев М. М.");
-        }
-        if (resolvedFullName && resolvedFullName.includes("Ханин")) {
-            resolvedFullName = resolvedFullName.replace(/Ханин Дмитрий Викторович|Ханин Д\. ?В\.|Ханин/g, "Бопхоев М. М.");
-        }
-
         // 3. Защита от попадания численных табельных номеров или анонимных меток в ФИО
         const isInvalid = !resolvedName || /^\d+$/.test(String(resolvedName).trim()) || String(resolvedName).startsWith('Работник №') || String(resolvedName).startsWith('ID_');
         if (isInvalid) {
@@ -3064,35 +3056,21 @@ function getEmpReplacementPairs() {
   const pairs = [];
   for (let k in flatMap) {
     if (flatMap.hasOwnProperty(k) && k && flatMap[k]) {
-      let toVal = String(flatMap[k]);
-      if (toVal.includes("Ханин")) {
-        toVal = toVal.replace(/Ханин Дмитрий Викторович|Ханин Д\. ?В\.|Ханин/g, "Бопхоев М. М.");
-      }
-      pairs.push({ from: k, to: toVal });
+      pairs.push({ from: k, to: String(flatMap[k]) });
     }
   }
-
-  // Явные правила сопоставления для надежной замены старой фамилии Ханин
-  pairs.push({ from: "Ханин Дмитрий Викторович", to: "Бопхоев М. М." });
-  pairs.push({ from: "Ханин Д. В.", to: "Бопхоев М. М." });
-  pairs.push({ from: "Ханин Д.В.", to: "Бопхоев М. М." });
-  pairs.push({ from: "Ханин", to: "Бопхоев" });
 
   pairs.sort((a, b) => b.from.length - a.from.length);
   return pairs;
 }
 
-// Автоматическое самолечение устаревших данных в localStorage браузера
+// Автоматический сброс устаревшего кэша, если в словаре отсутствует новый табельный номер 4611140
 try {
   const kFull = 'rtps_employees_full_dict';
   const rf = localStorage.getItem(kFull);
-  if (rf && rf.includes('Ханин')) {
-    localStorage.setItem(kFull, rf.replace(/Ханин Дмитрий Викторович|Ханин Д\. ?В\.|Ханин/g, 'Бопхоев М. М.'));
-  }
-  const kEmp = 'rtps_emp_dict';
-  const rd = localStorage.getItem(kEmp);
-  if (rd && rd.includes('Ханин')) {
-    localStorage.setItem(kEmp, rd.replace(/Ханин Дмитрий Викторович|Ханин Д\. ?В\.|Ханин/g, 'Бопхоев М. М.'));
+  if (rf && rf.indexOf('4604571') !== -1 && rf.indexOf('4611140') === -1) {
+    localStorage.removeItem(kFull);
+    localStorage.removeItem('rtps_emp_dict');
   }
 } catch (e) {}
 
@@ -3158,17 +3136,6 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename, fetchOptions = 
               }
             }
 
-            // Гарантированная замена любых остаточных упоминаний Ханин в XML
-            if (content.includes("Ханин")) {
-              content = content
-                .replace(/Ханин Дмитрий Викторович/g, "Бопхоев М. М.")
-                .replace(/Ханин Д\. ?В\./g, "Бопхоев М. М.")
-                .replace(/Ханин Д\.В\./g, "Бопхоев М. М.")
-                .replace(/Ханин/g, "Бопхоев");
-              fileChanged = true;
-              modified = true;
-            }
-
             if (fileChanged) {
               zip.file(fileName, content);
             }
@@ -3207,15 +3174,6 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename, fetchOptions = 
                     valStr = valStr.split(item.from).join(item.to);
                     changed = true;
                   }
-                }
-
-                if (valStr.includes("Ханин")) {
-                  valStr = valStr
-                    .replace(/Ханин Дмитрий Викторович/g, "Бопхоев М. М.")
-                    .replace(/Ханин Д\. ?В\./g, "Бопхоев М. М.")
-                    .replace(/Ханин Д\.В\./g, "Бопхоев М. М.")
-                    .replace(/Ханин/g, "Бопхоев");
-                  changed = true;
                 }
 
                 if (changed) {

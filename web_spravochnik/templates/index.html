@@ -1,4 +1,4 @@
-<!doctype html>
+д<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
@@ -74,9 +74,6 @@
   <div class="top">
     <div class="titlebox">
       <h1>Справочник</h1>
-      {% if USER_NAME %}
-      <span class="user-badge" title="Текущий пользователь">{{ USER_NAME }} · {{ USER_ROLE }}</span>
-      {% endif %}
     </div>
     <div class="actions">
       <a href="{{MAIN_SITE_URL}}/">На главную</a>
@@ -611,6 +608,16 @@ if (activeTab) {
     showTab(activeTab, btn);
   }
 }
+/* Автоматический сброс устаревшего кэша, если в словаре отсутствует новый табельный номер 4611140 */
+try {
+  const kFull = 'rtps_employees_full_dict';
+  const rf = localStorage.getItem(kFull);
+  if (rf && rf.indexOf('4604571') !== -1 && rf.indexOf('4611140') === -1) {
+    localStorage.removeItem(kFull);
+    localStorage.removeItem('rtps_emp_dict');
+  }
+} catch (e) {}
+
 /* Автоматическая инициализация пользовательских меток таблиц */
 (function initTableCustomLabels() {
   function applyCustomLabels() {

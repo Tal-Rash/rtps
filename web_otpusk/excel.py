@@ -455,15 +455,6 @@ def create_schedule_excel(year: int, items: list, holidays_data: list = None, in
             emp_pos = raw_pos
             emp_tab = raw_tab
 
-        # Гарантированная замена устаревшей фамилии Ханин на Бопхоев М. М.
-        if "Ханин" in emp_name:
-            emp_name = (
-                emp_name.replace("Ханин Дмитрий Викторович", "Бопхоев М. М.")
-                .replace("Ханин Д. В.", "Бопхоев М. М.")
-                .replace("Ханин Д.В.", "Бопхоев М. М.")
-                .replace("Ханин", "Бопхоев М. М.")
-            )
-
         # Гарантированная защита: исключаем попадание чисел (табельного номера) или анонимных меток в ФИО
         clean_name = emp_name.strip()
         is_invalid_fio = (
