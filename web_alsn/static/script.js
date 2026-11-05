@@ -2,6 +2,8 @@ const APP_PREFIX = window.APP_CONFIG.APP_PREFIX;
 const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
 
 let appState = { locomotives: [], warehouse: [] };
+let savedState = null;
+let canceledState = null;
 let currentTab = "locomotives";
 let isDirty = false;
 const MIN_LOCOMOTIVES = 5;
@@ -24,11 +26,19 @@ let warehouseFilters = {
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
 
-  // Горячая клавиша Ctrl+S / Cmd+S для быстрого сохранения
+  // Горячие клавиши для сохранения (Ctrl+S), отмены (Ctrl+Z) и возврата (Ctrl+Y / Ctrl+Shift+Z)
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       saveState();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+      e.preventDefault();
+      cancelChanges();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
+      if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+      e.preventDefault();
+      restoreChanges();
     }
   });
 
@@ -299,8 +309,11 @@ async function loadState() {
     appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
     recalcWarehouseLocations();
     normalizeWarehouseFilters();
+    savedState = cloneState(appState);
+    canceledState = null;
     render();
     markDirty(false);
+    updateHistoryButtons();
   } catch (err) {
     console.error(err);
     alert("Ошибка загрузки модуля АЛСН: " + err.message);
@@ -701,13 +714,50 @@ function render() {
   document.getElementById("saveBtn").style.display = CAN_EDIT ? "inline-block" : "none";
 }
 
+/* Глубокое клонирование объекта состояния */
+function cloneState(value) {
+  return value ? JSON.parse(JSON.stringify(value)) : null;
+}
+
+/* Обновление доступности кнопок отмены и повтора действий */
+function updateHistoryButtons() {
+  const cancelBtn = document.getElementById("cancelBtn");
+  const restoreBtn = document.getElementById("restoreBtn");
+  const hasDiff = CAN_EDIT && savedState && JSON.stringify(appState) !== JSON.stringify(savedState);
+  if (cancelBtn) cancelBtn.disabled = !hasDiff;
+  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
+}
+
+/* Отмена несохраненных изменений */
+function cancelChanges() {
+  if (!CAN_EDIT || !savedState) return;
+  syncWarehouseFromDom();
+  canceledState = cloneState(appState);
+  appState = cloneState(savedState);
+  render();
+  markDirty(false);
+  updateHistoryButtons();
+}
+
+/* Возврат отмененных изменений */
+function restoreChanges() {
+  if (!CAN_EDIT || !canceledState) return;
+  appState = cloneState(canceledState);
+  canceledState = null;
+  render();
+  markDirty(true);
+  updateHistoryButtons();
+}
+
 /* Обновление индикатора несохраненных изменений */
 function markDirty(dirty) {
   isDirty = dirty;
   const btn = document.getElementById("saveBtn");
-  if (!btn) return;
-  btn.textContent = dirty ? "Сохранить*" : "Сохранить";
-  btn.classList.toggle("dirty", dirty);
+  if (btn) {
+    btn.textContent = dirty ? "Сохранить*" : "Сохранить";
+    btn.classList.toggle("dirty", dirty);
+  }
+  updateHistoryButtons();
 }
 
 /* Сохранение состояния с поддержкой gzip-сжатия и анимацией */
@@ -747,7 +797,10 @@ async function saveState() {
       body: bodyToSend
     });
 
+    savedState = cloneState(appState);
+    canceledState = null;
     markDirty(false);
+    updateHistoryButtons();
     if (btn) {
       btn.textContent = "Сохранено!";
       setTimeout(() => {

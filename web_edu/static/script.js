@@ -13,11 +13,92 @@ let tempColumns = [];
 let tempCategories = {};
 let draggedRowTabNum = null;
 let resizeResetTimer = null;
+let undoStack = [];
+let redoStack = [];
+
+/* Обновление доступности кнопок отмены и возврата */
+function updateHistoryButtons() {
+  const cancelBtn = document.getElementById("cancelBtn");
+  const restoreBtn = document.getElementById("restoreBtn");
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || undoStack.length === 0;
+  if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || redoStack.length === 0;
+}
+
+/* Применение сохраненного порядка сотрудников при отмене/возврате */
+async function applyEmployeeOrder(order) {
+  const map = new Map((appState.employees || []).map((e) => [e.tab_num, e]));
+  const reordered = [];
+  order.forEach((tab) => {
+    if (map.has(tab)) {
+      reordered.push(map.get(tab));
+      map.delete(tab);
+    }
+  });
+  map.forEach((e) => reordered.push(e));
+  appState.employees = reordered;
+  await saveEmployeeOrder();
+}
+
+/* Отмена последнего действия */
+async function cancelChanges() {
+  if (!CAN_EDIT || undoStack.length === 0) return;
+  const action = undoStack.pop();
+  try {
+    if (action.type === "cell") {
+      await saveCellValue(action.tab_num, action.col, action.oldText);
+      redoStack.push(action);
+      renderMatrix();
+    } else if (action.type === "reorder") {
+      await applyEmployeeOrder(action.oldOrder);
+      redoStack.push(action);
+      renderMatrix();
+    }
+  } catch (err) {
+    console.error(err);
+    undoStack.push(action);
+  }
+  updateHistoryButtons();
+}
+
+/* Возврат отмененного действия */
+async function restoreChanges() {
+  if (!CAN_EDIT || redoStack.length === 0) return;
+  const action = redoStack.pop();
+  try {
+    if (action.type === "cell") {
+      await saveCellValue(action.tab_num, action.col, action.newText);
+      undoStack.push(action);
+      renderMatrix();
+    } else if (action.type === "reorder") {
+      await applyEmployeeOrder(action.newOrder);
+      undoStack.push(action);
+      renderMatrix();
+    }
+  } catch (err) {
+    console.error(err);
+    redoStack.push(action);
+  }
+  updateHistoryButtons();
+}
 
 window.addEventListener("DOMContentLoaded", () => {
   const chk = document.getElementById("chkShowDismissed");
   if (chk) chk.checked = showDismissed;
   loadState();
+
+  // Горячие клавиши отмены (Ctrl+Z) и возврата (Ctrl+Y / Ctrl+Shift+Z)
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      if (document.activeElement && document.activeElement.classList.contains("cell")) return;
+      e.preventDefault();
+      cancelChanges();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
+      if (document.activeElement && document.activeElement.classList.contains("cell")) return;
+      e.preventDefault();
+      restoreChanges();
+    }
+  });
+
   window.addEventListener("resize", () => {
     if (resizeResetTimer) clearTimeout(resizeResetTimer);
     resizeResetTimer = setTimeout(() => {
@@ -406,6 +487,7 @@ async function saveEmployeeOrder() {
 async function moveEmployeeRow(sourceTabNum, targetTabNum, after) {
   if (!sourceTabNum || !targetTabNum || sourceTabNum === targetTabNum) return;
 
+  const oldOrder = (appState.employees || []).map((e) => e.tab_num);
   const fromIdx = appState.employees.findIndex((emp) => emp.tab_num === sourceTabNum);
   const targetIdx = appState.employees.findIndex((emp) => emp.tab_num === targetTabNum);
   if (fromIdx < 0 || targetIdx < 0) return;
@@ -419,9 +501,13 @@ async function moveEmployeeRow(sourceTabNum, targetTabNum, after) {
   if (fromIdx < targetIdx) insertAt -= 1;
   appState.employees.splice(insertAt, 0, moved);
 
+  const newOrder = (appState.employees || []).map((e) => e.tab_num);
   renderMatrix();
   try {
     await saveEmployeeOrder();
+    undoStack.push({ type: "reorder", oldOrder, newOrder });
+    redoStack = [];
+    updateHistoryButtons();
   } catch (err) {
     console.error(err);
     alert(`Ошибка сохранения порядка строк: ${err.message}`);
@@ -502,6 +588,15 @@ async function onCellBlur(e) {
 
   try {
     await saveCellValue(cell.dataset.tab, Number(cell.dataset.col), newText);
+    undoStack.push({
+      type: "cell",
+      tab_num: cell.dataset.tab,
+      col: Number(cell.dataset.col),
+      oldText: oldText,
+      newText: newText
+    });
+    redoStack = [];
+    updateHistoryButtons();
     cell.dataset.original = newText;
     renderMatrix();
     resetSaveBtn("Сохранено!");

@@ -28,6 +28,8 @@
           <div class="toolbar">
             <button onclick="addRow()">+ строку</button>
             <button onclick="removeRow()">- строку</button>
+            <button id="cancelBtn" title="Отмена (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
+            <button id="restoreBtn" title="Вернуть (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
             <button onclick="loadState()">Обновить</button>
             <button id="saveBtn" class="primary" style="display:none;" onclick="saveState()">Сохранить</button>
           </div>
