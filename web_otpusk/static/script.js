@@ -106,13 +106,40 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/"/g, '&quot;');
     }
 
+    // Вспомогательная функция: разбор даты (поддерживает "15", "15.05", "15.05.2026", "2026-05-15", "15/05")
+    function parseDateInput(val, defaultMonth) {
+        if (val === null || val === undefined) return { day: NaN, month: defaultMonth };
+        let str = String(val).trim();
+        if (!str) return { day: NaN, month: defaultMonth };
+
+        // Проверка ISO-формата YYYY-MM-DD
+        const isoMatch = str.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+        if (isoMatch) {
+            const d = parseInt(isoMatch[3], 10);
+            let m = parseInt(isoMatch[2], 10) - 1;
+            return { day: d, month: m };
+        }
+
+        // Формат DD.MM.YYYY или DD.MM
+        const dotMatch = str.match(/^(\d{1,2})[./](\d{1,2})(?:[./]\d{2,4})?/);
+        if (dotMatch) {
+            const d = parseInt(dotMatch[1], 10);
+            let m = parseInt(dotMatch[2], 10) - 1;
+            return { day: d, month: m };
+        }
+
+        // Только день (например, "15" или "1")
+        const dayMatch = str.match(/^(\d{1,2})/);
+        if (dayMatch) {
+            return { day: parseInt(dayMatch[1], 10), month: defaultMonth };
+        }
+
+        return { day: NaN, month: defaultMonth };
+    }
+
     // Вспомогательная функция: извлечение номера дня из строки (поддерживает как "22", так и "22.03")
-    function parseDayNumber(val) {
-        if (val === null || val === undefined) return NaN;
-        const str = String(val).trim();
-        if (!str) return NaN;
-        const match = str.match(/^(\d{1,2})/);
-        return match ? parseInt(match[1], 10) : NaN;
+    function parseDayNumber(val, defaultMonth) {
+        return parseDateInput(val, defaultMonth).day;
     }
 
     // Вспомогательная функция: форматирование дня с добавлением месяца (например, 22 в марте -> 22.03)
@@ -559,6 +586,170 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearSelectedBtn) {
         clearSelectedBtn.addEventListener('click', clearSelectedCells);
     }
+
+    // Обработка вставки (Paste) из буфера обмена (даты, диапазоны дат, таблицы Excel)
+    function handleVacationTablePaste(targetInput, text) {
+        if (!targetInput || !text) return;
+        const tr = targetInput.closest('tr[data-emp-id]');
+        if (!tr) return;
+
+        const targetM = parseInt(targetInput.dataset.month, 10);
+        const isC = targetInput.classList.contains('c-input');
+
+        // Проверяем, содержит ли текст диапазон дат:
+        // например: "15.05 - 28.05", "15.05.2026 - 28.05.2026", "15-28", "15.05 — 28.05", "15.05 по 28.05"
+        const rangeMatch = text.match(/^(.*?)(?:\s*[-—–~]\s*|\s+по\s+|\s+до\s+)(.*?)$/i);
+        if (rangeMatch && !text.includes('\n') && !text.includes('\t')) {
+            const rawStart = rangeMatch[1].trim();
+            const rawEnd = rangeMatch[2].trim();
+            const pStart = parseDateInput(rawStart, targetM);
+            const pEnd = parseDateInput(rawEnd, (!isNaN(pStart.month)) ? pStart.month : targetM);
+
+            if (!isNaN(pStart.day)) {
+                const sM = (!isNaN(pStart.month) && pStart.month >= 0 && pStart.month < 13) ? pStart.month : targetM;
+                const cInp = tr.querySelector(`.c-input[data-month="${sM}"]`);
+                if (cInp) {
+                    cInp.value = formatDayWithMonth(pStart.day, sM);
+                }
+
+                if (!isNaN(pEnd.day)) {
+                    const eM = (!isNaN(pEnd.month) && pEnd.month >= 0 && pEnd.month < 13) ? pEnd.month : sM;
+                    const poInp = tr.querySelector(`.po-input[data-month="${eM}"]`);
+                    if (poInp) {
+                        poInp.value = formatDayWithMonth(pEnd.day, eM);
+                    }
+                    // Очищаем хвосты в последующих месяцах
+                    for (let f = eM + 1; f < 13; f++) {
+                        const fC = tr.querySelector(`.c-input[data-month="${f}"]`);
+                        const fPo = tr.querySelector(`.po-input[data-month="${f}"]`);
+                        if (fC && fC.value.trim() !== '') break;
+                        if (fPo && fPo.value.trim() !== '') fPo.value = '';
+                    }
+                    calculateRow(tr);
+                } else {
+                    autoCompleteVacation(tr, sM, pStart.day);
+                }
+                updateTotals();
+                return;
+            }
+        }
+
+        // Проверяем, это данные из Excel с несколькими строками или табуляциями
+        const lines = text.split(/\r?\n/).filter(line => line.length > 0);
+        if (lines.length > 1 || text.includes('\t')) {
+            const allRows = Array.from(tableBody.querySelectorAll('tr[data-emp-id]'));
+            const startRowIdx = allRows.indexOf(tr);
+            if (startRowIdx === -1) return;
+
+            lines.forEach((line, rOffset) => {
+                const currTr = allRows[startRowIdx + rOffset];
+                if (!currTr) return;
+
+                const cols = line.split('\t');
+                cols.forEach((colVal, cOffset) => {
+                    const cleanVal = colVal.trim();
+                    if (!cleanVal) return;
+
+                    const rMatch = cleanVal.match(/^(.*?)(?:\s*[-—–~]\s*|\s+по\s+|\s+до\s+)(.*?)$/i);
+                    if (rMatch) {
+                        const pStart = parseDateInput(rMatch[1], targetM);
+                        const pEnd = parseDateInput(rMatch[2], (!isNaN(pStart.month)) ? pStart.month : targetM);
+                        if (!isNaN(pStart.day)) {
+                            const sM = (!isNaN(pStart.month) && pStart.month >= 0 && pStart.month < 13) ? pStart.month : targetM;
+                            const eM = (!isNaN(pEnd.month) && pEnd.month >= 0 && pEnd.month < 13) ? pEnd.month : sM;
+                            const cInp = currTr.querySelector(`.c-input[data-month="${sM}"]`);
+                            if (cInp) cInp.value = formatDayWithMonth(pStart.day, sM);
+                            if (!isNaN(pEnd.day)) {
+                                const poInp = currTr.querySelector(`.po-input[data-month="${eM}"]`);
+                                if (poInp) poInp.value = formatDayWithMonth(pEnd.day, eM);
+                            }
+                        }
+                    } else {
+                        const parsed = parseDateInput(cleanVal, targetM);
+                        if (!isNaN(parsed.day)) {
+                            const curM = (!isNaN(parsed.month) && parsed.month >= 0 && parsed.month < 13) ? parsed.month : targetM;
+                            if (cols.length === 2) {
+                                if (cOffset === 0) {
+                                    const cInp = currTr.querySelector(`.c-input[data-month="${curM}"]`);
+                                    if (cInp) cInp.value = formatDayWithMonth(parsed.day, curM);
+                                } else {
+                                    const poInp = currTr.querySelector(`.po-input[data-month="${curM}"]`);
+                                    if (poInp) poInp.value = formatDayWithMonth(parsed.day, curM);
+                                }
+                            } else {
+                                const inputSelector = isC ? `.c-input[data-month="${curM}"]` : `.po-input[data-month="${curM}"]`;
+                                const inp = currTr.querySelector(inputSelector);
+                                if (inp) {
+                                    inp.value = formatDayWithMonth(parsed.day, curM);
+                                }
+                            }
+                        }
+                    }
+                });
+                calculateRow(currTr);
+            });
+            updateTotals();
+            return;
+        }
+
+        // Одиночное значение (одна дата, например "15" или "15.05" или "15.05.2026")
+        if (selectedInputs && selectedInputs.size > 1) {
+            // Вставка во все выделенные ячейки
+            selectedInputs.forEach(inp => {
+                const row = inp.closest('tr[data-emp-id]');
+                if (!row) return;
+                const m = parseInt(inp.dataset.month, 10);
+                const p = parseDateInput(text, m);
+                if (!isNaN(p.day)) {
+                    inp.value = formatDayWithMonth(p.day, m);
+                    calculateRow(row);
+                }
+            });
+            updateTotals();
+            return;
+        }
+
+        // Вставка в текущую ячейку
+        const p = parseDateInput(text, targetM);
+        if (!isNaN(p.day)) {
+            const m = (!isNaN(p.month) && p.month >= 0 && p.month < 13) ? p.month : targetM;
+            if (isC) {
+                const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
+                if (cInp) {
+                    cInp.value = formatDayWithMonth(p.day, m);
+                    autoCompleteVacation(tr, m, p.day);
+                }
+            } else {
+                const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
+                if (poInp) {
+                    poInp.value = formatDayWithMonth(p.day, m);
+                    calculateRow(tr);
+                }
+            }
+            updateTotals();
+        }
+    }
+
+    // Слушатель события paste в таблице
+    document.addEventListener('paste', (e) => {
+        const activeEl = document.activeElement;
+        const targetInput = (activeEl && activeEl.classList && activeEl.classList.contains('day-input'))
+            ? activeEl
+            : (selectedInputs.size > 0 ? Array.from(selectedInputs)[0] : null);
+
+        if (!targetInput || !tableBody || !tableBody.contains(targetInput)) {
+            return;
+        }
+
+        const clipboardData = e.clipboardData || window.clipboardData;
+        if (!clipboardData) return;
+        const text = clipboardData.getData('text');
+        if (!text || !text.trim()) return;
+
+        e.preventDefault();
+        pushUndoState();
+        handleVacationTablePaste(targetInput, text.trim());
+    });
 
     // Modal Handlers
     function openHolidaysModal() {
@@ -1201,23 +1392,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // Обработка ввода даты начала отпуска (c-input) с добавлением месяца и автоматическим расчетом окончания
-            let rowAutoCalcTimeout = null;
             tr.querySelectorAll('.c-input').forEach(cInput => {
-                const startM = parseInt(cInput.dataset.month);
+                const startM = parseInt(cInput.dataset.month, 10);
 
                 const triggerAutoCalc = (shouldFormat = false) => {
-                    if (rowAutoCalcTimeout) {
-                        clearTimeout(rowAutoCalcTimeout);
-                        rowAutoCalcTimeout = null;
-                    }
                     const val = cInput.value.trim();
                     if (val === '') {
                         clearAssociatedVacationEnd(tr, startM);
                         calculateRow(tr);
                         return;
                     }
-                    const startD = parseDayNumber(val);
-                    if (!isNaN(startD) && startD >= 1 && startD <= calendarDaysInMonths[startM]) {
+                    const parsed = parseDateInput(val, startM);
+                    const startD = parsed.day;
+                    if (!isNaN(startD) && startD >= 1 && startD <= (calendarDaysInMonths[startM] || 31)) {
                         if (shouldFormat) {
                             cInput.value = formatDayWithMonth(startD, startM);
                         }
@@ -1229,58 +1416,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 };
 
+                // При вводе (input) НЕ форматируем значение, чтобы не перебивать набор пользователя (например, при вводе 15)
                 cInput.addEventListener('input', () => {
-                    if (rowAutoCalcTimeout) {
-                        clearTimeout(rowAutoCalcTimeout);
-                        rowAutoCalcTimeout = null;
-                    }
                     const val = cInput.value.trim();
                     if (val === '') {
-                        triggerAutoCalc(false);
-                        return;
-                    }
-                    // Если значение содержит точку (например "5.03" или "22.03")
-                    if (val.includes('.')) {
-                        const parts = val.split('.');
-                        // Если день указан и введен месяц — форматируем день с добавлением ведущего нуля (01..09)
-                        if (parts[0] && parts.length > 1 && parts[1].length >= 2) {
-                            triggerAutoCalc(true);
-                            return;
-                        }
-                        triggerAutoCalc(false);
-                        return;
-                    }
-                    const num = parseInt(val, 10);
-                    // Если введено 2 цифры (например 05 или 22) или цифра >= 4 (например 5), форматируем сразу с добавлением нуля и месяца
-                    if (val.length >= 2 || (!isNaN(num) && num >= 4)) {
-                        triggerAutoCalc(true);
-                    } else {
-                        // Для цифр 1, 2, 3 даем короткую паузу 250мс для возможного ввода второй цифры
-                        rowAutoCalcTimeout = setTimeout(() => triggerAutoCalc(true), 250);
+                        clearAssociatedVacationEnd(tr, startM);
+                        calculateRow(tr);
                     }
                 });
 
+                // Форматирование и расчет запускаются при завершении ввода (blur или change)
                 cInput.addEventListener('change', () => triggerAutoCalc(true));
                 cInput.addEventListener('blur', () => triggerAutoCalc(true));
             });
 
             // Обработка ручной корректировки окончания отпуска (po-input) с добавлением месяца
-            let poCalcTimeout = null;
             tr.querySelectorAll('.po-input').forEach(poInput => {
-                const m = parseInt(poInput.dataset.month);
+                const m = parseInt(poInput.dataset.month, 10);
 
                 const triggerPoUpdate = (shouldFormat = false) => {
-                    if (poCalcTimeout) {
-                        clearTimeout(poCalcTimeout);
-                        poCalcTimeout = null;
-                    }
                     const val = poInput.value.trim();
                     if (val === '') {
                         calculateRow(tr);
                         return;
                     }
-                    const endD = parseDayNumber(val);
-                    if (!isNaN(endD) && endD >= 1 && endD <= calendarDaysInMonths[m]) {
+                    const parsed = parseDateInput(val, m);
+                    const endD = parsed.day;
+                    if (!isNaN(endD) && endD >= 1 && endD <= (calendarDaysInMonths[m] || 31)) {
                         if (shouldFormat) {
                             poInput.value = formatDayWithMonth(endD, m);
                         }
@@ -1299,30 +1461,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     calculateRow(tr);
                 };
 
+                // При вводе не перебиваем пользователя форматированием
                 poInput.addEventListener('input', () => {
-                    if (poCalcTimeout) {
-                        clearTimeout(poCalcTimeout);
-                        poCalcTimeout = null;
-                    }
                     const val = poInput.value.trim();
                     if (val === '') {
-                        triggerPoUpdate(false);
-                        return;
-                    }
-                    if (val.includes('.')) {
-                        const parts = val.split('.');
-                        if (parts[0] && parts.length > 1 && parts[1].length >= 2) {
-                            triggerPoUpdate(true);
-                            return;
-                        }
-                        triggerPoUpdate(false);
-                        return;
-                    }
-                    const num = parseInt(val, 10);
-                    if (val.length >= 2 || (!isNaN(num) && num >= 4)) {
-                        triggerPoUpdate(true);
-                    } else {
-                        poCalcTimeout = setTimeout(() => triggerPoUpdate(true), 250);
+                        calculateRow(tr);
                     }
                 });
 
