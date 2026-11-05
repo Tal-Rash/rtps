@@ -44,7 +44,7 @@ const REPAIR_SUMMARY_FIXED_HOLIDAYS = new Set([
   '02-23', '03-08', '05-01', '05-09', '06-12', '11-04',
 ]);
 const KP_RECHECK_DAYS = 30;
-const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
+const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'report',label:'Отчет'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
 
@@ -740,9 +740,24 @@ function handleMonthKeydown(e){
   }
 }
 function bindNav(){
-  document.getElementById('sectionNav').innerHTML = sections.map(s => `<button class="${ui.section===s.id || ui.modal===s.id ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`).join('');
+  const reportModal = document.getElementById('reportModal');
+  const isReportOpen = reportModal && reportModal.classList.contains('visible');
+  document.getElementById('sectionNav').innerHTML = sections.map(s => {
+    let isActive = false;
+    if (s.id === 'report') {
+      isActive = isReportOpen;
+    } else {
+      isActive = (ui.section === s.id || ui.modal === s.id) && !isReportOpen;
+    }
+    return `<button class="${isActive ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`;
+  }).join('');
 }
 function setSection(section){
+  closeReportModal();
+  if (section === 'report') {
+    openReport();
+    return;
+  }
   if (section === 'norms' || section === 'acts' || section === 'tu28') {
     ui.section = 'months';
     openSectionModal(section);
@@ -834,6 +849,8 @@ function renderSafe(){
   applyRepairScheduleSelectionClasses();
   renderOpenModals();
   updateHistoryButtons();
+  const importBtn = document.getElementById('importJsonBtn');
+  if (importBtn) importBtn.style.display = CAN_EDIT ? '' : 'none';
 }
 window.addEventListener('error', (event) => {
   const content = document.getElementById('content');
@@ -2759,14 +2776,21 @@ let reportDialogState = null;
 function openReportModalShell(title){
   document.getElementById('reportTitle').textContent = title;
   document.getElementById('reportBody').innerHTML = '<div class="report-loading">Подготовка отчета...</div>';
-  document.getElementById('reportModal').classList.add('visible');
-  document.getElementById('reportModal').setAttribute('aria-hidden', 'false');
+  const modal = document.getElementById('reportModal');
+  if (modal) {
+    modal.classList.add('visible');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+  bindNav();
 }
 function closeReportModal(){
   const modal = document.getElementById('reportModal');
-  modal.classList.remove('visible');
-  modal.setAttribute('aria-hidden', 'true');
+  if (modal) {
+    modal.classList.remove('visible');
+    modal.setAttribute('aria-hidden', 'true');
+  }
   reportDialogState = null;
+  bindNav();
 }
 function setReportNote(key, value){
   if (!CAN_EDIT) return;

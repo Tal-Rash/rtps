@@ -47,8 +47,33 @@
     .toolbar button.save-success { background:#16a34a !important; border-color:#16a34a !important; color:#fff !important; }
     .toolbar button.save-error { background:#dc2626 !important; border-color:#dc2626 !important; color:#fff !important; }
     .home-link { border:1px solid var(--accent); border-radius:8px; background:#fff; padding:10px 12px; color:var(--accent); font:inherit; font-weight:400; text-decoration:none; box-shadow:0 4px 12px rgba(16,32,51,.06); }
+    .tabs-row {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      width:100%;
+    }
+    .tabs-row .json-menu {
+      margin-left:auto;
+    }
     .json-menu { position:relative; display:inline-flex; }
-    .json-menu > button { min-width:84px; }
+    .json-menu > button {
+      background:#fff;
+      border:1px solid var(--accent);
+      padding:8px 14px;
+      border-radius:8px;
+      font-weight:500;
+      cursor:pointer;
+      color:var(--accent);
+      font:inherit;
+      transition:all 0.15s ease;
+      white-space:nowrap;
+    }
+    .json-menu > button:hover:not(:disabled) {
+      background:var(--soft);
+      box-shadow:0 0 0 2px rgba(39,110,241,0.12);
+    }
     .json-menu-panel {
       position:absolute;
       right:0;
@@ -62,10 +87,26 @@
       border-radius:12px;
       box-shadow:0 16px 30px rgba(16,32,51,.12);
       z-index:40;
-      min-width:168px;
+      min-width:175px;
     }
     .json-menu.open .json-menu-panel { display:flex; }
-    .json-menu-panel button { width:100%; text-align:left; border:1px solid var(--accent); }
+    .json-menu-panel button {
+      width:100%;
+      text-align:left;
+      border:1px solid var(--accent);
+      background:#fff;
+      padding:8px 12px;
+      border-radius:6px;
+      font:inherit;
+      font-size:13px;
+      color:var(--accent);
+      cursor:pointer;
+      white-space:nowrap;
+      transition:all 0.15s ease;
+    }
+    .json-menu-panel button:hover:not(:disabled) {
+      background:var(--soft);
+    }
     /* Нижняя строка: навигация по разделам */
     .nav { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:0; margin:0; background:transparent; border:0; box-shadow:none; overflow-x:auto; scrollbar-width:thin; }
     .nav button { flex:0 0 auto; background:#fff; border:1px solid var(--accent); padding:8px 14px; border-radius:8px; font-weight:500; cursor:pointer; color:var(--accent); font:inherit; transition:all 0.15s ease; white-space:nowrap; }

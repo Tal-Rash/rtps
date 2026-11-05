@@ -174,23 +174,13 @@ EDIT_TOOLBAR = """
         <button id="cancelButton" type="button" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreButton" type="button" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
-        <button onclick="openReport()">Отчет</button>
         <button id="saveButton" onclick="saveState()">Сохранить</button>
-        <div class="json-menu" id="jsonMenuWrap">
-          <button type="button" onclick="toggleJsonMenu(event)">JSON</button>
-          <div class="json-menu-panel" id="jsonMenuPanel" aria-hidden="true">
-            <button type="button" onclick="downloadJson(); closeJsonMenu()">Экспорт JSON</button>
-            <button type="button" onclick="triggerImportJson()">Импорт JSON</button>
-          </div>
-        </div>
-        <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
       </div>
 """
 
 READONLY_TOOLBAR = """
       <div class="toolbar">
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
-        <button onclick="openReport()">Отчет</button>
       </div>
 """
 

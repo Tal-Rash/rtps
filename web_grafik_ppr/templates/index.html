@@ -36,8 +36,18 @@
       <!-- Разделитель между строками -->
       <div class="topbar-divider"></div>
 
-      <!-- Нижняя строка: вкладки разделов -->
-      <div class="nav tabs" id="sectionNav" role="tablist" aria-label="Разделы"></div>
+      <!-- Нижняя строка: вкладки разделов и импорт/экспорт -->
+      <div class="tabs-row">
+        <div class="nav tabs" id="sectionNav" role="tablist" aria-label="Разделы"></div>
+        <div class="json-menu" id="jsonMenuWrap">
+          <button type="button" onclick="toggleJsonMenu(event)">Импорт / Экспорт</button>
+          <div class="json-menu-panel" id="jsonMenuPanel" aria-hidden="true">
+            <button type="button" onclick="downloadJson(); closeJsonMenu()">Экспорт JSON</button>
+            <button type="button" id="importJsonBtn" onclick="triggerImportJson()">Импорт JSON</button>
+          </div>
+        </div>
+        <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
+      </div>
     </div>
     <div class="panel">
       <div id="content"></div>
