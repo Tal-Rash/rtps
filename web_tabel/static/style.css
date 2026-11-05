@@ -349,26 +349,28 @@ button.primary:hover:not(:disabled),
   top: 0;
   z-index: 4;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin: 6px 0 10px;
   background: rgba(255, 255, 255, .96);
   padding: 0 0 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .months-row .month-strip {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   flex-wrap: nowrap;
   min-width: 0;
-  flex: 1 1 auto;
   width: auto;
   overflow: visible;
 }
 
 .month-norm-info {
   flex: 0 0 auto;
-  align-self: center;
+  margin-left: auto;
   white-space: nowrap;
   font-weight: 700;
   color: #1f3557;
@@ -961,17 +963,49 @@ button.primary:hover:not(:disabled),
 }
 
 .month-table-wrap {
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .table-wrap>table {
   border-collapse: separate;
   border-spacing: 0;
-  width: max-content;
-  min-width: 720px;
+  width: 100%;
+  min-width: max-content;
   table-layout: fixed;
+}
+
+/* Блок примечаний и памятки под таблицей табеля */
+.month-hint-wrap {
+  margin-top: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.month-hint {
+  width: 100%;
+  min-height: 70px;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(16, 32, 51, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.month-hint:focus {
+  outline: none;
+  border-color: #1f63df;
+  box-shadow: 0 0 0 3px rgba(39, 110, 241, 0.15);
 }
 
 .table-wrap>table th,

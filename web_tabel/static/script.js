@@ -82,11 +82,12 @@ function switchTab(tabId) {
   }
 }
 
+/* Автоматическая подгонка высоты поля примечаний под объем текста */
 function autoResizeMonthHint() {
   const mh = document.getElementById("monthHint");
   if (!mh || mh.offsetParent === null) return;
   mh.style.height = 'auto';
-  mh.style.height = mh.scrollHeight + 'px';
+  mh.style.height = Math.max(70, mh.scrollHeight + 2) + 'px';
 }
 
 /* Глубокое клонирование объекта состояния */
