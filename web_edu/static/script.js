@@ -611,7 +611,7 @@ function resetSaveBtn(text = "Сохранить") {
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = text;
-    btn.classList.add("primary");
+    btn.classList.remove("primary");
     if (text === "Сохранено!") {
       setTimeout(() => {
         if (btn.textContent === "Сохранено!") btn.textContent = "Сохранить";

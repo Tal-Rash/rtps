@@ -131,7 +131,7 @@ function markDirty(dirty) {
     btn.style.display = CAN_EDIT ? "inline-block" : "none";
     btn.disabled = !CAN_EDIT;
     btn.textContent = "Сохранить";
-    btn.classList.add("primary");
+    btn.classList.toggle("primary", !!dirty && !!CAN_EDIT);
   }
   updateHistoryButtons();
 }
@@ -510,7 +510,6 @@ async function saveState() {
     if (btn) {
       btn.disabled = false;
       btn.textContent = `✓ Сохранено (${totalElapsed}с)`;
-      btn.classList.add('primary');
       setTimeout(() => {
         if (btn) {
           btn.textContent = "Сохранить";

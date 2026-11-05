@@ -935,6 +935,10 @@ function setStatus(text){
 function setDirty(flag){
   dirty = !!flag;
   updateHistoryButtons();
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.classList.toggle('primary', dirty && CAN_EDIT);
+  }
 }
 function cloneState(value){
   return value ? JSON.parse(JSON.stringify(value)) : null;

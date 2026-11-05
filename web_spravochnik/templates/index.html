@@ -203,7 +203,7 @@
         <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
         <label>Год <select id="year"></select></label>
-        <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
+        <button id="saveBtn" onclick="saveAll()">Сохранить</button>
       </div>
     </div>
     <div class="top-divider"></div>
@@ -632,9 +632,9 @@ function hasUnsavedChanges(){
 function updateSaveButton(){
   const saveBtn = document.getElementById('saveBtn');
   if (!saveBtn) return;
-  saveBtn.classList.add('primary');
-  saveBtn.disabled = !CAN_EDIT;
   const dirty = CAN_EDIT && hasUnsavedChanges();
+  saveBtn.classList.toggle('primary', dirty);
+  saveBtn.disabled = !CAN_EDIT;
   saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Сохранить';
 }
 window.addEventListener('beforeunload', (event) => {

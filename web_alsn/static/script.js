@@ -755,7 +755,7 @@ function markDirty(dirty) {
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = "Сохранить";
-    btn.classList.add("primary");
+    btn.classList.toggle("primary", !!dirty && !!CAN_EDIT);
   }
   updateHistoryButtons();
 }
@@ -803,7 +803,6 @@ async function saveState() {
     updateHistoryButtons();
     if (btn) {
       btn.textContent = "Сохранено!";
-      btn.classList.add("primary");
       setTimeout(() => {
         if (btn) btn.textContent = "Сохранить";
       }, 2000);

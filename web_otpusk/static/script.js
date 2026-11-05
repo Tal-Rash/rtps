@@ -340,6 +340,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateUndoRedoButtons() {
         if (undoBtn) undoBtn.disabled = undoStack.length === 0;
         if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+        if (saveBtn) {
+            saveBtn.classList.toggle('primary', undoStack.length > 0);
+        }
     }
 
     function captureTableState() {
@@ -2016,6 +2019,9 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(res => res.json())
         .then(() => {
             saveBtn.textContent = 'Сохранено!';
+            undoStack = [];
+            redoStack = [];
+            updateUndoRedoButtons();
             setTimeout(() => {
                 saveBtn.textContent = 'Сохранить';
             }, 2000);

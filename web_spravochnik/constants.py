@@ -15,7 +15,7 @@ WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 
 # Настройки префикса и авторизации
 APP_PREFIX = "/spravochnik"
-APP_VERSION = "web-spravochnik-3.2"
+APP_VERSION = "web-spravochnik-3.3"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
