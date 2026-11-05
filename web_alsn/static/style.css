@@ -270,8 +270,8 @@ button.primary:hover, #saveBtn.primary:hover {
   flex-wrap: wrap;
   gap: 10px 14px;
   align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  justify-content: center;
+  margin-bottom: 12px;
 }
 
 .section-title {
@@ -285,6 +285,7 @@ button.primary:hover, #saveBtn.primary:hover {
   flex-wrap: wrap;
   gap: 10px 12px;
   align-items: end;
+  justify-content: center;
 }
 
 .warehouse-filters label {
