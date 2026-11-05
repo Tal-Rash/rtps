@@ -231,8 +231,7 @@ function renderTable() {
   // Render Vacations
   const vbody = document.getElementById("vacationsBody");
   let vHTML = "";
-  for (let r = 0; r < 11; r++) {
-    const emp = appState.employees[r] || {};
+  (appState.employees || []).forEach((emp, r) => {
     const tabNum = emp.tab_num || `empty_${r}`;
     const trClass = emp.exclude_date ? "excluded" : "";
     vHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
@@ -250,7 +249,7 @@ function renderTable() {
       }
     });
     vHTML += `</tr>`;
-  }
+  });
   vbody.innerHTML = vHTML;
 
   // Автоматический вызов подстановки локальных меток (ФИО)
@@ -420,11 +419,15 @@ async function saveState() {
     });
     
     const objVac = {};
-    for (let r=0; r<11; r++) { 
-        const emp = appState.employees[r] || {};
-        const tabNum = emp.tab_num || `empty_${r}`;
-        objVac[tabNum] = (appState.vacations && appState.vacations[tabNum]) || {}; 
+    if (appState.vacations) {
+      Object.assign(objVac, appState.vacations);
     }
+    (appState.employees || []).forEach((emp, r) => {
+      const tabNum = emp.tab_num || `empty_${r}`;
+      if (!objVac[tabNum]) {
+        objVac[tabNum] = (appState.vacations && appState.vacations[tabNum]) || {};
+      }
+    });
     const arrNorms = [];
     for (let r=0; r<12; r++) { arrNorms[r] = (appState.ts_norms_data && appState.ts_norms_data[r]) || {}; }
 
