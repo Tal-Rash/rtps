@@ -2351,7 +2351,7 @@ function renderTu28(){
   const extraRows = extraList.map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
       <input type="text" class="input" style="flex:1;" value="${esc(txt)}" ${disableExtra ? 'disabled' : ''} onchange="updateTu28Extra(${idx}, this.value)">
-      <button class="danger" style="width:40px;" ${disableExtra ? 'disabled' : ''} onclick="removeTu28Extra(${idx})">🗑</button>
+      <button class="danger" style="width:40px;" ${disableExtra ? 'disabled' : ''} onclick="removeTu28Extra(${idx})">✕</button>
     </div>
   `).join('');
   return `

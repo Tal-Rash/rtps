@@ -319,11 +319,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const tabCurrentBtn = document.getElementById('tabCurrentBtn');
             if (tabCurrentBtn) {
-                tabCurrentBtn.textContent = `📅 График отпусков ${currentYear}`;
+                tabCurrentBtn.textContent = `График отпусков ${currentYear}`;
             }
             const holidaysModalTitle = document.getElementById('holidaysModalTitle');
             if (holidaysModalTitle) {
-                holidaysModalTitle.textContent = `📅 Праздничные дни по месяцах (${currentYear})`;
+                holidaysModalTitle.textContent = `Праздничные дни по месяцам (${currentYear})`;
             }
 
             loadYearData(currentYear);
@@ -900,8 +900,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td style="font-size: 12px; color: ${isActive ? '#15803d' : 'var(--muted)'}; font-weight: ${isActive ? '600' : 'normal'};">${escapeHtml(ver.created_at)}</td>
                         <td style="text-align: center;">
                             <div style="display: flex; gap: 6px; justify-content: center;">
-                                <button type="button" class="btn-load-version ${isActive ? 'is-current-active' : ''}" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; ${isActive ? 'background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 600;' : 'background: #eaf1ff;'}">${isActive ? '✓ Активна' : '📥 Загрузить'}</button>
-                                <button type="button" class="btn-delete-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">🗑️ Удалить</button>
+                                <button type="button" class="btn-load-version ${isActive ? 'is-current-active' : ''}" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; ${isActive ? 'background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 600;' : 'background: #eaf1ff;'}">${isActive ? 'Активна' : 'Загрузить'}</button>
+                                <button type="button" class="btn-delete-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">Удалить</button>
                             </div>
                         </td>
                     `;
@@ -1009,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31];
                                         const tabCurrentBtn = document.getElementById('tabCurrentBtn');
                                         if (tabCurrentBtn) {
-                                            tabCurrentBtn.textContent = `📅 График отпусков ${currentYear}`;
+                                            tabCurrentBtn.textContent = `График отпусков ${currentYear}`;
                                         }
                                         renderHeaders();
                                     }
@@ -1200,7 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             })
                         }).then(r => r.json());
                     } else {
-                        createVersionBtn.textContent = '➕ Сохранить текущую версию';
+                        createVersionBtn.textContent = 'Сохранить текущую версию';
                         return null;
                     }
                 }
@@ -1208,7 +1208,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then((resData) => {
                 if (!resData) return;
-                createVersionBtn.textContent = '➕ Сохранить текущую версию';
+                createVersionBtn.textContent = 'Сохранить текущую версию';
                 if (newVersionNameInput) newVersionNameInput.value = '';
                 if (resData && resData.id) {
                     try { localStorage.setItem(`active_version_${currentYear}`, String(resData.id)); } catch (e) {}
@@ -2015,13 +2015,13 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(res => res.json())
         .then(() => {
-            saveBtn.textContent = '💾 Сохранено!';
+            saveBtn.textContent = 'Сохранено!';
             setTimeout(() => {
-                saveBtn.textContent = '💾 Сохранить изменения';
+                saveBtn.textContent = 'Сохранить изменения';
             }, 2000);
         })
         .catch(err => {
-            saveBtn.textContent = '❌ Ошибка';
+            saveBtn.textContent = 'Ошибка';
             console.error(err);
         });
     });
@@ -2287,7 +2287,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('Ошибка экспорта графика в Excel:', err);
                 alert('Не удалось выгрузить график в Excel: ' + (err.message || err));
             } finally {
-                exportScheduleBtn.textContent = '📊 Экспорт в Excel';
+                exportScheduleBtn.textContent = 'Экспорт в Excel';
                 exportScheduleBtn.disabled = false;
             }
         });
@@ -2526,17 +2526,17 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(res => res.json())
             .then(() => {
-                saveArchiveBtn.textContent = '💾 Архив сохранен!';
+                saveArchiveBtn.textContent = 'Архив сохранен!';
                 // Перезагружаем годовой график после обновления архива
                 if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {
                     loadVacations(currentYear);
                 }
                 setTimeout(() => {
-                    saveArchiveBtn.textContent = '💾 Сохранить архив';
+                    saveArchiveBtn.textContent = 'Сохранить архив';
                 }, 2000);
             })
             .catch(err => {
-                saveArchiveBtn.textContent = '❌ Ошибка';
+                saveArchiveBtn.textContent = 'Ошибка';
                 console.error(err);
             });
         });
@@ -2573,7 +2573,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return res.json();
             })
             .then(data => {
-                importArchiveBtn.textContent = '📥 Импорт из Excel';
+                importArchiveBtn.textContent = 'Импорт из Excel';
                 importArchiveFileInput.value = '';
                 let msg = `Успешно добавлено записей: ${data.imported_count || 0}`;
                 if (data.skipped_count && data.skipped_count > 0) {
@@ -2587,7 +2587,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             })
             .catch(err => {
-                importArchiveBtn.textContent = '📥 Импорт из Excel';
+                importArchiveBtn.textContent = 'Импорт из Excel';
                 importArchiveFileInput.value = '';
                 alert(`Ошибка при импорте: ${err.message}`);
                 console.error(err);
@@ -2798,9 +2798,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let headerHtml = `
             <th class="col-sticky-1" style="width: 240px; min-width: 240px; position: sticky; left: 0; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 12px; text-align: left;">Сотрудник</th>
             <th class="col-sticky-2" style="width: 75px; min-width: 75px; position: sticky; left: 240px; background: #f1f5f9; z-index: 11; border-right: 2px solid #cbd5e1; padding: 8px 4px; text-align: center;">Норма</th>
-            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">🔴 Лето (${periodText})</th>
-            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">🔵 Зима (${periodText})</th>
-            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">⚪ Демисезон</th>
+            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #ffebee; color: #c62828; border-bottom: 2px solid #ef9a9a; font-weight: 700;">Лето (${periodText})</th>
+            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #e1f5fe; color: #0277bd; border-bottom: 2px solid #81d4fa; font-weight: 700;">Зима (${periodText})</th>
+            <th style="min-width: 135px; padding: 8px 6px; text-align: center; background: #f1f5f9; color: #475569; border-bottom: 2px solid #cbd5e1; font-weight: 700;">Демисезон</th>
         `;
 
         years.forEach(y => {

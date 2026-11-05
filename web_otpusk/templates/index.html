@@ -35,25 +35,25 @@
                 </div>
                 <div class="actions">
                     <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
-                    <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↩️ Отменить</button>
-                    <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↪️ Повторить</button>
-                    <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>🗑️ Очистить</button>
+                    <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>Отменить</button>
+                    <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>Повторить</button>
+                    <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>Очистить</button>
                     <label class="toggle-control" id="badgeToggleLabel">
                         <input type="checkbox" id="toggleBadges">
-                        <span>👁️ Скрыть кружочки</span>
+                        <span>Скрыть кружочки</span>
                     </label>
                     <label class="toggle-control" id="carriedOverToggleLabel" title="Переключатель: считать ли отпуска, перешедшие с прошлого года, в итоговом занесено (факт)">
                         <input type="checkbox" id="toggleCarriedOverFact">
-                        <span>🔄 Учитывать прошлый год в факте</span>
+                        <span>Учитывать прошлый год в факте</span>
                     </label>
                     <label class="toggle-control" id="quittingToggleLabel" title="Переключатель: скрыть увольняемых сотрудников с отмеченным чекбоксом «исключить»">
                         <input type="checkbox" id="toggleQuitting">
-                        <span>🚪 Скрыть увольняемых</span>
+                        <span>Скрыть увольняемых</span>
                     </label>
-                    <button id="holidaysBtn" type="button">📅 Праздники</button>
-                    <button id="versionsBtn" type="button">🗂️ Версии</button>
-                    <button id="saveBtn" class="primary" type="button">💾 Сохранить изменения</button>
-                    <button id="exportScheduleBtn" type="button" class="export-btn" title="Выгрузить текущий график отпусков в Excel (.xlsx)">📊 Экспорт в Excel</button>
+                    <button id="holidaysBtn" type="button">Праздники</button>
+                    <button id="versionsBtn" type="button">Версии</button>
+                    <button id="saveBtn" class="primary" type="button">Сохранить изменения</button>
+                    <button id="exportScheduleBtn" type="button" class="export-btn" title="Выгрузить текущий график отпусков в Excel (.xlsx)">Экспорт в Excel</button>
                 </div>
             </div>
 
@@ -62,9 +62,9 @@
 
             <!-- Нижняя строка: вкладки разделов -->
             <div class="tabs nav tabs-nav" role="tablist" aria-label="Разделы">
-                <button id="tabCurrentBtn" class="tab tab-btn active" type="button">📅 График отпусков 2026</button>
-                <button id="tabArchiveBtn" class="tab tab-btn" type="button">📦 Архив отпусков</button>
-                <button id="historyMatrixBtn" class="tab tab-btn" type="button">📊 История по годам (Летние отпуска)</button>
+                <button id="tabCurrentBtn" class="tab tab-btn active" type="button">График отпусков 2026</button>
+                <button id="tabArchiveBtn" class="tab tab-btn" type="button">Архив отпусков</button>
+                <button id="historyMatrixBtn" class="tab tab-btn" type="button">История по годам (Летние отпуска)</button>
             </div>
         </div>
 
@@ -91,7 +91,7 @@
             <!-- Annual Calendar Reference Section -->
             <div class="calendar-section">
                 <div class="calendar-section-header">
-                    <h2>📅 Календарь на <span id="calendarYearTitle">2026</span> год</h2>
+                    <h2>Календарь на <span id="calendarYearTitle">2026</span> год</h2>
                     <div class="calendar-legend">
                         <span class="legend-item"><span class="legend-box weekend"></span> Выходные (Сб, Вс)</span>
                         <span class="legend-item"><span class="legend-box holiday"></span> Праздники</span>
@@ -107,14 +107,14 @@
         <div id="panelArchive" class="panel" style="display: none;">
             <div class="archive-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-                    <button id="addArchiveRowBtn" type="button">➕ Добавить запись</button>
-                    <button id="deleteArchiveRowBtn" type="button" style="color:#b00020; border-color:#fca5a5;">🗑️ Удалить выбранную</button>
-                    <button id="saveArchiveBtn" class="primary" type="button">💾 Сохранить архив</button>
+                    <button id="addArchiveRowBtn" type="button">Добавить запись</button>
+                    <button id="deleteArchiveRowBtn" type="button" style="color:#b00020; border-color:#fca5a5;">Удалить выбранную</button>
+                    <button id="saveArchiveBtn" class="primary" type="button">Сохранить архив</button>
                 </div>
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-                    <a href="/otpusk/api/vacations/archive/template" download="vacations_archive_template.xlsx" class="home-link" style="text-decoration:none;">📄 Шаблон Excel</a>
-                    <a href="#" onclick="downloadAndUnAnonymizeExcel('/otpusk/api/vacations/archive/export', 'vacations_archive.xlsx'); return false;" class="home-link" style="text-decoration:none;">📊 Экспорт в Excel</a>
-                    <button id="importArchiveBtn" type="button">📥 Импорт из Excel</button>
+                    <a href="/otpusk/api/vacations/archive/template" download="vacations_archive_template.xlsx" class="home-link" style="text-decoration:none;">Шаблон Excel</a>
+                    <a href="#" onclick="downloadAndUnAnonymizeExcel('/otpusk/api/vacations/archive/export', 'vacations_archive.xlsx'); return false;" class="home-link" style="text-decoration:none;">Экспорт в Excel</a>
+                    <button id="importArchiveBtn" type="button">Импорт из Excel</button>
                     <input type="file" id="importArchiveFileInput" accept=".xlsx,.xls" style="display: none;">
                 </div>
             </div>
@@ -144,7 +144,7 @@
     <div id="holidaysModal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
-                <h3 id="holidaysModalTitle">📅 Праздничные дни по месяцах (2026)</h3>
+                <h3 id="holidaysModalTitle">Праздничные дни по месяцам (2026)</h3>
                 <button id="closeHolidaysModal" class="modal-close-btn">&times;</button>
             </div>
             <div class="modal-body">
@@ -177,13 +177,13 @@
     <div id="versionsModal" class="modal-overlay">
         <div class="modal-card" style="max-width: 780px;">
             <div class="modal-header">
-                <h3 id="versionsModalTitle">🗂️ Сохранённые версии графика отпусков (<span id="versionModalYear">2026</span>)</h3>
+                <h3 id="versionsModalTitle">Сохранённые версии графика отпусков (<span id="versionModalYear">2026</span>)</h3>
                 <button id="closeVersionsModal" class="modal-close-btn">&times;</button>
             </div>
             <div class="modal-body">
                 <div style="display:flex; gap:10px; margin-bottom: 16px; flex-wrap: wrap;">
                     <input type="text" id="newVersionNameInput" class="holiday-input" placeholder="Название новой версии (например: Вариант 2 или Проект №1)" style="flex:1; min-width: 260px;">
-                    <button id="createVersionBtn" class="primary" type="button">➕ Сохранить текущую версию</button>
+                    <button id="createVersionBtn" class="primary" type="button">Сохранить текущую версию</button>
                 </div>
                 <div class="holidays-grid-container" style="max-height: 360px; overflow-y: auto;">
                     <table class="holidays-table">
@@ -211,36 +211,36 @@
     <div id="historyModal" class="modal-overlay">
         <div class="modal-card" style="max-width: 1200px; width: 95vw;">
             <div class="modal-header" style="background: linear-gradient(135deg, #1565c0, #1e88e5); color: #fff;">
-                <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">📊 График отпусков участка по годам (Анализ летних отпусков)</h3>
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">График отпусков участка по годам (Анализ летних отпусков)</h3>
                 <button id="closeHistoryModal" class="modal-close-btn" style="color: #fff;">&times;</button>
             </div>
             <div class="modal-body" style="padding: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
                     <div style="display: flex; align-items: center; gap: 16px; font-size: 0.9rem; font-weight: 500;">
                         <span>Легенда:</span>
-                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #d32f2f; border-radius: 3px;"></span> 🔴 Летние (Май, Июн, Июл, Авг)</span>
-                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #0288d1; border-radius: 3px;"></span> 🔵 Зимние (Ноя, Дек, Янв, Фев)</span>
-                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px;"></span> ⚪ Демисезон</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #d32f2f; border-radius: 3px;"></span> Летние (Май, Июн, Июл, Авг)</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #0288d1; border-radius: 3px;"></span> Зимние (Ноя, Дек, Янв, Фев)</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px;"></span> Демисезон</span>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <div style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.88rem; font-weight: 500;">
-                            <span>📅 Статистика: с</span>
+                            <span>Статистика: с</span>
                             <select id="historyStartYearSelect" style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; font-weight: 600; cursor: pointer; background: #ffffff;"></select>
                             <span>по</span>
                             <select id="historyEndYearSelect" style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; font-weight: 600; cursor: pointer; background: #ffffff;"></select>
                         </div>
                         <select id="historySortSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.88rem; background: #ffffff; font-weight: 500; cursor: pointer;">
-                            <option value="default">↕️ Сортировка: По порядку в списке</option>
-                            <option value="summer_rel_desc">🔴 Сначала кто БОЛЬШЕ ходил летом (к остальным месяцам, в %)</option>
-                            <option value="summer_rel_asc">⚪ Сначала кто МЕНЬШЕ ходил летом (к остальным месяцам, в %)</option>
-                            <option value="summer_count_desc">🔴 Сначала кто ЧАЩЕ ходил летом (по кол-ву отпусков)</option>
-                            <option value="winter_rel_desc">🔵 Сначала кто БОЛЬШЕ ходил зимой (к остальным месяцам, в %)</option>
+                            <option value="default">Сортировка: По порядку в списке</option>
+                            <option value="summer_rel_desc">Сначала кто БОЛЬШЕ ходил летом (к остальным месяцам, в %)</option>
+                            <option value="summer_rel_asc">Сначала кто МЕНЬШЕ ходил летом (к остальным месяцам, в %)</option>
+                            <option value="summer_count_desc">Сначала кто ЧАЩЕ ходил летом (по кол-ву отпусков)</option>
+                            <option value="winter_rel_desc">Сначала кто БОЛЬШЕ ходил зимой (к остальным месяцам, в %)</option>
                         </select>
                         <label style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.88rem; font-weight: 500; cursor: pointer; user-select: none;" title="Показать уволенных и архивных сотрудников">
                             <input type="checkbox" id="historyShowExcludedCheckbox" style="cursor: pointer; width: 15px; height: 15px;">
-                            <span>👥 Показывать уволенных</span>
+                            <span>Показывать уволенных</span>
                         </label>
-                        <input type="text" id="historySearchInput" placeholder="🔍 Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 170px;">
+                        <input type="text" id="historySearchInput" placeholder="Поиск сотрудника..." style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; width: 170px;">
                     </div>
                 </div>
                 <div class="table-shell" style="max-height: 70vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px;">

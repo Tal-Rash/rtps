@@ -103,9 +103,9 @@ function updateDismissedToggleLabel() {
   if (!lbl) return;
   const dismissedCount = (appState.employees || []).filter(e => e.is_dismissed).length;
   if (dismissedCount > 0) {
-    lbl.textContent = `👥 Показывать уволенных (${dismissedCount})`;
+    lbl.textContent = `Показывать уволенных (${dismissedCount})`;
   } else {
-    lbl.textContent = "👥 Показывать уволенных";
+    lbl.textContent = "Показывать уволенных";
   }
 }
 
