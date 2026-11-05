@@ -633,8 +633,8 @@ body.hide-badges .overflow-tag {
     background: #f7fafc;
 }
 
-/* Нижняя строка: навигация по вкладкам */
-.tabs-nav {
+/* Нижняя строка: навигация по вкладкам в стиле Замер КП */
+.tabs, .tabs-nav {
     display: flex;
     gap: 8px;
     align-items: center;
@@ -645,32 +645,35 @@ body.hide-badges .overflow-tag {
     width: 100%;
 }
 
-.tab-btn {
+.tab, .tab-btn {
     flex: 0 0 auto;
-    border: 1px solid var(--blue);
-    border-radius: 8px;
-    background: #ffffff;
-    color: var(--blue);
-    padding: 8px 14px;
+    border: 1px solid var(--blue) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: var(--blue) !important;
+    padding: 8px 14px !important;
     font: inherit;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
+    text-decoration: none;
+    box-shadow: none;
 }
 
-.tab-btn:hover {
-    background: var(--accent-soft);
-    box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+.tab:hover:not(:disabled), .tab-btn:hover:not(:disabled) {
+    background: var(--accent-soft) !important;
+    color: var(--blue) !important;
+    box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12) !important;
 }
 
-.tab-btn.active {
+.tab.active, .tab-btn.active {
     background: var(--blue) !important;
     color: #ffffff !important;
     border-color: var(--blue) !important;
     font-weight: 600;
-    box-shadow: 0 2px 8px rgba(39, 110, 241, 0.25);
+    box-shadow: 0 2px 8px rgba(39, 110, 241, 0.25) !important;
 }
 
 /* Archive Panel & Table */
