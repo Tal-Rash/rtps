@@ -37,7 +37,8 @@ OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru/otpusk")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
-BUILD_ID = "web-main-alsn-access-2026-06-28-2"
+# Идентификатор сборки веб-сервиса
+BUILD_ID = "web-main-2026-11-05"
 
 app = FastAPI(title="RTPS Web Main")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
