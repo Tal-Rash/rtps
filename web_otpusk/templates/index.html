@@ -16,10 +16,15 @@
 <body>
     <div class="wrap">
         <div class="top">
-            <!-- Верхняя строка: заголовок, год и функциональные кнопки -->
+            <!-- Верхняя строка: заголовок слева, основные действия справа -->
             <div class="top-row">
                 <div class="titlebox">
                     <h1>График отпусков</h1>
+                </div>
+                <div class="actions">
+                    <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
+                    <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↺</button>
+                    <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↻</button>
                     <div class="year-selector">
                         <label for="yearSelect"><strong>Год:</strong></label>
                         <select id="yearSelect" class="year-select">
@@ -32,11 +37,21 @@
                             <option value="2030">2030</option>
                         </select>
                     </div>
+                    <button id="saveBtn" type="button">Сохранить</button>
                 </div>
-                <div class="actions">
-                    <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
-                    <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↺</button>
-                    <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↻</button>
+            </div>
+
+            <!-- Разделитель между строками -->
+            <div class="top-divider"></div>
+
+            <!-- Нижняя строка: вкладки разделов слева и действия графика справа -->
+            <div class="tabs-row">
+                <div class="tabs nav tabs-nav" role="tablist" aria-label="Разделы">
+                    <button id="tabCurrentBtn" class="tab tab-btn active" type="button">График отпусков 2026</button>
+                    <button id="tabArchiveBtn" class="tab tab-btn" type="button">Архив отпусков</button>
+                    <button id="historyMatrixBtn" class="tab tab-btn" type="button">История по годам</button>
+                </div>
+                <div id="scheduleActions" class="tabs-actions">
                     <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>Очистить</button>
                     <label class="toggle-control" id="badgeToggleLabel">
                         <input type="checkbox" id="toggleBadges">
@@ -52,19 +67,8 @@
                     </label>
                     <button id="holidaysBtn" type="button">Праздники</button>
                     <button id="versionsBtn" type="button">Версии</button>
-                    <button id="saveBtn" type="button">Сохранить</button>
                     <button id="exportScheduleBtn" type="button" class="export-btn" title="Выгрузить текущий график отпусков в Excel (.xlsx)">Экспорт в Excel</button>
                 </div>
-            </div>
-
-            <!-- Разделитель между строками -->
-            <div class="top-divider"></div>
-
-            <!-- Нижняя строка: вкладки разделов -->
-            <div class="tabs nav tabs-nav" role="tablist" aria-label="Разделы">
-                <button id="tabCurrentBtn" class="tab tab-btn active" type="button">График отпусков 2026</button>
-                <button id="tabArchiveBtn" class="tab tab-btn" type="button">Архив отпусков</button>
-                <button id="historyMatrixBtn" class="tab tab-btn" type="button">История по годам</button>
             </div>
         </div>
 

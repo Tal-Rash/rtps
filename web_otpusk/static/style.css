@@ -633,7 +633,16 @@ body.hide-badges .overflow-tag {
     background: #f7fafc;
 }
 
-/* Нижняя строка: навигация по вкладкам в стиле Замер КП */
+/* Нижняя строка: контейнер для вкладок слева и дополнительных действий справа */
+.tabs-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
 .tabs, .tabs-nav {
     display: flex;
     gap: 8px;
@@ -642,7 +651,14 @@ body.hide-badges .overflow-tag {
     padding: 0;
     overflow-x: auto;
     scrollbar-width: thin;
-    width: 100%;
+}
+
+.tabs-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-wrap: wrap;
 }
 
 .tab, .tab-btn {

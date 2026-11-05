@@ -333,6 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Undo / Redo History System
     let undoStack = [];
     let redoStack = [];
+    let initialSavedSnapshot = null;
 
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
@@ -341,7 +342,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (undoBtn) undoBtn.disabled = undoStack.length === 0;
         if (redoBtn) redoBtn.disabled = redoStack.length === 0;
         if (saveBtn) {
-            saveBtn.classList.toggle('primary', undoStack.length > 0);
+            const currentSnapshot = JSON.stringify(captureTableState());
+            const hasChanges = initialSavedSnapshot ? (currentSnapshot !== initialSavedSnapshot) : (undoStack.length > 0);
+            saveBtn.classList.toggle('primary', hasChanges);
         }
     }
 
@@ -1483,6 +1486,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         undoStack = [];
         redoStack = [];
+        initialSavedSnapshot = JSON.stringify(captureTableState());
         updateUndoRedoButtons();
 
         // Summary Row 1: Всего положено отпусков
@@ -1900,6 +1904,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
+        updateUndoRedoButtons();
     }
 
     function drawLine(wrapper, leftPct, widthPct, isCarried = false) {
@@ -2021,6 +2026,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saveBtn.textContent = 'Сохранено!';
             undoStack = [];
             redoStack = [];
+            initialSavedSnapshot = JSON.stringify(captureTableState());
             updateUndoRedoButtons();
             setTimeout(() => {
                 saveBtn.textContent = 'Сохранить';
@@ -2359,6 +2365,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tabArchiveBtn.classList.remove('active');
             panelCurrent.style.display = 'block';
             panelArchive.style.display = 'none';
+            const scheduleActions = document.getElementById('scheduleActions');
+            if (scheduleActions) scheduleActions.style.display = '';
             if (badgeToggleLabel) badgeToggleLabel.style.display = '';
             if (holidaysBtn) holidaysBtn.style.display = '';
             if (saveBtn) saveBtn.style.display = '';
@@ -2374,6 +2382,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tabCurrentBtn.classList.remove('active');
             panelCurrent.style.display = 'none';
             panelArchive.style.display = 'block';
+            const scheduleActions = document.getElementById('scheduleActions');
+            if (scheduleActions) scheduleActions.style.display = 'none';
             if (badgeToggleLabel) badgeToggleLabel.style.display = 'none';
             if (holidaysBtn) holidaysBtn.style.display = 'none';
             if (saveBtn) saveBtn.style.display = 'none';
