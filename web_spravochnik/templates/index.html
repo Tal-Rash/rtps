@@ -1,92 +1,217 @@
-д<!doctype html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Справочник</title>
   <style>
-    :root{--line:#d9e2ef;--text:#102033;--muted:#66758a;--blue:#276ef1;--bg:#f4f7fb}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{padding:16px;max-width:1500px;margin:0 auto}
-    .top{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px 16px;margin-bottom:14px}
-    h1{margin:0;font-size:22px}.muted{color:var(--muted);font-size:13px}
-    .user-badge {
+    :root {
+      --bg: #f4f7fb;
+      --card: #fff;
+      --line: #d9e2ef;
+      --text: #102033;
+      --muted: #607086;
+      --accent: #276ef1;
+      --soft: #eaf1ff;
+      --shadow: 0 12px 32px rgba(16, 32, 51, 0.08);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #e8eefb, #f7f9fc 150px) fixed;
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1700px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    /* Единая плашка шапки в стиле Замер КП */
+    .top {
+      position: sticky;
+      top: 12px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    /* Верхняя строка: заголовок и функциональные кнопки */
+    .top-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .titlebox h1, h1 { margin: 0; font-size: 22px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button, a, select {
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 8px 12px;
+      background: #fff;
+      color: var(--accent);
+      font-weight: 500;
+      text-decoration: none;
+      font: inherit;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button:hover:not(:disabled), a:hover {
+      background: var(--soft);
+      color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+    }
+    .home-link {
       display: inline-flex;
       align-items: center;
-      font-size: 13px;
-      color: var(--muted);
-      background: var(--bg);
-      padding: 4px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--line);
-      margin-top: 4px;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 12px;
+      color: var(--accent);
+      font-weight: 500;
+      text-decoration: none;
     }
-    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    button,a,select{border:1px solid #2f6fed;border-radius:8px;padding:10px 12px;background:#fff;color:#1f57d6;font-weight:400;text-decoration:none;font:inherit}
-    button:hover,a:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
-    button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-    button.primary:disabled{opacity:.78}
-    .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;margin-bottom:-1px;padding-left:17px;position:relative;z-index:2}
-    .tab{background:#fff;border:1px solid #2f6fed;border-bottom-color:#2f6fed;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:400;cursor:pointer;color:#1f57d6}
-    .tab:hover{box-shadow:0 0 0 2px rgba(47,111,237,.10)}
-    .tab.active{background:#2f6fed;color:#fff;border-color:#2f6fed;border-bottom-color:#2f6fed}
-    .panel{display:none;background:#fff;border:1px solid #2f6fed;border-radius:18px;padding:14px;overflow:auto;position:relative;z-index:1}
-    .table-shell{margin-top:12px;background:#fff;border:1px solid #2f6fed;border-radius:18px;overflow:hidden}
-    .panel.active{display:block}
-    table{border-collapse:collapse;width:100%;min-width:760px}
-    table.norms-table{table-layout:fixed}
-    table.employees-table{table-layout:fixed}
-    th,td{border:1px solid var(--line);padding:0;height:34px;text-align:center;overflow:hidden}
-    th{background:#eef4fb;font-weight:700}
-    table.employees-table td{height:auto;vertical-align:middle;position:relative}
-    table.employees-table th{height:34px;vertical-align:middle}
-    table.norms-table th, table.norms-table td{white-space:nowrap}
-    table.employees-table th, table.employees-table td{white-space:normal}
-    td input{width:100%;height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent}
-    td textarea{width:100%;min-height:34px;border:0;padding:6px 8px;font:inherit;text-align:center;background:transparent;resize:none;overflow:hidden;display:block;line-height:1.25;box-sizing:border-box}
-    td input[type=checkbox]{width:auto;height:auto}
-    table.employees-table td input[type=checkbox]{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
-    .left{text-align:left!important}
-    .rowbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px}
-    .inventory-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px}
-    .selected-row{outline:2px solid #7aa7ff;outline-offset:-2px;background:#f3f8ff}
-    .deleted-row{opacity:.55}
-    .deleted-row td, .deleted-row td input{color:#8b96a8;text-decoration:line-through;text-decoration-thickness:1.5px}
+    .home-link:hover {
+      background: var(--soft);
+    }
+    button.primary {
+      background: var(--accent) !important;
+      border-color: var(--accent) !important;
+      color: #fff !important;
+    }
+    button.primary:hover {
+      background: #1f63df !important;
+      border-color: #1f63df !important;
+    }
+    button.primary:disabled { opacity: .78; }
+    /* Тонкий разделитель между строками шапки */
+    .top-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 0;
+      opacity: 0.8;
+    }
+    /* Нижняя строка: вкладки разделов */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 0;
+      padding: 0;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .tab {
+      flex: 0 0 auto;
+      background: #fff;
+      border: 1px solid var(--accent);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--accent);
+      transition: all 0.15s ease;
+    }
+    .tab:hover {
+      background: var(--soft);
+      box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+    }
+    .tab.active {
+      background: var(--accent) !important;
+      color: #fff !important;
+      border-color: var(--accent) !important;
+      box-shadow: 0 2px 8px rgba(39, 110, 241, 0.25);
+    }
+    /* Основные панели содержимого */
+    .panel {
+      display: none;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow: auto;
+    }
+    .table-shell {
+      margin-top: 12px;
+      background: #fff;
+      border: 1px solid var(--accent);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .panel.active { display: block; }
+    table { border-collapse: collapse; width: 100%; min-width: 760px; }
+    table.norms-table { table-layout: fixed; }
+    table.employees-table { table-layout: fixed; }
+    th, td { border: 1px solid var(--line); padding: 0; height: 34px; text-align: center; overflow: hidden; }
+    th { background: #eef4fb; font-weight: 700; }
+    table.employees-table td { height: auto; vertical-align: middle; position: relative; }
+    table.employees-table th { height: 34px; vertical-align: middle; }
+    table.norms-table th, table.norms-table td { white-space: nowrap; }
+    table.employees-table th, table.employees-table td { white-space: normal; }
+    td input { width: 100%; height: 34px; border: 0; padding: 6px 8px; font: inherit; text-align: center; background: transparent; }
+    td textarea { width: 100%; min-height: 34px; border: 0; padding: 6px 8px; font: inherit; text-align: center; background: transparent; resize: none; overflow: hidden; display: block; line-height: 1.25; box-sizing: border-box; }
+    td input[type=checkbox] { width: auto; height: auto; }
+    table.employees-table td input[type=checkbox] { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    .left { text-align: left !important; }
+    .rowbar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+    .inventory-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+    .selected-row { outline: 2px solid #7aa7ff; outline-offset: -2px; background: #f3f8ff; }
+    .deleted-row { opacity: .55; }
+    .deleted-row td, .deleted-row td input { color: #8b96a8; text-decoration: line-through; text-decoration-thickness: 1.5px; }
     td input:focus,
-    td input:focus-visible{
-      outline:none;
-      box-shadow:none;
+    td input:focus-visible {
+      outline: none;
+      box-shadow: none;
     }
-    .modal-backdrop{position:fixed;inset:0;background:rgba(16,32,51,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
-    .modal-backdrop.show{display:flex}
-    .modal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(16,32,51,.2)}
-    .modal h2{margin:0 0 12px;font-size:22px}
-    .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .modal-grid label{display:flex;flex-direction:column;gap:6px;font-weight:700}
-    .modal-grid input{padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
-    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-    .modal-actions button{min-width:120px}
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(16, 32, 51, .4); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+    .modal-backdrop.show { display: flex; }
+    .modal { width: min(520px, 100%); background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: 0 20px 60px rgba(16, 32, 51, .2); }
+    .modal h2 { margin: 0 0 12px; font-size: 22px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .modal-grid label { display: flex; flex-direction: column; gap: 6px; font-weight: 700; }
+    .modal-grid input { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    .modal-actions button { min-width: 120px; }
   </style>
 </head>
 <body>
 <div class="wrap">
+  <!-- Единая шапка: верхняя строка с действиями, нижняя строка со вкладками -->
   <div class="top">
-    <div class="titlebox">
-      <h1>Справочник</h1>
+    <div class="top-row">
+      <div class="titlebox">
+        <h1>Справочник</h1>
+      </div>
+      <div class="actions">
+        <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
+        <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+        <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+        <label>Год <select id="year"></select></label>
+        <button id="saveBtn" class="primary" onclick="saveAll()">Сохранить</button>
+      </div>
     </div>
-    <div class="actions">
-      <a href="{{MAIN_SITE_URL}}/">На главную</a>
-      <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
-      <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-      <label>Год <select id="year"></select></label>
-      <button id="saveBtn" onclick="saveAll()">Сохранить</button>
+    <div class="top-divider"></div>
+    <div class="tabs" role="tablist" aria-label="Разделы">
+      <button class="tab active" type="button" onclick="showTab('norms', this)">Нормы времени</button>
+      <button class="tab" type="button" onclick="showTab('employees', this)">Сотрудники</button>
+      <button class="tab" type="button" onclick="showTab('inventory', this)">Локомотивы</button>
     </div>
-  </div>
-  <div class="tabs">
-    <button class="tab active" onclick="showTab('norms', this)">Нормы времени</button>
-    <button class="tab" onclick="showTab('employees', this)">Сотрудники</button>
-    <button class="tab" onclick="showTab('inventory', this)">Локомотивы</button>
   </div>
   <div id="norms" class="panel active"></div>
   <div id="employees" class="panel"></div>

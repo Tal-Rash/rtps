@@ -9,21 +9,29 @@
 <body>
   <div class="shell">
     <div class="topbar">
-      <div class="titlebox">
-        <h1>Замер КП</h1>
-      </div>
-      <div class="controls">
-        <a class="home-link" href="http://yrtps.ru/">На главную</a>
-        <div class="nav" role="tablist" aria-label="Разделы">
-          <button id="tabInput" class="tab active" type="button" {{TAB_INPUT_STYLE}} onclick="switchTab('input')">Ввод замера</button>
-          <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
-          <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
-          <button id="tabWear" class="tab" type="button" onclick="switchTab('wear')">Анализ износа</button>
-          <button id="tabSchedule" class="tab" type="button" onclick="switchTab('schedule')">График замеров</button>
+      <!-- Верхняя строка: заголовок и функциональные кнопки -->
+      <div class="topbar-row">
+        <div class="titlebox">
+          <h1>Замер КП</h1>
         </div>
-        <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
-        <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
-        <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+        <div class="controls">
+          <a class="home-link" href="http://yrtps.ru/">На главную</a>
+          <button id="normsBtn" type="button" onclick="openNormsDialog()">Нормы</button>
+          <button id="cancelBtn" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+          <button id="restoreBtn" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
+        </div>
+      </div>
+
+      <!-- Разделитель между строками -->
+      <div class="topbar-divider"></div>
+
+      <!-- Нижняя строка: вкладки разделов -->
+      <div class="nav tabs" role="tablist" aria-label="Разделы">
+        <button id="tabInput" class="tab active" type="button" {{TAB_INPUT_STYLE}} onclick="switchTab('input')">Ввод замера</button>
+        <button id="tabKp" class="tab" type="button" onclick="switchTab('kp')">КП данные</button>
+        <button id="tabArchive" class="tab" type="button" onclick="switchTab('archive')">Архив замеров</button>
+        <button id="tabWear" class="tab" type="button" onclick="switchTab('wear')">Анализ износа</button>
+        <button id="tabSchedule" class="tab" type="button" onclick="switchTab('schedule')">График замеров</button>
       </div>
     </div>
 

@@ -32,26 +32,47 @@ body {
 }
 
 .wrap {
-    max-width: 1650px;
+    max-width: 1700px;
     margin: 0 auto;
     padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
 }
 
-/* Topbar Header */
+/* Единая шапка в стиле Замер КП */
 .top {
+    position: sticky;
+    top: 12px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--blue);
+    border-radius: 18px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+}
+
+/* Верхняя строка: заголовок и функциональные кнопки */
+.top-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    background: #ffffff;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 14px 18px;
-    box-shadow: var(--shadow);
     flex-wrap: wrap;
+    width: 100%;
+}
+
+/* Разделитель между строками */
+.top-divider {
+    height: 1px;
+    background: #d9e2ef;
+    margin: 0;
+    opacity: 0.8;
+    width: 100%;
 }
 
 .titlebox {
@@ -188,13 +209,14 @@ button.export-btn:hover, .btn-export-excel:hover {
     accent-color: var(--blue);
 }
 
-/* Panel & Table Shell */
+/* Основная панель содержимого */
 .panel {
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.92);
     border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 14px;
+    border-radius: 18px;
+    padding: 16px;
     box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
 }
 
 .table-wrapper, .table-shell {
@@ -611,38 +633,44 @@ body.hide-badges .overflow-tag {
     background: #f7fafc;
 }
 
-/* Tabs Navigation */
+/* Нижняя строка: навигация по вкладкам */
 .tabs-nav {
     display: flex;
     gap: 8px;
-    margin-top: 4px;
-    margin-bottom: -10px;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    width: 100%;
 }
 
 .tab-btn {
-    border: 1px solid var(--line);
-    border-bottom: none;
-    border-radius: 12px 12px 0 0;
-    background: #e6efff;
-    color: var(--blue-dark);
-    padding: 10px 20px;
+    flex: 0 0 auto;
+    border: 1px solid var(--blue);
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--blue);
+    padding: 8px 14px;
+    font: inherit;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
 .tab-btn:hover {
     background: var(--accent-soft);
+    box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
 }
 
 .tab-btn.active {
-    background: #ffffff;
-    color: var(--blue);
-    border: 2px solid var(--blue);
-    border-bottom: 2px solid #ffffff;
-    font-weight: 700;
-    box-shadow: 0 -4px 12px rgba(39, 110, 241, 0.08);
+    background: var(--blue) !important;
+    color: #ffffff !important;
+    border-color: var(--blue) !important;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(39, 110, 241, 0.25);
 }
 
 /* Archive Panel & Table */

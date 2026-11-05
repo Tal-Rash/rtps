@@ -25,22 +25,30 @@ body {
   padding: 16px;
 }
 
+/* Единая шапка в стиле Замер КП */
 .topbar {
   position: sticky;
   top: 12px;
   z-index: 30;
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+/* Верхняя строка: заголовок и функциональные кнопки */
+.topbar-row {
+  display: flex;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  padding: 14px 16px;
-  margin-bottom: 14px;
-  background: #fff;
-  border: 1px solid var(--accent);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
 }
 
 .titlebox h1 { margin: 0; font-size: 22px; }
@@ -61,59 +69,89 @@ button,
 .home-link {
   border: 1px solid var(--accent);
   border-radius: 8px;
-  background: transparent;
-  padding: 10px 12px;
+  background: #fff;
+  padding: 8px 12px;
   font: inherit;
   color: var(--accent);
   cursor: pointer;
   text-decoration: none;
-  font-weight: 400;
+  font-weight: 500;
+  transition: all 0.15s ease;
 }
 
 button:hover:not(:disabled),
-.home-link:hover { background: var(--accent-soft); }
+.home-link:hover {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+}
 
+button.primary, #saveBtn.primary {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+button.primary:hover, #saveBtn.primary:hover {
+  background: #1f63df !important;
+  border-color: #1f63df !important;
+}
+
+/* Тонкий разделитель между функциональным рядом и вкладками */
+.topbar-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 0;
+  opacity: 0.8;
+}
+
+/* Нижняя строка: вкладки разделов */
 .tabs {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
-  margin-bottom: -1px;
-  padding-left: 17px;
+  align-items: center;
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: thin;
-  position: relative;
-  z-index: 2;
+  margin: 0;
+  padding: 0;
 }
 
 .tab {
   flex: 0 0 auto;
-  min-height: 48px;
+  min-height: auto;
   background: #fff;
   border: 1px solid var(--accent);
-  border-bottom-color: var(--accent);
-  padding: 10px 16px;
-  border-radius: 8px 8px 0 0;
-  font-weight: 400;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 500;
   cursor: pointer;
   color: var(--accent);
+  font: inherit;
+  transition: all 0.15s ease;
+}
+
+.tab:hover:not(:disabled) {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
 }
 
 .tab.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 2px 8px rgba(39, 110, 241, 0.25);
 }
 
+/* Основная панель содержимого */
 .panel {
   width: 100%;
   border: 1px solid var(--accent);
-  border-radius: 16px;
-  background: #fff;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
   overflow: hidden;
-  padding: 12px;
+  padding: 16px;
   position: relative;
   z-index: 1;
 }

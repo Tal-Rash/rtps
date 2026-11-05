@@ -16,49 +16,56 @@
 <body>
     <div class="wrap">
         <div class="top">
-            <div class="titlebox">
-                <h1>График отпусков</h1>
-                <div class="year-selector">
-                    <label for="yearSelect"><strong>Год:</strong></label>
-                    <select id="yearSelect" class="year-select">
-                        <option value="2024">2024</option>
-                        <option value="2025">2025</option>
-                        <option value="2026" selected>2026</option>
-                        <option value="2027">2027</option>
-                        <option value="2028">2028</option>
-                        <option value="2029">2029</option>
-                        <option value="2030">2030</option>
-                    </select>
+            <!-- Верхняя строка: заголовок, год и функциональные кнопки -->
+            <div class="top-row">
+                <div class="titlebox">
+                    <h1>График отпусков</h1>
+                    <div class="year-selector">
+                        <label for="yearSelect"><strong>Год:</strong></label>
+                        <select id="yearSelect" class="year-select">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2027">2027</option>
+                            <option value="2028">2028</option>
+                            <option value="2029">2029</option>
+                            <option value="2030">2030</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="actions">
+                    <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
+                    <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↩️ Отменить</button>
+                    <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↪️ Повторить</button>
+                    <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>🗑️ Очистить</button>
+                    <label class="toggle-control" id="badgeToggleLabel">
+                        <input type="checkbox" id="toggleBadges">
+                        <span>👁️ Скрыть кружочки</span>
+                    </label>
+                    <label class="toggle-control" id="carriedOverToggleLabel" title="Переключатель: считать ли отпуска, перешедшие с прошлого года, в итоговом занесено (факт)">
+                        <input type="checkbox" id="toggleCarriedOverFact">
+                        <span>🔄 Учитывать прошлый год в факте</span>
+                    </label>
+                    <label class="toggle-control" id="quittingToggleLabel" title="Переключатель: скрыть увольняемых сотрудников с отмеченным чекбоксом «исключить»">
+                        <input type="checkbox" id="toggleQuitting">
+                        <span>🚪 Скрыть увольняемых</span>
+                    </label>
+                    <button id="holidaysBtn" type="button">📅 Праздники</button>
+                    <button id="versionsBtn" type="button">🗂️ Версии</button>
+                    <button id="saveBtn" class="primary" type="button">💾 Сохранить изменения</button>
+                    <button id="exportScheduleBtn" type="button" class="export-btn" title="Выгрузить текущий график отпусков в Excel (.xlsx)">📊 Экспорт в Excel</button>
                 </div>
             </div>
-            <div class="actions">
-                <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
-                <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↩️ Отменить</button>
-                <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↪️ Повторить</button>
-                <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>🗑️ Очистить</button>
-                <label class="toggle-control" id="badgeToggleLabel">
-                    <input type="checkbox" id="toggleBadges">
-                    <span>👁️ Скрыть кружочки</span>
-                </label>
-                <label class="toggle-control" id="carriedOverToggleLabel" title="Переключатель: считать ли отпуска, перешедшие с прошлого года, в итоговом занесено (факт)">
-                    <input type="checkbox" id="toggleCarriedOverFact">
-                    <span>🔄 Учитывать прошлый год в факте</span>
-                </label>
-                <label class="toggle-control" id="quittingToggleLabel" title="Переключатель: скрыть увольняемых сотрудников с отмеченным чекбоксом «исключить»">
-                    <input type="checkbox" id="toggleQuitting">
-                    <span>🚪 Скрыть увольняемых</span>
-                </label>
-                <button id="holidaysBtn" type="button">📅 Праздники</button>
-                <button id="versionsBtn" type="button">🗂️ Версии</button>
-                <button id="saveBtn" class="primary" type="button">💾 Сохранить изменения</button>
-                <button id="exportScheduleBtn" type="button" class="export-btn" title="Выгрузить текущий график отпусков в Excel (.xlsx)">📊 Экспорт в Excel</button>
-            </div>
-        </div>
 
-        <div class="tabs-nav">
-            <button id="tabCurrentBtn" class="tab-btn active" type="button">📅 График отпусков 2026</button>
-            <button id="tabArchiveBtn" class="tab-btn" type="button">📦 Архив отпусков</button>
-            <button id="historyMatrixBtn" class="tab-btn" type="button" style="margin-left: auto; background-color: #1565c0; color: #ffffff; border-color: #0d47a1; font-weight: 600;">📊 История по годам (Летние отпуска)</button>
+            <!-- Разделитель между строками -->
+            <div class="top-divider"></div>
+
+            <!-- Нижняя строка: вкладки разделов -->
+            <div class="tabs-nav" role="tablist" aria-label="Разделы">
+                <button id="tabCurrentBtn" class="tab-btn active" type="button">📅 График отпусков 2026</button>
+                <button id="tabArchiveBtn" class="tab-btn" type="button">📦 Архив отпусков</button>
+                <button id="historyMatrixBtn" class="tab-btn" type="button" style="margin-left: auto;">📊 История по годам (Летние отпуска)</button>
+            </div>
         </div>
 
         <!-- Panel 1: Current Vacation Grid -->

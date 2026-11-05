@@ -21,42 +21,49 @@
 <body>
   <div class="shell">
     <div class="topbar">
-      <div class="titlebox">
-        <h1>Табель учета</h1>
-
+      <!-- Верхняя строка: заголовок и функциональные кнопки -->
+      <div class="topbar-row">
+        <div class="titlebox">
+          <h1>Табель учета</h1>
+        </div>
+        <div class="controls">
+          <a class="home-link" href="http://yrtps.ru/">На главную</a>
+          <div class="toolbar">
+            <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100" style="width:80px; padding: 6px;"></label>
+            <input type="hidden" id="monthInput" value="6">
+            <div class="json-menu">
+              <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Молоко  </button>
+              <div class="json-menu-panel">
+                <button onclick="exportMilk('компенсация')">Компенсация (План)</button>
+                <button onclick="exportMilk('план')">Выдача (План)</button>
+                <button onclick="exportMilk('факт')">Выдача (Факт)</button>
+                <button type="button" onclick="window.open(`${_prefix}/api/export-milk-details?year=${document.getElementById('yearInput').value}&month=${document.getElementById('monthInput').value}&type=${encodeURIComponent('план')}`, '_blank')">Не засчитанные дни</button>
+              </div>
+            </div>
+            <div class="json-menu">
+              <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Отчет  </button>
+              <div class="json-menu-panel" id="exportMenuPanel">
+                <button onclick="exportSummary('Отпуска')">Отпуска</button>
+                <button onclick="exportSummary('Отпуска внеплановые')">Отпуска внеплановые</button>
+                <button onclick="exportSummary('Отпуск б/с')">Отпуск б/с</button>
+                <button onclick="exportSummary('Учебный отпуск')">Учебный отпуск</button>
+                <button onclick="exportSummary('Больничный')">Больничный</button>
+              </div>
+            </div>
+            <button onclick="openSickModal()" style="margin-right: 5px;">Больничный</button>
+            <button onclick="saveState()" id="saveBtn" style="display:none;" class="primary">Сохранить</button>
+          </div>
+        </div>
       </div>
-      <div class="controls">
-        <a class="home-link" href="http://yrtps.ru/">На главную</a>
-        <div class="nav" id="sectionNav">
-          <button class="nav-tab active" onclick="switchTab('months')">📅 Месяцы</button>
-          <button class="nav-tab" onclick="switchTab('employees')">⚙️ Сотрудники</button>
-          <button class="nav-tab" onclick="switchTab('vacations')">🌴 Отпуска</button>
-        </div>
-        <div class="toolbar">
-          <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100" style="width:80px; padding: 6px;"></label>
-          <input type="hidden" id="monthInput" value="6">
-          <div class="json-menu">
-            <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Молоко  </button>
-            <div class="json-menu-panel">
-              <button onclick="exportMilk('компенсация')">Компенсация (План)</button>
-              <button onclick="exportMilk('план')">Выдача (План)</button>
-              <button onclick="exportMilk('факт')">Выдача (Факт)</button>
-              <button type="button" onclick="window.open(`${_prefix}/api/export-milk-details?year=${document.getElementById('yearInput').value}&month=${document.getElementById('monthInput').value}&type=${encodeURIComponent('план')}`, '_blank')">Не засчитанные дни</button>
-            </div>
-          </div>
-          <div class="json-menu">
-            <button class="dropdown-toggle" onclick="this.parentElement.classList.toggle('open')">Отчет  </button>
-            <div class="json-menu-panel" id="exportMenuPanel">
-              <button onclick="exportSummary('Отпуска')">Отпуска</button>
-              <button onclick="exportSummary('Отпуска внеплановые')">Отпуска внеплановые</button>
-              <button onclick="exportSummary('Отпуск б/с')">Отпуск б/с</button>
-              <button onclick="exportSummary('Учебный отпуск')">Учебный отпуск</button>
-              <button onclick="exportSummary('Больничный')">Больничный</button>
-            </div>
-          </div>
-          <button onclick="openSickModal()" style="margin-right: 5px;">Больничный</button>
-          <button onclick="saveState()" id="saveBtn" style="display:none;" class="">Сохранить</button>
-        </div>
+
+      <!-- Разделитель между строками -->
+      <div class="topbar-divider"></div>
+
+      <!-- Нижняя строка: вкладки разделов -->
+      <div class="nav tabs" id="sectionNav" role="tablist" aria-label="Разделы">
+        <button class="nav-tab active" onclick="switchTab('months')">📅 Месяцы</button>
+        <button class="nav-tab" onclick="switchTab('employees')">⚙️ Сотрудники</button>
+        <button class="nav-tab" onclick="switchTab('vacations')">🌴 Отпуска</button>
       </div>
     </div>
 

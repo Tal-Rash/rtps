@@ -22,14 +22,22 @@
 <body>
   <div class="shell">
     <div class="topbar">
-      <div class="titlebox">
-        <h1>График ППР</h1>
+      <!-- Верхняя строка: заголовок и функциональные кнопки -->
+      <div class="topbar-row">
+        <div class="titlebox">
+          <h1>График ППР</h1>
+        </div>
+        <div class="controls">
+          <a class="home-link" href="/" onclick="return requestHomeClick(event)">На главную</a>
+          {{TOOLBAR}}
+        </div>
       </div>
-      <div class="controls">
-      <a class="home-link" href="/" onclick="return requestHomeClick(event)">На главную</a>
-      <div class="nav" id="sectionNav"></div>
-      {{TOOLBAR}}
-      </div>
+
+      <!-- Разделитель между строками -->
+      <div class="topbar-divider"></div>
+
+      <!-- Нижняя строка: вкладки разделов -->
+      <div class="nav tabs" id="sectionNav" role="tablist" aria-label="Разделы"></div>
     </div>
     <div class="panel">
       <div id="content"></div>

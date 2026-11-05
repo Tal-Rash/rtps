@@ -18,23 +18,30 @@
 <body>
   <div class="shell">
     <div class="topbar">
-      <div class="titlebox">
-        <h1>АЛСН</h1>
-      </div>
-      <div class="controls">
-        <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
-        <div class="toolbar">
-          <button onclick="addRow()">+ строку</button>
-          <button onclick="removeRow()">- строку</button>
-          <button onclick="loadState()">🔄 Обновить</button>
-          <button id="saveBtn" style="display:none;" onclick="saveState()">Сохранить</button>
+      <!-- Верхняя строка: заголовок и функциональные кнопки -->
+      <div class="topbar-row">
+        <div class="titlebox">
+          <h1>АЛСН</h1>
+        </div>
+        <div class="controls">
+          <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
+          <div class="toolbar">
+            <button onclick="addRow()">+ строку</button>
+            <button onclick="removeRow()">- строку</button>
+            <button onclick="loadState()">🔄 Обновить</button>
+            <button id="saveBtn" class="primary" style="display:none;" onclick="saveState()">Сохранить</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="tabs" role="tablist" aria-label="Разделы">
-      <button id="tabLoc" class="tab active" type="button" onclick="setTab('locomotives')">Локомотивы</button>
-      <button id="tabWh" class="tab" type="button" onclick="setTab('warehouse')">Список ПБ</button>
+      <!-- Разделитель между строками -->
+      <div class="topbar-divider"></div>
+
+      <!-- Нижняя строка: вкладки разделов -->
+      <div class="tabs" role="tablist" aria-label="Разделы">
+        <button id="tabLoc" class="tab active" type="button" onclick="setTab('locomotives')">Локомотивы</button>
+        <button id="tabWh" class="tab" type="button" onclick="setTab('warehouse')">Список ПБ</button>
+      </div>
     </div>
 
     <div class="panel">

@@ -18,25 +18,32 @@
 <body>
   <div class="shell">
     <div class="topbar">
-      <div class="titlebox">
-        <h1>Обучение</h1>
+      <!-- Верхняя строка: заголовок и функциональные кнопки -->
+      <div class="topbar-row">
+        <div class="titlebox">
+          <h1>Обучение</h1>
+        </div>
+        <div class="controls">
+          <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
+          <div class="toolbar">
+            <label class="toggle-dismissed-label" id="toggleDismissedWrapper" title="Показать или скрыть уволенных сотрудников">
+              <input type="checkbox" id="chkShowDismissed" onchange="toggleDismissed(this.checked)">
+              <span id="toggleDismissedText">👥 Показывать уволенных</span>
+            </label>
+            <button class="btn btn-outline" onclick="openSettingsModal()" id="btnSettings">⚙ Настройка колонок</button>
+            <button id="saveBtn" class="btn btn-outline primary" style="display:none;" onclick="forceSave()">Сохранить</button>
+            <button class="btn btn-outline" onclick="loadState()">🔄 Обновить</button>
+          </div>
+        </div>
       </div>
-      <div class="controls">
-        <a class="home-link" href="{{MAIN_SITE_URL}}/">На главную</a>
-        <div class="nav" id="sectionNav">
-          <button class="nav-tab active" id="btnModeDates" onclick="setMode('dates')">📅 Даты</button>
-          <button class="nav-tab" id="btnModeProtocols" onclick="setMode('protocols')">📄 Протоколы</button>
-        </div>
-        
-        <div class="toolbar">
-          <label class="toggle-dismissed-label" id="toggleDismissedWrapper" title="Показать или скрыть уволенных сотрудников">
-            <input type="checkbox" id="chkShowDismissed" onchange="toggleDismissed(this.checked)">
-            <span id="toggleDismissedText">👥 Показывать уволенных</span>
-          </label>
-          <button class="btn btn-outline" onclick="openSettingsModal()" id="btnSettings">⚙ Настройка колонок</button>
-          <button id="saveBtn" class="btn btn-outline" style="display:none;" onclick="forceSave()">Сохранить</button>
-          <button class="btn btn-outline" onclick="loadState()">🔄 Обновить</button>
-        </div>
+
+      <!-- Разделитель между строками -->
+      <div class="topbar-divider"></div>
+
+      <!-- Нижняя строка: вкладки разделов -->
+      <div class="nav tabs" id="sectionNav" role="tablist" aria-label="Разделы">
+        <button class="nav-tab active" id="btnModeDates" onclick="setMode('dates')">📅 Даты</button>
+        <button class="nav-tab" id="btnModeProtocols" onclick="setMode('protocols')">📄 Протоколы</button>
       </div>
     </div>
     

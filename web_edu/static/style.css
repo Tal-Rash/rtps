@@ -33,22 +33,40 @@ body {
   width: 100%;
 }
 
+/* Единая шапка в стиле Замер КП */
 .topbar {
   position: sticky;
   top: 12px;
   z-index: 30;
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+/* Верхняя строка: заголовок и функциональные кнопки */
+.topbar-row {
+  display: flex;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  padding: 14px 16px;
-  margin-bottom: 14px;
-  background: #fff;
-  border: 1px solid var(--accent);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
+  width: 100%;
+}
+
+/* Разделитель между строками */
+.topbar-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 0;
+  opacity: 0.8;
+  width: 100%;
 }
 
 .titlebox h1 {
@@ -85,16 +103,25 @@ button,
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
-  padding: 10px 12px;
+  padding: 8px 12px;
   font: inherit;
+  font-weight: 500;
   color: var(--accent);
   text-decoration: none;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 button:hover:not(:disabled),
 .home-link:hover {
   background: var(--accent-soft);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+}
+
+button.primary, #saveBtn.primary {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
 }
 
 button:disabled {
@@ -102,9 +129,31 @@ button:disabled {
   cursor: default;
 }
 
+/* Нижняя строка: навигация по вкладкам */
+.nav-tab {
+  flex: 0 0 auto;
+  background: #fff;
+  border: 1px solid var(--accent);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--accent);
+  font: inherit;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.nav-tab:hover:not(:disabled) {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+}
+
 .nav-tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 2px 8px rgba(39, 110, 241, 0.25);
 }
 
 .badge {
@@ -126,10 +175,12 @@ button:disabled {
 .table-frame {
   width: 100%;
   border: 1px solid var(--accent);
-  border-radius: 8px;
-  background: #fff;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
   overflow: hidden;
+  padding: 8px;
 }
 
 .table-wrap {
