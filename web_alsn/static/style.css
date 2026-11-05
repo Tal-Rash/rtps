@@ -89,6 +89,7 @@ button.primary, #saveBtn.primary {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
   color: #fff !important;
+  font-weight: 500;
 }
 
 button.primary:hover, #saveBtn.primary:hover {

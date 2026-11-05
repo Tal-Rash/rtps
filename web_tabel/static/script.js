@@ -128,13 +128,9 @@ function markDirty(dirty) {
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.style.display = CAN_EDIT ? "inline-block" : "none";
-    if (dirty) {
-      btn.classList.add("dirty");
-      btn.textContent = "Сохранить*";
-    } else {
-      btn.classList.remove("dirty");
-      btn.textContent = "Сохранить";
-    }
+    btn.disabled = !CAN_EDIT;
+    btn.textContent = "Сохранить";
+    btn.classList.add("primary");
   }
   updateHistoryButtons();
 }
@@ -496,7 +492,7 @@ async function saveState() {
         btn.disabled = false;
         btn.textContent = `✗ Ошибка (${netElapsed}с)`;
         setTimeout(() => {
-          if (btn) btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
+          if (btn) btn.textContent = "Сохранить";
         }, 3000);
       }
       throw new Error(errMsg);
@@ -513,9 +509,9 @@ async function saveState() {
     if (btn) {
       btn.disabled = false;
       btn.textContent = `✓ Сохранено (${totalElapsed}с)`;
-      btn.classList.remove('dirty');
+      btn.classList.add('primary');
       setTimeout(() => {
-        if (btn && !isDirty) {
+        if (btn) {
           btn.textContent = "Сохранить";
         }
       }, 2500);
@@ -525,7 +521,7 @@ async function saveState() {
     alert("Ошибка сохранения: " + err.message);
     if (btn) {
       btn.disabled = false;
-      btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
+      btn.textContent = "Сохранить";
     }
   }
 }

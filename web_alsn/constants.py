@@ -15,7 +15,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 # Настройки авторизации и сессий
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/alsn"
-APP_VERSION = "web-alsn-1.6"
+APP_VERSION = "web-alsn-1.7"
 DB_LOCK = Lock()
 
 # URL-адреса для перенаправления и навигации

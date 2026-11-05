@@ -122,6 +122,13 @@ button.primary, #saveBtn.primary {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
   color: #fff !important;
+  font-weight: 500;
+}
+
+button.primary:hover:not(:disabled), #saveBtn.primary:hover:not(:disabled) {
+  background: #1f63df !important;
+  border-color: #1f63df !important;
+  color: #fff !important;
 }
 
 button:disabled {

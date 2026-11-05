@@ -174,7 +174,7 @@ EDIT_TOOLBAR = """
         <button id="cancelButton" type="button" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
         <button id="restoreButton" type="button" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
-        <button id="saveButton" onclick="saveState()">Сохранить</button>
+        <button id="saveButton" class="primary" onclick="saveState()">Сохранить</button>
       </div>
 """
 

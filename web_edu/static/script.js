@@ -421,9 +421,8 @@ function attachCellListeners() {
 function onCellInput(e) {
   const btn = document.getElementById("saveBtn");
   if (btn) {
-    btn.textContent = "Сохранить*";
-    btn.classList.add("dirty");
-    btn.classList.remove("btn-outline");
+    btn.textContent = "Сохранить";
+    btn.classList.add("primary");
   }
 }
 
@@ -612,8 +611,7 @@ function resetSaveBtn(text = "Сохранить") {
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = text;
-    btn.classList.remove("dirty");
-    btn.classList.add("btn-outline");
+    btn.classList.add("primary");
     if (text === "Сохранено!") {
       setTimeout(() => {
         if (btn.textContent === "Сохранено!") btn.textContent = "Сохранить";

@@ -754,8 +754,8 @@ function markDirty(dirty) {
   isDirty = dirty;
   const btn = document.getElementById("saveBtn");
   if (btn) {
-    btn.textContent = dirty ? "Сохранить*" : "Сохранить";
-    btn.classList.toggle("dirty", dirty);
+    btn.textContent = "Сохранить";
+    btn.classList.add("primary");
   }
   updateHistoryButtons();
 }
@@ -803,14 +803,15 @@ async function saveState() {
     updateHistoryButtons();
     if (btn) {
       btn.textContent = "Сохранено!";
+      btn.classList.add("primary");
       setTimeout(() => {
-        if (!isDirty && btn) btn.textContent = "Сохранить";
+        if (btn) btn.textContent = "Сохранить";
       }, 2000);
     }
   } catch (err) {
     console.error(err);
     alert("Ошибка сохранения: " + err.message);
-    if (btn) btn.textContent = isDirty ? "Сохранить*" : "Сохранить";
+    if (btn) btn.textContent = "Сохранить";
   } finally {
     if (btn) btn.disabled = false;
   }

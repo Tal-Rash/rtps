@@ -97,7 +97,8 @@ function markDirty(v=true){ dirty=v; updateSaveButtonState(); }
 function updateSaveButtonState(){
   const btn = document.getElementById('saveButton');
   if (!btn) return;
-  btn.classList.toggle('save-ready', !!dirty && !!CAN_EDIT);
+  btn.classList.add('primary');
+  btn.disabled = !CAN_EDIT;
 }
 function cloneState(value){
   return value ? JSON.parse(JSON.stringify(value)) : null;

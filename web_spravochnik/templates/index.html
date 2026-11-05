@@ -615,6 +615,13 @@ async function saveAll(){
   canceledState = null;
   updateHistoryButtons();
   updateSaveButton();
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.textContent = 'Сохранено!';
+    setTimeout(() => {
+      if (saveBtn) saveBtn.textContent = 'Сохранить';
+    }, 2000);
+  }
 }
 function cloneState(value){
   return value ? JSON.parse(JSON.stringify(value)) : null;
@@ -625,10 +632,10 @@ function hasUnsavedChanges(){
 function updateSaveButton(){
   const saveBtn = document.getElementById('saveBtn');
   if (!saveBtn) return;
-  const dirty = CAN_EDIT && hasUnsavedChanges();
-  saveBtn.classList.toggle('primary', dirty);
+  saveBtn.classList.add('primary');
   saveBtn.disabled = !CAN_EDIT;
-  saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Изменений нет';
+  const dirty = CAN_EDIT && hasUnsavedChanges();
+  saveBtn.title = dirty ? 'Есть несохранённые изменения' : 'Сохранить';
 }
 window.addEventListener('beforeunload', (event) => {
   if (!CAN_EDIT || !hasUnsavedChanges()) return;

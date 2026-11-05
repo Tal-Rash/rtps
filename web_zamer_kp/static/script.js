@@ -2756,6 +2756,13 @@ async function saveToArchive(){
   await loadArchive();
   setDirty(false);
   setStatus('Данные сохранены в архив');
+  const topSaveBtn = document.getElementById('saveBtn');
+  if (topSaveBtn) {
+    topSaveBtn.textContent = 'Сохранено!';
+    setTimeout(() => {
+      if (topSaveBtn) topSaveBtn.textContent = 'Сохранить';
+    }, 2000);
+  }
 }
 
 function cancelChanges(){

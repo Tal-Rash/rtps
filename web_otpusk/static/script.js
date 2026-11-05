@@ -2017,11 +2017,14 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(() => {
             saveBtn.textContent = 'Сохранено!';
             setTimeout(() => {
-                saveBtn.textContent = 'Сохранить изменения';
+                saveBtn.textContent = 'Сохранить';
             }, 2000);
         })
         .catch(err => {
             saveBtn.textContent = 'Ошибка';
+            setTimeout(() => {
+                saveBtn.textContent = 'Сохранить';
+            }, 3000);
             console.error(err);
         });
     });

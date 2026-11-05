@@ -41,6 +41,8 @@
     .toolbar input,select,textarea { border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; font:inherit; }
     .toolbar #yearInput { border-color:var(--accent); }
     .toolbar button { font-weight:400; }
+    .toolbar button.primary, button.primary, #saveButton.primary { background:var(--accent) !important; border-color:var(--accent) !important; color:#fff !important; font-weight:500; }
+    .toolbar button.primary:hover:not(:disabled), button.primary:hover:not(:disabled), #saveButton.primary:hover:not(:disabled) { background:#1f63df !important; border-color:#1f63df !important; color:#fff !important; }
     .toolbar button.save-ready { background:var(--accent); border-color:var(--accent); color:#fff; }
     .toolbar button.save-ready:hover { background:#1f63df; border-color:#1f63df; color:#fff; }
     .toolbar button.save-saving { background:#e2e8f0; border-color:#94a3b8; color:#475569; cursor:wait; }
