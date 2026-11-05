@@ -169,6 +169,10 @@ def get_mod_role(session: tuple[str, str, str, str] | None, mod_name: str) -> st
 
 EDIT_TOOLBAR = """
       <div class="toolbar">
+        <button id="addTopRowBtn" type="button" onclick="handleTopAddRow()">+ строку</button>
+        <button id="delTopRowBtn" type="button" onclick="handleTopDeleteRow()">- строку</button>
+        <button id="cancelButton" type="button" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
+        <button id="restoreButton" type="button" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
         <label>Год <select id="yearInput" onchange="loadYearFromInput()"></select></label>
         <button onclick="openReport()">Отчет</button>
         <button id="saveButton" onclick="saveState()">Сохранить</button>

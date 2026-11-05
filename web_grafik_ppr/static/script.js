@@ -109,6 +109,13 @@ function updateHistoryButtons(){
   if (restoreBtn) restoreBtn.style.display = '';
   if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedMonthsState;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledMonthsState;
+
+  // Обновление состояния кнопок добавления и удаления строки в верхней панели
+  const addBtn = document.getElementById('addTopRowBtn');
+  const delBtn = document.getElementById('delTopRowBtn');
+  const canModifyRows = CAN_EDIT && (ui.section === 'months' || ui.section === 'repairSchedule');
+  if (addBtn) addBtn.disabled = !canModifyRows;
+  if (delBtn) delBtn.disabled = !canModifyRows;
 }
 function ensureLeaveGuard(){
   if (!CAN_EDIT || leaveGuardInstalled) return;
@@ -847,25 +854,43 @@ function repairButtonsHtml(){
       </div>
     `;
 }
-function rowActionsHtml(){
-  return `
-      <div class="row-actions">
-        <button type="button" onclick="addRow('plan'); addRow('fact')">+ строку</button>
-        <button type="button" class="danger" onclick="deleteRow('plan'); deleteRow('fact')">- строку</button>
-        <button type="button" id="cancelButton" title="Отмена" aria-label="Отмена" onclick="cancelChanges()">↺</button>
-        <button type="button" id="restoreButton" title="Вернуть" aria-label="Вернуть" onclick="restoreChanges()">↻</button>
-      </div>
-  `;
+// Обработчик добавления строки из верхней панели управления
+function handleTopAddRow(){
+  if (!CAN_EDIT) return;
+  if (ui.section === 'repairSchedule') {
+    addRepairScheduleRow();
+  } else {
+    const m = currentMonth();
+    if (!m) return;
+    ['plan', 'fact'].forEach(type => {
+      if (!Array.isArray(m[type])) m[type] = [];
+      m[type].push({ excluded:false, cells:[String(m[type].length+1),'','','',...Array.from({length:m.days},()=>''),''] });
+    });
+    markDirty(true);
+    render();
+  }
 }
-function rowActionsSpacerHtml(){
-  return `
-      <div class="row-actions row-actions-spacer" aria-hidden="true">
-        <button type="button" tabindex="-1">+ строку</button>
-        <button type="button" tabindex="-1" class="danger">- строку</button>
-        <button type="button" tabindex="-1">↺</button>
-        <button type="button" tabindex="-1">↻</button>
-      </div>
-  `;
+
+// Обработчик удаления строки из верхней панели управления
+function handleTopDeleteRow(){
+  if (!CAN_EDIT) return;
+  if (ui.section === 'repairSchedule') {
+    deleteRepairScheduleRow();
+  } else {
+    const m = currentMonth();
+    if (!m) return;
+    let changed = false;
+    ['plan', 'fact'].forEach(type => {
+      if (Array.isArray(m[type]) && m[type].length > 0) {
+        m[type].pop();
+        changed = true;
+      }
+    });
+    if (changed) {
+      markDirty(true);
+      render();
+    }
+  }
 }
 function monthSelectHtml(){
   return `
@@ -1129,8 +1154,6 @@ function renderRepairSchedule(){
       <div class="section-title">График ремонтов</div>
       <div class="row-actions">
         <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="openRepairSchedulePeriodicity()">Периодичность</button>
-        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="deleteRepairScheduleRow()">- строку</button>
-        <button type="button" ${CAN_EDIT ? '' : 'disabled'} onclick="addRepairScheduleRow()">+ строку</button>
       </div>
     </div>
     <div class="table-wrap repair-schedule-wrap">
@@ -1882,14 +1905,15 @@ function renderMonthTable(type, title, m, headers){
     ...Array.from({length:m.days}, (_, d) => `<col style="width:36px" class="${dayClass(m.month, d + 1)}">`),
     '<col style="width:120px">'
   ].join('');
-  const controlsHtml = type === 'plan' ? rowActionsHtml() : rowActionsSpacerHtml();
   return `
     <div class="section-head month-table-head" style="margin-top:16px;">
       <div class="month-table-actions">
         ${repairButtonsHtml()}
       </div>
       <div class="section-title month-table-title">${title}</div>
-      ${controlsHtml}
+      <div class="month-table-actions-spacer" aria-hidden="true" style="visibility:hidden;">
+        ${repairButtonsHtml()}
+      </div>
     </div>
     <div class="table-wrap month-table-wrap">
       <table class="compact month-table">
