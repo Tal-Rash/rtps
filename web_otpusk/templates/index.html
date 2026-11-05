@@ -53,18 +53,24 @@
                 </div>
                 <div id="scheduleActions" class="tabs-actions">
                     <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>Очистить</button>
-                    <label class="toggle-control" id="badgeToggleLabel">
-                        <input type="checkbox" id="toggleBadges">
-                        <span>Скрыть кружочки</span>
-                    </label>
-                    <label class="toggle-control" id="carriedOverToggleLabel" title="Переключатель: считать ли отпуска, перешедшие с прошлого года, в итоговом занесено (факт)">
-                        <input type="checkbox" id="toggleCarriedOverFact">
-                        <span>Учитывать прошлый год в факте</span>
-                    </label>
-                    <label class="toggle-control" id="quittingToggleLabel" title="Переключатель: скрыть увольняемых сотрудников с отмеченным чекбоксом «исключить»">
-                        <input type="checkbox" id="toggleQuitting">
-                        <span>Скрыть увольняемых</span>
-                    </label>
+                    <!-- Выпадающий список фильтров -->
+                    <div class="filters-menu" id="filtersMenuWrap">
+                        <button id="filtersMenuBtn" type="button" class="dropdown-toggle" onclick="toggleFiltersMenu(event)" title="Фильтры отображения графика">Фильтры ▾</button>
+                        <div class="filters-menu-panel" id="filtersMenuPanel" onclick="event.stopPropagation()">
+                            <label class="toggle-control" id="badgeToggleLabel">
+                                <input type="checkbox" id="toggleBadges">
+                                <span>Скрыть кружочки</span>
+                            </label>
+                            <label class="toggle-control" id="carriedOverToggleLabel" title="Переключатель: считать ли отпуска, перешедшие с прошлого года, в итоговом занесено (факт)">
+                                <input type="checkbox" id="toggleCarriedOverFact">
+                                <span>Учитывать прошлый год в факте</span>
+                            </label>
+                            <label class="toggle-control" id="quittingToggleLabel" title="Переключатель: скрыть увольняемых сотрудников с отмеченным чекбоксом «исключить»">
+                                <input type="checkbox" id="toggleQuitting">
+                                <span>Скрыть увольняемых</span>
+                            </label>
+                        </div>
+                    </div>
                     <button id="holidaysBtn" type="button">Праздники</button>
                     <button id="versionsBtn" type="button">Версии</button>
                     <button id="exportScheduleBtn" type="button" class="export-btn" title="Выгрузить текущий график отпусков в Excel (.xlsx)">Экспорт в Excel</button>

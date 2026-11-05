@@ -94,9 +94,12 @@ body {
     gap: 8px;
     background: #f0f4fd;
     border: 1px solid var(--line);
-    padding: 4px 10px;
+    padding: 0 10px;
+    height: 40px;
+    min-height: 40px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 15px;
+    box-sizing: border-box;
 }
 
 button:disabled {
@@ -108,7 +111,7 @@ button:disabled {
 .year-select {
     border: 1px solid var(--line);
     border-radius: 6px;
-    padding: 5px 10px;
+    padding: 4px 8px;
     font-size: 15px;
     font-weight: 700;
     color: var(--blue-dark);
@@ -116,6 +119,7 @@ button:disabled {
     cursor: pointer;
     outline: none;
     transition: all 0.15s ease;
+    height: 30px;
 }
 
 .year-select:focus, .year-select:hover {
@@ -130,22 +134,37 @@ button:disabled {
     flex-wrap: wrap;
 }
 
-/* RTPS Button & Link Styles */
+/* Кнопки отмены и повтора */
+#undoBtn, #redoBtn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+    justify-content: center;
+}
+
+/* Стили кнопок и ссылок RTPS */
 button, .home-link {
     border: 1px solid var(--line);
     border-radius: 8px;
     background: #ffffff;
     color: var(--blue-dark);
-    padding: 9px 14px;
+    padding: 10px 14px;
+    min-height: 40px;
     font: inherit;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     text-decoration: none;
     cursor: pointer;
     transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    box-sizing: border-box;
 }
 
 button:hover, .home-link:hover {
@@ -180,33 +199,110 @@ button.export-btn:hover, .btn-export-excel:hover {
     box-shadow: 0 4px 12px rgba(16, 124, 65, 0.3);
 }
 
-/* Toggle Switch Control */
+/* Выпадающее меню фильтров */
+.filters-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+#filtersMenuBtn {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-height: 40px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--blue-dark);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+}
+
+#filtersMenuBtn:hover {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.12);
+}
+
+#filtersMenuBtn.has-active {
+    border-color: var(--blue);
+    background: var(--accent-soft);
+    font-weight: 600;
+}
+
+.filter-badge-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--blue);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    padding: 0 4px;
+    margin-left: 2px;
+}
+
+.filters-menu-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 16px 32px rgba(16, 32, 51, 0.16);
+    z-index: 100;
+    min-width: 290px;
+    max-width: calc(100vw - 32px);
+    white-space: nowrap;
+}
+
+.filters-menu.open .filters-menu-panel {
+    display: flex;
+}
+
+/* Переключатели и чекбоксы */
 .toggle-control {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
     color: var(--text);
     user-select: none;
     background: #ffffff;
-    border: 1px solid var(--line);
-    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    padding: 9px 12px;
     border-radius: 8px;
     transition: all 0.15s ease;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .toggle-control:hover {
     background: var(--accent-soft);
+    border-color: var(--blue);
     box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.12);
 }
 
 .toggle-control input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
+    width: 17px;
+    height: 17px;
     cursor: pointer;
     accent-color: var(--blue);
+    margin: 0;
+    flex-shrink: 0;
 }
 
 /* Основная панель содержимого */
@@ -661,21 +757,32 @@ body.hide-badges .overflow-tag {
     flex-wrap: wrap;
 }
 
+.tabs-actions button {
+    min-height: 40px;
+    padding: 10px 14px;
+    font-size: 15px;
+    font-weight: 500;
+}
+
 .tab, .tab-btn {
     flex: 0 0 auto;
     border: 1px solid var(--blue) !important;
     border-radius: 8px !important;
     background: #ffffff !important;
     color: var(--blue) !important;
-    padding: 8px 14px !important;
+    padding: 10px 16px !important;
+    min-height: 40px;
     font: inherit;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
     text-decoration: none;
     box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
 }
 
 .tab:hover:not(:disabled), .tab-btn:hover:not(:disabled) {

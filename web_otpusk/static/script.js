@@ -33,6 +33,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveHolidaysBtn = document.getElementById('saveHolidaysBtn');
     const holidaysTableBody = document.getElementById('holidaysTableBody');
 
+    // Элементы выпадающего меню фильтров
+    const filtersMenuWrap = document.getElementById('filtersMenuWrap');
+    const filtersMenuBtn = document.getElementById('filtersMenuBtn');
+
+    // Функция переключения состояния меню фильтров
+    window.toggleFiltersMenu = function(e) {
+        if (e) e.stopPropagation();
+        if (filtersMenuWrap) {
+            filtersMenuWrap.classList.toggle('open');
+        }
+    };
+
+    // Закрытие меню фильтров при клике вне его области
+    document.addEventListener('click', (e) => {
+        if (filtersMenuWrap && filtersMenuWrap.classList.contains('open')) {
+            if (!filtersMenuWrap.contains(e.target)) {
+                filtersMenuWrap.classList.remove('open');
+            }
+        }
+    });
+
+    // Закрытие меню фильтров по клавише Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && filtersMenuWrap && filtersMenuWrap.classList.contains('open')) {
+            filtersMenuWrap.classList.remove('open');
+        }
+    });
+
+    const toggleQuitting = document.getElementById('toggleQuitting');
+
+    // Обновление счётчика активных фильтров на кнопке
+    function updateFiltersBadge() {
+        if (!filtersMenuBtn) return;
+        let count = 0;
+        if (toggleBadges && toggleBadges.checked) count++;
+        if (toggleCarriedOverFact && toggleCarriedOverFact.checked) count++;
+        if (toggleQuitting && toggleQuitting.checked) count++;
+
+        if (count > 0) {
+            filtersMenuBtn.innerHTML = `Фильтры <span class="filter-badge-count">${count}</span> ▾`;
+            filtersMenuBtn.classList.add('has-active');
+        } else {
+            filtersMenuBtn.innerHTML = 'Фильтры ▾';
+            filtersMenuBtn.classList.remove('has-active');
+        }
+    }
+
     if (toggleBadges) {
         toggleBadges.addEventListener('change', (e) => {
             if (e.target.checked) {
@@ -40,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 document.body.classList.remove('hide-badges');
             }
+            updateFiltersBadge();
         });
     }
 
@@ -54,10 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleCarriedOverFact.addEventListener('change', (e) => {
             localStorage.setItem('rtps_include_carried_fact', e.target.checked ? '1' : '0');
             updateTotals();
+            updateFiltersBadge();
         });
     }
 
-    const toggleQuitting = document.getElementById('toggleQuitting');
     if (toggleQuitting) {
         const savedHideQuitting = localStorage.getItem('rtps_hide_quitting');
         toggleQuitting.checked = (savedHideQuitting === '1');
@@ -65,8 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleQuitting.addEventListener('change', (e) => {
             localStorage.setItem('rtps_hide_quitting', e.target.checked ? '1' : '0');
             applyQuittingFilter();
+            updateFiltersBadge();
         });
     }
+
+    // Первичная инициализация бейджа фильтров
+    updateFiltersBadge();
 
     // Применение фильтрации и исключения увольняемых сотрудников
     function applyQuittingFilter() {
