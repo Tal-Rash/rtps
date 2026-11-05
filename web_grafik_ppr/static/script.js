@@ -44,7 +44,8 @@ const REPAIR_SUMMARY_FIXED_HOLIDAYS = new Set([
   '02-23', '03-08', '05-01', '05-09', '06-12', '11-04',
 ]);
 const KP_RECHECK_DAYS = 30;
-const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'report',label:'Отчет'},{id:'norms',label:'Нормы / парк'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
+// Разделы в левой части навигации
+const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'report',label:'Отчет'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
 
@@ -761,15 +762,23 @@ function handleMonthKeydown(e){
 function bindNav(){
   const reportModal = document.getElementById('reportModal');
   const isReportOpen = reportModal && reportModal.classList.contains('visible');
-  document.getElementById('sectionNav').innerHTML = sections.map(s => {
-    let isActive = false;
-    if (s.id === 'report') {
-      isActive = isReportOpen;
-    } else {
-      isActive = (ui.section === s.id || ui.modal === s.id) && !isReportOpen;
-    }
-    return `<button class="${isActive ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`;
-  }).join('');
+  const nav = document.getElementById('sectionNav');
+  if (nav) {
+    nav.innerHTML = sections.map(s => {
+      let isActive = false;
+      if (s.id === 'report') {
+        isActive = isReportOpen;
+      } else {
+        isActive = (ui.section === s.id || ui.modal === s.id) && !isReportOpen;
+      }
+      return `<button class="${isActive ? 'active' : ''}" onclick="setSection('${s.id}')">${s.label}</button>`;
+    }).join('');
+  }
+  // Обновляем активность кнопки "Нормы / парк" в правой части
+  const normsBtn = document.getElementById('normsBtn');
+  if (normsBtn) {
+    normsBtn.classList.toggle('active', ui.modal === 'norms');
+  }
 }
 function setSection(section){
   closeReportModal();

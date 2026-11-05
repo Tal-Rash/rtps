@@ -56,8 +56,38 @@
       flex-wrap:wrap;
       width:100%;
     }
-    .tabs-row .json-menu {
+    /* Действия и меню справа в строке вкладок */
+    .tabs-actions {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
       margin-left:auto;
+      flex-wrap:wrap;
+    }
+    .tabs-actions > button,
+    .tabs-actions .nav-tab {
+      background:#fff;
+      border:1px solid var(--accent);
+      padding:8px 14px;
+      border-radius:8px;
+      font-weight:500;
+      cursor:pointer;
+      color:var(--accent);
+      font:inherit;
+      transition:all 0.15s ease;
+      white-space:nowrap;
+    }
+    .tabs-actions > button:hover:not(:disabled),
+    .tabs-actions .nav-tab:hover:not(:disabled) {
+      background:var(--soft);
+      box-shadow:0 0 0 2px rgba(39,110,241,0.12);
+    }
+    .tabs-actions > button.active,
+    .tabs-actions .nav-tab.active {
+      background:var(--accent) !important;
+      color:#fff !important;
+      border-color:var(--accent) !important;
+      box-shadow:0 2px 8px rgba(39,110,241,0.25);
     }
     .json-menu { position:relative; display:inline-flex; }
     .json-menu > button {

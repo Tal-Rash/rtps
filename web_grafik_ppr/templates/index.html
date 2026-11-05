@@ -36,14 +36,17 @@
       <!-- Разделитель между строками -->
       <div class="topbar-divider"></div>
 
-      <!-- Нижняя строка: вкладки разделов и импорт/экспорт -->
+      <!-- Нижняя строка: вкладки разделов слева и действия справа -->
       <div class="tabs-row">
         <div class="nav tabs" id="sectionNav" role="tablist" aria-label="Разделы"></div>
-        <div class="json-menu" id="jsonMenuWrap">
-          <button type="button" onclick="toggleJsonMenu(event)">Импорт / Экспорт</button>
-          <div class="json-menu-panel" id="jsonMenuPanel" aria-hidden="true">
-            <button type="button" onclick="downloadJson(); closeJsonMenu()">Экспорт JSON</button>
-            <button type="button" id="importJsonBtn" onclick="triggerImportJson()">Импорт JSON</button>
+        <div class="tabs-actions">
+          <button type="button" id="normsBtn" class="nav-tab" onclick="setSection('norms')">Нормы / парк</button>
+          <div class="json-menu" id="jsonMenuWrap">
+            <button type="button" onclick="toggleJsonMenu(event)">Импорт / Экспорт</button>
+            <div class="json-menu-panel" id="jsonMenuPanel" aria-hidden="true">
+              <button type="button" onclick="downloadJson(); closeJsonMenu()">Экспорт JSON</button>
+              <button type="button" id="importJsonBtn" onclick="triggerImportJson()">Импорт JSON</button>
+            </div>
           </div>
         </div>
         <input id="importFile" type="file" accept=".json,application/json" style="display:none" onchange="importJson(event)">
