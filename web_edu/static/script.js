@@ -421,10 +421,13 @@ function attachCellListeners() {
 }
 
 function onCellInput(e) {
+  const cell = e.target;
+  const currentText = String(cell ? cell.innerText : "").trim();
+  const originalText = String(cell && cell.dataset ? cell.dataset.original : "").trim();
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = "Сохранить";
-    btn.classList.add("primary");
+    btn.classList.toggle("primary", currentText !== originalText);
   }
 }
 

@@ -93,7 +93,16 @@ function closeErrorModal(){
   modal.classList.remove('visible');
   modal.setAttribute('aria-hidden', 'true');
 }
-function markDirty(v=true){ dirty=v; updateSaveButtonState(); }
+function markDirty(v=true){
+  if (v === false) {
+    dirty = false;
+  } else if (savedMonthsState && appState && appState.months) {
+    dirty = !!(CAN_EDIT && JSON.stringify(appState.months) !== JSON.stringify(savedMonthsState));
+  } else {
+    dirty = !!v;
+  }
+  updateSaveButtonState();
+}
 function updateSaveButtonState(){
   const btn = document.getElementById('saveButton');
   if (!btn) return;
@@ -108,7 +117,7 @@ function updateHistoryButtons(){
   const restoreBtn = document.getElementById('restoreButton');
   if (cancelBtn) cancelBtn.style.display = '';
   if (restoreBtn) restoreBtn.style.display = '';
-  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedMonthsState;
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !dirty;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledMonthsState;
 
   // Обновление состояния кнопок добавления и удаления строки в верхней панели

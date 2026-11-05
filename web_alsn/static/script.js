@@ -753,11 +753,17 @@ function restoreChanges() {
 
 /* Обновление индикатора несохраненных изменений */
 function markDirty(dirty) {
-  isDirty = dirty;
+  if (dirty === false) {
+    isDirty = false;
+  } else if (savedState && appState) {
+    isDirty = !!(CAN_EDIT && JSON.stringify(appState) !== JSON.stringify(savedState));
+  } else {
+    isDirty = !!dirty;
+  }
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.textContent = "Сохранить";
-    btn.classList.toggle("primary", !!dirty && !!CAN_EDIT);
+    btn.classList.toggle("primary", !!isDirty && !!CAN_EDIT);
   }
   updateHistoryButtons();
 }

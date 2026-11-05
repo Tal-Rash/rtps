@@ -211,13 +211,19 @@ function restoreChanges() {
 }
 
 function markDirty(dirty) {
-  isDirty = dirty;
+  if (dirty === false) {
+    isDirty = false;
+  } else if (savedState) {
+    isDirty = !!(CAN_EDIT && JSON.stringify(appState) !== JSON.stringify(savedState));
+  } else {
+    isDirty = !!dirty;
+  }
   const btn = document.getElementById("saveBtn");
   if (btn) {
     btn.style.display = CAN_EDIT ? "inline-block" : "none";
     btn.disabled = !CAN_EDIT;
     btn.textContent = "Сохранить";
-    btn.classList.toggle("primary", !!dirty && !!CAN_EDIT);
+    btn.classList.toggle("primary", !!isDirty && !!CAN_EDIT);
   }
   updateHistoryButtons();
 }

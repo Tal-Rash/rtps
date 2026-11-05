@@ -933,7 +933,13 @@ function setStatus(text){
   document.getElementById('status').textContent = text || '';
 }
 function setDirty(flag){
-  dirty = !!flag;
+  if (flag === false) {
+    dirty = false;
+  } else if (savedState && state) {
+    dirty = !!(CAN_EDIT && JSON.stringify(state) !== JSON.stringify(savedState));
+  } else {
+    dirty = !!flag;
+  }
   updateHistoryButtons();
   const saveBtn = document.getElementById('saveBtn');
   if (saveBtn) {
@@ -948,7 +954,7 @@ function updateHistoryButtons(){
   const restoreBtn = document.getElementById('restoreBtn');
   if (cancelBtn) cancelBtn.style.display = '';
   if (restoreBtn) restoreBtn.style.display = '';
-  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !savedState;
+  if (cancelBtn) cancelBtn.disabled = !CAN_EDIT || !dirty;
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || !canceledState;
 }
 function setActiveTab(tab){
