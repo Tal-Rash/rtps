@@ -207,6 +207,58 @@ button.primary:hover:not(:disabled),
   border: 1px solid var(--accent);
 }
 
+/* Нижняя строка: контейнер для вкладок разделов слева и действий справа */
+.tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.tabs-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.tabs-actions button {
+  background: #fff;
+  border: 1px solid var(--accent);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--accent);
+  font: inherit;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tabs-actions button:hover:not(:disabled) {
+  background: var(--soft);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
+}
+
+.tabs-actions .json-menu-panel button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--accent);
+  padding: 8px 12px;
+  background: #fff;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.tabs-actions .json-menu-panel button:hover {
+  background: var(--soft);
+  color: var(--accent);
+}
+
 /* Нижняя строка: навигация по разделам */
 .nav {
   display: flex;
