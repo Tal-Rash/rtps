@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 # Константы и конфигурация для модуля График ППР
-APP_VERSION = "web-gpp-1.30"
+APP_VERSION = "web-gpp-1.31"
 
 # Месяцы на русском языке
 MONTHS_RU = [

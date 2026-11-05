@@ -44,8 +44,8 @@ const REPAIR_SUMMARY_FIXED_HOLIDAYS = new Set([
   '02-23', '03-08', '05-01', '05-09', '06-12', '11-04',
 ]);
 const KP_RECHECK_DAYS = 30;
-// Разделы в левой части навигации
-const sections = [{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'report',label:'Отчет'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
+// Разделы в левой части навигации: График месячный, График ремонтов, Сводка, Отчет, Акты, ТУ-28
+const sections = [{id:'months',label:'График месячный'},{id:'repairSchedule',label:'График ремонтов'},{id:'repairSummary',label:'Сводка'},{id:'report',label:'Отчет'},{id:'acts',label:'Акты'},{id:'tu28',label:'ТУ-28'}];
 let leaveGuardInstalled = false;
 let pendingLeaveAction = null;
 
@@ -768,6 +768,8 @@ function bindNav(){
       let isActive = false;
       if (s.id === 'report') {
         isActive = isReportOpen;
+      } else if (s.id === 'months') {
+        isActive = (ui.section === 'months') && !ui.modal && !isReportOpen;
       } else {
         isActive = (ui.section === s.id || ui.modal === s.id) && !isReportOpen;
       }
@@ -782,6 +784,14 @@ function bindNav(){
 }
 function setSection(section){
   closeReportModal();
+  // Переход к разделу "График месячный"
+  if (section === 'months') {
+    ui.modal = null;
+    ui.section = 'months';
+    clearRepairScheduleSelection();
+    render();
+    return;
+  }
   if (section === 'report') {
     openReport();
     return;
