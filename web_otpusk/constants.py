@@ -14,7 +14,7 @@ WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 
 # Настройки префикса и сессий
 APP_PREFIX = "/otpusk"
-APP_VERSION = "web-otpusk-3.7"
+APP_VERSION = "web-otpusk-3.8"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 

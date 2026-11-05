@@ -14,7 +14,7 @@ WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 # Настройки авторизации и сессий
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/edu"
-APP_VERSION = "web-edu-3.6"
+APP_VERSION = "web-edu-3.7"
 DB_LOCK = Lock()
 
 # URL-адреса для перенаправления и навигации

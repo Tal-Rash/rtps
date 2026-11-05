@@ -126,6 +126,8 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  initUnsavedChangesModal();
 });
 
 function escapeHtml(value) {
@@ -777,6 +779,77 @@ function forceSave() {
     resetSaveBtn("Сохранено!");
   }
 }
+
+function isEduDirty() {
+  const btn = document.getElementById("saveBtn");
+  return !!(btn && btn.classList.contains("primary"));
+}
+
+let pendingLeaveAction = null;
+
+function checkUnsavedBeforeLeave(action, message) {
+  if (!isEduDirty() || !CAN_EDIT) {
+    action();
+    return;
+  }
+  pendingLeaveAction = action;
+  const modal = document.getElementById('unsavedChangesModal');
+  const msgEl = document.getElementById('unsavedChangesMessage');
+  if (msgEl && message) msgEl.textContent = message;
+  if (modal) modal.style.display = 'flex';
+}
+
+function handleHomeClick(event) {
+  if (event) event.preventDefault();
+  const mainUrl = (window.APP_CONFIG && window.APP_CONFIG.MAIN_SITE_URL) ? window.APP_CONFIG.MAIN_SITE_URL : "http://yrtps.ru";
+  checkUnsavedBeforeLeave(() => {
+    resetSaveBtn();
+    window.location.href = mainUrl + "/";
+  }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
+  return false;
+}
+
+function initUnsavedChangesModal() {
+  const modal = document.getElementById('unsavedChangesModal');
+  const saveBtn = document.getElementById('unsavedSaveBtn');
+  const discardBtn = document.getElementById('unsavedDiscardBtn');
+  const cancelBtn = document.getElementById('unsavedCancelBtn');
+
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      forceSave();
+      resetSaveBtn();
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      if (act) act();
+    };
+  }
+
+  if (discardBtn) {
+    discardBtn.onclick = () => {
+      resetSaveBtn();
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      if (act) act();
+    };
+  }
+
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      pendingLeaveAction = null;
+      if (modal) modal.style.display = 'none';
+    };
+  }
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (isEduDirty() && CAN_EDIT) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 /* Автоматическая инициализация пользовательских меток таблиц для модуля Обучение */
 function getEmpReplacementPairs() {

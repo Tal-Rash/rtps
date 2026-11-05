@@ -56,12 +56,13 @@
   <div id="leaveModal" class="modal-overlay" aria-hidden="true">
     <div class="modal-window leave-window" onclick="event.stopPropagation()">
       <div class="modal-head">
-        <div class="section-title" style="margin:0 auto;">Сохранить изменения?</div>
+        <div class="section-title" style="margin:0 auto;">Несохранённые изменения</div>
       </div>
-      <div id="leaveMessage" class="leave-body">Есть несохранённые изменения.</div>
+      <div id="leaveMessage" class="leave-body">Есть несохранённые изменения. Сохранить их перед переходом?</div>
       <div class="section-modal-actions">
-        <button onclick="resolveLeaveChoice(true)">Да</button>
-        <button class="primary" onclick="resolveLeaveChoice(false)">Нет</button>
+        <button class="primary" onclick="resolveLeaveChoice('save')">Сохранить</button>
+        <button onclick="resolveLeaveChoice('discard')">Не сохранять</button>
+        <button onclick="resolveLeaveChoice('cancel')">Отмена</button>
       </div>
     </div>
   </div>

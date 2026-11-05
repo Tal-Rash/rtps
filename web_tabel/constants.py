@@ -15,7 +15,7 @@ WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 # Настройки авторизации и сессий
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/tabel"
-APP_VERSION = "web-tabel-1.66"
+APP_VERSION = "web-tabel-1.67"
 DB_LOCK = Lock()
 
 # Адрес страницы входа (по умолчанию относительный URL для работы по HTTPS)

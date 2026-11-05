@@ -119,15 +119,14 @@ function updateHistoryButtons(){
   if (delBtn) delBtn.disabled = !canModifyRows;
 }
 function ensureLeaveGuard(){
-  if (!CAN_EDIT || leaveGuardInstalled) return;
-  history.pushState({leaveGuard:true}, '', location.href);
+  // Оставляем флаг для совместимости
   leaveGuardInstalled = true;
 }
 function openLeaveModal(message, action){
   pendingLeaveAction = action;
   const modal = document.getElementById('leaveModal');
   const body = document.getElementById('leaveMessage');
-  if (body) body.textContent = message || 'Есть несохранённые изменения.';
+  if (body) body.textContent = message || 'Есть несохранённые изменения. Сохранить их перед переходом?';
   if (!modal) return;
   modal.classList.add('visible');
   modal.setAttribute('aria-hidden', 'false');
@@ -138,12 +137,22 @@ function closeLeaveModal(){
   modal.classList.remove('visible');
   modal.setAttribute('aria-hidden', 'true');
 }
-async function resolveLeaveChoice(shouldSave){
+async function resolveLeaveChoice(choice){
+  if (choice === 'cancel' || choice === false && choice !== 'discard') {
+    pendingLeaveAction = null;
+    closeLeaveModal();
+    return;
+  }
   const action = pendingLeaveAction;
   if (!action) return;
-  if (shouldSave && dirty && CAN_EDIT) {
-    await saveState({refreshReport:false});
-    if (dirty) return;
+  if (choice === 'save' || choice === true) {
+    if (dirty && CAN_EDIT) {
+      await saveState({refreshReport:false});
+      if (dirty) return;
+    }
+  } else if (choice === 'discard') {
+    dirty = false;
+    updateSaveButtonState();
   }
   pendingLeaveAction = null;
   closeLeaveModal();
@@ -3082,10 +3091,6 @@ function restoreChanges(){
   render();
 }
 window.addEventListener('beforeunload', (e)=>{ if (dirty && CAN_EDIT) { e.preventDefault(); e.returnValue=''; } });
-window.addEventListener('popstate', () => {
-  if (!leaveGuardInstalled || !CAN_EDIT) return;
-  promptLeave('Есть несохранённые изменения. Сохранить перед уходом?', () => { location.href = '/'; });
-});
 savedAppState = cloneState(appState);
 savedMonthsState = cloneState(appState.months);
 updateHistoryButtons();

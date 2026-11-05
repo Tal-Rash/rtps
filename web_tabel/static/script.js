@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const d = new Date();
   document.getElementById("yearInput").value = d.getFullYear();
   document.getElementById("monthInput").value = d.getMonth() + 1;
+  currentLoadedYear = d.getFullYear();
+  initUnsavedChangesModal();
   loadState();
 
   // Горячие клавиши отмены (Ctrl+Z) и возврата (Ctrl+Y / Ctrl+Shift+Z)
@@ -26,9 +28,93 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+let pendingLeaveAction = null;
+let currentLoadedYear = null;
+
+function checkUnsavedBeforeLeave(action, message) {
+  if (!isDirty || !CAN_EDIT) {
+    action();
+    return;
+  }
+  pendingLeaveAction = action;
+  const modal = document.getElementById('unsavedChangesModal');
+  const msgEl = document.getElementById('unsavedChangesMessage');
+  if (msgEl && message) msgEl.textContent = message;
+  if (modal) modal.style.display = 'flex';
+}
+
+function handleHomeClick(event) {
+  if (event) event.preventDefault();
+  const targetUrl = event && event.currentTarget ? event.currentTarget.getAttribute('href') : 'http://yrtps.ru/';
+  checkUnsavedBeforeLeave(() => {
+    isDirty = false;
+    location.href = targetUrl;
+  }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
+  return false;
+}
+
+function handleYearChange(event) {
+  const newYear = document.getElementById("yearInput").value;
+  checkUnsavedBeforeLeave(() => {
+    currentLoadedYear = newYear;
+    loadState();
+  }, 'Есть несохранённые изменения. Сохранить их перед сменой года?');
+  if (isDirty && currentLoadedYear) {
+    document.getElementById("yearInput").value = currentLoadedYear;
+  }
+}
+
+function initUnsavedChangesModal() {
+  const modal = document.getElementById('unsavedChangesModal');
+  const saveBtn = document.getElementById('unsavedSaveBtn');
+  const discardBtn = document.getElementById('unsavedDiscardBtn');
+  const cancelBtn = document.getElementById('unsavedCancelBtn');
+
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Сохранение...';
+      try {
+        await saveState();
+      } catch (e) {
+        console.error(e);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Сохранить';
+        return;
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить';
+      markDirty(false);
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      if (act) act();
+    };
+  }
+
+  if (discardBtn) {
+    discardBtn.onclick = () => {
+      markDirty(false);
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      if (act) act();
+    };
+  }
+
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      pendingLeaveAction = null;
+      if (modal) modal.style.display = 'none';
+    };
+  }
+}
+
 function setMonth(val) {
-  document.getElementById("monthInput").value = val;
-  loadState();
+  checkUnsavedBeforeLeave(() => {
+    document.getElementById("monthInput").value = val;
+    loadState();
+  }, 'Есть несохранённые изменения. Сохранить их перед переключением месяца?');
 }
 
 function renderMonthButtons() {

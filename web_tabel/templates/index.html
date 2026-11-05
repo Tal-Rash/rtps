@@ -27,11 +27,11 @@
           <h1>Табель учета</h1>
         </div>
         <div class="controls">
-          <a class="home-link" href="http://yrtps.ru/">На главную</a>
+          <a class="home-link" href="http://yrtps.ru/" onclick="return handleHomeClick(event)">На главную</a>
           <div class="toolbar">
             <button id="cancelBtn" title="Отмена (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
             <button id="restoreBtn" title="Вернуть (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
-            <label>Год: <input type="number" id="yearInput" onchange="loadState()" min="2000" max="2100" style="width:80px; padding: 6px;"></label>
+            <label>Год: <input type="number" id="yearInput" onchange="handleYearChange(event)" min="2000" max="2100" style="width:80px; padding: 6px;"></label>
             <input type="hidden" id="monthInput" value="6">
             <button onclick="saveState()" id="saveBtn">Сохранить</button>
           </div>
@@ -195,6 +195,19 @@
   .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 400px; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
   .modal-header { background: #e8e8e8; padding: 10px; font-weight: bold; border-bottom: 1px solid #ccc; }
   </style>
+
+  <!-- Модальное окно подтверждения при несохранённых изменениях -->
+  <div id="unsavedChangesModal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(16,32,51,0.48); z-index:99999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <div style="background:#ffffff; border-radius:16px; padding:24px 28px; max-width:440px; width:90%; box-shadow:0 16px 40px rgba(16,32,51,0.2); text-align:center; font-family:inherit; border:1px solid #d9e2ef;">
+      <h3 style="margin:0 0 10px; font-size:18px; color:#102033; font-weight:700;">Несохранённые изменения</h3>
+      <p id="unsavedChangesMessage" style="margin:0 0 20px; font-size:14px; color:#475569; line-height:1.45;">Есть несохранённые изменения. Сохранить их перед переходом?</p>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        <button id="unsavedSaveBtn" type="button" class="primary" style="padding:9px 18px; border-radius:8px; font-weight:600; cursor:pointer;">Сохранить</button>
+        <button id="unsavedDiscardBtn" type="button" style="padding:9px 18px; border-radius:8px; font-weight:600; cursor:pointer; background:#ffffff; border:1px solid #cbd5e1; color:#334155;">Не сохранять</button>
+        <button id="unsavedCancelBtn" type="button" style="padding:9px 18px; border-radius:8px; font-weight:600; cursor:pointer; background:#ffffff; border:1px solid #cbd5e1; color:#64748b;">Отмена</button>
+      </div>
+    </div>
+  </div>
 
   <script src="{{APP_PREFIX}}/static/jszip.min.js"></script>
   <script src="{{APP_PREFIX}}/static/xlsx.full.min.js"></script>

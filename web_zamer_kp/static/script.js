@@ -2641,12 +2641,17 @@ async function switchLocomotive(next){
     return;
   }
   if (dirty && current) {
-    const ok = confirm('Есть несохранённые изменения. Сохранить перед сменой локомотива?');
-    if (!ok) {
+    checkUnsavedBeforeLeave(async () => {
+      const known = isKnownLocomotive(next);
+      if (!known) {
+        document.getElementById('locomotive').value = current;
+        return;
+      }
+      await loadState(next);
+    }, 'Есть несохранённые изменения. Сохранить перед сменой локомотива?', () => {
       document.getElementById('locomotive').value = current;
-      return;
-    }
-    await saveDraft();
+    });
+    return;
   }
   const known = isKnownLocomotive(next);
   if (!known) {
@@ -2802,6 +2807,92 @@ function restoreChanges(){
   canceledState = null;
   canceledRepairType = '';
 }
+
+let pendingLeaveAction = null;
+let pendingCancelCallback = null;
+
+function checkUnsavedBeforeLeave(action, message, cancelCallback) {
+  if (!dirty || !CAN_EDIT) {
+    action();
+    return;
+  }
+  pendingLeaveAction = action;
+  pendingCancelCallback = cancelCallback || null;
+  const modal = document.getElementById('unsavedChangesModal');
+  const msgEl = document.getElementById('unsavedChangesMessage');
+  if (msgEl && message) msgEl.textContent = message;
+  if (modal) modal.style.display = 'flex';
+}
+
+function handleHomeClick(event) {
+  if (event) event.preventDefault();
+  const targetUrl = event && event.currentTarget ? event.currentTarget.getAttribute('href') : 'http://yrtps.ru/';
+  checkUnsavedBeforeLeave(() => {
+    setDirty(false);
+    location.href = targetUrl;
+  }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
+  return false;
+}
+
+function initUnsavedChangesModal() {
+  const modal = document.getElementById('unsavedChangesModal');
+  const saveBtn = document.getElementById('unsavedSaveBtn');
+  const discardBtn = document.getElementById('unsavedDiscardBtn');
+  const cancelBtn = document.getElementById('unsavedCancelBtn');
+
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Сохранение...';
+      try {
+        await saveDraft();
+      } catch (e) {
+        console.error(e);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Сохранить';
+        return;
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить';
+      setDirty(false);
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      pendingCancelCallback = null;
+      if (act) act();
+    };
+  }
+
+  if (discardBtn) {
+    discardBtn.onclick = () => {
+      setDirty(false);
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      pendingCancelCallback = null;
+      if (act) act();
+    };
+  }
+
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      const cancelCb = pendingCancelCallback;
+      pendingLeaveAction = null;
+      pendingCancelCallback = null;
+      if (modal) modal.style.display = 'none';
+      if (cancelCb) cancelCb();
+    };
+  }
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (dirty && CAN_EDIT) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+initUnsavedChangesModal();
 
 document.getElementById('locomotive')?.addEventListener('change', onLocomotiveCommit);
 document.addEventListener('mouseup', () => {

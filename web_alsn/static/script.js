@@ -42,6 +42,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  initUnsavedChangesModal();
+
   // Предупреждение о несохраненных данных при закрытии страницы
   window.addEventListener("beforeunload", (e) => {
     if (isDirty) {
@@ -816,15 +818,73 @@ async function saveState() {
   }
 }
 
+let pendingLeaveAction = null;
+
+function checkUnsavedBeforeLeave(action, message) {
+  if (!isDirty || !CAN_EDIT) {
+    action();
+    return;
+  }
+  pendingLeaveAction = action;
+  const modal = document.getElementById('unsavedChangesModal');
+  const msgEl = document.getElementById('unsavedChangesMessage');
+  if (msgEl && message) msgEl.textContent = message;
+  if (modal) modal.style.display = 'flex';
+}
+
+function initUnsavedChangesModal() {
+  const modal = document.getElementById('unsavedChangesModal');
+  const saveBtn = document.getElementById('unsavedSaveBtn');
+  const discardBtn = document.getElementById('unsavedDiscardBtn');
+  const cancelBtn = document.getElementById('unsavedCancelBtn');
+
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Сохранение...';
+      try {
+        await saveState();
+      } catch (e) {
+        console.error(e);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Сохранить';
+        return;
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить';
+      markDirty(false);
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      if (act) act();
+    };
+  }
+
+  if (discardBtn) {
+    discardBtn.onclick = () => {
+      markDirty(false);
+      if (modal) modal.style.display = 'none';
+      const act = pendingLeaveAction;
+      pendingLeaveAction = null;
+      if (act) act();
+    };
+  }
+
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      pendingLeaveAction = null;
+      if (modal) modal.style.display = 'none';
+    };
+  }
+}
+
 /* Переход на главную страницу портала с проверкой несохраненных изменений */
 function requestHomeClick(event) {
-  if (isDirty) {
-    if (!confirm("Есть несохранённые изменения. Вы уверены, что хотите перейти на главную страницу без сохранения?")) {
-      if (event) event.preventDefault();
-      return false;
-    }
-  }
+  if (event) event.preventDefault();
   const mainUrl = (window.APP_CONFIG && window.APP_CONFIG.MAIN_SITE_URL) ? window.APP_CONFIG.MAIN_SITE_URL : "http://yrtps.ru";
-  window.location.href = mainUrl + "/";
-  return true;
+  checkUnsavedBeforeLeave(() => {
+    markDirty(false);
+    window.location.href = mainUrl + "/";
+  }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
+  return false;
 }

@@ -313,20 +313,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (yearSelect) {
         yearSelect.addEventListener('change', (e) => {
-            currentYear = parseInt(e.target.value) || 2026;
-            months = getMonthsList(currentYear);
-            calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31];
-            
-            const tabCurrentBtn = document.getElementById('tabCurrentBtn');
-            if (tabCurrentBtn) {
-                tabCurrentBtn.textContent = `График отпусков ${currentYear}`;
-            }
-            const holidaysModalTitle = document.getElementById('holidaysModalTitle');
-            if (holidaysModalTitle) {
-                holidaysModalTitle.textContent = `Праздничные дни по месяцам (${currentYear})`;
-            }
+            const newYear = parseInt(e.target.value) || 2026;
+            checkUnsavedBeforeLeave(() => {
+                currentYear = newYear;
+                months = getMonthsList(currentYear);
+                calendarDaysInMonths = [31, getDaysInFeb(currentYear), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31];
+                
+                const tabCurrentBtn = document.getElementById('tabCurrentBtn');
+                if (tabCurrentBtn) {
+                    tabCurrentBtn.textContent = `График отпусков ${currentYear}`;
+                }
+                const holidaysModalTitle = document.getElementById('holidaysModalTitle');
+                if (holidaysModalTitle) {
+                    holidaysModalTitle.textContent = `Праздничные дни по месяцам (${currentYear})`;
+                }
 
-            loadYearData(currentYear);
+                loadYearData(currentYear);
+            }, 'Есть несохранённые изменения. Сохранить их перед переключением года?', () => {
+                yearSelect.value = currentYear;
+            });
         });
     }
 
@@ -334,6 +339,101 @@ document.addEventListener('DOMContentLoaded', () => {
     let undoStack = [];
     let redoStack = [];
     let initialSavedSnapshot = null;
+
+    function isScheduleDirty() {
+        if (!CAN_EDIT) return false;
+        const currentSnapshot = JSON.stringify(captureTableState());
+        return initialSavedSnapshot ? (currentSnapshot !== initialSavedSnapshot) : (undoStack.length > 0);
+    }
+
+    let pendingLeaveAction = null;
+    let pendingCancelCallback = null;
+
+    function checkUnsavedBeforeLeave(action, message, cancelCallback) {
+        if (!isScheduleDirty()) {
+            action();
+            return;
+        }
+        pendingLeaveAction = action;
+        pendingCancelCallback = cancelCallback || null;
+        const modal = document.getElementById('unsavedChangesModal');
+        const msgEl = document.getElementById('unsavedChangesMessage');
+        if (msgEl && message) msgEl.textContent = message;
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function initUnsavedChangesModal() {
+        const modal = document.getElementById('unsavedChangesModal');
+        const saveBtnModal = document.getElementById('unsavedSaveBtn');
+        const discardBtn = document.getElementById('unsavedDiscardBtn');
+        const cancelBtn = document.getElementById('unsavedCancelBtn');
+
+        if (saveBtnModal) {
+            saveBtnModal.onclick = async () => {
+                saveBtnModal.disabled = true;
+                saveBtnModal.textContent = 'Сохранение...';
+                try {
+                    await saveScheduleData();
+                } catch (e) {
+                    console.error(e);
+                    alert('Ошибка сохранения: ' + e.message);
+                    saveBtnModal.disabled = false;
+                    saveBtnModal.textContent = 'Сохранить';
+                    return;
+                }
+                saveBtnModal.disabled = false;
+                saveBtnModal.textContent = 'Сохранить';
+                if (modal) modal.style.display = 'none';
+                const act = pendingLeaveAction;
+                pendingLeaveAction = null;
+                pendingCancelCallback = null;
+                if (act) act();
+            };
+        }
+
+        if (discardBtn) {
+            discardBtn.onclick = () => {
+                initialSavedSnapshot = JSON.stringify(captureTableState());
+                undoStack = [];
+                redoStack = [];
+                updateUndoRedoButtons();
+                if (modal) modal.style.display = 'none';
+                const act = pendingLeaveAction;
+                pendingLeaveAction = null;
+                pendingCancelCallback = null;
+                if (act) act();
+            };
+        }
+
+        if (cancelBtn) {
+            cancelBtn.onclick = () => {
+                const cancelCb = pendingCancelCallback;
+                pendingLeaveAction = null;
+                pendingCancelCallback = null;
+                if (modal) modal.style.display = 'none';
+                if (cancelCb) cancelCb();
+            };
+        }
+    }
+
+    window.handleHomeClick = function(event) {
+        if (event) event.preventDefault();
+        const targetUrl = event && event.currentTarget ? event.currentTarget.getAttribute('href') : (window.APP_CONFIG.MAIN_SITE_URL || 'http://yrtps.ru') + '/';
+        checkUnsavedBeforeLeave(() => {
+            initialSavedSnapshot = JSON.stringify(captureTableState());
+            location.href = targetUrl;
+        }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
+        return false;
+    };
+
+    window.addEventListener('beforeunload', (e) => {
+        if (isScheduleDirty()) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
+    initUnsavedChangesModal();
 
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
@@ -1913,7 +2013,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Save functionality
-    saveBtn.addEventListener('click', () => {
+    async function saveScheduleData() {
         saveBtn.textContent = 'Сохранение...';
         
         const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
@@ -2016,29 +2116,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        fetch(`${APP_PREFIX}/api/vacations?year=${currentYear}`, {
+        const res = await fetch(`${APP_PREFIX}/api/vacations?year=${currentYear}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(allData)
-        })
-        .then(res => res.json())
-        .then(() => {
-            saveBtn.textContent = 'Сохранено!';
-            undoStack = [];
-            redoStack = [];
-            initialSavedSnapshot = JSON.stringify(captureTableState());
-            updateUndoRedoButtons();
-            setTimeout(() => {
-                saveBtn.textContent = 'Сохранить';
-            }, 2000);
-        })
-        .catch(err => {
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        saveBtn.textContent = 'Сохранено!';
+        undoStack = [];
+        redoStack = [];
+        initialSavedSnapshot = JSON.stringify(captureTableState());
+        updateUndoRedoButtons();
+        setTimeout(() => {
+            saveBtn.textContent = 'Сохранить';
+        }, 2000);
+    }
+
+    saveBtn.addEventListener('click', async () => {
+        try {
+            await saveScheduleData();
+        } catch (err) {
             saveBtn.textContent = 'Ошибка';
             setTimeout(() => {
                 saveBtn.textContent = 'Сохранить';
             }, 3000);
             console.error(err);
-        });
+        }
     });
 
     // Поиск и определение реальных данных сотрудника из локального хранилища браузера
@@ -2378,17 +2481,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         tabArchiveBtn.addEventListener('click', () => {
-            tabArchiveBtn.classList.add('active');
-            tabCurrentBtn.classList.remove('active');
-            panelCurrent.style.display = 'none';
-            panelArchive.style.display = 'block';
-            const scheduleActions = document.getElementById('scheduleActions');
-            if (scheduleActions) scheduleActions.style.display = 'none';
-            if (badgeToggleLabel) badgeToggleLabel.style.display = 'none';
-            if (holidaysBtn) holidaysBtn.style.display = 'none';
-            if (saveBtn) saveBtn.style.display = 'none';
+            checkUnsavedBeforeLeave(() => {
+                tabArchiveBtn.classList.add('active');
+                tabCurrentBtn.classList.remove('active');
+                panelCurrent.style.display = 'none';
+                panelArchive.style.display = 'block';
+                const scheduleActions = document.getElementById('scheduleActions');
+                if (scheduleActions) scheduleActions.style.display = 'none';
+                if (badgeToggleLabel) badgeToggleLabel.style.display = 'none';
+                if (holidaysBtn) holidaysBtn.style.display = 'none';
+                if (saveBtn) saveBtn.style.display = 'none';
 
-            loadArchive();
+                loadArchive();
+            }, 'Есть несохранённые изменения в графике. Сохранить их перед переходом в архив?');
         });
     }
 
