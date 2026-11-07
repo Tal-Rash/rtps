@@ -25,7 +25,7 @@ if str(_ROOT) not in sys.path:
 if str(_ROOT.parent) not in sys.path:
     sys.path.insert(0, str(_ROOT.parent))
 
-from rtps_common import module_has_access, resolve_user_access
+from rtps_common import module_has_access, module_role, resolve_user_access
 
 try:
     from .constants import (
@@ -103,17 +103,14 @@ def get_session(request: Request) -> dict | None:
     if not resolved:
         return None
     role, mods = resolved
-    if not module_has_access(role, mods, "alsn"):
+    mod_role = module_role(role, mods, "alsn")
+    if not mod_role:
         return None
-    can_edit = (
-        role == "admin"
-        or "admin" in mods
-        or "alsn:edit" in mods
-        or (role in ("edit", "editor") and ("alsn" in mods.split(",") or "alsn:view" in mods))
-    )
+    can_edit = mod_role in ("edit", "editor", "admin")
     return {
         "user_id": user_id,
         "role": role,
+        "mod_role": mod_role,
         "modules": mods,
         "full_name": full_name,
         "can_edit": can_edit,
@@ -170,18 +167,23 @@ async def api_state(request: Request):
 @app.post("/api/state")
 @app.post(f"{APP_PREFIX}/api/state", include_in_schema=False)
 async def api_save_state(request: Request):
-    """Сохранение состояния АЛСН с поддержкой gzip-сжатия и асинхронного выполнения."""
+    """Сохранение состояния АЛСН с поддержкой прямого JSON и gzip-сжатия."""
     t0 = time.perf_counter()
     session = get_session(request)
     if not session or not session["can_edit"]:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     try:
+        raw_body = await request.body()
         if request.headers.get("content-encoding") == "gzip":
-            raw_body = await request.body()
-            payload = json.loads(gzip.decompress(raw_body).decode("utf-8"))
+            try:
+                decompressed = gzip.decompress(raw_body).decode("utf-8")
+                payload = json.loads(decompressed)
+            except Exception:
+                # Если прокси-сервер уже распаковал тело запроса
+                payload = json.loads(raw_body.decode("utf-8"))
         else:
-            payload = await request.json()
+            payload = json.loads(raw_body.decode("utf-8"))
     except Exception as exc:
         return JSONResponse({"error": f"Некорректный JSON в теле запроса: {exc}"}, status_code=400)
 

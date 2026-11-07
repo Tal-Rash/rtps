@@ -46,6 +46,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Предупреждение о несохраненных данных при закрытии страницы
   window.addEventListener("beforeunload", (e) => {
+    syncLocomotivesFromDom();
+    syncWarehouseFromDom();
+    markDirty();
     if (isDirty) {
       e.preventDefault();
       e.returnValue = "";
@@ -268,6 +271,8 @@ function ensureMinLocomotives(rows, minCount = MIN_LOCOMOTIVES) {
 }
 
 function setTab(tab) {
+  syncLocomotivesFromDom();
+  syncWarehouseFromDom();
   currentTab = tab;
   document.getElementById("tabLoc").classList.toggle("active", tab === "locomotives");
   document.getElementById("tabWh").classList.toggle("active", tab === "warehouse");
@@ -428,6 +433,24 @@ function parsePasteMatrix(text) {
     .map((line) => line.split("\t"));
 }
 
+/* Синхронизация данных локомотивов из DOM в память appState */
+function syncLocomotivesFromDom() {
+  document.querySelectorAll(".loc-series[data-loc-idx]").forEach((el) => {
+    const idx = Number(el.dataset.locIdx);
+    if (appState.locomotives && appState.locomotives[idx]) {
+      const val = el.innerText.trim();
+      appState.locomotives[idx].series = val === "Локомотив" ? "" : val;
+    }
+  });
+  document.querySelectorAll(".loc-number[data-loc-idx]").forEach((el) => {
+    const idx = Number(el.dataset.locIdx);
+    if (appState.locomotives && appState.locomotives[idx]) {
+      appState.locomotives[idx].number = el.innerText.trim();
+    }
+  });
+}
+
+/* Синхронизация данных склада из DOM в память appState */
 function syncWarehouseFromDom() {
   document.querySelectorAll(".warehouse-cell").forEach((cell) => {
     const rowIdx = Number(cell.dataset.row);
@@ -445,7 +468,8 @@ function getRows() {
 
 function addRow() {
   if (!CAN_EDIT) return;
-  if (currentTab === "warehouse") syncWarehouseFromDom();
+  syncLocomotivesFromDom();
+  syncWarehouseFromDom();
   const rows = getRows();
   rows.push(currentTab === "locomotives" ? blankLoc() : blankWh());
   recalcWarehouseLocations();
@@ -455,7 +479,8 @@ function addRow() {
 
 function removeRow() {
   if (!CAN_EDIT) return;
-  if (currentTab === "warehouse") syncWarehouseFromDom();
+  syncLocomotivesFromDom();
+  syncWarehouseFromDom();
   const rows = getRows();
   if (currentTab === "locomotives" && rows.length <= MIN_LOCOMOTIVES) return;
   if (currentTab === "warehouse" && rows.length <= 1) return;
@@ -468,7 +493,11 @@ function removeRow() {
 function editCell(tab, rowIdx, field, el) {
   const rows = tab === "locomotives" ? appState.locomotives : appState.warehouse;
   if (!rows[rowIdx]) return;
-  rows[rowIdx][field] = el.innerText.trim();
+  let val = el.innerText.trim();
+  if (tab === "locomotives" && field === "series" && val === "Локомотив") {
+    val = "";
+  }
+  rows[rowIdx][field] = val;
   if (tab === "locomotives" && field === "number") {
     recalcWarehouseLocations();
   }
@@ -476,6 +505,7 @@ function editCell(tab, rowIdx, field, el) {
 }
 
 function editDeviceSelect(rowIdx, deviceIdx, field, value) {
+  syncLocomotivesFromDom();
   const row = appState.locomotives[rowIdx];
   if (!row) return;
   if (!Array.isArray(row.devices)) row.devices = blankDeviceRows();
@@ -501,7 +531,9 @@ function editWarehouseCell(rowIdx, colIdx, el) {
   if (colIdx === 2 || colIdx === 3) {
     const nextValue = recalcWarehouseNextDate(appState.warehouse[rowIdx]);
     const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
-    if (nextCell) nextCell.innerText = nextValue;
+    if (nextCell && document.activeElement !== nextCell) {
+      nextCell.innerText = nextValue;
+    }
   }
   if (colIdx === 0 || colIdx === 1) {
     recalcWarehouseLocations();
@@ -527,11 +559,21 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
   if (!CAN_EDIT) return;
 
   const key = event.key;
-  if (key === "Delete" || key === "Backspace") {
+  if (key === "Delete") {
     event.preventDefault();
     const cell = event.currentTarget;
     cell.innerText = "";
     setWarehouseCellValue(rowIdx, colIdx, "");
+    if (colIdx === 2 || colIdx === 3) {
+      recalcWarehouseNextDate(appState.warehouse[rowIdx]);
+      const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
+      if (nextCell) nextCell.innerText = "";
+    }
+    if (colIdx === 0 || colIdx === 1) {
+      recalcWarehouseLocations();
+      const locCell = cell.closest("tr")?.querySelector(".warehouse-auto-value");
+      if (locCell) locCell.innerText = appState.warehouse[rowIdx].location || "Депо";
+    }
     markDirty(true);
     return;
   }
@@ -635,9 +677,9 @@ function render() {
     return `
       <article class="loc-card">
         <div class="loc-card-title">
-          <span class="editable" style="display:inline-block; min-width:120px;" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'series', this)"` : ''}>${escapeHtml(row.series || "Локомотив")}</span>
+          <span class="editable loc-series" data-loc-idx="${idx}" style="display:inline-block; min-width:120px;" ${CAN_EDIT ? `contenteditable="true" onfocus="if(this.innerText.trim()==='Локомотив')this.innerText='';" oninput="editCell('locomotives', ${idx}, 'series', this)" onblur="if(!this.innerText.trim())this.innerText='Локомотив'; editCell('locomotives', ${idx}, 'series', this)"` : ''}>${escapeHtml(row.series || "Локомотив")}</span>
           <span> № </span>
-          <span class="editable" style="display:inline-block; min-width:70px;" ${CAN_EDIT ? `contenteditable="true" onblur="editCell('locomotives', ${idx}, 'number', this)"` : ''}>${escapeHtml(row.number)}</span>
+          <span class="editable loc-number" data-loc-idx="${idx}" style="display:inline-block; min-width:70px;" ${CAN_EDIT ? `contenteditable="true" oninput="editCell('locomotives', ${idx}, 'number', this)" onblur="editCell('locomotives', ${idx}, 'number', this)"` : ''}>${escapeHtml(row.number)}</span>
         </div>
         <table class="device-table">
           <thead>
@@ -656,19 +698,19 @@ function render() {
     <tr data-warehouse-row="1" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}" data-warehouse-number="${escapeHtml(row.number)}">
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
           data-row="${idx}" data-col="0"
-          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 0, this)" onblur="editWarehouseCell(' + idx + ', 0, this)" onclick="handleWarehouseClick(' + idx + ', 0)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 0)" oncopy="handleWarehouseCopy(event, ' + idx + ', 0)" onpaste="handleWarehousePaste(event, ' + idx + ', 0)"' : ''}>${escapeHtml(row.type)}</td>
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 0, this)" oninput="editWarehouseCell(' + idx + ', 0, this)" onblur="editWarehouseCell(' + idx + ', 0, this)" onclick="handleWarehouseClick(' + idx + ', 0)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 0)" oncopy="handleWarehouseCopy(event, ' + idx + ', 0)" onpaste="handleWarehousePaste(event, ' + idx + ', 0)"' : ''}>${escapeHtml(row.type)}</td>
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 1 ? " selected" : ""}"
           data-row="${idx}" data-col="1"
-          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 1, this)" onblur="editWarehouseCell(' + idx + ', 1, this)" onclick="handleWarehouseClick(' + idx + ', 1)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 1)" oncopy="handleWarehouseCopy(event, ' + idx + ', 1)" onpaste="handleWarehousePaste(event, ' + idx + ', 1)"' : ''}>${escapeHtml(row.number)}</td>
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 1, this)" oninput="editWarehouseCell(' + idx + ', 1, this)" onblur="editWarehouseCell(' + idx + ', 1, this)" onclick="handleWarehouseClick(' + idx + ', 1)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 1)" oncopy="handleWarehouseCopy(event, ' + idx + ', 1)" onpaste="handleWarehousePaste(event, ' + idx + ', 1)"' : ''}>${escapeHtml(row.number)}</td>
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 2 ? " selected" : ""}"
           data-row="${idx}" data-col="2"
-          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 2, this)" onblur="editWarehouseCell(' + idx + ', 2, this)" onclick="handleWarehouseClick(' + idx + ', 2)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 2)" oncopy="handleWarehouseCopy(event, ' + idx + ', 2)" onpaste="handleWarehousePaste(event, ' + idx + ', 2)"' : ''}>${escapeHtml(row.verification_date)}</td>
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 2, this)" oninput="editWarehouseCell(' + idx + ', 2, this)" onblur="editWarehouseCell(' + idx + ', 2, this)" onclick="handleWarehouseClick(' + idx + ', 2)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 2)" oncopy="handleWarehouseCopy(event, ' + idx + ', 2)" onpaste="handleWarehousePaste(event, ' + idx + ', 2)"' : ''}>${escapeHtml(row.verification_date)}</td>
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 3 ? " selected" : ""}"
           data-row="${idx}" data-col="3"
-          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 3, this)" onblur="editWarehouseCell(' + idx + ', 3, this)" onclick="handleWarehouseClick(' + idx + ', 3)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 3)" oncopy="handleWarehouseCopy(event, ' + idx + ', 3)" onpaste="handleWarehousePaste(event, ' + idx + ', 3)"' : ''}>${escapeHtml(row.periodicity)}</td>
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 3, this)" oninput="editWarehouseCell(' + idx + ', 3, this)" onblur="editWarehouseCell(' + idx + ', 3, this)" onclick="handleWarehouseClick(' + idx + ', 3)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 3)" oncopy="handleWarehouseCopy(event, ' + idx + ', 3)" onpaste="handleWarehousePaste(event, ' + idx + ', 3)"' : ''}>${escapeHtml(row.periodicity)}</td>
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 4 ? " selected" : ""}"
           data-row="${idx}" data-col="4"
-          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 4, this)" onblur="editWarehouseCell(' + idx + ', 4, this)" onclick="handleWarehouseClick(' + idx + ', 4)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 4)" oncopy="handleWarehouseCopy(event, ' + idx + ', 4)" onpaste="handleWarehousePaste(event, ' + idx + ', 4)"' : ''}>${escapeHtml(row.next_verification_date)}</td>
+          ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 4, this)" oninput="editWarehouseCell(' + idx + ', 4, this)" onblur="editWarehouseCell(' + idx + ', 4, this)" onclick="handleWarehouseClick(' + idx + ', 4)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 4)" oncopy="handleWarehouseCopy(event, ' + idx + ', 4)" onpaste="handleWarehousePaste(event, ' + idx + ', 4)"' : ''}>${escapeHtml(row.next_verification_date)}</td>
       <td class="warehouse-auto${warehouseSelected?.row === idx && warehouseSelected?.col === 5 ? " selected" : ""}">
         <div class="warehouse-auto-value">${escapeHtml(row.location || "Депо")}</div>
       </td>
@@ -733,6 +775,7 @@ function updateHistoryButtons() {
 /* Отмена несохраненных изменений */
 function cancelChanges() {
   if (!CAN_EDIT || !savedState) return;
+  syncLocomotivesFromDom();
   syncWarehouseFromDom();
   canceledState = cloneState(appState);
   appState = cloneState(savedState);
@@ -762,104 +805,156 @@ function markDirty(dirty) {
   }
   const btn = document.getElementById("saveBtn");
   if (btn) {
-    btn.textContent = "Сохранить";
+    btn.style.display = CAN_EDIT ? "inline-block" : "none";
     btn.classList.toggle("primary", !!isDirty && !!CAN_EDIT);
+    if (!btn.disabled && !btn.textContent.includes("Сохран")) {
+      btn.textContent = "Сохранить";
+    }
   }
   updateHistoryButtons();
 }
 
-/* Сохранение состояния с поддержкой gzip-сжатия и анимацией */
+/* Сохранение состояния с поддержкой gzip-сжатия и подробной индикацией */
 async function saveState() {
   if (!CAN_EDIT) return;
   const btn = document.getElementById("saveBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Сохранение...";
+  }
+
+  const t0 = performance.now();
+
   try {
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Сохранение...";
-    }
-    syncWarehouseFromDom();
-    recalcWarehouseLocations();
-    appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
+    syncLocomotivesFromDom();
+    syncWarehouseFromDom();
+    recalcWarehouseLocations();
+    appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
 
     const jsonPayload = JSON.stringify(appState);
     let bodyToSend = jsonPayload;
     const headers = { "Content-Type": "application/json; charset=utf-8" };
 
-    // Сжатие gzip на клиенте (сжимает JSON в 15-20 раз и моментально проходит фильтры)
+    // Сжатие gzip на клиенте при наличии поддержки CompressionStream
     if (typeof CompressionStream !== "undefined") {
       try {
         const stream = new Blob([jsonPayload]).stream().pipeThrough(new CompressionStream("gzip"));
         bodyToSend = await new Response(stream).blob();
         headers["Content-Encoding"] = "gzip";
       } catch (e) {
+        console.warn("Gzip fallback:", e);
         bodyToSend = jsonPayload;
+        delete headers["Content-Encoding"];
       }
     }
 
-    await requestJson(`${APP_PREFIX}/api/state`, {
+    const tPayload = performance.now();
+    const res = await fetch(`${APP_PREFIX}/api/state`, {
       method: "POST",
       headers,
       body: bodyToSend
     });
 
+    const tFetch = performance.now();
+    const netElapsed = ((tFetch - tPayload) / 1000).toFixed(1);
+
+    if (!res.ok) {
+      let errMsg = `Ошибка сохранения (HTTP ${res.status})`;
+      try {
+        const text = await res.text();
+        try {
+          const errData = JSON.parse(text);
+          if (errData.error) errMsg = `Ошибка сервера: ${errData.error}`;
+          else if (errData.detail) errMsg = `Ошибка: ${errData.detail}`;
+          else errMsg = `HTTP ${res.status}: ${text.substring(0, 100)}`;
+        } catch {
+          errMsg = `HTTP ${res.status}: ${text.substring(0, 100)}`;
+        }
+      } catch {}
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `✗ Ошибка (${netElapsed}с)`;
+        setTimeout(() => {
+          if (btn) {
+            btn.textContent = "Сохранить";
+            markDirty();
+          }
+        }, 3000);
+      }
+      throw new Error(errMsg);
+    }
+
     savedState = cloneState(appState);
     canceledState = null;
     markDirty(false);
     updateHistoryButtons();
+
+    const totalElapsed = ((performance.now() - t0) / 1000).toFixed(1);
     if (btn) {
-      btn.textContent = "Сохранено!";
+      btn.disabled = false;
+      btn.textContent = `✓ Сохранено (${totalElapsed}с)`;
       setTimeout(() => {
-        if (btn) btn.textContent = "Сохранить";
-      }, 2000);
+        if (btn) {
+          btn.textContent = "Сохранить";
+          markDirty();
+        }
+      }, 2500);
     }
+    return true;
   } catch (err) {
-    console.error(err);
+    console.error("Save error:", err);
     alert("Ошибка сохранения: " + err.message);
-    if (btn) btn.textContent = "Сохранить";
-  } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Сохранить";
+      markDirty();
+    }
+    throw err;
   }
 }
 
 let pendingLeaveAction = null;
 
 function checkUnsavedBeforeLeave(action, message) {
+  syncLocomotivesFromDom();
+  syncWarehouseFromDom();
+  markDirty();
   if (!isDirty || !CAN_EDIT) {
     action();
     return;
   }
   pendingLeaveAction = action;
-  const modal = document.getElementById('unsavedChangesModal');
-  const msgEl = document.getElementById('unsavedChangesMessage');
+  const modal = document.getElementById("unsavedChangesModal");
+  const msgEl = document.getElementById("unsavedChangesMessage");
   if (msgEl && message) msgEl.textContent = message;
-  if (modal) modal.style.display = 'flex';
+  if (modal) modal.style.display = "flex";
 }
 
 function initUnsavedChangesModal() {
-  const modal = document.getElementById('unsavedChangesModal');
-  const saveBtn = document.getElementById('unsavedSaveBtn');
-  const discardBtn = document.getElementById('unsavedDiscardBtn');
-  const cancelBtn = document.getElementById('unsavedCancelBtn');
+  const modal = document.getElementById("unsavedChangesModal");
+  const saveBtn = document.getElementById("unsavedSaveBtn");
+  const discardBtn = document.getElementById("unsavedDiscardBtn");
+  const cancelBtn = document.getElementById("unsavedCancelBtn");
 
   if (saveBtn) {
     saveBtn.onclick = async () => {
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Сохранение...';
+      saveBtn.textContent = "⏳ Сохранение...";
       try {
         await saveState();
       } catch (e) {
         console.error(e);
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Сохранить';
+        saveBtn.textContent = "Сохранить";
         return;
       }
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Сохранить';
-      markDirty(false);
-      if (modal) modal.style.display = 'none';
+      saveBtn.textContent = "Сохранить";
+      if (modal) modal.style.display = "none";
       const act = pendingLeaveAction;
       pendingLeaveAction = null;
       if (act) act();
@@ -869,7 +964,7 @@ function initUnsavedChangesModal() {
   if (discardBtn) {
     discardBtn.onclick = () => {
       markDirty(false);
-      if (modal) modal.style.display = 'none';
+      if (modal) modal.style.display = "none";
       const act = pendingLeaveAction;
       pendingLeaveAction = null;
       if (act) act();
@@ -879,7 +974,7 @@ function initUnsavedChangesModal() {
   if (cancelBtn) {
     cancelBtn.onclick = () => {
       pendingLeaveAction = null;
-      if (modal) modal.style.display = 'none';
+      if (modal) modal.style.display = "none";
     };
   }
 }
@@ -891,6 +986,6 @@ function requestHomeClick(event) {
   checkUnsavedBeforeLeave(() => {
     markDirty(false);
     window.location.href = mainUrl + "/";
-  }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
+  }, "Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?");
   return false;
 }

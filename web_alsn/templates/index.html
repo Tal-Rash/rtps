@@ -26,12 +26,12 @@
         <div class="controls">
           <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
           <div class="toolbar">
-            <button onclick="addRow()">+ строку</button>
-            <button onclick="removeRow()">- строку</button>
-            <button id="cancelBtn" title="Отмена (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
-            <button id="restoreBtn" title="Вернуть (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
-            <button onclick="loadState()">Обновить</button>
-            <button id="saveBtn" onclick="saveState()">Сохранить</button>
+            <button type="button" onclick="addRow()">+ строку</button>
+            <button type="button" onclick="removeRow()">- строку</button>
+            <button id="cancelBtn" type="button" title="Отмена (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
+            <button id="restoreBtn" type="button" title="Вернуть (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
+            <button type="button" onclick="loadState()">Обновить</button>
+            <button id="saveBtn" type="button" onclick="saveState()">Сохранить</button>
           </div>
         </div>
       </div>
