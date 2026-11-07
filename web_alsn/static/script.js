@@ -17,6 +17,10 @@ const WAREHOUSE_FIELDS = [
   "updated_at"
 ];
 let warehouseSelected = null;
+let warehouseSelection = null;
+let isWarehouseSelecting = false;
+let selectionAnchor = null;
+let didWarehouseDrag = false;
 let warehouseFilters = {
   type: "",
   nextMonth: "",
@@ -27,7 +31,39 @@ let warehouseFilters = {
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
 
-  // Горячие клавиши для сохранения (Ctrl+S), отмены (Ctrl+Z) и возврата (Ctrl+Y / Ctrl+Shift+Z)
+  // Обработка событий мыши для выделения диапазона ячеек склада как в Excel
+  const whBody = document.getElementById("whBody");
+  if (whBody) {
+    whBody.addEventListener("mousedown", handleWarehouseMouseDown);
+    whBody.addEventListener("mouseover", handleWarehouseMouseOver);
+  }
+  window.addEventListener("mouseup", handleWarehouseMouseUp);
+
+  // Копирование выделенного диапазона ячеек склада по Ctrl+C в формате TSV (как в Excel)
+  document.addEventListener("copy", (e) => {
+    if (currentTab === "warehouse") {
+      const sel = getWarehouseSelection();
+      if (sel) {
+        const isMulti = sel.startRow !== sel.endRow || sel.startCol !== sel.endCol;
+        const textSelected = window.getSelection()?.toString();
+        if (isMulti || !textSelected) {
+          copyWarehouseSelection(e);
+        }
+      }
+    }
+  });
+
+  // Вставка данных в выделенный диапазон склада по Ctrl+V при неактивном текстовом курсоре
+  document.addEventListener("paste", (e) => {
+    if (currentTab === "warehouse") {
+      const sel = getWarehouseSelection();
+      if (sel && (!document.activeElement || !document.activeElement.classList.contains("warehouse-cell"))) {
+        handleWarehousePaste(e, sel.startRow, sel.startCol);
+      }
+    }
+  });
+
+  // Горячие клавиши для сохранения (Ctrl+S), отмены (Ctrl+Z), возврата (Ctrl+Y / Ctrl+Shift+Z) и выделения всего (Ctrl+A)
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
@@ -40,6 +76,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (document.activeElement && document.activeElement.tagName === "INPUT") return;
       e.preventDefault();
       restoreChanges();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+      if (currentTab === "warehouse") {
+        const activeEl = document.activeElement;
+        const isEditingInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "SELECT");
+        if (!isEditingInput && appState.warehouse.length > 0) {
+          e.preventDefault();
+          setWarehouseSelection(
+            { row: 0, col: 0 },
+            { row: appState.warehouse.length - 1, col: WAREHOUSE_FIELDS.length - 1 }
+          );
+        }
+      }
     }
   });
 
@@ -299,6 +347,9 @@ function setTab(tab) {
   syncLocomotivesFromDom();
   syncWarehouseFromDom();
   currentTab = tab;
+  if (tab !== "warehouse") {
+    clearWarehouseSelection();
+  }
   document.getElementById("tabLoc").classList.toggle("active", tab === "locomotives");
   document.getElementById("tabWh").classList.toggle("active", tab === "warehouse");
   document.getElementById("tab-locomotives").classList.toggle("active", tab === "locomotives");
@@ -441,7 +492,9 @@ function warehouseCellText(rowIdx, colIdx) {
   const row = appState.warehouse[rowIdx];
   if (!row) return "";
   const field = WAREHOUSE_FIELDS[colIdx];
-  return field ? String(row[field] ?? "") : "";
+  if (!field) return "";
+  if (field === "location") return row.location || "Депо";
+  return String(row[field] ?? "");
 }
 
 function setWarehouseCellValue(rowIdx, colIdx, value) {
@@ -451,11 +504,234 @@ function setWarehouseCellValue(rowIdx, colIdx, value) {
   row[field] = String(value ?? "");
 }
 
+/* Получение информации о ячейке склада (строка и колонка) по DOM-элементу */
+function getWarehouseCellInfo(target) {
+  const cell = target?.closest?.("#whBody td");
+  if (!cell) return null;
+  const row = Number(cell.dataset.row);
+  const col = Number(cell.dataset.col);
+  if (!Number.isFinite(row) || !Number.isFinite(col)) return null;
+  return { cell, row, col };
+}
+
+/* Вычисление прямоугольных границ диапазона выделения */
+function warehouseSelectionBounds(a, b) {
+  return {
+    startRow: Math.min(a.row, b.row),
+    endRow: Math.max(a.row, b.row),
+    startCol: Math.min(a.col, b.col),
+    endCol: Math.max(a.col, b.col)
+  };
+}
+
+/* Установка выделенного диапазона ячеек склада как в Excel */
+function setWarehouseSelection(anchor, focus) {
+  if (!anchor || !focus) return;
+  const totalRows = appState.warehouse.length;
+  if (!totalRows) return;
+  const totalCols = WAREHOUSE_FIELDS.length;
+
+  const boundedAnchor = {
+    row: Math.max(0, Math.min(totalRows - 1, anchor.row)),
+    col: Math.max(0, Math.min(totalCols - 1, anchor.col))
+  };
+  const boundedFocus = {
+    row: Math.max(0, Math.min(totalRows - 1, focus.row)),
+    col: Math.max(0, Math.min(totalCols - 1, focus.col))
+  };
+
+  const bounds = warehouseSelectionBounds(boundedAnchor, boundedFocus);
+  warehouseSelection = {
+    anchor: boundedAnchor,
+    focus: boundedFocus,
+    ...bounds
+  };
+  warehouseSelected = { row: boundedFocus.row, col: boundedFocus.col };
+  applyWarehouseSelectionClasses();
+}
+
+/* Очистка выделения ячеек склада */
+function clearWarehouseSelection() {
+  warehouseSelection = null;
+  warehouseSelected = null;
+  applyWarehouseSelectionClasses();
+}
+
+/* Получение активного диапазона выделения склада */
+function getWarehouseSelection() {
+  if (warehouseSelection) return warehouseSelection;
+  if (warehouseSelected) {
+    return {
+      startRow: warehouseSelected.row,
+      endRow: warehouseSelected.row,
+      startCol: warehouseSelected.col,
+      endCol: warehouseSelected.col,
+      anchor: warehouseSelected,
+      focus: warehouseSelected
+    };
+  }
+  return null;
+}
+
+/* Применение CSS-классов и контурной рамки выделения в стиле Excel */
+function applyWarehouseSelectionClasses() {
+  document.querySelectorAll("#whBody td.selected-range, #whBody td.selected").forEach((cell) => {
+    cell.classList.remove("selected-range", "selected");
+    cell.style.removeProperty("box-shadow");
+  });
+
+  const sel = getWarehouseSelection();
+  if (!sel || currentTab !== "warehouse") return;
+
+  const rowEls = document.querySelectorAll("#whBody tr[data-warehouse-row]");
+  for (let r = sel.startRow; r <= sel.endRow; r++) {
+    const rowEl = rowEls[r];
+    if (!rowEl) continue;
+    const cells = rowEl.querySelectorAll("td");
+    for (let c = sel.startCol; c <= sel.endCol; c++) {
+      const cell = cells[c];
+      if (!cell) continue;
+
+      cell.classList.add("selected-range");
+      if (r === sel.focus.row && c === sel.focus.col) {
+        cell.classList.add("selected");
+      }
+
+      // Отрисовка контурной внешней рамки диапазона как в Excel
+      const shadows = [];
+      if (r === sel.startRow) shadows.push("inset 0 1.5px 0 0 #276ef1");
+      if (r === sel.endRow) shadows.push("inset 0 -1.5px 0 0 #276ef1");
+      if (c === sel.startCol) shadows.push("inset 1.5px 0 0 0 #276ef1");
+      if (c === sel.endCol) shadows.push("inset -1.5px 0 0 0 #276ef1");
+
+      if (shadows.length > 0) {
+        cell.style.setProperty("box-shadow", shadows.join(", "), "important");
+      } else {
+        cell.style.boxShadow = "";
+      }
+    }
+  }
+}
+
+/* Копирование выделенных приборов/ячеек склада в буфер обмена в формате TSV (как в Excel) */
+function copyWarehouseSelection(event) {
+  const sel = getWarehouseSelection();
+  if (!sel || currentTab !== "warehouse") return;
+
+  const lines = [];
+  for (let r = sel.startRow; r <= sel.endRow; r++) {
+    const rowValues = [];
+    for (let c = sel.startCol; c <= sel.endCol; c++) {
+      rowValues.push(warehouseCellText(r, c));
+    }
+    lines.push(rowValues.join("\t"));
+  }
+  const tsvText = lines.join("\n");
+  if (!tsvText) return;
+
+  if (event?.clipboardData) {
+    event.clipboardData.setData("text/plain", tsvText);
+    event.preventDefault();
+  } else if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(tsvText);
+  }
+}
+
+/* Очистка значений в выделенном диапазоне ячеек при нажатии Delete / Backspace */
+function clearWarehouseSelectionValues() {
+  if (!CAN_EDIT) return false;
+  const sel = getWarehouseSelection();
+  if (!sel) return false;
+
+  let changed = false;
+  for (let r = sel.startRow; r <= sel.endRow; r++) {
+    const row = appState.warehouse[r];
+    if (!row) continue;
+    for (let c = sel.startCol; c <= sel.endCol; c++) {
+      if (c >= 5) continue; // Не затираем автоматически вычисляемые поля
+      setWarehouseCellValue(r, c, "");
+      const cellEl = document.querySelector(`.warehouse-cell[data-row="${r}"][data-col="${c}"]`);
+      if (cellEl) cellEl.innerText = "";
+      changed = true;
+    }
+    recalcWarehouseNextDate(row);
+    const nextCell = document.querySelector(`.warehouse-cell[data-row="${r}"][data-col="4"]`);
+    if (nextCell) nextCell.innerText = row.next_verification_date || "";
+  }
+  if (changed) {
+    recalcWarehouseLocations();
+    for (let r = sel.startRow; r <= sel.endRow; r++) {
+      const locCell = document.querySelector(`.warehouse-auto[data-row="${r}"][data-col="5"] .warehouse-auto-value`);
+      if (locCell) locCell.innerText = appState.warehouse[r]?.location || "Депо";
+    }
+    applyWarehouseSelectionClasses();
+    markDirty(true);
+  }
+  return changed;
+}
+
+/* Обработка нажатия мыши по ячейке склада */
+function handleWarehouseMouseDown(e) {
+  if (e.button !== 0) return;
+  const info = getWarehouseCellInfo(e.target);
+  if (!info) return;
+
+  if (e.shiftKey && warehouseSelection?.anchor) {
+    didWarehouseDrag = true;
+    setWarehouseSelection(warehouseSelection.anchor, { row: info.row, col: info.col });
+    e.preventDefault();
+    return;
+  }
+
+  isWarehouseSelecting = true;
+  didWarehouseDrag = false;
+  selectionAnchor = { row: info.row, col: info.col };
+  setWarehouseSelection(selectionAnchor, { row: info.row, col: info.col });
+
+  if (info.col >= 5) {
+    e.preventDefault();
+  }
+}
+
+/* Обработка перемещения мыши с зажатой кнопкой для протягивания выделения */
+function handleWarehouseMouseOver(e) {
+  if (!isWarehouseSelecting) return;
+  if (e.buttons !== 1) {
+    isWarehouseSelecting = false;
+    return;
+  }
+  const info = getWarehouseCellInfo(e.target);
+  if (!info || !selectionAnchor) return;
+
+  if (info.row !== selectionAnchor.row || info.col !== selectionAnchor.col) {
+    didWarehouseDrag = true;
+    window.getSelection()?.removeAllRanges();
+    if (document.activeElement && document.activeElement.isContentEditable) {
+      document.activeElement.blur();
+    }
+  }
+
+  setWarehouseSelection(selectionAnchor, { row: info.row, col: info.col });
+}
+
+/* Завершение протягивания выделения мыши */
+function handleWarehouseMouseUp(e) {
+  if (!isWarehouseSelecting) return;
+  isWarehouseSelecting = false;
+
+  const sel = getWarehouseSelection();
+  if (sel && sel.startRow === sel.endRow && sel.startCol === sel.endCol && !didWarehouseDrag) {
+    if (sel.startCol < 5 && CAN_EDIT) {
+      const cell = document.querySelector(`.warehouse-cell[data-row="${sel.startRow}"][data-col="${sel.startCol}"]`);
+      if (cell && document.activeElement !== cell) {
+        cell.focus();
+      }
+    }
+  }
+}
+
 function selectWarehouseCell(rowIdx, colIdx) {
-  warehouseSelected = { row: rowIdx, col: colIdx };
-  document.querySelectorAll(".warehouse-cell.selected").forEach((cell) => cell.classList.remove("selected"));
-  const cell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="${colIdx}"]`);
-  if (cell) cell.classList.add("selected");
+  setWarehouseSelection({ row: rowIdx, col: colIdx }, { row: rowIdx, col: colIdx });
 }
 
 function focusWarehouseCell(rowIdx, colIdx, selectText = false) {
@@ -611,6 +887,7 @@ function handleWarehouseFocus(rowIdx, colIdx, el) {
 }
 
 function handleWarehouseClick(rowIdx, colIdx) {
+  if (didWarehouseDrag) return;
   selectWarehouseCell(rowIdx, colIdx);
 }
 
@@ -618,7 +895,16 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
   if (!CAN_EDIT) return;
 
   const key = event.key;
-  if (key === "Delete") {
+  const sel = getWarehouseSelection();
+
+  // Очистка выделенного диапазона при нажатии Delete или Backspace
+  if (key === "Delete" || key === "Backspace") {
+    if (sel && (sel.endRow > sel.startRow || sel.endCol > sel.startCol)) {
+      event.preventDefault();
+      clearWarehouseSelectionValues();
+      return;
+    }
+    // Очистка одиночной ячейки
     event.preventDefault();
     const cell = event.currentTarget;
     cell.innerText = "";
@@ -640,6 +926,19 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
       if (locCell) locCell.innerText = appState.warehouse[rowIdx].location || "Депо";
     }
     markDirty(true);
+    return;
+  }
+
+  // Расширение диапазона выделения с зажатым Shift (стрелки клавиатуры как в Excel)
+  if (event.shiftKey && (key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight")) {
+    event.preventDefault();
+    const anchor = sel?.anchor || { row: rowIdx, col: colIdx };
+    const focus = { ...(sel?.focus || { row: rowIdx, col: colIdx }) };
+    if (key === "ArrowUp") focus.row = Math.max(0, focus.row - 1);
+    else if (key === "ArrowDown") focus.row = Math.min(appState.warehouse.length - 1, focus.row + 1);
+    else if (key === "ArrowLeft") focus.col = Math.max(0, focus.col - 1);
+    else if (key === "ArrowRight") focus.col = Math.min(WAREHOUSE_FIELDS.length - 1, focus.col + 1);
+    setWarehouseSelection(anchor, focus);
     return;
   }
 
@@ -669,6 +968,11 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
 }
 
 function handleWarehouseCopy(event, rowIdx, colIdx) {
+  const sel = getWarehouseSelection();
+  if (sel && (sel.endRow > sel.startRow || sel.endCol > sel.startCol)) {
+    copyWarehouseSelection(event);
+    return;
+  }
   const text = warehouseCellText(rowIdx, colIdx);
   if (!text) return;
   event.clipboardData?.setData("text/plain", text);
@@ -707,28 +1011,40 @@ function handleWarehousePaste(event, rowIdx, colIdx) {
   }
   if (!matrix.length) return;
 
-  for (let r = 0; r < matrix.length; r += 1) {
-    const sourceRow = matrix[r];
-    const targetRowIdx = rowIdx + r;
+  const sel = getWarehouseSelection();
+  const startRow = sel ? sel.startRow : rowIdx;
+  const startCol = sel ? sel.startCol : colIdx;
+
+  // Если в буфере одна ячейка, а в таблице выделен диапазон из нескольких — заполняем все выделенные ячейки (как в Excel)
+  const fillSingle = matrix.length === 1 && matrix[0].length === 1 && sel && (sel.endRow > sel.startRow || sel.endCol > sel.startCol);
+  const targetRowCount = fillSingle ? (sel.endRow - sel.startRow + 1) : matrix.length;
+  const targetColCount = fillSingle ? (sel.endCol - sel.startCol + 1) : Math.max(...matrix.map((row) => row.length));
+
+  for (let r = 0; r < targetRowCount; r += 1) {
+    const targetRowIdx = startRow + r;
     while (targetRowIdx >= appState.warehouse.length) {
       appState.warehouse.push(blankWh());
     }
     const targetRow = appState.warehouse[targetRowIdx];
     if (!targetRow) break;
-    for (let c = 0; c < sourceRow.length; c += 1) {
-      const targetColIdx = colIdx + c;
+
+    const sourceRow = fillSingle ? matrix[0] : matrix[Math.min(r, matrix.length - 1)];
+    for (let c = 0; c < targetColCount; c += 1) {
+      const targetColIdx = startCol + c;
       if (targetColIdx >= 5) break; // Автоматические колонки (местонахождение и дата изменения) не перезаписываются при вставке
-      setWarehouseCellValue(targetRowIdx, targetColIdx, sourceRow[c].trim());
+      const val = fillSingle ? sourceRow[0] : (sourceRow[c] ?? "");
+      setWarehouseCellValue(targetRowIdx, targetColIdx, String(val).trim());
     }
     recalcWarehouseNextDate(targetRow);
   }
   recalcWarehouseLocations();
   render();
   markDirty(true);
-  focusWarehouseCell(
-    Math.min(rowIdx + matrix.length - 1, appState.warehouse.length - 1),
-    Math.min(colIdx + matrix[0].length - 1, 4)
-  );
+
+  // Устанавливаем выделение на вставленный диапазон ячеек
+  const newFocusRow = Math.min(startRow + targetRowCount - 1, appState.warehouse.length - 1);
+  const newFocusCol = Math.min(startCol + targetColCount - 1, 4);
+  setWarehouseSelection({ row: startRow, col: startCol }, { row: newFocusRow, col: newFocusCol });
 }
 
 /* Отрисовка интерфейса локомотивов и склада */
@@ -809,10 +1125,10 @@ function render() {
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 4 ? " selected" : ""}"
           data-row="${idx}" data-col="4"
           ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 4, this)" oninput="editWarehouseCell(' + idx + ', 4, this)" onblur="editWarehouseCell(' + idx + ', 4, this)" onclick="handleWarehouseClick(' + idx + ', 4)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 4)" oncopy="handleWarehouseCopy(event, ' + idx + ', 4)" onpaste="handleWarehousePaste(event, ' + idx + ', 4)"' : ''}>${escapeHtml(row.next_verification_date)}</td>
-      <td class="warehouse-auto${warehouseSelected?.row === idx && warehouseSelected?.col === 5 ? " selected" : ""}">
+      <td class="warehouse-auto" data-row="${idx}" data-col="5">
         <div class="warehouse-auto-value">${escapeHtml(row.location || "Депо")}</div>
       </td>
-      <td class="warehouse-auto${warehouseSelected?.row === idx && warehouseSelected?.col === 6 ? " selected" : ""}">
+      <td class="warehouse-auto" data-row="${idx}" data-col="6">
         <div class="warehouse-auto-value warehouse-updated-val" data-row="${idx}">${escapeHtml(row.updated_at || "")}</div>
       </td>
     </tr>
@@ -856,6 +1172,7 @@ function render() {
   }
 
   applyWarehouseFilters();
+  applyWarehouseSelectionClasses();
   document.getElementById("saveBtn").style.display = CAN_EDIT ? "inline-block" : "none";
 }
 
