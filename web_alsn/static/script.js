@@ -13,7 +13,8 @@ const WAREHOUSE_FIELDS = [
   "verification_date",
   "periodicity",
   "next_verification_date",
-  "location"
+  "location",
+  "updated_at"
 ];
 let warehouseSelected = null;
 let warehouseFilters = {
@@ -86,7 +87,8 @@ function normalizeWhRow(row) {
     verification_date: String(row?.verification_date ?? ""),
     periodicity: String(row?.periodicity ?? ""),
     next_verification_date: String(row?.next_verification_date ?? ""),
-    location: String(row?.location ?? "")
+    location: String(row?.location ?? ""),
+    updated_at: String(row?.updated_at ?? "")
   };
 }
 
@@ -361,8 +363,30 @@ function blankWh() {
     verification_date: "",
     periodicity: "",
     next_verification_date: "",
-    location: ""
+    location: "",
+    updated_at: ""
   };
+}
+
+/* Проверка, изменились ли данные прибора в строке склада по сравнению с сохранённым состоянием */
+function isWarehouseRowChanged(currentRow, savedRow) {
+  if (!savedRow) {
+    // Новая строка: считается изменённой при наличии любых заполненных данных прибора
+    return !!(
+      String(currentRow?.type ?? "").trim() ||
+      String(currentRow?.number ?? "").trim() ||
+      String(currentRow?.verification_date ?? "").trim() ||
+      String(currentRow?.periodicity ?? "").trim() ||
+      String(currentRow?.next_verification_date ?? "").trim()
+    );
+  }
+  return (
+    String(currentRow?.type ?? "").trim() !== String(savedRow?.type ?? "").trim() ||
+    String(currentRow?.number ?? "").trim() !== String(savedRow?.number ?? "").trim() ||
+    String(currentRow?.verification_date ?? "").trim() !== String(savedRow?.verification_date ?? "").trim() ||
+    String(currentRow?.periodicity ?? "").trim() !== String(savedRow?.periodicity ?? "").trim() ||
+    String(currentRow?.next_verification_date ?? "").trim() !== String(savedRow?.next_verification_date ?? "").trim()
+  );
 }
 
 function parseDateDMY(value) {
@@ -693,7 +717,7 @@ function handleWarehousePaste(event, rowIdx, colIdx) {
     if (!targetRow) break;
     for (let c = 0; c < sourceRow.length; c += 1) {
       const targetColIdx = colIdx + c;
-      if (targetColIdx >= WAREHOUSE_FIELDS.length) break;
+      if (targetColIdx >= 5) break; // Автоматические колонки (местонахождение и дата изменения) не перезаписываются при вставке
       setWarehouseCellValue(targetRowIdx, targetColIdx, sourceRow[c].trim());
     }
     recalcWarehouseNextDate(targetRow);
@@ -703,7 +727,7 @@ function handleWarehousePaste(event, rowIdx, colIdx) {
   markDirty(true);
   focusWarehouseCell(
     Math.min(rowIdx + matrix.length - 1, appState.warehouse.length - 1),
-    Math.min(colIdx + matrix[0].length - 1, WAREHOUSE_FIELDS.length - 1)
+    Math.min(colIdx + matrix[0].length - 1, 4)
   );
 }
 
@@ -788,8 +812,11 @@ function render() {
       <td class="warehouse-auto${warehouseSelected?.row === idx && warehouseSelected?.col === 5 ? " selected" : ""}">
         <div class="warehouse-auto-value">${escapeHtml(row.location || "Депо")}</div>
       </td>
+      <td class="warehouse-auto${warehouseSelected?.row === idx && warehouseSelected?.col === 6 ? " selected" : ""}">
+        <div class="warehouse-auto-value warehouse-updated-val" data-row="${idx}">${escapeHtml(row.updated_at || "")}</div>
+      </td>
     </tr>
-  `).join("") + `<tr id="whEmptyStateRow"><td class="empty-state" colspan="6">Нет строк</td></tr>`;
+  `).join("") + `<tr id="whEmptyStateRow"><td class="empty-state" colspan="7">Нет строк</td></tr>`;
 
   // Заполнение фильтров склада
   const typeFilter = document.getElementById("warehouseTypeFilter");
@@ -907,6 +934,28 @@ async function saveState() {
     syncWarehouseFromDom();
     recalcWarehouseLocations();
     appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
+
+    // Обновление даты последнего изменения только для строк приборов с фактическими правками
+    const todayStr = formatDateDMY(new Date());
+    appState.warehouse.forEach((row, idx) => {
+      const savedRow = savedState?.warehouse ? savedState.warehouse[idx] : null;
+      const hasAnyData = !!(
+        String(row?.type ?? "").trim() ||
+        String(row?.number ?? "").trim() ||
+        String(row?.verification_date ?? "").trim() ||
+        String(row?.periodicity ?? "").trim() ||
+        String(row?.next_verification_date ?? "").trim()
+      );
+      if (!hasAnyData) {
+        row.updated_at = "";
+      } else if (isWarehouseRowChanged(row, savedRow)) {
+        row.updated_at = todayStr;
+      }
+      const updatedValEl = document.querySelector(`.warehouse-updated-val[data-row="${idx}"]`);
+      if (updatedValEl) {
+        updatedValEl.innerText = row.updated_at || "";
+      }
+    });
 
     const jsonPayload = JSON.stringify(appState);
     let bodyToSend = jsonPayload;

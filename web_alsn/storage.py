@@ -74,6 +74,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
             p_val = row.get("periodicity")
             nvd_val = row.get("next_verification_date")
             loc_val = row.get("location")
+            u_val = row.get("updated_at")
             normalized.append({
                 "type": str("" if t_val is None else t_val).strip(),
                 "number": str("" if n_val is None else n_val).strip(),
@@ -81,6 +82,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
                 "periodicity": str("" if p_val is None else p_val).strip(),
                 "next_verification_date": str("" if nvd_val is None else nvd_val).strip(),
                 "location": str("" if loc_val is None else loc_val).strip(),
+                "updated_at": str("" if u_val is None else u_val).strip(),
             })
     if not normalized:
         normalized.append({
@@ -90,6 +92,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
             "periodicity": "",
             "next_verification_date": "",
             "location": "",
+            "updated_at": "",
         })
     return normalized
 
@@ -161,7 +164,8 @@ def init_db() -> None:
                     verification_date TEXT NOT NULL DEFAULT '',
                     periodicity TEXT NOT NULL DEFAULT '',
                     next_verification_date TEXT NOT NULL DEFAULT '',
-                    location TEXT NOT NULL DEFAULT ''
+                    location TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
@@ -170,6 +174,10 @@ def init_db() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_warehouse_sort ON warehouse(sort_order, id)")
 
             cur = conn.cursor()
+            wh_cols = [r[1] for r in cur.execute("PRAGMA table_info(warehouse)").fetchall()]
+            if "updated_at" not in wh_cols:
+                conn.execute("ALTER TABLE warehouse ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+
             cur.execute("SELECT COUNT(*) FROM locomotives")
             if int(cur.fetchone()[0] or 0) == 0:
                 conn.execute(
@@ -180,8 +188,8 @@ def init_db() -> None:
             cur.execute("SELECT COUNT(*) FROM warehouse")
             if int(cur.fetchone()[0] or 0) == 0:
                 conn.execute(
-                    "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
-                    (1, "", "", "", "", "", ""),
+                    "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location, updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                    (1, "", "", "", "", "", "", ""),
                 )
 
 
@@ -209,9 +217,10 @@ def load_state_from_db() -> dict:
                 "periodicity": row["periodicity"],
                 "next_verification_date": row["next_verification_date"],
                 "location": row["location"],
+                "updated_at": row["updated_at"] if "updated_at" in row.keys() else "",
             }
             for row in cur.execute(
-                "SELECT type, number, verification_date, periodicity, next_verification_date, location FROM warehouse ORDER BY sort_order, id"
+                "SELECT type, number, verification_date, periodicity, next_verification_date, location, updated_at FROM warehouse ORDER BY sort_order, id"
             ).fetchall()
         ]
     return {"locomotives": locomotives, "warehouse": warehouse}
@@ -239,7 +248,7 @@ def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
                 ],
             )
             cur.executemany(
-                "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location) VALUES(?,?,?,?,?,?,?)",
+                "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location, updated_at) VALUES(?,?,?,?,?,?,?,?)",
                 [
                     (
                         idx + 1,
@@ -249,6 +258,7 @@ def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
                         row["periodicity"],
                         row["next_verification_date"],
                         row["location"],
+                        row.get("updated_at", ""),
                     )
                     for idx, row in enumerate(warehouse)
                 ],
