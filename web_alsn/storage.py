@@ -41,7 +41,7 @@ def blank_device_rows(count: int = 5) -> list[dict[str, str]]:
 
 
 def parse_devices_json(value) -> list[dict[str, str]]:
-    """Безопасный разбор JSON со списком приборов локомотива."""
+    """Безопасный разбор JSON со списком приборов локомотива с сохранением ведущих нулей."""
     try:
         parsed = json.loads(str(value or "[]"))
     except Exception:
@@ -52,27 +52,35 @@ def parse_devices_json(value) -> list[dict[str, str]]:
     for row in parsed:
         if not isinstance(row, dict):
             continue
+        t_val = row.get("type")
+        n_val = row.get("number")
         normalized.append({
-            "type": str(row.get("type", "") or "").strip(),
-            "number": str(row.get("number", "") or "").strip(),
+            "type": str("" if t_val is None else t_val).strip(),
+            "number": str("" if n_val is None else n_val).strip(),
         })
     return normalized or blank_device_rows()
 
 
 def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
-    """Нормализация строк склада приборов."""
+    """Нормализация строк склада приборов с сохранением ведущих нулей в номерах."""
     normalized = []
     if isinstance(rows, list):
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            t_val = row.get("type")
+            n_val = row.get("number")
+            vd_val = row.get("verification_date")
+            p_val = row.get("periodicity")
+            nvd_val = row.get("next_verification_date")
+            loc_val = row.get("location")
             normalized.append({
-                "type": str(row.get("type", "") or "").strip(),
-                "number": str(row.get("number", "") or "").strip(),
-                "verification_date": str(row.get("verification_date", "") or "").strip(),
-                "periodicity": str(row.get("periodicity", "") or "").strip(),
-                "next_verification_date": str(row.get("next_verification_date", "") or "").strip(),
-                "location": str(row.get("location", "") or "").strip(),
+                "type": str("" if t_val is None else t_val).strip(),
+                "number": str("" if n_val is None else n_val).strip(),
+                "verification_date": str("" if vd_val is None else vd_val).strip(),
+                "periodicity": str("" if p_val is None else p_val).strip(),
+                "next_verification_date": str("" if nvd_val is None else nvd_val).strip(),
+                "location": str("" if loc_val is None else loc_val).strip(),
             })
     if not normalized:
         normalized.append({
@@ -87,7 +95,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
 
 
 def normalize_locomotives(rows: list | None) -> list[dict]:
-    """Нормализация строк локомотивов и их приборов."""
+    """Нормализация строк локомотивов и их приборов с сохранением ведущих нулей."""
     normalized = []
     if isinstance(rows, list):
         for row in rows:
@@ -96,15 +104,19 @@ def normalize_locomotives(rows: list | None) -> list[dict]:
             devices = row.get("devices")
             if not isinstance(devices, list):
                 devices = []
+            s_val = row.get("series")
+            n_val = row.get("number")
+            inv_val = row.get("inventory_num")
+            note_val = row.get("note")
             normalized.append({
-                "series": str(row.get("series", "") or "").strip(),
-                "number": str(row.get("number", "") or "").strip(),
-                "inventory_num": str(row.get("inventory_num", "") or "").strip(),
-                "note": str(row.get("note", "") or "").strip(),
+                "series": str("" if s_val is None else s_val).strip(),
+                "number": str("" if n_val is None else n_val).strip(),
+                "inventory_num": str("" if inv_val is None else inv_val).strip(),
+                "note": str("" if note_val is None else note_val).strip(),
                 "devices": [
                     {
-                        "type": str(d.get("type", "") or "").strip(),
-                        "number": str(d.get("number", "") or "").strip(),
+                        "type": str("" if d.get("type") is None else d.get("type")).strip(),
+                        "number": str("" if d.get("number") is None else d.get("number")).strip(),
                     }
                     for d in devices
                     if isinstance(d, dict)

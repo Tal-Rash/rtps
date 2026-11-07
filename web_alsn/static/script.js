@@ -90,6 +90,13 @@ function normalizeWhRow(row) {
   };
 }
 
+/* Нормализация номера прибора: получение формы без ведущих нулей для надёжного сопоставления */
+function cleanDeviceNumber(num) {
+  const s = String(num ?? "").trim();
+  const unpadded = s.replace(/^0+/, "");
+  return unpadded || s;
+}
+
 /* Построение быстрого индекса приборов локомотивов для O(1) поиска местонахождения */
 function buildLocoDeviceIndex() {
   const index = new Map();
@@ -101,8 +108,13 @@ function buildLocoDeviceIndex() {
       const dType = String(dev?.type ?? "").trim().toLowerCase();
       const dNum = String(dev?.number ?? "").trim().toLowerCase();
       if (dNum) {
-        if (dType) index.set(`${dType}::${dNum}`, locoNum);
+        const cNum = cleanDeviceNumber(dNum).toLowerCase();
+        if (dType) {
+          index.set(`${dType}::${dNum}`, locoNum);
+          index.set(`${dType}::${cNum}`, locoNum);
+        }
         if (!index.has(`*::${dNum}`)) index.set(`*::${dNum}`, locoNum);
+        if (!index.has(`*::${cNum}`)) index.set(`*::${cNum}`, locoNum);
       }
     }
   }
@@ -117,7 +129,8 @@ function recalcWarehouseLocations() {
     const rNum = String(row?.number ?? "").trim().toLowerCase();
     let location = "Депо";
     if (rNum) {
-      location = index.get(`${rType}::${rNum}`) || index.get(`*::${rNum}`) || "Депо";
+      const cNum = cleanDeviceNumber(rNum).toLowerCase();
+      location = index.get(`${rType}::${rNum}`) || index.get(`${rType}::${cNum}`) || index.get(`*::${rNum}`) || index.get(`*::${cNum}`) || "Депо";
     }
     row.location = location;
   }
@@ -179,7 +192,11 @@ function getWarehouseNumberOptions(optionsData, type, currentNumber = "") {
   const list = set ? Array.from(set) : optionsData.allNumbers;
   const current = String(currentNumber ?? "").trim();
   if (current && !list.includes(current)) {
-    return [current, ...list];
+    const cCurr = cleanDeviceNumber(current);
+    const hasEquivalent = list.some((item) => cleanDeviceNumber(item) === cCurr);
+    if (!hasEquivalent) {
+      return [current, ...list];
+    }
   }
   return list;
 }
@@ -208,7 +225,13 @@ function warehouseRowMatchesFilters(row) {
   const filterLocation = String(warehouseFilters.location ?? "").trim().toLowerCase();
   const filterNumber = String(warehouseFilters.number ?? "").trim().toLowerCase();
 
-  if (filterNumber && !numberValue.includes(filterNumber)) return false;
+  if (filterNumber) {
+    const cleanFilter = cleanDeviceNumber(filterNumber).toLowerCase();
+    const cleanNum = cleanDeviceNumber(numberValue).toLowerCase();
+    if (!numberValue.includes(filterNumber) && !cleanNum.includes(cleanFilter)) {
+      return false;
+    }
+  }
   if (filterType && typeValue !== filterType) return false;
   if (filterLocation && locationValue !== filterLocation) return false;
   if (warehouseFilters.nextMonth) {
@@ -515,7 +538,9 @@ function editDeviceSelect(rowIdx, deviceIdx, field, value) {
     const optionsData = getWarehouseOptionsData();
     const allowedNumbers = getWarehouseNumberOptions(optionsData, row.devices[deviceIdx].type);
     const currentNumber = String(row.devices[deviceIdx].number ?? "").trim();
-    if (currentNumber && !allowedNumbers.includes(currentNumber)) {
+    const cCurr = cleanDeviceNumber(currentNumber);
+    const isAllowed = allowedNumbers.includes(currentNumber) || allowedNumbers.some((item) => cleanDeviceNumber(item) === cCurr);
+    if (currentNumber && !isAllowed) {
       row.devices[deviceIdx].number = "";
     }
   }
@@ -527,18 +552,28 @@ function editDeviceSelect(rowIdx, deviceIdx, field, value) {
 }
 
 function editWarehouseCell(rowIdx, colIdx, el) {
-  setWarehouseCellValue(rowIdx, colIdx, el.innerText.trim());
+  const val = el.innerText.trim();
+  setWarehouseCellValue(rowIdx, colIdx, val);
+
+  const rowEl = el.closest("tr");
+  if (rowEl) {
+    if (colIdx === 0) rowEl.dataset.warehouseType = val;
+    if (colIdx === 1) rowEl.dataset.warehouseNumber = val;
+    if (colIdx === 4) rowEl.dataset.warehouseNext = val;
+  }
+
   if (colIdx === 2 || colIdx === 3) {
     const nextValue = recalcWarehouseNextDate(appState.warehouse[rowIdx]);
     const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
     if (nextCell && document.activeElement !== nextCell) {
       nextCell.innerText = nextValue;
     }
+    if (rowEl) rowEl.dataset.warehouseNext = nextValue;
   }
   if (colIdx === 0 || colIdx === 1) {
     recalcWarehouseLocations();
     // Обновляем отображение ячейки местонахождения для текущей строки
-    const locCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="0"]`)?.closest("tr")?.querySelector(".warehouse-auto-value");
+    const locCell = rowEl ? rowEl.querySelector(".warehouse-auto-value") : null;
     if (locCell) locCell.innerText = appState.warehouse[rowIdx].location || "Депо";
   }
   markDirty(true);
@@ -564,6 +599,12 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
     const cell = event.currentTarget;
     cell.innerText = "";
     setWarehouseCellValue(rowIdx, colIdx, "");
+    const rowEl = cell.closest("tr");
+    if (rowEl) {
+      if (colIdx === 0) rowEl.dataset.warehouseType = "";
+      if (colIdx === 1) rowEl.dataset.warehouseNumber = "";
+      if (colIdx === 4) rowEl.dataset.warehouseNext = "";
+    }
     if (colIdx === 2 || colIdx === 3) {
       recalcWarehouseNextDate(appState.warehouse[rowIdx]);
       const nextCell = document.querySelector(`.warehouse-cell[data-row="${rowIdx}"][data-col="4"]`);
@@ -613,14 +654,41 @@ function handleWarehouseCopy(event, rowIdx, colIdx) {
 function handleWarehousePaste(event, rowIdx, colIdx) {
   if (!CAN_EDIT) return;
   event.preventDefault();
+  syncLocomotivesFromDom();
   syncWarehouseFromDom();
-  const text = event.clipboardData?.getData("text/plain") || "";
-  const matrix = parsePasteMatrix(text);
+
+  let matrix = [];
+  // Сначала пробуем получить форматированную HTML-таблицу (из Excel / веб-страниц),
+  // где номера с ведущими нулями (например '0123') не обрезаются до чисел
+  const html = event.clipboardData?.getData("text/html");
+  if (html && (html.includes("<table") || html.includes("<tr") || html.includes("<td"))) {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const trs = Array.from(doc.querySelectorAll("tr"));
+      if (trs.length) {
+        matrix = trs.map((tr) =>
+          Array.from(tr.querySelectorAll("td, th")).map((td) => td.innerText.replace(/\u00a0/g, " ").trim())
+        ).filter((row) => row.length && row.some((c) => c !== ""));
+      }
+    } catch (e) {
+      console.warn("HTML paste fallback:", e);
+    }
+  }
+
+  // Если HTML не найден, используем стандартный текстовый буфер обмена
+  if (!matrix.length) {
+    const text = event.clipboardData?.getData("text/plain") || "";
+    matrix = parsePasteMatrix(text);
+  }
   if (!matrix.length) return;
 
   for (let r = 0; r < matrix.length; r += 1) {
     const sourceRow = matrix[r];
     const targetRowIdx = rowIdx + r;
+    while (targetRowIdx >= appState.warehouse.length) {
+      appState.warehouse.push(blankWh());
+    }
     const targetRow = appState.warehouse[targetRowIdx];
     if (!targetRow) break;
     for (let c = 0; c < sourceRow.length; c += 1) {
@@ -652,6 +720,8 @@ function render() {
     const deviceRows = (row.devices && row.devices.length ? row.devices : blankDeviceRows()).map((device, deviceIdx) => {
       const numberOptions = getWarehouseNumberOptions(optionsData, device.type, device.number);
       const availableTypes = Array.from(new Set([...(device.type ? [String(device.type).trim()] : []), ...optionsData.types]));
+      const devNumStr = String(device.number ?? "").trim();
+      const devNumClean = cleanDeviceNumber(devNumStr);
       return `
       <tr>
         <td>
@@ -666,7 +736,11 @@ function render() {
           <select class="device-select" ${CAN_EDIT ? `onchange="editDeviceSelect(${idx}, ${deviceIdx}, 'number', this.value)"` : 'disabled'}>
             <option value=""></option>
             ${numberOptions
-              .map((option) => `<option value="${escapeHtml(option)}"${String(device.number ?? "") === option ? " selected" : ""}>${escapeHtml(option)}</option>`)
+              .map((option) => {
+                const optStr = String(option ?? "").trim();
+                const isSelected = devNumStr === optStr || (devNumClean && cleanDeviceNumber(optStr) === devNumClean);
+                return `<option value="${escapeHtml(option)}"${isSelected ? " selected" : ""}>${escapeHtml(option)}</option>`;
+              })
               .join("")}
           </select>
         </td>
