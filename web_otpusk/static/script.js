@@ -3,6 +3,30 @@ const APP_PREFIX = (typeof window !== 'undefined' && window.APP_CONFIG && window
     (typeof window !== 'undefined' && window.location.pathname.startsWith('/otpusk') ? '/otpusk' : '');
 const CAN_EDIT = Boolean(typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.CAN_EDIT);
 
+// Ссылка на функцию проверки несохранённых изменений для глобальной навигации
+let checkUnsavedBeforeLeaveGlobal = null;
+
+/**
+ * Переход на главную страницу портала с проверкой несохранённых изменений
+ */
+function handleHomeClick(event) {
+    if (event) event.preventDefault();
+    const mainUrl = (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.MAIN_SITE_URL) 
+        ? window.APP_CONFIG.MAIN_SITE_URL 
+        : "http://yrtps.ru";
+    const targetUrl = mainUrl.endsWith('/') ? mainUrl : (mainUrl + '/');
+
+    if (typeof checkUnsavedBeforeLeaveGlobal === 'function') {
+        checkUnsavedBeforeLeaveGlobal(() => {
+            window.location.href = targetUrl;
+        }, "Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?");
+    } else {
+        window.location.href = targetUrl;
+    }
+    return false;
+}
+window.handleHomeClick = handleHomeClick;
+
 document.addEventListener('DOMContentLoaded', () => {
     const yearSelect = document.getElementById('yearSelect');
     let currentYear = yearSelect ? (parseInt(yearSelect.value) || 2026) : 2026;
@@ -490,15 +514,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    window.handleHomeClick = function(event) {
-        if (event) event.preventDefault();
-        const targetUrl = event && event.currentTarget ? event.currentTarget.getAttribute('href') : (window.APP_CONFIG.MAIN_SITE_URL || 'http://yrtps.ru') + '/';
-        checkUnsavedBeforeLeave(() => {
-            initialSavedSnapshot = JSON.stringify(captureTableState());
-            location.href = targetUrl;
-        }, 'Есть несохранённые изменения. Сохранить их перед переходом на главную страницу?');
-        return false;
-    };
+    // Привязываем функцию проверки несохранённых изменений к глобальному обработчику
+    checkUnsavedBeforeLeaveGlobal = checkUnsavedBeforeLeave;
 
     window.addEventListener('beforeunload', (e) => {
         if (isScheduleDirty()) {
