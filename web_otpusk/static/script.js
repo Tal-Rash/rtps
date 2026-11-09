@@ -1,6 +1,9 @@
+// Глобальные константы прав доступа и префикса URL
+const APP_PREFIX = (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.APP_PREFIX) || 
+    (typeof window !== 'undefined' && window.location.pathname.startsWith('/otpusk') ? '/otpusk' : '');
+const CAN_EDIT = Boolean(typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.CAN_EDIT);
+
 document.addEventListener('DOMContentLoaded', () => {
-    const APP_PREFIX = window.location.pathname.startsWith('/otpusk') ? '/otpusk' : '';
-    
     const yearSelect = document.getElementById('yearSelect');
     let currentYear = yearSelect ? (parseInt(yearSelect.value) || 2026) : 2026;
 
@@ -374,7 +377,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tabCurrentBtn = document.getElementById('tabCurrentBtn');
                 if (tabCurrentBtn) {
                     tabCurrentBtn.textContent = `График отпусков ${currentYear}`;
+                    tabCurrentBtn.classList.add('active');
                 }
+                const tabArchiveBtn = document.getElementById('tabArchiveBtn');
+                if (tabArchiveBtn) {
+                    tabArchiveBtn.classList.remove('active');
+                }
+                const panelCurrent = document.getElementById('panelCurrent');
+                const panelArchive = document.getElementById('panelArchive');
+                if (panelCurrent) panelCurrent.style.display = 'block';
+                if (panelArchive) panelArchive.style.display = 'none';
+
+                const scheduleActions = document.getElementById('scheduleActions');
+                if (scheduleActions) scheduleActions.style.display = '';
+                const badgeToggleLabel = document.getElementById('badgeToggleLabel');
+                if (badgeToggleLabel) badgeToggleLabel.style.display = '';
+                const holidaysBtn = document.getElementById('holidaysBtn');
+                if (holidaysBtn) holidaysBtn.style.display = '';
+                const saveBtn = document.getElementById('saveBtn');
+                if (saveBtn) saveBtn.style.display = '';
+
                 const holidaysModalTitle = document.getElementById('holidaysModalTitle');
                 if (holidaysModalTitle) {
                     holidaysModalTitle.textContent = `Праздничные дни по месяцам (${currentYear})`;
@@ -2526,9 +2548,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (holidaysBtn) holidaysBtn.style.display = '';
             if (saveBtn) saveBtn.style.display = '';
 
-            // При переключении на годовой график перезагружаем данные из сервера
-            if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {
-                loadVacations(currentYear);
+            // При переключении на годовой график перезагружаем данные с сервера
+            if (typeof loadYearData === 'function' && typeof currentYear !== 'undefined') {
+                loadYearData(currentYear);
             }
         });
 
@@ -2579,6 +2601,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!archiveTableBody) return;
         archiveTableBody.innerHTML = '';
 
+        if (!CAN_EDIT) {
+            if (addArchiveRowBtn) addArchiveRowBtn.style.display = 'none';
+            if (deleteArchiveRowBtn) deleteArchiveRowBtn.style.display = 'none';
+            if (saveArchiveBtn) saveArchiveBtn.style.display = 'none';
+            const importArchiveBtn = document.getElementById('importArchiveBtn');
+            if (importArchiveBtn) importArchiveBtn.style.display = 'none';
+        }
+
+        const disAttr = CAN_EDIT ? '' : 'disabled';
         const empOptions = allData.map(e => `<option value="${escapeHtml(e.name)}" data-tab="${escapeHtml(e.tab_num || '')}">${escapeHtml(e.name)}</option>`).join('');
 
         archiveData.forEach((row, index) => {
@@ -2594,18 +2625,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             tr.innerHTML = `
                 <td style="text-align:center; font-weight:bold; color:var(--muted);">${index + 1}</td>
-                <td><input type="number" class="archive-input archive-year" value="${row.y || 2025}" style="text-align:center;"></td>
+                <td><input type="number" class="archive-input archive-year" value="${row.y || 2025}" style="text-align:center;" ${disAttr}></td>
                 <td>
-                    <input type="text" class="archive-input archive-name" value="${escapeHtml(row.name || '')}" list="archiveEmpList_${index}" placeholder="ФИО сотрудника">
+                    <input type="text" class="archive-input archive-name" value="${escapeHtml(row.name || '')}" list="archiveEmpList_${index}" placeholder="ФИО сотрудника" ${disAttr}>
                     <datalist id="archiveEmpList_${index}">
                         ${empOptions}
                     </datalist>
                 </td>
-                <td><input type="text" class="archive-input archive-tab" value="${escapeHtml(row.tab_num || '')}" placeholder="Таб. №"></td>
-                <td><input type="date" class="archive-input archive-start" value="${row.start_date || ''}"></td>
-                <td><input type="date" class="archive-input archive-end" value="${row.end_date || ''}"></td>
-                <td><input type="number" class="archive-input archive-days" value="${row.days || 0}" style="text-align:center;"></td>
-                <td><input type="text" class="archive-input archive-note" value="${escapeHtml(row.note || '')}" placeholder="Примечание"></td>
+                <td><input type="text" class="archive-input archive-tab" value="${escapeHtml(row.tab_num || '')}" placeholder="Таб. №" ${disAttr}></td>
+                <td><input type="date" class="archive-input archive-start" value="${row.start_date || ''}" ${disAttr}></td>
+                <td><input type="date" class="archive-input archive-end" value="${row.end_date || ''}" ${disAttr}></td>
+                <td><input type="number" class="archive-input archive-days" value="${row.days || 0}" style="text-align:center;" ${disAttr}></td>
+                <td><input type="text" class="archive-input archive-note" value="${escapeHtml(row.note || '')}" placeholder="Примечание" ${disAttr}></td>
             `;
 
             const startInp = tr.querySelector('.archive-start');
@@ -2704,8 +2735,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(() => {
                 saveArchiveBtn.textContent = 'Архив сохранен!';
                 // Перезагружаем годовой график после обновления архива
-                if (typeof loadVacations === 'function' && typeof currentYear !== 'undefined') {
-                    loadVacations(currentYear);
+                if (typeof loadYearData === 'function' && typeof currentYear !== 'undefined') {
+                    loadYearData(currentYear);
                 }
                 setTimeout(() => {
                     saveArchiveBtn.textContent = 'Сохранить архив';

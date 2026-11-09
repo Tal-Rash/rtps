@@ -249,6 +249,8 @@ async def api_save_holidays(request: Request, year: int = 2026):
 
 @app.get("/api/vacations/history_matrix")
 @app.get(f"{APP_PREFIX}/api/vacations/history_matrix", include_in_schema=False)
+@app.get("/api/history_matrix")
+@app.get(f"{APP_PREFIX}/api/history_matrix", include_in_schema=False)
 async def api_get_history_matrix(request: Request, year: int = 2026):
     """Получение исторической матрицы отпусков по годам для анализа сезонности."""
     session = get_session(request)

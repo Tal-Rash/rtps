@@ -21,9 +21,9 @@ if str(_ROOT.parent) not in sys.path:
 from rtps_common import connect_sqlite
 
 try:
-    from .constants import DB_FILE, DB_LOCK, DEFAULT_HOLIDAYS, ROOT
+    from .constants import DB_FILE, DB_LOCK, DEFAULT_HOLIDAYS, MONTH_NAMES_RU, ROOT
 except (ImportError, ValueError):
-    from constants import DB_FILE, DB_LOCK, DEFAULT_HOLIDAYS, ROOT
+    from constants import DB_FILE, DB_LOCK, DEFAULT_HOLIDAYS, MONTH_NAMES_RU, ROOT
 
 
 @contextmanager

@@ -14,7 +14,7 @@ WEB_USERS_DB = ROOT.parent / "base" / "web_users.db"
 
 # Настройки префикса и сессий
 APP_PREFIX = "/otpusk"
-APP_VERSION = "web-otpusk-3.9"
+APP_VERSION = "web-otpusk-3.10"
 SESSION_COOKIE = "rtps_session"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
@@ -40,6 +40,22 @@ DEFAULT_HOLIDAYS = [
     {"month": 10, "name": "Ноябрь", "totalDays": 30, "dates": "4"},
     {"month": 11, "name": "Декабрь", "totalDays": 31, "dates": ""}
 ]
+
+# Названия месяцев на русском языке по их порядковым номерам (1-12)
+MONTH_NAMES_RU = {
+    1: "январь",
+    2: "февраль",
+    3: "март",
+    4: "апрель",
+    5: "май",
+    6: "июнь",
+    7: "июль",
+    8: "август",
+    9: "сентябрь",
+    10: "октябрь",
+    11: "ноябрь",
+    12: "декабрь",
+}
 
 # Кэш секретного ключа для быстрой проверки сессий
 _SECRET_CACHE = {"mtime": 0.0, "secret": "opYbo6NB8pb7dChYQkmHEvUH6K4hAHjuzi2qEYOC024"}
