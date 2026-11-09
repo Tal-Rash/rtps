@@ -3039,12 +3039,20 @@ if (document.getElementById('wearLocomotive')) {
   renderWearLocomotiveOptions();
 }
 if (document.getElementById('inputTable')) {
-  initialLoadPromise = loadState().catch(error => {
+  // Проверяем наличие параметров запроса locomotive и tab для прямого перехода
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramLoco = urlParams.get('locomotive');
+  const paramTab = urlParams.get('tab');
+  initialLoadPromise = loadState(paramLoco || undefined).catch(error => {
     console.error(error);
     setStatus(error?.message || 'Не удалось загрузить данные');
     return null;
   });
-  if (!CAN_EDIT && document.getElementById('tabKp')) switchTab('kp');
+  if (paramTab && typeof switchTab === 'function') {
+    switchTab(paramTab);
+  } else if (!CAN_EDIT && document.getElementById('tabKp')) {
+    switchTab('kp');
+  }
 }
 if (document.getElementById('wearChartSvg') || document.getElementById('wearChartsGrid')) {
   loadWearAnalysis().catch(() => undefined);

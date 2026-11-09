@@ -19,8 +19,12 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT.parent))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(ROOT.parent))
 from rtps_common import connect_sqlite, resolve_user_access
+from overdue import get_overdue_summary
 
 DATA_DIR = ROOT / "data"
 SHARED_DATA_DIR = ROOT.parent / "data"
@@ -37,8 +41,9 @@ OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru/otpusk")
 
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
+COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
 # Идентификатор сборки веб-сервиса
-BUILD_ID = "web-main-2026-11-05"
+BUILD_ID = "web-main-2026-11-09"
 
 app = FastAPI(title="RTPS Web Main")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
@@ -248,6 +253,23 @@ async def home_page(request: Request):
         users_link = f'<a class="badge badge-users" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом{pending_badge}</a>'
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
         
+    # Формируем кнопку контроля просрочек
+    overdue_summary = get_overdue_summary(COMMON_DB_FILE)
+    if overdue_summary["has_overdue"]:
+        overdue_button = (
+            f'<button id="overdueBtn" class="badge badge-alert-btn" type="button" '
+            f'onclick="openOverdueModal()" title="Есть просрочки! Нажмите для просмотра">'
+            f'Просрочки <span class="badge-counter">{overdue_summary["total_overdue"]}</span>'
+            f'</button>'
+        )
+    else:
+        overdue_button = (
+            f'<button id="overdueBtn" class="badge badge-ok-btn" type="button" '
+            f'onclick="openOverdueModal()" title="Все показатели в норме, просрочек нет">'
+            f'Просрочки: 0'
+            f'</button>'
+        )
+
     def has_access_to(mod_name):
         mods = session["modules"]
         role = session["role"]
@@ -267,6 +289,9 @@ async def home_page(request: Request):
         "USERS_LINK": users_link,
         "PENDING_USERS_COUNT": pending_users_count,
         "LOGS_LINK": logs_link,
+        "OVERDUE_BUTTON": overdue_button,
+        "OVERDUE_SUMMARY": overdue_summary,
+        "OVERDUE_SUMMARY_JSON": json.dumps(overdue_summary, ensure_ascii=False),
         "HIDE_GRAFIK_PPR": ("hide_grafik_ppr:yes" in session["modules"]) or not has_access_to("grafik_ppr"),
         "HIDE_ZAMER_KP": ("hide_zamer_kp:yes" in session["modules"]) or not has_access_to("zamer_kp"),
         "HIDE_SPRAVOCHNIK": ("hide_spravochnik:yes" in session["modules"]) or not has_access_to("spravochnik"),
@@ -286,6 +311,14 @@ async def home_page(request: Request):
         return templates.TemplateResponse(request=request, name="home.html", context=context)
     except TypeError:
         return templates.TemplateResponse("home.html", context)
+
+@app.get("/api/overdue")
+async def api_overdue_endpoint(request: Request):
+    """API получения актуальной сводки по всем видам просрочек."""
+    session = get_current_session(request)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
+    return get_overdue_summary(COMMON_DB_FILE)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
