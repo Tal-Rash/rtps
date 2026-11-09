@@ -42,6 +42,7 @@ OTPUSK_SITE_URL = os.environ.get("OTPUSK_SITE_URL", "http://yrtps.ru/otpusk")
 FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
 COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
+ALSN_DB_FILE = ROOT.parent / "web_alsn" / "data" / "alsn.db"
 # Идентификатор сборки веб-сервиса
 BUILD_ID = "web-main-2026-11-09"
 
@@ -254,7 +255,7 @@ async def home_page(request: Request):
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
         
     # Формируем кнопку контроля просрочек
-    overdue_summary = get_overdue_summary(COMMON_DB_FILE)
+    overdue_summary = get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE)
     if overdue_summary["has_overdue"]:
         overdue_button = (
             f'<button id="overdueBtn" class="badge badge-alert-btn" type="button" '
@@ -318,7 +319,7 @@ async def api_overdue_endpoint(request: Request):
     session = get_current_session(request)
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
-    return get_overdue_summary(COMMON_DB_FILE)
+    return get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
