@@ -716,14 +716,14 @@ def load_history_matrix(year: int = 2026) -> dict:
         exc_iso = format_date_to_iso(exc_date_str)
 
         # Проверяем статус увольнения/исключения сотрудника
-        is_exc = False
         is_quitting = bool(exc_year is not None and exc_year in (year, year - 1))
-        if emp.get("from_archive"):
-            is_exc = True
-        elif is_employee_excluded_for_year(emp, year):
-            is_exc = True
-        elif int(emp.get("is_excluded") or 0) == 1 and not is_quitting:
-            is_exc = True
+        is_exc = bool(
+            emp.get("from_archive")
+            or is_employee_excluded_for_year(emp, year)
+            or int(emp.get("is_excluded") or 0) == 1
+            or is_quitting
+            or bool(exc_date_str)
+        )
 
         # Если сотрудник ещё не был принят на работу к целевому году, пропускаем
         if not is_exc and hire_year is not None and hire_year > year:

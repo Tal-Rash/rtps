@@ -3043,8 +3043,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const query = filterText.toLowerCase();
         const repPairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
         let filteredEmployees = employees.filter(emp => {
+            // Определение признака увольнения или исключения сотрудника
+            const isDismissed = Boolean(
+                emp.is_excluded || 
+                emp.is_quitting_this_year || 
+                (emp.exclude_date && String(emp.exclude_date).trim() !== '')
+            );
             // Если галочка Показывать уволенных снята, исключаем уволенных
-            if (!showExcluded && emp.is_excluded) {
+            if (!showExcluded && isDismissed) {
                 return false;
             }
             if (!query) return true;
@@ -3101,7 +3107,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         filteredEmployees.forEach(emp => {
             const empName = escapeHtml(emp.name || emp.full_name || '');
-            const isExcluded = Boolean(emp.is_excluded);
+            const isExcluded = Boolean(
+                emp.is_excluded || 
+                emp.is_quitting_this_year || 
+                (emp.exclude_date && String(emp.exclude_date).trim() !== '')
+            );
             const excDate = emp.exclude_date ? formatDateRu(emp.exclude_date) : '';
             const empPos = isExcluded 
                 ? `<span style="color: #94a3b8; font-style: italic;">${escapeHtml(emp.position || 'Уволен')}</span>`
