@@ -953,7 +953,6 @@ function handleWarehouseKeydown(event, rowIdx, colIdx) {
   if (!CAN_EDIT) return;
 
   const key = event.key;
-  if (key === "Delete") {
   const sel = getWarehouseSelection();
 
   // Очистка выделенного диапазона при нажатии Delete или Backspace
