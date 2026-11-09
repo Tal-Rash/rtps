@@ -14,6 +14,17 @@ from rtps_common import connect_sqlite
 KP_RECHECK_DAYS = 30
 
 
+def is_diesel_locomotive(ser: str) -> bool:
+    """
+    Проверяет, относится ли локомотив к тепловозам (маневровые тепловозы ТЭМ и др.).
+    Тяговые агрегаты (серии ПЭ-2М / PE-2M) тепловозами не являются и не учитываются при контроле замеров КП.
+    """
+    s = str(ser or "").strip().upper()
+    if "ПЭ" in s or "PE" in s:
+        return False
+    return True
+
+
 def get_overdue_summary(common_db_path: Path) -> dict:
     """
     Формирует сводку по всем видам просрочек системы РТПС.
@@ -51,9 +62,9 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
     if not db_path.exists():
         return {
             "id": "kp",
-            "title": "Замеры колесных пар",
+            "title": "Замеры колесных пар тепловозов",
             "count": 0,
-            "unit_label": "локомотивов",
+            "unit_label": "тепловозов",
             "items": [],
             "no_data_items": [],
             "up_to_date_items": [],
@@ -103,7 +114,11 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
                 if not num:
                     continue
 
-                full_title = f"{ser} №{num}" if ser else f"Локомотив №{num}"
+                # В контроль просрочки замеров КП попадают только тепловозы (ПЭ-2М исключаются)
+                if not is_diesel_locomotive(ser):
+                    continue
+
+                full_title = f"{ser} №{num}" if ser else f"Тепловоз №{num}"
                 last_date_str = dates_dict.get(num)
 
                 if last_date_str:
@@ -155,10 +170,11 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
 
     return {
         "id": "kp",
-        "title": "Замеры колесных пар",
+        "title": "Замеры колесных пар тепловозов",
         "count": len(overdue_items),
-        "unit_label": "локомотивов",
+        "unit_label": "тепловозов",
         "items": overdue_items,
         "no_data_items": no_data_items,
         "up_to_date_items": up_to_date_items,
     }
+

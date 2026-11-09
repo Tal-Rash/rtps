@@ -358,8 +358,8 @@
 
       <div class="modal-body">
         <div class="modal-note">
-          По регламенту повторный замер параметров колесных пар локомотивов выполняется <strong>не реже 1 раза в 30 дней</strong>.
-          Красным выделены локомотивы, у которых превышен допустимый межзамерный интервал.
+          По регламенту повторный замер параметров колесных пар тепловозов выполняется <strong>не реже 1 раза в 30 дней</strong>.
+          Красным выделены тепловозы, у которых превышен допустимый межзамерный интервал.
         </div>
 
         <div id="overdueTableContainer">
@@ -470,11 +470,11 @@
       const noData = category.no_data_items || [];
       
       if (items.length === 0) {
-        let html = `<div class="empty-state">✅ Все замеры колесных пар выполнены вовремя! Просроченных замеров нет.</div>`;
+        let html = `<div class="empty-state">✅ Все замеры колесных пар тепловозов выполнены вовремя! Просроченных замеров нет.</div>`;
         if (noData.length > 0) {
           html += `
             <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
-              <summary style="cursor:pointer; font-weight:600; color:#334155;">Локомотивы без истории замеров в базе (${noData.length})</summary>
+              <summary style="cursor:pointer; font-weight:600; color:#334155;">Тепловозы без истории замеров в базе (${noData.length})</summary>
               <div style="margin-top:8px; line-height:1.8;">
                 ${noData.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)}</a>`).join('')}
               </div>
@@ -502,7 +502,7 @@
         <table class="overdue-table">
           <thead>
             <tr>
-              <th>Локомотив</th>
+              <th>Тепловоз</th>
               <th>Предыдущий замер</th>
               <th>Крайний срок</th>
               <th>Просрочено</th>
@@ -518,7 +518,7 @@
       if (noData.length > 0) {
         tableHtml += `
           <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
-            <summary style="cursor:pointer; font-weight:600; color:#334155;">Локомотивы без истории замеров в базе (${noData.length})</summary>
+            <summary style="cursor:pointer; font-weight:600; color:#334155;">Тепловозы без истории замеров в базе (${noData.length})</summary>
             <div style="margin-top:8px; line-height:1.8;">
               ${noData.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)}</a>`).join('')}
             </div>
