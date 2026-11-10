@@ -104,7 +104,14 @@
       margin: 0;
       opacity: 0.8;
     }
-    /* Нижняя строка: вкладки разделов */
+    /* Нижняя строка: вкладки разделов и кнопки действий текущего раздела */
+    .tabs-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
     .tabs {
       display: flex;
       gap: 8px;
@@ -114,6 +121,26 @@
       padding: 0;
       overflow-x: auto;
       scrollbar-width: thin;
+    }
+    .tab-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .tab-action-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      border-color: #cbd5e1;
+      color: #94a3b8;
+      box-shadow: none !important;
+      background: #fff !important;
     }
     .tab {
       flex: 0 0 auto;
@@ -148,7 +175,7 @@
       overflow: auto;
     }
     .table-shell {
-      margin-top: 12px;
+      margin-top: 0;
       background: #fff;
       border: 1px solid var(--accent);
       border-radius: 14px;
@@ -270,10 +297,27 @@
       </div>
     </div>
     <div class="top-divider"></div>
-    <div class="tabs" role="tablist" aria-label="Разделы">
-      <button class="tab active" type="button" onclick="showTab('norms', this)">Нормы времени</button>
-      <button class="tab" type="button" onclick="showTab('employees', this)">Сотрудники</button>
-      <button class="tab" type="button" onclick="showTab('inventory', this)">Локомотивы</button>
+    <div class="tabs-row">
+      <div class="tabs" role="tablist" aria-label="Разделы">
+        <button class="tab active" type="button" onclick="showTab('norms', this)">Нормы времени</button>
+        <button class="tab" type="button" onclick="showTab('employees', this)">Сотрудники</button>
+        <button class="tab" type="button" onclick="showTab('inventory', this)">Локомотивы</button>
+      </div>
+      <div class="tab-actions">
+        <!-- Кнопки действий для вкладки "Сотрудники" -->
+        <div id="employeesTopActions" class="tab-action-group" style="display:none;">
+          <button type="button" onclick="copyEmpSelection()" title="Копировать выделенное в буфер обмена (Ctrl+C)">Копировать</button>
+          <button id="empAddBtn" type="button" onclick="addRow('employees')">+ строку</button>
+          <button id="empDeleteBtn" type="button" onclick="deleteRow('employees')">- строку</button>
+        </div>
+        <!-- Кнопки действий для вкладки "Локомотивы" -->
+        <div id="inventoryTopActions" class="tab-action-group" style="display:none;">
+          <button id="inventoryAddBtn" type="button" onclick="openAddLocomotiveModal()">Добавить локомотив</button>
+          <button id="inventoryDeleteBtn" type="button" onclick="softDeleteInventory()" disabled>Удалить</button>
+          <button id="inventoryRestoreBtn" type="button" onclick="restoreInventoryRow()" disabled>Восстановить</button>
+          <button id="inventoryPurgeBtn" type="button" onclick="purgeSelectedInventory()" disabled>Окончательно удалить</button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="norms" class="panel active"></div>
@@ -376,38 +420,12 @@ function renderAll(){
   updateHistoryButtons();
   updateSaveButton();
   syncInventoryActionButtons();
+  const currentTab = document.querySelector('.panel.active')?.id || 'norms';
+  updateTopActions(currentTab);
 }
 
 function renderTable(name, rows, editableRows){
   const panel = document.getElementById(name);
-  const rowbar = (editableRows && CAN_EDIT)
-    ? (
-      name === 'inventory'
-        ? (() => {
-            const selectedRow = selected.inventory >= 0 ? state.inventory[selected.inventory] : null;
-            const isDeleted = selectedRow ? Number(selectedRow[8] || 0) > 0 : false;
-            return `<div class="rowbar">
-              <button type="button" onclick="openAddLocomotiveModal()">Добавить локомотив</button>
-              <button id="inventoryDeleteBtn" type="button" onclick="softDeleteInventory()" ${selected.inventory < 0 || isDeleted ? 'disabled' : ''}>Удалить</button>
-              <button id="inventoryRestoreBtn" type="button" onclick="restoreInventoryRow()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Восстановить</button>
-              <button id="inventoryPurgeBtn" type="button" onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
-            </div>`;
-          })()
-        : (name === 'employees'
-            ? `<div class="rowbar">
-                <button type="button" onclick="copyEmpSelection()" title="Копировать выделенное в буфер обмена (Ctrl+C)">Копировать</button>
-                <button type="button" onclick="addRow('${name}')">+ строку</button>
-                <button type="button" onclick="deleteRow('${name}')">- строку</button>
-              </div>`
-            : `<div class="rowbar"><button type="button" onclick="addRow('${name}')">+ строку</button><button type="button" onclick="deleteRow('${name}')">- строку</button></div>`
-          )
-    )
-    : (name === 'employees'
-        ? `<div class="rowbar">
-            <button type="button" onclick="copyEmpSelection()" title="Копировать выделенное в буфер обмена (Ctrl+C)">Копировать</button>
-          </div>`
-        : ''
-      );
   const tableClass = name === 'norms' ? ' class="norms-table"' : '';
   const employeesTableClass = name === 'employees' ? ' class="employees-table"' : '';
   const colGroup = name === 'norms'
@@ -456,7 +474,7 @@ function renderTable(name, rows, editableRows){
       `</tr></thead>`
     : `<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + `</tr></thead>`;
 
-  let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + theadHtml + '<tbody>';
+  let html = '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + theadHtml + '<tbody>';
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[8] || 0) > 0;
     const isDraggable = (name === 'inventory' || name === 'employees') && CAN_EDIT;
@@ -916,6 +934,25 @@ function submitAddLocomotive(){
   renderTable('inventory', state.inventory, true);
   updateSaveButton();
 }
+// Управление отображением кнопок действий в шапке в зависимости от выбранной вкладки
+function updateTopActions(activeTab){
+  const empGroup = document.getElementById('employeesTopActions');
+  const invGroup = document.getElementById('inventoryTopActions');
+  if (empGroup) {
+    empGroup.style.display = (activeTab === 'employees') ? 'flex' : 'none';
+    const empAddBtn = document.getElementById('empAddBtn');
+    const empDeleteBtn = document.getElementById('empDeleteBtn');
+    if (empAddBtn) empAddBtn.style.display = CAN_EDIT ? '' : 'none';
+    if (empDeleteBtn) empDeleteBtn.style.display = CAN_EDIT ? '' : 'none';
+  }
+  if (invGroup) {
+    invGroup.style.display = (activeTab === 'inventory' && CAN_EDIT) ? 'flex' : 'none';
+    if (activeTab === 'inventory') {
+      syncInventoryActionButtons();
+    }
+  }
+}
+
 function showTab(id, btn){
   document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -927,6 +964,7 @@ function showTab(id, btn){
   } else {
     clearEmpSelection();
   }
+  updateTopActions(id);
 }
 function escapeHtml(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -939,6 +977,8 @@ if (activeTab) {
   if (btn) {
     showTab(activeTab, btn);
   }
+} else {
+  updateTopActions('norms');
 }
 /* Автоматический сброс устаревшего кэша, если в словаре отсутствует новый табельный номер 4611140 */
 try {
