@@ -179,6 +179,69 @@
       outline: none;
       box-shadow: none;
     }
+    /* Стили выделения и копирования ячеек таблицы сотрудников как в Excel */
+    table.employees-table tr.selected-row {
+      outline: none;
+      background: transparent;
+    }
+    table.employees-table td.selected-cell {
+      background: #e8f0fe !important;
+    }
+    table.employees-table td.selected-cell input,
+    table.employees-table td.selected-cell textarea {
+      background: transparent !important;
+    }
+    table.employees-table td.row-num {
+      user-select: none;
+      cursor: pointer;
+      background: #eef4fb;
+      font-weight: 600;
+      color: #3b4b60;
+    }
+    table.employees-table td.row-num:hover {
+      background: #dbe7fc;
+    }
+    table.employees-table td.row-num.selected-row-num {
+      background: #c2d7fe !important;
+      font-weight: 700;
+      color: #102033;
+    }
+    table.employees-table th.emp-corner-th,
+    table.employees-table th.emp-col-th {
+      user-select: none;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    table.employees-table th.emp-corner-th:hover,
+    table.employees-table th.emp-col-th:hover {
+      background: #dbe7fc;
+    }
+    table.employees-table th.emp-col-th.selected-col-th {
+      background: #c2d7fe !important;
+      color: #102033;
+    }
+    /* Всплывающее уведомление о копировании */
+    .copy-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(16, 32, 51, 0.92);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      z-index: 10000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+    }
+    .copy-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(16, 32, 51, .4); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
     .modal-backdrop.show { display: flex; }
     .modal { width: min(520px, 100%); background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: 0 20px 60px rgba(16, 32, 51, .2); }
@@ -330,9 +393,21 @@ function renderTable(name, rows, editableRows){
               <button id="inventoryPurgeBtn" type="button" onclick="purgeSelectedInventory()" ${selected.inventory < 0 || !isDeleted ? 'disabled' : ''}>Окончательно удалить</button>
             </div>`;
           })()
-        : `<div class="rowbar"><button onclick="addRow('${name}')">+ строку</button><button onclick="deleteRow('${name}')">- строку</button></div>`
+        : (name === 'employees'
+            ? `<div class="rowbar">
+                <button type="button" onclick="copyEmpSelection()" title="Копировать выделенное в буфер обмена (Ctrl+C)">Копировать</button>
+                <button type="button" onclick="addRow('${name}')">+ строку</button>
+                <button type="button" onclick="deleteRow('${name}')">- строку</button>
+              </div>`
+            : `<div class="rowbar"><button type="button" onclick="addRow('${name}')">+ строку</button><button type="button" onclick="deleteRow('${name}')">- строку</button></div>`
+          )
     )
-    : '';
+    : (name === 'employees'
+        ? `<div class="rowbar">
+            <button type="button" onclick="copyEmpSelection()" title="Копировать выделенное в буфер обмена (Ctrl+C)">Копировать</button>
+          </div>`
+        : ''
+      );
   const tableClass = name === 'norms' ? ' class="norms-table"' : '';
   const employeesTableClass = name === 'employees' ? ' class="employees-table"' : '';
   const colGroup = name === 'norms'
@@ -374,30 +449,45 @@ function renderTable(name, rows, editableRows){
           <col style="width:120px">
         </colgroup>`
     : '';
-  let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + '<thead><tr><th style="width:42px">№</th>' + headers[name].map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+
+  const theadHtml = name === 'employees'
+    ? `<thead><tr><th class="emp-corner-th" style="width:42px" onclick="selectEmpAll()" title="Выделить всю таблицу (Ctrl+A)">№</th>` +
+      headers[name].map((h, c) => `<th class="emp-col-th" data-col="${c}" title="Выделить столбец (клик или протягивание)">${h}</th>`).join('') +
+      `</tr></thead>`
+    : `<thead><tr><th style="width:42px">№</th>` + headers[name].map(h => `<th>${h}</th>`).join('') + `</tr></thead>`;
+
+  let html = rowbar + '<div class="table-shell"><table' + (tableClass || employeesTableClass) + '>' + colGroup + theadHtml + '<tbody>';
   rows.forEach((row, r) => {
     const isDeleted = name === 'inventory' && Number(row[8] || 0) > 0;
     const isDraggable = (name === 'inventory' || name === 'employees') && CAN_EDIT;
-    const draggable = isDraggable
+    // Для таблицы сотрудников перетаскивание привязано к ячейке с номером строки (td.row-num)
+    const trDraggable = (name === 'inventory' && CAN_EDIT)
       ? ` draggable="true" ondragstart="dragStartRow(event, '${name}', ${r})" ondragover="dragOverRow(event, '${name}', ${r})" ondrop="dropRow(event, '${name}', ${r})" ondragend="dragEndRow(event)"`
-      : '';
+      : (name === 'employees' && CAN_EDIT)
+        ? ` ondragover="dragOverRow(event, '${name}', ${r})" ondrop="dropRow(event, '${name}', ${r})"`
+        : '';
     const isSelected = selected[name] === r;
     const rowClass = [
       isDeleted ? 'deleted-row' : '',
       isSelected ? 'selected-row' : '',
     ].filter(Boolean).join(' ');
-    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${draggable}><td style="${isDraggable ? 'cursor:grab;' : ''}">${r + 1}</td>`;
+
+    const rowNumCell = name === 'employees'
+      ? `<td class="row-num" data-row="${r}" ${CAN_EDIT ? `draggable="true" ondragstart="dragStartRow(event, 'employees', ${r})" ondragend="dragEndRow(event)"` : ''} style="${isDraggable ? 'cursor:grab;' : 'cursor:pointer;'}" title="${isDraggable ? 'Клик — выделить строку, перетаскивание — изменить порядок' : 'Клик — выделить строку'}">${r + 1}</td>`
+      : `<td style="${isDraggable ? 'cursor:grab;' : ''}">${r + 1}</td>`;
+
+    html += `<tr class="${rowClass}" onclick="selectRow('${name}', ${r})"${trDraggable}>${rowNumCell}`;
     headers[name].forEach((_, c) => {
       const val = row[c] ?? '';
       if(name === 'employees' && (c === 4 || c === 5)){
-        html += `<td><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
+        html += `<td class="emp-cell" data-row="${r}" data-col="${c}"><input type="checkbox" ${val ? 'checked' : ''} ${CAN_EDIT ? `onclick="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.checked)"` : 'disabled'}></td>`;
       } else if (name === 'employees' && (c === 6 || c === 7)) {
-        html += `<td><input type="date" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" onchange="setCell('${name}',${r},${c},this.value)"` : 'disabled'}></td>`;
+        html += `<td class="emp-cell" data-row="${r}" data-col="${c}"><input type="date" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onchange="setCell('${name}',${r},${c},this.value)"` : 'disabled'}></td>`;
       } else if (name === 'employees' && c === 8) {
-        html += `<td><input class="num" type="number" min="0" max="100" value="${escapeHtml(val !== '' && val !== null && val !== undefined ? val : 28)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value===''?28:(parseInt(this.value)||0))"` : 'readonly'}></td>`;
+        html += `<td class="emp-cell" data-row="${r}" data-col="${c}"><input class="num" type="number" min="0" max="100" value="${escapeHtml(val !== '' && val !== null && val !== undefined ? val : 28)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r});" oninput="setCell('${name}',${r},${c},this.value===''?28:(parseInt(this.value)||0))"` : 'readonly'}></td>`;
       } else if (name === 'employees') {
         const cls = c < 3 ? 'left' : '';
-        html += `<td><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autoResizeTextarea(this);" oninput="setCell('${name}',${r},${c},this.value); autoResizeTextarea(this);" onmousedown="event.stopPropagation()"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
+        html += `<td class="emp-cell" data-row="${r}" data-col="${c}"><textarea class="${cls}" rows="1" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectRow('${name}', ${r});" onfocus="selectRow('${name}', ${r}); autoResizeTextarea(this);" oninput="setCell('${name}',${r},${c},this.value); autoResizeTextarea(this);"` : 'readonly'}>${escapeHtml(val)}</textarea></td>`;
       } else if (name === 'inventory' && c === 2) {
         const cls = 'left';
         html += `<td><input class="${cls}" value="${escapeHtml(val)}" ${CAN_EDIT ? `onclick="event.stopPropagation(); selectInventoryRow(${r});" onfocus="selectInventoryRow(${r});" onmousedown="event.stopPropagation()" oninput="setCell('${name}',${r},${c},this.value)"` : 'readonly'}></td>`;
@@ -422,6 +512,7 @@ function renderTable(name, rows, editableRows){
   panel.innerHTML = html;
   if (name === 'employees') {
     resizeEmployeeTable(panel);
+    applyEmpSelectionClasses();
   }
 }
 
@@ -527,6 +618,9 @@ function deleteRow(name){
   const row = selected[name] >= 0 ? selected[name] : state[name].length - 1;
   if(row >= 0) state[name].splice(row, 1);
   selected[name] = -1;
+  if (name === 'employees') {
+    clearEmpSelection();
+  }
   renderTable(name, state[name], true);
   updateSaveButton();
 }
@@ -829,6 +923,9 @@ function showTab(id, btn){
   btn.classList.add('active');
   if (id === 'employees') {
     resizeEmployeeTable(document.getElementById('employees'));
+    applyEmpSelectionClasses();
+  } else {
+    clearEmpSelection();
   }
 }
 function escapeHtml(value){
@@ -1166,7 +1263,460 @@ async function downloadAndUnAnonymizeExcel(url, defaultFilename) {
   }
 }
 
+/* ==========================================================================
+ * Выделение ячеек, строк, столбцов и копирование в формате Excel (TSV) для таблицы сотрудников
+ * ========================================================================== */
+
+// Состояние выделения таблицы сотрудников
+let empSelection = null;       // { startRow, endRow, startCol, endCol, type: 'cell'|'row'|'col'|'all' }
+let empSelectionAnchor = null; // { row, col, type: 'cell'|'row'|'col'|'all' }
+let empIsMouseDown = false;
+let empDragging = false;
+let empRowDragging = false;
+let empColDragging = false;
+
+// Установка диапазона выделения ячеек
+function setEmpSelection(anchor, focus, type = 'cell') {
+  if (!anchor || !focus) return;
+  const maxRow = (state?.employees?.length || 1) - 1;
+  const maxCol = (headers.employees ? headers.employees.length : 10) - 1;
+
+  const startRow = Math.max(0, Math.min(anchor.row, focus.row));
+  const endRow = Math.min(maxRow, Math.max(anchor.row, focus.row));
+  const startCol = Math.max(0, Math.min(anchor.col, focus.col));
+  const endCol = Math.min(maxCol, Math.max(anchor.col, focus.col));
+
+  empSelection = { startRow, endRow, startCol, endCol, type };
+  applyEmpSelectionClasses();
+}
+
+// Сброс выделения ячеек таблицы сотрудников
+function clearEmpSelection() {
+  empSelection = null;
+  empSelectionAnchor = null;
+  empDragging = false;
+  empRowDragging = false;
+  empColDragging = false;
+  applyEmpSelectionClasses();
+}
+
+// Получение текущего диапазона выделения
+function getEmpSelection() {
+  return empSelection;
+}
+
+// Применение визуальной рамки в стиле Excel и фоновой подсветки к выделенным ячейкам
+function applyEmpSelectionClasses() {
+  const panel = document.getElementById('employees');
+  if (!panel) return;
+
+  // Очистка предыдущих классов и стилей
+  panel.querySelectorAll('td.emp-cell.selected-cell').forEach(td => {
+    td.classList.remove('selected-cell');
+    td.style.boxShadow = '';
+  });
+  panel.querySelectorAll('td.row-num.selected-row-num').forEach(td => {
+    td.classList.remove('selected-row-num');
+  });
+  panel.querySelectorAll('th.emp-col-th.selected-col-th').forEach(th => {
+    th.classList.remove('selected-col-th');
+  });
+
+  const sel = getEmpSelection();
+  if (!sel || !panel.classList.contains('active')) return;
+
+  const rowEls = panel.querySelectorAll('tbody tr');
+  const visibleIndices = [];
+  for (let r = sel.startRow; r <= sel.endRow; r++) {
+    const rowEl = rowEls[r];
+    if (rowEl && rowEl.style.display !== 'none') {
+      visibleIndices.push(r);
+    }
+  }
+
+  const maxCol = (headers.employees ? headers.employees.length : 10) - 1;
+  const isFullRow = (sel.startCol === 0 && sel.endCol === maxCol);
+  const isFullCol = (sel.startRow === 0 && sel.endRow >= (state?.employees ? state.employees.length - 1 : 0));
+
+  for (let i = 0; i < visibleIndices.length; i++) {
+    const r = visibleIndices[i];
+    const rowEl = rowEls[r];
+    if (!rowEl) continue;
+
+    // Подсветка номера строки при полном выделении строки
+    if (isFullRow) {
+      const rowNumTd = rowEl.querySelector('td.row-num');
+      if (rowNumTd) rowNumTd.classList.add('selected-row-num');
+    }
+
+    for (let c = sel.startCol; c <= sel.endCol; c++) {
+      const cell = rowEl.querySelector(`td.emp-cell[data-col="${c}"]`);
+      if (!cell) continue;
+
+      cell.classList.add('selected-cell');
+
+      // Формирование контурной синей рамки выделения диапазона как в Excel
+      const shadows = [];
+      const isTopEdge = (i === 0) || (visibleIndices[i - 1] !== r - 1);
+      const isBottomEdge = (i === visibleIndices.length - 1) || (visibleIndices[i + 1] !== r + 1);
+
+      if (isTopEdge) shadows.push('inset 0 1.5px 0 0 #276ef1');
+      if (isBottomEdge) shadows.push('inset 0 -1.5px 0 0 #276ef1');
+      if (c === sel.startCol) shadows.push('inset 1.5px 0 0 0 #276ef1');
+      if (c === sel.endCol) shadows.push('inset -1.5px 0 0 0 #276ef1');
+
+      if (shadows.length > 0) {
+        cell.style.setProperty('box-shadow', shadows.join(', '), 'important');
+      } else {
+        cell.style.boxShadow = '';
+      }
+    }
+  }
+
+  // Подсветка заголовков столбцов при выделении столбцов целиком
+  if (isFullCol) {
+    for (let c = sel.startCol; c <= sel.endCol; c++) {
+      const colTh = panel.querySelector(`th.emp-col-th[data-col="${c}"]`);
+      if (colTh) colTh.classList.add('selected-col-th');
+    }
+  }
+}
+
+// Получение текстового значения ячейки сотрудников (приоритет живому значению из DOM)
+function getEmpCellText(r, c) {
+  const panel = document.getElementById('employees');
+  const td = panel ? panel.querySelector(`td.emp-cell[data-row="${r}"][data-col="${c}"]`) : null;
+  if (td) {
+    const cb = td.querySelector('input[type="checkbox"]');
+    if (cb) return cb.checked ? '1' : '0';
+    const inp = td.querySelector('input');
+    if (inp) return inp.value;
+    const ta = td.querySelector('textarea');
+    if (ta) return ta.value;
+  }
+  const val = state?.employees?.[r]?.[c];
+  if (c === 4 || c === 5) return val ? '1' : '0';
+  return val !== undefined && val !== null ? String(val) : '';
+}
+
+// Форматирование значения ячейки для TSV буфера обмена (экранирование переводов строк и кавычек)
+function formatTsvCell(val) {
+  const str = val !== undefined && val !== null ? String(val) : '';
+  if (str.includes('\t') || str.includes('\n') || str.includes('\r') || str.includes('"')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+// Склонение существительных после числительных
+function getEmpNoun(number, one, two, five) {
+  let n = Math.abs(number);
+  n %= 100;
+  if (n >= 5 && n <= 20) return five;
+  n %= 10;
+  if (n === 1) return one;
+  if (n >= 2 && n <= 4) return two;
+  return five;
+}
+
+// Отображение всплывающего уведомления об успешном копировании
+function showCopyToast(msg) {
+  let toast = document.getElementById('empCopyToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'empCopyToast';
+    toast.className = 'copy-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg || 'Скопировано в буфер обмена';
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 1800);
+}
+
+// Копирование выделенных ячеек таблицы сотрудников в буфер обмена в формате TSV
+function copyEmpSelection(event) {
+  const sel = getEmpSelection();
+  const panel = document.getElementById('employees');
+  if (!sel || !panel || !panel.classList.contains('active')) {
+    // Если выделения нет, но активна вкладка сотрудников — выделяем всю таблицу и копируем
+    if (panel && panel.classList.contains('active') && state?.employees?.length) {
+      selectEmpAll();
+      return copyEmpSelection(event);
+    }
+    return false;
+  }
+
+  // Если пользователь выделил фрагмент текста вручную внутри поля ввода, даем сработать стандартному копированию
+  const active = document.activeElement;
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && active.selectionStart !== active.selectionEnd) {
+    return false;
+  }
+
+  const rowEls = panel.querySelectorAll('tbody tr');
+  const lines = [];
+  for (let r = sel.startRow; r <= sel.endRow; r++) {
+    const rowEl = rowEls[r];
+    // Пропуск скрытых строк при фильтрации
+    if (rowEl && rowEl.style.display === 'none') continue;
+    const rowValues = [];
+    for (let c = sel.startCol; c <= sel.endCol; c++) {
+      rowValues.push(formatTsvCell(getEmpCellText(r, c)));
+    }
+    lines.push(rowValues.join('\t'));
+  }
+  const tsvText = lines.join('\n');
+  if (!tsvText) return false;
+
+  if (event?.clipboardData) {
+    event.clipboardData.setData('text/plain', tsvText);
+    event.preventDefault();
+  } else if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(tsvText).catch(() => {
+      copyViaTextarea(tsvText);
+    });
+  } else {
+    copyViaTextarea(tsvText);
+  }
+  showCopyToast(`Скопировано (${lines.length} ${getEmpNoun(lines.length, 'строка', 'строки', 'строк')})`);
+  return true;
+}
+
+// Вспомогательное копирование через временный textarea для старых браузеров
+function copyViaTextarea(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+  } catch (e) {
+  } finally {
+    ta.remove();
+  }
+}
+
+// Выделение всех строк и столбцов таблицы сотрудников
+function selectEmpAll() {
+  const maxRow = (state?.employees?.length || 1) - 1;
+  const maxCol = (headers.employees ? headers.employees.length : 10) - 1;
+  empSelectionAnchor = { row: 0, col: 0, type: 'all' };
+  setEmpSelection({ row: 0, col: 0 }, { row: maxRow, col: maxCol }, 'all');
+}
+
+// Обработка нажатия мыши в панели сотрудников (делегирование событий)
+function handleEmpMouseDown(e) {
+  if (e.button !== 0) return;
+
+  // 1. Клик по угловой ячейке "№" (выделение всей таблицы)
+  const corner = e.target.closest('th.emp-corner-th');
+  if (corner) {
+    e.preventDefault();
+    selectEmpAll();
+    return;
+  }
+
+  // 2. Клик по заголовку столбца (выделение столбца)
+  const colTh = e.target.closest('th.emp-col-th');
+  if (colTh) {
+    const c = Number(colTh.dataset.col);
+    const maxRow = (state?.employees?.length || 1) - 1;
+    if (e.shiftKey && empSelectionAnchor && empSelectionAnchor.type === 'col') {
+      setEmpSelection({ row: 0, col: empSelectionAnchor.col }, { row: maxRow, col: c }, 'col');
+    } else {
+      empSelectionAnchor = { row: 0, col: c, type: 'col' };
+      empIsMouseDown = true;
+      empColDragging = true;
+      setEmpSelection({ row: 0, col: c }, { row: maxRow, col: c }, 'col');
+    }
+    e.preventDefault();
+    return;
+  }
+
+  // 3. Клик по ячейке с номером строки (выделение всей строки)
+  const rowNum = e.target.closest('td.row-num');
+  if (rowNum) {
+    const r = Number(rowNum.dataset.row);
+    const maxCol = (headers.employees ? headers.employees.length : 10) - 1;
+    if (e.shiftKey && empSelectionAnchor && (empSelectionAnchor.type === 'row' || empSelectionAnchor.type === 'cell')) {
+      e.preventDefault();
+      setEmpSelection({ row: empSelectionAnchor.row, col: 0 }, { row: r, col: maxCol }, 'row');
+    } else {
+      empSelectionAnchor = { row: r, col: 0, type: 'row' };
+      empIsMouseDown = true;
+      empRowDragging = true;
+      setEmpSelection({ row: r, col: 0 }, { row: r, col: maxCol }, 'row');
+      selected.employees = r;
+    }
+    return;
+  }
+
+  // 4. Клик по ячейке данных
+  const cell = e.target.closest('td.emp-cell');
+  if (cell) {
+    const r = Number(cell.dataset.row);
+    const c = Number(cell.dataset.col);
+    if (e.shiftKey && empSelectionAnchor) {
+      e.preventDefault();
+      setEmpSelection(empSelectionAnchor, { row: r, col: c }, 'cell');
+      return;
+    }
+    empSelectionAnchor = { row: r, col: c, type: 'cell' };
+    empIsMouseDown = true;
+    empDragging = false;
+    setEmpSelection({ row: r, col: c }, { row: r, col: c }, 'cell');
+    selected.employees = r;
+    // preventDefault не вызывается, чтобы текстовое поле получало фокус и каретку для редактирования
+  }
+}
+
+// Обработка протягивания мыши для выделения диапазона ячеек
+function handleEmpMouseOver(e) {
+  if (!empIsMouseDown || !(e.buttons & 1)) {
+    empIsMouseDown = false;
+    empDragging = false;
+    empRowDragging = false;
+    empColDragging = false;
+    return;
+  }
+
+  // Протягивание по заголовкам столбцов
+  if (empColDragging) {
+    const colTh = e.target.closest('th.emp-col-th');
+    if (colTh && empSelectionAnchor) {
+      const c = Number(colTh.dataset.col);
+      const maxRow = (state?.employees?.length || 1) - 1;
+      setEmpSelection({ row: 0, col: empSelectionAnchor.col }, { row: maxRow, col: c }, 'col');
+    }
+    return;
+  }
+
+  // Протягивание по номерам строк
+  if (empRowDragging) {
+    const rowNum = e.target.closest('td.row-num');
+    if (rowNum && empSelectionAnchor) {
+      const r = Number(rowNum.dataset.row);
+      const maxCol = (headers.employees ? headers.employees.length : 10) - 1;
+      setEmpSelection({ row: empSelectionAnchor.row, col: 0 }, { row: r, col: maxCol }, 'row');
+    }
+    return;
+  }
+
+  // Протягивание по ячейкам данных
+  if (empSelectionAnchor && empSelectionAnchor.type === 'cell') {
+    const cell = e.target.closest('td.emp-cell');
+    if (!cell) return;
+    const r = Number(cell.dataset.row);
+    const c = Number(cell.dataset.col);
+    if (r !== empSelectionAnchor.row || c !== empSelectionAnchor.col) {
+      empDragging = true;
+      if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) {
+        document.activeElement.blur();
+      }
+      window.getSelection()?.removeAllRanges();
+      setEmpSelection(empSelectionAnchor, { row: r, col: c }, 'cell');
+    }
+  }
+}
+
+// Инициализация обработчиков событий для таблицы сотрудников
+function initEmpTableSelection() {
+  const empPanel = document.getElementById('employees');
+  if (empPanel) {
+    empPanel.addEventListener('mousedown', handleEmpMouseDown);
+    empPanel.addEventListener('mouseover', handleEmpMouseOver);
+  }
+
+  // Сброс состояния перетаскивания при отпускании кнопки мыши
+  window.addEventListener('mouseup', () => {
+    empIsMouseDown = false;
+    empDragging = false;
+    empRowDragging = false;
+    empColDragging = false;
+  });
+
+  // Сброс выделения при клике вне панели сотрудников
+  document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('#employees') && !e.target.closest('.copy-toast')) {
+      if (empSelection) clearEmpSelection();
+    }
+  });
+
+  // Горячие клавиши Ctrl+C, Ctrl+A и стрелки навигации
+  document.addEventListener('keydown', (e) => {
+    const panel = document.getElementById('employees');
+    if (!panel || !panel.classList.contains('active')) return;
+
+    const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+
+    // Escape — сброс выделения
+    if (e.key === 'Escape') {
+      clearEmpSelection();
+      return;
+    }
+
+    // Ctrl+A — выделить всю таблицу
+    if (isCtrlOrMeta && (key === 'a' || key === 'ф')) {
+      const active = document.activeElement;
+      const isEditingText = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if (!isEditingText) {
+        e.preventDefault();
+        selectEmpAll();
+        return;
+      }
+    }
+
+    // Ctrl+C — копировать выделенное
+    if (isCtrlOrMeta && (key === 'c' || key === 'с')) {
+      if (empSelection) {
+        const copied = copyEmpSelection(e);
+        if (copied && e.preventDefault) {
+          // Скопировано
+        }
+      }
+    }
+
+    // Навигация стрелками при неактивном текстовом поле
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      const active = document.activeElement;
+      const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if (!isEditing && empSelection) {
+        e.preventDefault();
+        const maxRow = (state?.employees?.length || 1) - 1;
+        const maxCol = (headers.employees ? headers.employees.length : 10) - 1;
+        const focus = { row: empSelection.endRow, col: empSelection.endCol };
+        if (key === 'arrowup') focus.row = Math.max(0, focus.row - 1);
+        else if (key === 'arrowdown') focus.row = Math.min(maxRow, focus.row + 1);
+        else if (key === 'arrowleft') focus.col = Math.max(0, focus.col - 1);
+        else if (key === 'arrowright') focus.col = Math.min(maxCol, focus.col + 1);
+
+        if (e.shiftKey) {
+          setEmpSelection(empSelectionAnchor || focus, focus, 'cell');
+        } else {
+          empSelectionAnchor = focus;
+          setEmpSelection(focus, focus, 'cell');
+        }
+      }
+    }
+  });
+
+  // Обработка стандартного события копирования страницы
+  document.addEventListener('copy', (e) => {
+    const panel = document.getElementById('employees');
+    if (!panel || !panel.classList.contains('active')) return;
+    if (empSelection) {
+      copyEmpSelection(e);
+    }
+  });
+}
+
 initUnsavedChangesModal();
+initEmpTableSelection();
 loadState();
 </script>
 </body>
