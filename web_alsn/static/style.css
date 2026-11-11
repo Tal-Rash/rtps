@@ -406,6 +406,21 @@ button.primary:hover, #saveBtn.primary:hover {
   justify-content: center;
 }
 
+/* Стили чекбокса отметки прибора в ремонте */
+.wh-repair-check {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  vertical-align: middle;
+  margin: 0;
+}
+
+.warehouse-repair-cell {
+  text-align: center;
+  user-select: none;
+}
+
 .row-num {
   text-align: center;
   font-weight: 700;

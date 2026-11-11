@@ -76,6 +76,14 @@
                 <option value="">Все места</option>
               </select>
             </label>
+            <label>
+              Ремонт
+              <select id="warehouseRepairFilter" onchange="setWarehouseFilter('repair', this.value)">
+                <option value="">Все</option>
+                <option value="1">В ремонте</option>
+                <option value="0">Не в ремонте</option>
+              </select>
+            </label>
             <button type="button" onclick="clearWarehouseFilters()">Сбросить</button>
           </div>
         </div>
@@ -88,6 +96,7 @@
               <col style="width: 160px;">
               <col style="width: 190px;">
               <col style="width: 220px;">
+              <col style="width: 120px;">
               <col style="width: 170px;">
             </colgroup>
             <thead>
@@ -98,6 +107,7 @@
                 <th>Периодичность</th>
                 <th>След. дата поверки</th>
                 <th>Место нахождения</th>
+                <th>В ремонте</th>
                 <th>Дата изменения</th>
               </tr>
             </thead>

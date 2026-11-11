@@ -14,6 +14,7 @@ const WAREHOUSE_FIELDS = [
   "periodicity",
   "next_verification_date",
   "location",
+  "in_repair",
   "updated_at"
 ];
 let warehouseSelected = null;
@@ -25,6 +26,7 @@ let warehouseFilters = {
   type: "",
   nextMonth: "",
   location: "",
+  repair: "",
   number: ""
 };
 
@@ -149,6 +151,7 @@ function normalizeWhRow(row) {
     periodicity: String(row?.periodicity ?? ""),
     next_verification_date: String(row?.next_verification_date ?? ""),
     location: String(row?.location ?? ""),
+    in_repair: row?.in_repair ? 1 : 0,
     updated_at: String(row?.updated_at ?? "")
   };
 }
@@ -269,6 +272,7 @@ function normalizeWarehouseFilters() {
     type: String(warehouseFilters?.type ?? ""),
     nextMonth: String(warehouseFilters?.nextMonth ?? ""),
     location: String(warehouseFilters?.location ?? ""),
+    repair: String(warehouseFilters?.repair ?? ""),
     number: String(warehouseFilters?.number ?? "")
   };
 }
@@ -286,6 +290,7 @@ function warehouseRowMatchesFilters(row) {
   const numberValue = String(row?.number ?? "").trim().toLowerCase();
   const filterType = String(warehouseFilters.type ?? "").trim().toLowerCase();
   const filterLocation = String(warehouseFilters.location ?? "").trim().toLowerCase();
+  const filterRepair = String(warehouseFilters.repair ?? "").trim();
   const filterNumber = String(warehouseFilters.number ?? "").trim().toLowerCase();
 
   if (filterNumber) {
@@ -297,6 +302,10 @@ function warehouseRowMatchesFilters(row) {
   }
   if (filterType && typeValue !== filterType) return false;
   if (filterLocation && locationValue !== filterLocation) return false;
+  if (filterRepair !== "") {
+    const rowRepair = String(row?.in_repair ? 1 : 0);
+    if (rowRepair !== filterRepair) return false;
+  }
   if (warehouseFilters.nextMonth) {
     const parsed = parseDateDMY(nextValue);
     if (!parsed || formatMonthKey(parsed) !== warehouseFilters.nextMonth) return false;
@@ -308,10 +317,12 @@ function syncWarehouseFilterDom() {
   const typeFilter = document.getElementById("warehouseTypeFilter");
   const nextDateFilter = document.getElementById("warehouseNextMonthFilter");
   const locationFilter = document.getElementById("warehouseLocationFilter");
+  const repairFilter = document.getElementById("warehouseRepairFilter");
   const numberFilter = document.getElementById("warehouseNumberFilter");
   if (typeFilter) typeFilter.value = warehouseFilters.type;
   if (nextDateFilter) nextDateFilter.value = warehouseFilters.nextMonth;
   if (locationFilter) locationFilter.value = warehouseFilters.location;
+  if (repairFilter) repairFilter.value = warehouseFilters.repair;
   if (numberFilter) numberFilter.value = warehouseFilters.number;
 }
 
@@ -324,6 +335,7 @@ function applyWarehouseFilters() {
       type: rowEl.dataset.warehouseType || "",
       next_verification_date: rowEl.dataset.warehouseNext || "",
       location: rowEl.dataset.warehouseLocation || "",
+      in_repair: rowEl.dataset.warehouseRepair === "1" ? 1 : 0,
       number: rowEl.dataset.warehouseNumber || ""
     };
     const visible = warehouseRowMatchesFilters(row);
@@ -344,7 +356,7 @@ function setWarehouseFilter(field, value) {
 
 /* Сброс всех фильтров склада */
 function clearWarehouseFilters() {
-  warehouseFilters = { type: "", nextMonth: "", location: "", number: "" };
+  warehouseFilters = { type: "", nextMonth: "", location: "", repair: "", number: "" };
   syncWarehouseFilterDom();
   applyWarehouseFilters();
 }
@@ -429,6 +441,7 @@ function blankWh() {
     periodicity: "",
     next_verification_date: "",
     location: "",
+    in_repair: 0,
     updated_at: ""
   };
 }
@@ -442,7 +455,8 @@ function isWarehouseRowChanged(currentRow, savedRow) {
       String(currentRow?.number ?? "").trim() ||
       String(currentRow?.verification_date ?? "").trim() ||
       String(currentRow?.periodicity ?? "").trim() ||
-      String(currentRow?.next_verification_date ?? "").trim()
+      String(currentRow?.next_verification_date ?? "").trim() ||
+      (currentRow?.in_repair ? 1 : 0)
     );
   }
   return (
@@ -450,7 +464,8 @@ function isWarehouseRowChanged(currentRow, savedRow) {
     String(currentRow?.number ?? "").trim() !== String(savedRow?.number ?? "").trim() ||
     String(currentRow?.verification_date ?? "").trim() !== String(savedRow?.verification_date ?? "").trim() ||
     String(currentRow?.periodicity ?? "").trim() !== String(savedRow?.periodicity ?? "").trim() ||
-    String(currentRow?.next_verification_date ?? "").trim() !== String(savedRow?.next_verification_date ?? "").trim()
+    String(currentRow?.next_verification_date ?? "").trim() !== String(savedRow?.next_verification_date ?? "").trim() ||
+    (currentRow?.in_repair ? 1 : 0) !== (savedRow?.in_repair ? 1 : 0)
   );
 }
 
@@ -508,6 +523,7 @@ function warehouseCellText(rowIdx, colIdx) {
   const field = WAREHOUSE_FIELDS[colIdx];
   if (!field) return "";
   if (field === "location") return row.location || "Депо";
+  if (field === "in_repair") return row.in_repair ? "В ремонте" : "";
   return String(row[field] ?? "");
 }
 
@@ -515,6 +531,10 @@ function setWarehouseCellValue(rowIdx, colIdx, value) {
   const row = appState.warehouse[rowIdx];
   const field = WAREHOUSE_FIELDS[colIdx];
   if (!row || !field) return;
+  if (field === "in_repair") {
+    row.in_repair = (value === 1 || value === "1" || value === true || String(value).toLowerCase() === "да" || String(value).toLowerCase() === "в ремонте") ? 1 : 0;
+    return;
+  }
   row[field] = String(value ?? "");
 }
 
@@ -700,7 +720,17 @@ function clearWarehouseSelectionValues() {
     const row = appState.warehouse[r];
     if (!row) continue;
     for (let c = sel.startCol; c <= sel.endCol; c++) {
-      if (c >= 5) continue; // Не затираем автоматически вычисляемые поля
+      if (c === 5 || c === 7) continue; // Не затираем автоматически вычисляемые поля
+      if (c === 6) {
+        if (row.in_repair) {
+          row.in_repair = 0;
+          const chk = document.querySelector(`.wh-repair-check[data-row="${r}"]`);
+          if (chk) chk.checked = false;
+          if (rowEl) rowEl.dataset.warehouseRepair = "0";
+          changed = true;
+        }
+        continue;
+      }
       setWarehouseCellValue(r, c, "");
       const cellEl = document.querySelector(`.warehouse-cell[data-row="${r}"][data-col="${c}"]`);
       if (cellEl) cellEl.innerText = "";
@@ -727,6 +757,7 @@ function clearWarehouseSelectionValues() {
 /* Обработка нажатия мыши по ячейке склада */
 function handleWarehouseMouseDown(e) {
   if (e.button !== 0) return;
+  if (e.target.tagName === "INPUT") return;
   const info = getWarehouseCellInfo(e.target);
   if (!info) return;
 
@@ -840,7 +871,26 @@ function syncWarehouseFromDom() {
       setWarehouseCellValue(rowIdx, colIdx, cell.innerText.trim());
     }
   });
+  document.querySelectorAll(".wh-repair-check").forEach((chk) => {
+    const rowIdx = Number(chk.dataset.row);
+    if (Number.isFinite(rowIdx) && appState.warehouse[rowIdx]) {
+      appState.warehouse[rowIdx].in_repair = chk.checked ? 1 : 0;
+    }
+  });
   appState.warehouse.forEach((row) => recalcWarehouseNextDate(row));
+}
+
+/* Переключение признака нахождения прибора в ремонте */
+function toggleWarehouseRepair(rowIdx, checked) {
+  if (!CAN_EDIT) return;
+  const row = appState.warehouse[rowIdx];
+  if (!row) return;
+  row.in_repair = checked ? 1 : 0;
+  const rowEl = document.querySelector(`#whBody tr[data-warehouse-row][data-row-idx="${rowIdx}"]`);
+  if (rowEl) {
+    rowEl.dataset.warehouseRepair = row.in_repair ? "1" : "0";
+  }
+  markDirty(true);
 }
 
 function getRows() {
@@ -1203,7 +1253,7 @@ function render() {
   }).join("") || `<div class="empty-state">Нет строк</div>`;
 
   whBody.innerHTML = appState.warehouse.map((row, idx) => `
-    <tr data-warehouse-row="1" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}" data-warehouse-number="${escapeHtml(row.number)}">
+    <tr data-warehouse-row="1" data-row-idx="${idx}" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}" data-warehouse-repair="${row.in_repair ? '1' : '0'}" data-warehouse-number="${escapeHtml(row.number)}">
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
           data-row="${idx}" data-col="0"
           ${CAN_EDIT ? 'contenteditable="true" spellcheck="false" onfocus="handleWarehouseFocus(' + idx + ', 0, this)" oninput="editWarehouseCell(' + idx + ', 0, this)" onblur="editWarehouseCell(' + idx + ', 0, this)" onclick="handleWarehouseClick(' + idx + ', 0)" onkeydown="handleWarehouseKeydown(event, ' + idx + ', 0)" oncopy="handleWarehouseCopy(event, ' + idx + ', 0)" onpaste="handleWarehousePaste(event, ' + idx + ', 0)"' : ''}>${escapeHtml(row.type)}</td>
@@ -1222,11 +1272,14 @@ function render() {
       <td class="warehouse-auto" data-row="${idx}" data-col="5">
         <div class="warehouse-auto-value">${escapeHtml(row.location || "Депо")}</div>
       </td>
-      <td class="warehouse-auto" data-row="${idx}" data-col="6">
+      <td class="warehouse-auto warehouse-repair-cell" data-row="${idx}" data-col="6">
+        <input type="checkbox" class="wh-repair-check" data-row="${idx}" ${row.in_repair ? "checked" : ""} ${CAN_EDIT ? `onchange="toggleWarehouseRepair(${idx}, this.checked)"` : "disabled"}>
+      </td>
+      <td class="warehouse-auto" data-row="${idx}" data-col="7">
         <div class="warehouse-auto-value warehouse-updated-val" data-row="${idx}">${escapeHtml(row.updated_at || "")}</div>
       </td>
     </tr>
-  `).join("") + `<tr id="whEmptyStateRow"><td class="empty-state" colspan="7">Нет строк</td></tr>`;
+  `).join("") + `<tr id="whEmptyStateRow"><td class="empty-state" colspan="8">Нет строк</td></tr>`;
 
   // Заполнение фильтров склада
   const typeFilter = document.getElementById("warehouseTypeFilter");
@@ -1355,7 +1408,8 @@ async function saveState() {
         String(row?.number ?? "").trim() ||
         String(row?.verification_date ?? "").trim() ||
         String(row?.periodicity ?? "").trim() ||
-        String(row?.next_verification_date ?? "").trim()
+        String(row?.next_verification_date ?? "").trim() ||
+        (row?.in_repair ? 1 : 0)
       );
       if (!hasAnyData) {
         row.updated_at = "";

@@ -74,6 +74,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
             p_val = row.get("periodicity")
             nvd_val = row.get("next_verification_date")
             loc_val = row.get("location")
+            rep_val = row.get("in_repair")
             u_val = row.get("updated_at")
             normalized.append({
                 "type": str("" if t_val is None else t_val).strip(),
@@ -82,6 +83,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
                 "periodicity": str("" if p_val is None else p_val).strip(),
                 "next_verification_date": str("" if nvd_val is None else nvd_val).strip(),
                 "location": str("" if loc_val is None else loc_val).strip(),
+                "in_repair": 1 if rep_val in (1, "1", True, "true", "True", "Да", "да", "В ремонте") else 0,
                 "updated_at": str("" if u_val is None else u_val).strip(),
             })
     if not normalized:
@@ -92,6 +94,7 @@ def normalize_warehouse_rows(rows: list | None) -> list[dict[str, str]]:
             "periodicity": "",
             "next_verification_date": "",
             "location": "",
+            "in_repair": 0,
             "updated_at": "",
         })
     return normalized
@@ -165,6 +168,7 @@ def init_db() -> None:
                     periodicity TEXT NOT NULL DEFAULT '',
                     next_verification_date TEXT NOT NULL DEFAULT '',
                     location TEXT NOT NULL DEFAULT '',
+                    in_repair INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL DEFAULT ''
                 )
                 """
@@ -175,6 +179,8 @@ def init_db() -> None:
 
             cur = conn.cursor()
             wh_cols = [r[1] for r in cur.execute("PRAGMA table_info(warehouse)").fetchall()]
+            if "in_repair" not in wh_cols:
+                conn.execute("ALTER TABLE warehouse ADD COLUMN in_repair INTEGER NOT NULL DEFAULT 0")
             if "updated_at" not in wh_cols:
                 conn.execute("ALTER TABLE warehouse ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
 
@@ -188,8 +194,8 @@ def init_db() -> None:
             cur.execute("SELECT COUNT(*) FROM warehouse")
             if int(cur.fetchone()[0] or 0) == 0:
                 conn.execute(
-                    "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location, updated_at) VALUES(?,?,?,?,?,?,?,?)",
-                    (1, "", "", "", "", "", "", ""),
+                    "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location, in_repair, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (1, "", "", "", "", "", "", 0, ""),
                 )
 
 
@@ -209,6 +215,14 @@ def load_state_from_db() -> dict:
                 "SELECT series, number, inventory_num, note, devices_json FROM locomotives ORDER BY sort_order, id"
             ).fetchall()
         ]
+        wh_cols = [r[1] for r in cur.execute("PRAGMA table_info(warehouse)").fetchall()]
+        has_in_repair = "in_repair" in wh_cols
+        has_updated_at = "updated_at" in wh_cols
+        cols_query = "type, number, verification_date, periodicity, next_verification_date, location"
+        if has_in_repair:
+            cols_query += ", in_repair"
+        if has_updated_at:
+            cols_query += ", updated_at"
         warehouse = [
             {
                 "type": row["type"],
@@ -217,10 +231,11 @@ def load_state_from_db() -> dict:
                 "periodicity": row["periodicity"],
                 "next_verification_date": row["next_verification_date"],
                 "location": row["location"],
-                "updated_at": row["updated_at"] if "updated_at" in row.keys() else "",
+                "in_repair": int(row["in_repair"]) if has_in_repair and row["in_repair"] else 0,
+                "updated_at": row["updated_at"] if has_updated_at else "",
             }
             for row in cur.execute(
-                "SELECT type, number, verification_date, periodicity, next_verification_date, location, updated_at FROM warehouse ORDER BY sort_order, id"
+                f"SELECT {cols_query} FROM warehouse ORDER BY sort_order, id"
             ).fetchall()
         ]
     return {"locomotives": locomotives, "warehouse": warehouse}
@@ -248,7 +263,7 @@ def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
                 ],
             )
             cur.executemany(
-                "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location, updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                "INSERT INTO warehouse(sort_order, type, number, verification_date, periodicity, next_verification_date, location, in_repair, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                 [
                     (
                         idx + 1,
@@ -258,6 +273,7 @@ def save_state_to_db(locomotives: list[dict], warehouse: list[dict]) -> None:
                         row["periodicity"],
                         row["next_verification_date"],
                         row["location"],
+                        int(row.get("in_repair") or 0),
                         row.get("updated_at", ""),
                     )
                     for idx, row in enumerate(warehouse)
