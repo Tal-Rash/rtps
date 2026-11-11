@@ -868,11 +868,27 @@ function onToolRepairChange(index, isChecked) {
 }
 
 /**
- * Добавление новой строки
+ * Добавление новой строки в конец журнала (снизу)
  */
 function addRow() {
   if (!window.APP_CONFIG.CAN_EDIT) return;
   pushHistory();
+
+  // Сбрасываем фильтры, чтобы новая строка гарантированно отображалась
+  const hasFilter = (document.getElementById("searchFilter")?.value || "") ||
+                    (document.getElementById("statusFilter")?.value || "") ||
+                    (document.getElementById("categoryFilter")?.value || "") ||
+                    (document.getElementById("monthFilter")?.value || "") ||
+                    activeKpiFilter;
+  if (hasFilter) {
+    document.getElementById("searchFilter").value = "";
+    const catSel = document.getElementById("categoryFilter");
+    if (catSel) catSel.value = "";
+    document.getElementById("statusFilter").value = "";
+    document.getElementById("monthFilter").value = "";
+    activeKpiFilter = "";
+    document.querySelectorAll(".kpi-card").forEach(c => c.classList.remove("active-kpi"));
+  }
 
   const nowFormatted = formatDate(serverToday);
   const nextYearFormatted = formatDate(addMonths(serverToday, 12));
@@ -896,7 +912,9 @@ function addRow() {
       notes: "",
       updated_at: new Date().toLocaleString("ru-RU"),
     };
-    jacksItems.unshift(newJack);
+    // Добавляем строку в конец списка (снизу)
+    jacksItems.push(newJack);
+    selectedRowIndex = jacksItems.length - 1;
   } else {
     const newTool = {
       sort_order: toolsItems.length + 1,
@@ -915,14 +933,32 @@ function addRow() {
       notes: "",
       updated_at: new Date().toLocaleString("ru-RU"),
     };
-    toolsItems.unshift(newTool);
+    // Добавляем строку в конец списка (снизу)
+    toolsItems.push(newTool);
+    selectedRowIndex = toolsItems.length - 1;
   }
 
-  selectedRowIndex = 0;
   renderTable();
   updateKpis();
   populateFilterDropdowns();
-  showToast("Добавлена новая строка в журнал", "info");
+
+  // Автоматически прокручиваем таблицу вниз к новой строке и фокусируем её первое поле
+  const containerId = currentTab === "jacks" ? "jacksTableContainer" : "toolsTableContainer";
+  const container = document.getElementById(containerId);
+  if (container) {
+    setTimeout(() => {
+      container.scrollTop = container.scrollHeight;
+      const selector = currentTab === "jacks"
+        ? "#jacksTableBody tr:last-child input"
+        : "#toolsTableBody tr:last-child input";
+      const firstInput = document.querySelector(selector);
+      if (firstInput) {
+        firstInput.focus();
+      }
+    }, 50);
+  }
+
+  showToast("Добавлена новая строка в конец журнала", "info");
 }
 
 /**
