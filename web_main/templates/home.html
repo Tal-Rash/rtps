@@ -467,7 +467,7 @@
       }
 
       const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, items: [], no_data_items: [] };
-      const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, items: [], no_data_items: [] };
+      const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, items: [], no_data_items: [], repair_items: [] };
 
       const kpCountEl = document.getElementById('modalKpCount');
       if (kpCountEl) kpCountEl.textContent = kpCategory.count || 0;
@@ -564,9 +564,19 @@
     function renderAlsnCategory(container, category) {
       const items = category.items || [];
       const noData = category.no_data_items || [];
+      const inRepair = category.repair_items || [];
 
       if (items.length === 0) {
         let html = `<div class="empty-state">✅ Все приборы безопасности АЛСН поверены вовремя! Просроченных приборов нет.</div>`;
+        if (inRepair.length > 0) {
+          html += `
+            <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
+              <summary style="cursor:pointer; font-weight:600; color:#334155;">Приборы в ремонте (${inRepair.length})</summary>
+              <div style="margin-top:8px; line-height:1.8;">
+                ${inRepair.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)} (${esc(l.location)})</a>`).join('')}
+              </div>
+            </details>`;
+        }
         if (noData.length > 0) {
           html += `
             <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
@@ -614,6 +624,17 @@
           </tbody>
         </table>
       `;
+
+      if (inRepair.length > 0) {
+        tableHtml += `
+          <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
+            <summary style="cursor:pointer; font-weight:600; color:#334155;">Приборы в ремонте (${inRepair.length})</summary>
+            <div style="margin-top:8px; line-height:1.8;">
+              ${inRepair.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)} (${esc(l.location)})</a>`).join('')}
+            </div>
+          </details>
+        `;
+      }
 
       if (noData.length > 0) {
         tableHtml += `

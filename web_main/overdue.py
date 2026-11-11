@@ -227,6 +227,7 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
     overdue_items = []
     no_data_items = []
     up_to_date_items = []
+    repair_items = []
 
     if not db_path.exists():
         return {
@@ -237,6 +238,7 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
             "items": [],
             "no_data_items": [],
             "up_to_date_items": [],
+            "repair_items": [],
         }
 
     try:
@@ -269,14 +271,24 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
             except Exception:
                 pass
 
+            # Проверяем структуру таблицы warehouse и наличие столбца in_repair
+            cur = conn.cursor()
+            wh_cols = [r[1] for r in cur.execute("PRAGMA table_info(warehouse)").fetchall()]
+            has_in_repair = "in_repair" in wh_cols
+            cols_query = "type, number, verification_date, periodicity, next_verification_date, location"
+            if has_in_repair:
+                cols_query += ", in_repair"
+
             # Выбираем приборы безопасности со склада
             wh_rows = cur.execute(
-                """
-                SELECT type, number, verification_date, periodicity, next_verification_date, location
+                f"""
+                SELECT {cols_query}
                 FROM warehouse
                 ORDER BY sort_order ASC, id ASC
                 """
             ).fetchall()
+
+            repair_items = []
 
             for row in wh_rows:
                 dev_type = str(row[0] or "").strip()
@@ -297,6 +309,24 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
                     or str(row[5] or "").strip()
                     or "Депо"
                 )
+
+                # Проверка признака нахождения в ремонте
+                raw_repair = row[6] if (has_in_repair and len(row) > 6) else 0
+                in_repair = raw_repair in (1, "1", True, "true", "True")
+
+                full_title = f"{dev_type} №{dev_num}".strip() if dev_type and dev_num else (dev_num or dev_type)
+
+                # Приборы, находящиеся в ремонте, не учитываются в просрочках
+                if in_repair:
+                    repair_items.append({
+                        "type": dev_type,
+                        "number": dev_num,
+                        "full_title": full_title,
+                        "location": loc,
+                        "in_repair": True,
+                        "url": "/alsn",
+                    })
+                    continue
 
                 ver_date_str = str(row[2] or "").strip()
                 periodicity_str = str(row[3] or "").strip()
@@ -362,5 +392,6 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
         "items": overdue_items,
         "no_data_items": no_data_items,
         "up_to_date_items": up_to_date_items,
+        "repair_items": repair_items,
     }
 
