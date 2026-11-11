@@ -441,7 +441,7 @@
 
       <div class="modal-mode-tabs">
         <button id="modeUpcomingBtn" class="modal-mode-btn" type="button" onclick="switchOverdueMode('upcoming')">
-          🟡 Скоро срок (&le; 1 мес): <span id="modalModeUpcomingCount">0</span>
+          🟡 Скоро срок (след. месяц): <span id="modalModeUpcomingCount">0</span>
         </button>
         <button id="modeOverdueBtn" class="modal-mode-btn active-overdue" type="button" onclick="switchOverdueMode('overdue')">
           🔴 Просрочено: <span id="modalModeOverdueCount">0</span>
@@ -587,7 +587,7 @@
       const totalBadge = document.getElementById('modalTotalBadge');
 
       if (activeMode === 'upcoming') {
-        if (titleEl) titleEl.textContent = 'Приближение сроков (за 1 месяц)';
+        if (titleEl) titleEl.textContent = 'Приближение сроков (до конца след. месяца)';
         if (iconEl) iconEl.textContent = '🟡';
         if (totalBadge) {
           if (totalUpcoming > 0) {
@@ -643,9 +643,9 @@
       if (noteEl) {
         if (activeMode === 'upcoming') {
           if (activeCategory === 'alsn') {
-            noteEl.innerHTML = 'Внимание: приборы безопасности (ПБ), у которых срок очередной поверки наступает <strong>в течение 1 месяца (до 30 дней)</strong>.';
+            noteEl.innerHTML = 'Внимание: приборы безопасности (ПБ), у которых срок очередной поверки наступает <strong>до конца следующего месяца</strong>.';
           } else {
-            noteEl.innerHTML = 'Внимание: тепловозы, у которых срок очередного замера параметров колесных пар наступает <strong>в течение 1 месяца (до 30 дней)</strong>.';
+            noteEl.innerHTML = 'Внимание: тепловозы, у которых срок очередного замера параметров колесных пар наступает <strong>до конца следующего месяца</strong>.';
           }
         } else {
           if (activeCategory === 'alsn') {
@@ -674,7 +674,7 @@
       
       if (items.length === 0) {
         let emptyMsg = isUpcoming
-          ? '✅ В ближайший месяц замеров колесных пар тепловозов не ожидается.'
+          ? '✅ До конца следующего месяца замеров колесных пар тепловозов не ожидается.'
           : '✅ Все замеры колесных пар тепловозов выполнены вовремя! Просроченных замеров нет.';
         let html = `<div class="empty-state">${emptyMsg}</div>`;
         if (noData.length > 0) {
@@ -748,7 +748,7 @@
 
       if (items.length === 0) {
         let emptyMsg = isUpcoming
-          ? '✅ В ближайший месяц очередных поверок приборов безопасности не ожидается.'
+          ? '✅ До конца следующего месяца очередных поверок приборов безопасности не ожидается.'
           : '✅ Все приборы безопасности АЛСН поверены вовремя! Просроченных приборов нет.';
         let html = `<div class="empty-state">${emptyMsg}</div>`;
         if (inRepair.length > 0) {
@@ -875,11 +875,11 @@
         const uCount = data.total_upcoming || 0;
         if (uCount > 0) {
           upcomingBtn.className = 'badge badge-warning-btn';
-          upcomingBtn.title = 'Срок поверки/замера наступает в течение 1 месяца! Нажмите для просмотра';
+          upcomingBtn.title = 'Срок поверки/замера наступает в текущем или следующем месяце! Нажмите для просмотра';
           upcomingBtn.innerHTML = `Внимание <span class="badge-warning-counter">${uCount}</span>`;
         } else {
           upcomingBtn.className = 'badge badge-warning-ok-btn';
-          upcomingBtn.title = 'Сроков в течение ближайшего месяца нет';
+          upcomingBtn.title = 'Сроков до конца следующего месяца нет';
           upcomingBtn.innerHTML = 'Внимание: 0';
         }
       }

@@ -260,14 +260,14 @@ async def home_page(request: Request):
     if overdue_summary["has_upcoming"]:
         upcoming_button = (
             f'<button id="upcomingBtn" class="badge badge-warning-btn" type="button" '
-            f'onclick="openOverdueModal(\'upcoming\')" title="Срок поверки/замера наступает в течение 1 месяца">'
+            f'onclick="openOverdueModal(\'upcoming\')" title="Срок поверки/замера наступает в текущем или следующем месяце">'
             f'Внимание <span class="badge-warning-counter">{overdue_summary["total_upcoming"]}</span>'
             f'</button>'
         )
     else:
         upcoming_button = (
             f'<button id="upcomingBtn" class="badge badge-warning-ok-btn" type="button" '
-            f'onclick="openOverdueModal(\'upcoming\')" title="Сроков в течение ближайшего месяца нет">'
+            f'onclick="openOverdueModal(\'upcoming\')" title="Сроков до конца следующего месяца нет">'
             f'Внимание: 0'
             f'</button>'
         )

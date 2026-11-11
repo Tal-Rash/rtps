@@ -55,6 +55,22 @@ def add_months_to_date(sourcedate: dt.date, months: int) -> dt.date:
     return dt.date(year, month, day)
 
 
+def get_end_of_next_month(sourcedate: dt.date) -> dt.date:
+    """
+    Возвращает последний день следующего календарного месяца.
+    Например, для любой даты в ноябре 2026 года вернет 31 декабря 2026 года.
+    Это позволяет включить в категорию 'Внимание' как остаток текущего месяца, так и весь следующий месяц.
+    """
+    if sourcedate.month == 12:
+        next_month = 1
+        next_year = sourcedate.year + 1
+    else:
+        next_month = sourcedate.month + 1
+        next_year = sourcedate.year
+    last_day = calendar.monthrange(next_year, next_month)[1]
+    return dt.date(next_year, next_month, last_day)
+
+
 def get_overdue_summary(
     common_db_path: Path | None = None,
     alsn_db_path: Path | None = None,
@@ -97,7 +113,7 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
     Проверяет просрочки и приближающиеся сроки замеров колесных пар по всем активным локомотивам.
     Крайний срок = дата последнего замера + 30 дней.
     Если крайний срок меньше сегодняшнего числа — замер считается просроченным.
-    Если до крайнего срока остается 1 месяц (до 30 дней) — замер считается приближающимся к просрочке.
+    Если крайний срок наступает в текущем или следующем календарном месяце — замер считается приближающимся.
     """
     overdue_items = []
     upcoming_items = []
@@ -175,8 +191,8 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
                         is_overdue = limit_date < today
                         days_diff = (today - limit_date).days
                         days_remaining = (limit_date - today).days if not is_overdue else 0
-                        month_ahead = add_months_to_date(today, 1)
-                        is_upcoming = not is_overdue and (limit_date <= month_ahead or days_remaining <= 30)
+                        end_of_next_month = get_end_of_next_month(today)
+                        is_upcoming = not is_overdue and limit_date <= end_of_next_month
 
                         item = {
                             "series": ser,
@@ -240,7 +256,7 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
     """
     Проверяет просрочки и приближающиеся сроки поверки приборов безопасности АЛСН из базы данных alsn.db.
     Прибор считается просроченным, если следующая дата поверки меньше сегодняшней даты.
-    Прибор считается приближающимся к просрочке, если до следующей даты поверки остается 1 месяц (до 30 дней).
+    Прибор считается приближающимся к просрочке, если срок поверки наступает в текущем или следующем календарном месяце.
     """
     overdue_items = []
     upcoming_items = []
@@ -371,8 +387,8 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
                     is_overdue = next_date < today
                     days_diff = (today - next_date).days
                     days_remaining = (next_date - today).days if not is_overdue else 0
-                    month_ahead = add_months_to_date(today, 1)
-                    is_upcoming = not is_overdue and (next_date <= month_ahead or days_remaining <= 30)
+                    end_of_next_month = get_end_of_next_month(today)
+                    is_upcoming = not is_overdue and next_date <= end_of_next_month
 
                     item = {
                         "type": dev_type,
