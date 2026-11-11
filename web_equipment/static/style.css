@@ -30,7 +30,7 @@ body {
   padding: 16px;
 }
 
-/* Шапка приложения в едином стиле РТПС */
+/* Шапка приложения в едином стиле РТПС (Замер КП / АЛСН) */
 .topbar {
   position: sticky;
   top: 12px;
@@ -38,9 +38,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 14px 16px;
   margin-bottom: 14px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--accent);
   border-radius: 18px;
   box-shadow: var(--shadow);
@@ -49,7 +49,7 @@ body {
 
 .topbar-row {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -90,45 +90,46 @@ body {
   font-size: 13px;
 }
 
-.controls {
+.controls,
+.toolbar,
+.nav {
   display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.toolbar {
-  display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
 
+.controls { justify-content: flex-end; }
+
+/* Кнопки панели и ссылка «На главную» — размер и стили 1:1 как в АЛСН и Справочнике */
+button,
 .btn-tool,
 .home-link {
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
-  padding: 7px 12px;
+  padding: 8px 12px;
   font: inherit;
-  font-size: 13px;
   color: var(--accent);
   cursor: pointer;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 6px;
   transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
+button:hover:not(:disabled),
 .btn-tool:hover:not(:disabled),
 .home-link:hover {
   background: var(--accent-soft);
   box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
 }
 
+button:disabled,
 .btn-tool:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -136,18 +137,23 @@ body {
   color: #94a3b8;
 }
 
+button.primary,
 .btn-tool.primary,
 #saveBtn.primary {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
   color: #fff !important;
+  font-weight: 500;
 }
 
-.btn-tool.primary:hover:not(:disabled) {
-  background: #1d58d8 !important;
-  border-color: #1d58d8 !important;
+button.primary:hover:not(:disabled),
+.btn-tool.primary:hover:not(:disabled),
+#saveBtn.primary:hover:not(:disabled) {
+  background: #1f63df !important;
+  border-color: #1f63df !important;
 }
 
+/* Тонкий разделитель между функциональным рядом и вкладками */
 .topbar-divider {
   height: 1px;
   background: var(--line);
@@ -155,7 +161,7 @@ body {
   opacity: 0.8;
 }
 
-/* Вкладки категорий */
+/* Нижняя строка: вкладки разделов в едином стиле */
 .tabs {
   display: flex;
   gap: 8px;
@@ -163,26 +169,28 @@ body {
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: thin;
-  padding-bottom: 2px;
+  margin: 0;
+  padding: 0;
 }
 
 .tab {
   flex: 0 0 auto;
+  min-height: auto;
   background: #fff;
-  border: 1px solid #cbd5e1;
-  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  padding: 8px 14px;
   border-radius: 8px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  color: #475569;
+  color: var(--accent);
   font: inherit;
-  font-size: 13px;
   transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
-.tab:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+.tab:hover:not(:disabled) {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
 }
 
 .tab.active {
@@ -315,22 +323,25 @@ body {
   box-shadow: 0 0 0 3px rgba(39, 110, 241, 0.15);
 }
 
+/* Кнопка сброса фильтра */
+button.btn-secondary,
 .btn-secondary {
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--accent);
   border-radius: 8px;
   background: #fff;
-  color: #475569;
-  font-weight: 600;
-  font-size: 13px;
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--accent);
   cursor: pointer;
-  transition: all 0.15s;
+  font-weight: 500;
+  height: auto;
+  transition: all 0.15s ease;
 }
 
+button.btn-secondary:hover,
 .btn-secondary:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px rgba(39, 110, 241, 0.12);
 }
 
 /* Контейнер таблицы с горизонтальным скроллом */
@@ -515,21 +526,25 @@ select.cell-center {
   margin: 0 auto;
 }
 
+/* Кнопка удаления строки в таблице */
+button.row-delete-btn,
 .row-delete-btn {
-  background: none;
-  border: none;
-  color: #94a3b8;
+  background: none !important;
+  border: none !important;
+  color: #94a3b8 !important;
   font-size: 16px;
   font-weight: bold;
   cursor: pointer;
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 2px 6px !important;
+  box-shadow: none !important;
   transition: all 0.15s;
 }
 
+button.row-delete-btn:hover,
 .row-delete-btn:hover {
-  background: #fee2e2;
-  color: #ef4444;
+  background: #fee2e2 !important;
+  color: #ef4444 !important;
 }
 
 /* Подвал таблицы */
