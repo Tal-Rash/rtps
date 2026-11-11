@@ -53,7 +53,7 @@ def render_nginx(modules: dict[str, dict]) -> str:
         "",
     ]
 
-    ordered_keys = ["grafik_ppr", "spravochnik", "zamer_kp", "alsn", "tabel", "edu", "otpusk"]
+    ordered_keys = ["grafik_ppr", "spravochnik", "zamer_kp", "alsn", "tabel", "edu", "otpusk", "equipment"]
     for key in ordered_keys:
         module = modules[key]
         port = int(module["port"])

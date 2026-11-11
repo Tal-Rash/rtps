@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Оборудование и инструмент</title>
+  <link rel="stylesheet" href="{{APP_PREFIX}}/static/style.css?v={{APP_VERSION}}">
+  <script>
+    var _prefix = "{{APP_PREFIX}}";
+    var _canEdit = "{{CAN_EDIT}}";
+    window.APP_CONFIG = {
+      APP_PREFIX: _prefix,
+      CAN_EDIT: _canEdit === "true",
+      MAIN_SITE_URL: "{{MAIN_SITE_URL}}" || "http://yrtps.ru",
+      CATEGORIES: {{ CATEGORIES | tojson }},
+      TEST_TYPES: {{ TEST_TYPES | tojson }}
+    };
+  </script>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <!-- Верхняя строка: заголовок, информация о пользователе и функциональные кнопки -->
+      <div class="topbar-row">
+        <div class="titlebox">
+          <div class="title-with-badge">
+            <h1>Оборудование и инструмент</h1>
+            <span class="user-role-badge">{{ USER_NAME }} ({{ USER_ROLE }})</span>
+          </div>
+          <div class="sub">Периодические проверки, испытания домкратов, электроинструмента и оснастки</div>
+        </div>
+        <div class="controls">
+          <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
+          <div class="toolbar">
+            {% if CAN_EDIT == "true" %}
+            <button type="button" class="btn-tool" onclick="addRow()" title="Добавить новую единицу оборудования">+ Добавить</button>
+            <button type="button" class="btn-tool" onclick="removeSelectedRow()" title="Удалить выбранную строку">- Удалить</button>
+            <button id="cancelBtn" type="button" class="btn-tool" title="Отмена действия (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
+            <button id="restoreBtn" type="button" class="btn-tool" title="Вернуть действие (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
+            {% endif %}
+            <button type="button" class="btn-tool" onclick="copySelectedRows()" title="Копировать выделенные строки в буфер обмена">Копировать</button>
+            <a class="btn-tool link-button" href="{{APP_PREFIX}}/export/csv" title="Скачать таблицу в формате Excel CSV">Экспорт CSV</a>
+            <button type="button" class="btn-tool" onclick="loadData()" title="Перезагрузить данные из базы">Обновить</button>
+            {% if CAN_EDIT == "true" %}
+            <button id="saveBtn" type="button" class="btn-tool primary" onclick="saveData()" title="Сохранить изменения (Ctrl+S)">Сохранить</button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Разделитель -->
+      <div class="topbar-divider"></div>
+
+      <!-- Категории оборудования (вкладки быстрого переключения) -->
+      <div class="tabs" role="tablist" aria-label="Категории оборудования">
+        <button class="tab active" type="button" data-category="" onclick="selectCategoryTab(this, '')">Все категории</button>
+        <button class="tab" type="button" data-category="Домкраты и гидрооборудование" onclick="selectCategoryTab(this, 'Домкраты и гидрооборудование')">Домкраты и гидравлика</button>
+        <button class="tab" type="button" data-category="Электроинструмент" onclick="selectCategoryTab(this, 'Электроинструмент')">Электроинструмент</button>
+        <button class="tab" type="button" data-category="Пневмоинструмент" onclick="selectCategoryTab(this, 'Пневмоинструмент')">Пневмоинструмент</button>
+        <button class="tab" type="button" data-category="Грузоподъемные механизмы и стропы" onclick="selectCategoryTab(this, 'Грузоподъемные механизмы и стропы')">Грузоподъемные мех-мы</button>
+        <button class="tab" type="button" data-category="Лестницы и стремянки" onclick="selectCategoryTab(this, 'Лестницы и стремянки')">Лестницы и стремянки</button>
+        <button class="tab" type="button" data-category="Диэлектрические средства защиты" onclick="selectCategoryTab(this, 'Диэлектрические средства защиты')">Средства защиты</button>
+        <button class="tab" type="button" data-category="Сварочное оборудование" onclick="selectCategoryTab(this, 'Сварочное оборудование')">Сварочное оборуд.</button>
+        <button class="tab" type="button" data-category="Прочее" onclick="selectCategoryTab(this, 'Прочее')">Прочее</button>
+      </div>
+    </div>
+
+    <!-- Информационные KPI-карточки со статусами контроля -->
+    <div class="kpi-grid">
+      <div class="kpi-card" onclick="filterByKpi('')" title="Показать всё оборудование">
+        <div class="kpi-title">Всего единиц</div>
+        <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-sub">в реестре участка</div>
+      </div>
+      <div class="kpi-card kpi-card-ok" onclick="filterByKpi('ok')" title="Нажмите для фильтрации по действующим проверкам">
+        <div class="kpi-title">В норме</div>
+        <div class="kpi-value" id="kpiOk">0</div>
+        <div class="kpi-sub">проверки пройдены</div>
+      </div>
+      <div class="kpi-card kpi-card-warning" onclick="filterByKpi('upcoming')" title="Нажмите для фильтрации по наступающим срокам">
+        <div class="kpi-title">Внимание</div>
+        <div class="kpi-value" id="kpiUpcoming">0</div>
+        <div class="kpi-sub">срок до конца след. месяца</div>
+      </div>
+      <div class="kpi-card kpi-card-alert" onclick="filterByKpi('overdue')" title="Нажмите для фильтрации по просроченным">
+        <div class="kpi-title">Просрочено</div>
+        <div class="kpi-value" id="kpiOverdue">0</div>
+        <div class="kpi-sub">требуется испытание</div>
+      </div>
+      <div class="kpi-card kpi-card-repair" onclick="filterByKpi('repair')" title="Нажмите для фильтрации оборудования в ремонте">
+        <div class="kpi-title">В ремонте</div>
+        <div class="kpi-value" id="kpiRepair">0</div>
+        <div class="kpi-sub">исключено из работы</div>
+      </div>
+    </div>
+
+    <!-- Основная панель -->
+    <div class="panel">
+      <!-- Панель фильтров и поиска -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <label for="searchFilter">Быстрый поиск</label>
+          <input type="text" id="searchFilter" placeholder="Поиск по наименованию, номеру, акту..." oninput="applyFilters()">
+        </div>
+        <div class="filter-group">
+          <label for="categoryFilter">Категория</label>
+          <select id="categoryFilter" onchange="onCategorySelectChange(this.value)">
+            <option value="">Все категории</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="statusFilter">Состояние поверки</label>
+          <select id="statusFilter" onchange="applyFilters()">
+            <option value="">Все состояния</option>
+            <option value="overdue">🔴 Только просроченные</option>
+            <option value="upcoming">🟡 Скоро срок (след. месяц)</option>
+            <option value="ok">🟢 Действующие (в норме)</option>
+            <option value="repair">🔧 В ремонте</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="monthFilter">След. месяц проверки</label>
+          <select id="monthFilter" onchange="applyFilters()">
+            <option value="">Все месяцы</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="locationFilter">Место / Участок</label>
+          <select id="locationFilter" onchange="applyFilters()">
+            <option value="">Все места</option>
+          </select>
+        </div>
+        <button type="button" class="btn-secondary" onclick="resetFilters()">Сбросить</button>
+      </div>
+
+      <!-- Таблица оборудования -->
+      <div class="table-container">
+        <table class="equipment-table" id="equipmentTable">
+          <thead>
+            <tr>
+              <th style="width: 44px;">№</th>
+              <th style="width: 170px;">Категория</th>
+              <th style="width: 260px;">Наименование оборудования</th>
+              <th style="width: 120px;">Инв. / Зав. №</th>
+              <th style="width: 170px;">Место / Участок</th>
+              <th style="width: 160px;">Ответственный</th>
+              <th style="width: 220px;">Вид проверки / испытания</th>
+              <th style="width: 90px;" title="Периодичность проверки в месяцах">Период. (мес.)</th>
+              <th style="width: 120px;">Дата проверки</th>
+              <th style="width: 125px;">След. дата проверки</th>
+              <th style="width: 140px;">Срок проверки</th>
+              <th style="width: 80px;" title="Отметить, если оборудование выведено в ремонт">В ремонте</th>
+              <th style="width: 140px;">№ акта / результат</th>
+              <th style="width: 200px;">Примечание</th>
+              {% if CAN_EDIT == "true" %}
+              <th style="width: 50px;" title="Действия">✕</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Строки генерируются динамически -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-footer">
+        <div class="rows-info">Показано строк: <span id="visibleRowCount">0</span> из <span id="totalRowCount">0</span></div>
+        <div class="shortcuts-hint">
+          Горячие клавиши: <strong>Ctrl+S</strong> — сохранить, <strong>Ctrl+Z</strong> — отмена, <strong>Ctrl+Y</strong> — повтор, <strong>Delete</strong> — удалить строку
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно подтверждения при несохранённых изменениях -->
+  <div id="unsavedChangesModal" class="modal-overlay" style="display:none;">
+    <div class="modal-dialog">
+      <h3>Несохранённые изменения</h3>
+      <p>В таблице есть несохранённые изменения. Сохранить их перед переходом?</p>
+      <div class="modal-actions">
+        <button type="button" class="btn-tool primary" onclick="confirmSaveAndLeave()">Сохранить</button>
+        <button type="button" class="btn-tool" onclick="confirmLeaveWithoutSaving()">Не сохранять</button>
+        <button type="button" class="btn-tool" onclick="closeUnsavedModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Всплывающее уведомление (Toast) -->
+  <div id="toastNotification" class="toast"></div>
+
+  <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
+</body>
+</html>

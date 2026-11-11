@@ -17,6 +17,7 @@ from rtps_common import connect_sqlite
 ROOT = Path(__file__).resolve().parent
 DEFAULT_COMMON_DB = ROOT.parent / "base" / "common_database.db"
 DEFAULT_ALSN_DB = ROOT.parent / "web_alsn" / "data" / "alsn.db"
+DEFAULT_EQUIPMENT_DB = ROOT.parent / "web_equipment" / "data" / "equipment.db"
 
 # Количество дней межзамерного интервала КП для тепловозов
 KP_RECHECK_DAYS = 30
@@ -74,16 +75,21 @@ def get_end_of_next_month(sourcedate: dt.date) -> dt.date:
 def get_overdue_summary(
     common_db_path: Path | None = None,
     alsn_db_path: Path | None = None,
+    equipment_db_path: Path | None = None,
 ) -> dict:
     """
     Формирует сводку по всем видам просрочек системы РТПС.
-    Возвращает словарь с общим количеством просрочек и детализацией по категориям.
+    Возвращает словарь с общим количеством просрочек и детализацией по категориям:
+      - Замеры колесных пар (КП)
+      - Приборы безопасности АЛСН
+      - Оборудование и инструмент (домкраты, электроинструмент, стропы и др.)
     """
     today = dt.date.today()
     categories = []
 
     c_db = common_db_path or DEFAULT_COMMON_DB
     a_db = alsn_db_path or DEFAULT_ALSN_DB
+    e_db = equipment_db_path or DEFAULT_EQUIPMENT_DB
 
     # 1. Просрочки замеров колесных пар (КП) тепловозов
     kp_category = _check_kp_overdues(c_db, today)
@@ -92,6 +98,10 @@ def get_overdue_summary(
     # 2. Просрочки поверки приборов безопасности АЛСН
     alsn_category = _check_alsn_overdues(a_db, today)
     categories.append(alsn_category)
+
+    # 3. Просрочки проверок и испытаний оборудования и инструмента
+    equipment_category = _check_equipment_overdues(e_db, today)
+    categories.append(equipment_category)
 
     # Подсчет общего числа просрочек по всем категориям
     total_overdue = sum(cat.get("count", 0) for cat in categories)
@@ -441,4 +451,160 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
         "up_to_date_items": up_to_date_items,
         "repair_items": repair_items,
     }
+
+
+def _check_equipment_overdues(db_path: Path, today: dt.date) -> dict:
+    """
+    Проверяет просрочки и приближающиеся сроки проверок и испытаний оборудования и инструмента из equipment.db.
+    Оборудование считается просроченным, если следующая дата проверки меньше сегодняшней даты.
+    Оборудование считается приближающимся к просрочке, если срок проверки наступает в текущем или следующем календарном месяце.
+    Оборудование с отметкой 'В ремонте' исключается из подсчета просрочек.
+    """
+    overdue_items = []
+    upcoming_items = []
+    no_data_items = []
+    up_to_date_items = []
+    repair_items = []
+
+    if not db_path.exists():
+        return {
+            "id": "equipment",
+            "title": "Оборудование и инструмент",
+            "count": 0,
+            "upcoming_count": 0,
+            "unit_label": "единиц",
+            "items": [],
+            "upcoming_items": [],
+            "no_data_items": [],
+            "up_to_date_items": [],
+            "repair_items": [],
+        }
+
+    try:
+        with connect_sqlite(db_path) as conn:
+            conn.row_factory = None
+            cur = conn.cursor()
+
+            # Получаем все единицы оборудования из базы
+            rows = cur.execute(
+                """
+                SELECT category, name, inv_number, location, responsible,
+                       test_type, periodicity, last_test_date, next_test_date,
+                       in_repair, protocol_num, notes
+                FROM equipment
+                ORDER BY sort_order ASC, id ASC
+                """
+            ).fetchall()
+
+            for row in rows:
+                cat = str(row[0] or "Прочее").strip()
+                name = str(row[1] or "").strip()
+                inv_num = str(row[2] or "").strip()
+                location = str(row[3] or "").strip() or "Участок РТПС"
+                responsible = str(row[4] or "").strip()
+                test_type = str(row[5] or "").strip()
+                periodicity_str = str(row[6] or "").strip()
+                last_date_str = str(row[7] or "").strip()
+                next_date_str = str(row[8] or "").strip()
+                raw_repair = row[9]
+                in_repair = raw_repair in (1, "1", True, "true", "True")
+                protocol_num = str(row[10] or "").strip()
+                notes = str(row[11] or "").strip()
+
+                if not name and not inv_num:
+                    continue
+
+                full_title = f"{name} (инв. №{inv_num})" if inv_num else name
+
+                # Оборудование в ремонте не учитывается в просрочках
+                if in_repair:
+                    repair_items.append({
+                        "category": cat,
+                        "name": name,
+                        "number": inv_num,
+                        "full_title": full_title,
+                        "location": location,
+                        "responsible": responsible,
+                        "in_repair": True,
+                        "url": "/equipment",
+                    })
+                    continue
+
+                last_date = parse_alsn_date(last_date_str)
+                next_date = parse_alsn_date(next_date_str)
+
+                # Если следующая дата проверки не указана явно, но есть последняя дата и периодичность
+                if not next_date and last_date and periodicity_str:
+                    try:
+                        p_months = int(periodicity_str)
+                        if p_months > 0:
+                            next_date = add_months_to_date(last_date, p_months)
+                    except Exception:
+                        pass
+
+                if next_date:
+                    is_overdue = next_date < today
+                    days_diff = (today - next_date).days
+                    days_remaining = (next_date - today).days if not is_overdue else 0
+                    end_of_next_month = get_end_of_next_month(today)
+                    is_upcoming = not is_overdue and next_date <= end_of_next_month
+
+                    item = {
+                        "category": cat,
+                        "name": name,
+                        "number": inv_num,
+                        "full_title": full_title,
+                        "location": location,
+                        "responsible": responsible,
+                        "test_type": test_type,
+                        "verification_date": last_date.isoformat() if last_date else "",
+                        "verification_date_str": last_date.strftime("%d.%m.%Y") if last_date else last_date_str,
+                        "limit_date": next_date.isoformat(),
+                        "limit_date_str": next_date.strftime("%d.%m.%Y"),
+                        "days_overdue": days_diff if is_overdue else 0,
+                        "days_remaining": days_remaining,
+                        "is_overdue": is_overdue,
+                        "is_upcoming": is_upcoming,
+                        "protocol_num": protocol_num,
+                        "notes": notes,
+                        "url": "/equipment",
+                    }
+
+                    if is_overdue:
+                        overdue_items.append(item)
+                    else:
+                        if is_upcoming:
+                            upcoming_items.append(item)
+                        up_to_date_items.append(item)
+                else:
+                    no_data_items.append({
+                        "category": cat,
+                        "name": name,
+                        "number": inv_num,
+                        "full_title": full_title,
+                        "location": location,
+                        "url": "/equipment",
+                    })
+
+        # Сортируем просроченное оборудование по убыванию дней просрочки
+        overdue_items.sort(key=lambda x: x["days_overdue"], reverse=True)
+        # Сортируем приближающиеся сроки по возрастанию оставшихся дней
+        upcoming_items.sort(key=lambda x: x["days_remaining"])
+
+    except Exception as exc:
+        print(f"[overdue] Ошибка при проверке оборудования: {exc}")
+
+    return {
+        "id": "equipment",
+        "title": "Оборудование и инструмент",
+        "count": len(overdue_items),
+        "upcoming_count": len(upcoming_items),
+        "unit_label": "единиц",
+        "items": overdue_items,
+        "upcoming_items": upcoming_items,
+        "no_data_items": no_data_items,
+        "up_to_date_items": up_to_date_items,
+        "repair_items": repair_items,
+    }
+
 

@@ -6,3 +6,5 @@ web_main.service
 tabel.service
 edu.service
 otpusk.service
+equipment.service
+

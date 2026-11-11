@@ -43,8 +43,9 @@ FAILED_ATTEMPTS: dict[str, list[float]] = {}
 DB_FILE = ROOT.parent / "base" / "web_users.db"
 COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
 ALSN_DB_FILE = ROOT.parent / "web_alsn" / "data" / "alsn.db"
+EQUIPMENT_DB_FILE = ROOT.parent / "web_equipment" / "data" / "equipment.db"
 # Идентификатор сборки веб-сервиса
-BUILD_ID = "web-main-2026-11-09"
+BUILD_ID = "web-main-2026-11-11"
 
 app = FastAPI(title="RTPS Web Main")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
@@ -52,7 +53,7 @@ templates = Jinja2Templates(directory=str(ROOT / "templates"))
 def normalize_admin_modules(modules_str: str) -> str:
     modules = [m.strip() for m in str(modules_str or "").split(",") if m.strip()]
     by_name = {m.split(":", 1)[0]: i for i, m in enumerate(modules)}
-    for module_name in ("grafik_ppr", "zamer_kp", "spravochnik", "tabel", "edu", "alsn", "otpusk"):
+    for module_name in ("grafik_ppr", "zamer_kp", "spravochnik", "tabel", "edu", "alsn", "otpusk", "equipment"):
         if module_name in by_name:
             modules[by_name[module_name]] = f"{module_name}:edit"
         else:
@@ -111,7 +112,7 @@ def init_db() -> None:
             if cur.fetchone()[0] == 0:
                 conn.execute(
                     "INSERT INTO users (password, full_name, role, allowed_modules) VALUES (?, ?, ?, ?)",
-                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,edu,alsn,otpusk,admin")
+                    ("12345", "Администратор (Главный)", "admin", "zamer_kp,grafik_ppr,spravochnik,tabel,edu,alsn,otpusk,equipment,admin")
                 )
                 print("Создан администратор по умолчанию. Пароль: 12345")
             else:
@@ -255,7 +256,7 @@ async def home_page(request: Request):
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
         
     # Формируем кнопки контроля приближающихся сроков и просрочек
-    overdue_summary = get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE)
+    overdue_summary = get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE, EQUIPMENT_DB_FILE)
 
     if overdue_summary["has_upcoming"]:
         upcoming_button = (
@@ -317,13 +318,15 @@ async def home_page(request: Request):
         "HIDE_EDU": ("hide_edu:yes" in session["modules"]) or not has_access_to("edu"),
         "HIDE_ALSN": ("hide_alsn:yes" in session["modules"]) or not has_access_to("alsn"),
         "HIDE_OTPUSK": ("hide_otpusk:yes" in session["modules"]) or not has_access_to("otpusk"),
+        "HIDE_EQUIPMENT": ("hide_equipment:yes" in session["modules"]) or not has_access_to("equipment"),
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "ALSN_LINK": link_for("alsn", "/alsn"),
         "SPRAVOCHNIK_LINK": link_for("spravochnik", "/spravochnik"),
         "TABEL_LINK": link_for("tabel", "/tabel"),
         "EDU_LINK": link_for("edu", "/edu"),
-        "OTPUSK_LINK": link_for("otpusk", "/otpusk")
+        "OTPUSK_LINK": link_for("otpusk", "/otpusk"),
+        "EQUIPMENT_LINK": link_for("equipment", "/equipment")
     }
     try:
         return templates.TemplateResponse(request=request, name="home.html", context=context)
@@ -336,7 +339,7 @@ async def api_overdue_endpoint(request: Request):
     session = get_current_session(request)
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
-    return get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE)
+    return get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE, EQUIPMENT_DB_FILE)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -446,13 +449,15 @@ async def users_page(request: Request):
                     "e_r": "edit" if is_admin else get_mod_role(mods, "edu", u[3]),
                     "a_r": "edit" if is_admin else get_mod_role(mods, "alsn", u[3]),
                     "o_r": "edit" if is_admin else get_mod_role(mods, "otpusk", u[3]),
+                    "eq_r": "edit" if is_admin else get_mod_role(mods, "equipment", u[3]),
                     "h_g": "checked" if "hide_grafik_ppr:yes" in (u[4] or "") else "",
                     "h_z": "checked" if "hide_zamer_kp:yes" in (u[4] or "") else "",
                     "h_s": "checked" if "hide_spravochnik:yes" in (u[4] or "") else "",
                     "h_t": "checked" if "hide_tabel:yes" in (u[4] or "") else "",
                     "h_e": "checked" if "hide_edu:yes" in (u[4] or "") else "",
                     "h_a": "checked" if "hide_alsn:yes" in (u[4] or "") else "",
-                    "h_o": "checked" if "hide_otpusk:yes" in (u[4] or "") else ""
+                    "h_o": "checked" if "hide_otpusk:yes" in (u[4] or "") else "",
+                    "h_eq": "checked" if "hide_equipment:yes" in (u[4] or "") else ""
                 })
     except Exception as e:
         error_message = f"Ошибка БД: {e}"
@@ -460,7 +465,7 @@ async def users_page(request: Request):
     return templates.TemplateResponse(request=request, name="users.html", context={"request": request, "users": users, "error_message": error_message})
 
 @app.post("/users/add")
-async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), module_otpusk: str = Form("none")):
+async def add_user(request: Request, full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), module_otpusk: str = Form("none"), module_equipment: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -475,6 +480,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
     if module_otpusk != "none": modules.append(f"otpusk:{module_otpusk}")
+    if module_equipment != "none": modules.append(f"equipment:{module_equipment}")
     
     if form.get("hide_grafik_ppr") == "yes": modules.append("hide_grafik_ppr:yes")
     if form.get("hide_zamer_kp") == "yes": modules.append("hide_zamer_kp:yes")
@@ -483,6 +489,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if form.get("hide_edu") == "yes": modules.append("hide_edu:yes")
     if form.get("hide_alsn") == "yes": modules.append("hide_alsn:yes")
     if form.get("hide_otpusk") == "yes": modules.append("hide_otpusk:yes")
+    if form.get("hide_equipment") == "yes": modules.append("hide_equipment:yes")
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -492,6 +499,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
             "edu:edit",
             "alsn:edit",
             "otpusk:edit",
+            "equipment:edit",
             "admin",
         ]
     
@@ -503,7 +511,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     return RedirectResponse("/users", status_code=303)
 
 @app.post("/users/update")
-async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), module_otpusk: str = Form("none")):
+async def update_user(request: Request, id: int = Form(...), full_name: str = Form(""), password: str = Form(""), role: str = Form("viewer"), module_grafik_ppr: str = Form("none"), module_zamer_kp: str = Form("none"), module_spravochnik: str = Form("none"), module_tabel: str = Form("none"), module_edu: str = Form("none"), module_alsn: str = Form("none"), module_otpusk: str = Form("none"), module_equipment: str = Form("none")):
     session = get_current_session(request)
     if not session or (session["role"] != "admin" and "admin" not in session["modules"]):
         return RedirectResponse("/", status_code=303)
@@ -535,6 +543,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     module_edu = posted_or_existing("module_edu", "edu", module_edu)
     module_alsn = posted_or_existing("module_alsn", "alsn", module_alsn)
     module_otpusk = posted_or_existing("module_otpusk", "otpusk", module_otpusk)
+    module_equipment = posted_or_existing("module_equipment", "equipment", module_equipment)
     
     def posted_or_existing_hide(field_name: str) -> bool:
         if "is_full_update" in posted_fields:
@@ -550,6 +559,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     hide_edu = posted_or_existing_hide("hide_edu")
     hide_alsn = posted_or_existing_hide("hide_alsn")
     hide_otpusk = posted_or_existing_hide("hide_otpusk")
+    hide_equipment = posted_or_existing_hide("hide_equipment")
 
     modules = []
     if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
@@ -559,6 +569,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if module_edu != "none": modules.append(f"edu:{module_edu}")
     if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
     if module_otpusk != "none": modules.append(f"otpusk:{module_otpusk}")
+    if module_equipment != "none": modules.append(f"equipment:{module_equipment}")
     
     if hide_grafik_ppr: modules.append("hide_grafik_ppr:yes")
     if hide_zamer_kp: modules.append("hide_zamer_kp:yes")
@@ -567,6 +578,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if hide_edu: modules.append("hide_edu:yes")
     if hide_alsn: modules.append("hide_alsn:yes")
     if hide_otpusk: modules.append("hide_otpusk:yes")
+    if hide_equipment: modules.append("hide_equipment:yes")
     
     if role == "admin":
         modules = [
@@ -577,6 +589,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
             "edu:edit",
             "alsn:edit",
             "otpusk:edit",
+            "equipment:edit",
             "admin",
         ]
     
@@ -635,6 +648,11 @@ async def redir_zamer():
 @app.get("/alsn/")
 async def redir_alsn():
     return RedirectResponse(f"{MAIN_SITE_URL}/alsn", status_code=303)
+
+@app.get("/equipment")
+@app.get("/equipment/")
+async def redir_equipment():
+    return RedirectResponse(f"{MAIN_SITE_URL}/equipment", status_code=303)
 
 import urllib.request
 import urllib.error

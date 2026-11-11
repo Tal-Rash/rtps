@@ -423,6 +423,15 @@
         {% endif %}
         {{ OTPUSK_LINK | safe }}
       </div>
+      <div class="card">
+        {% if not HIDE_EQUIPMENT %}
+        <div>
+          <h2>Оборудование</h2>
+          <p>Проверки и испытания оборудования и инструмента.</p>
+        </div>
+        {% endif %}
+        {{ EQUIPMENT_LINK | safe }}
+      </div>
     </div>
     <div class="status">Сервер запущен: {{STARTED_AT}}</div>
   </div>
@@ -454,6 +463,9 @@
         </button>
         <button id="tabAlsnBtn" class="modal-tab" type="button" onclick="switchOverdueCategory('alsn')">
           Приборы АЛСН (<span id="modalAlsnCount">0</span>)
+        </button>
+        <button id="tabEquipmentBtn" class="modal-tab" type="button" onclick="switchOverdueCategory('equipment')">
+          Оборудование (<span id="modalEquipmentCount">0</span>)
         </button>
       </div>
 
@@ -500,17 +512,17 @@
     // Открытие модального окна контроля сроков
     function openOverdueModal(mode = 'overdue') {
       activeMode = mode;
-      // Если по КП элементов нет, а по АЛСН есть — сразу переключаемся на вкладку АЛСН
       if (overdueData) {
         const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, upcoming_count: 0 };
         const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, upcoming_count: 0 };
+        const eqCategory = (overdueData.categories || []).find(c => c.id === 'equipment') || { count: 0, upcoming_count: 0 };
         const kpCount = activeMode === 'upcoming' ? (kpCategory.upcoming_count || 0) : (kpCategory.count || 0);
         const alsnCount = activeMode === 'upcoming' ? (alsnCategory.upcoming_count || 0) : (alsnCategory.count || 0);
-        if (kpCount === 0 && alsnCount > 0) {
-          activeCategory = 'alsn';
-        } else {
-          activeCategory = 'kp';
-        }
+        const eqCount = activeMode === 'upcoming' ? (eqCategory.upcoming_count || 0) : (eqCategory.count || 0);
+        if (kpCount > 0) activeCategory = 'kp';
+        else if (alsnCount > 0) activeCategory = 'alsn';
+        else if (eqCount > 0) activeCategory = 'equipment';
+        else activeCategory = 'kp';
       }
       renderOverdueModal();
       const modal = document.getElementById('overdueModal');
@@ -526,12 +538,15 @@
       if (overdueData) {
         const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, upcoming_count: 0 };
         const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, upcoming_count: 0 };
+        const eqCategory = (overdueData.categories || []).find(c => c.id === 'equipment') || { count: 0, upcoming_count: 0 };
         const kpCount = activeMode === 'upcoming' ? (kpCategory.upcoming_count || 0) : (kpCategory.count || 0);
         const alsnCount = activeMode === 'upcoming' ? (alsnCategory.upcoming_count || 0) : (alsnCategory.count || 0);
-        if (kpCount === 0 && alsnCount > 0) {
-          activeCategory = 'alsn';
-        } else if (kpCount > 0 && alsnCount === 0) {
-          activeCategory = 'kp';
+        const eqCount = activeMode === 'upcoming' ? (eqCategory.upcoming_count || 0) : (eqCategory.count || 0);
+        const curCount = activeCategory === 'kp' ? kpCount : (activeCategory === 'alsn' ? alsnCount : eqCount);
+        if (curCount === 0) {
+          if (kpCount > 0) activeCategory = 'kp';
+          else if (alsnCount > 0) activeCategory = 'alsn';
+          else if (eqCount > 0) activeCategory = 'equipment';
         }
       }
       renderOverdueModal();
@@ -628,9 +643,11 @@
 
       const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, upcoming_count: 0, items: [], upcoming_items: [], no_data_items: [] };
       const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, upcoming_count: 0, items: [], upcoming_items: [], no_data_items: [], repair_items: [] };
+      const equipmentCategory = (overdueData.categories || []).find(c => c.id === 'equipment') || { count: 0, upcoming_count: 0, items: [], upcoming_items: [], no_data_items: [], repair_items: [] };
 
       const kpCount = activeMode === 'upcoming' ? (kpCategory.upcoming_count || 0) : (kpCategory.count || 0);
       const alsnCount = activeMode === 'upcoming' ? (alsnCategory.upcoming_count || 0) : (alsnCategory.count || 0);
+      const eqCount = activeMode === 'upcoming' ? (equipmentCategory.upcoming_count || 0) : (equipmentCategory.count || 0);
 
       const kpCountEl = document.getElementById('modalKpCount');
       if (kpCountEl) kpCountEl.textContent = kpCount;
@@ -638,17 +655,24 @@
       const alsnCountEl = document.getElementById('modalAlsnCount');
       if (alsnCountEl) alsnCountEl.textContent = alsnCount;
 
+      const eqCountEl = document.getElementById('modalEquipmentCount');
+      if (eqCountEl) eqCountEl.textContent = eqCount;
+
       // Обновляем пояснительную записку под выбранную категорию и режим
       const noteEl = document.getElementById('overdueNote');
       if (noteEl) {
         if (activeMode === 'upcoming') {
-          if (activeCategory === 'alsn') {
+          if (activeCategory === 'equipment') {
+            noteEl.innerHTML = 'Внимание: оборудование и инструмент, у которых срок очередной проверки/испытания наступает <strong>до конца следующего месяца</strong>.';
+          } else if (activeCategory === 'alsn') {
             noteEl.innerHTML = 'Внимание: приборы безопасности (ПБ), у которых срок очередной поверки наступает <strong>до конца следующего месяца</strong>.';
           } else {
             noteEl.innerHTML = 'Внимание: тепловозы, у которых срок очередного замера параметров колесных пар наступает <strong>до конца следующего месяца</strong>.';
           }
         } else {
-          if (activeCategory === 'alsn') {
+          if (activeCategory === 'equipment') {
+            noteEl.innerHTML = 'По регламенту домкраты, электроинструмент, ГПМ и оснастка должны проходить периодические проверки и испытания в установленные сроки. Красным выделены позиции, у которых <strong>просрочена дата проверки</strong>.';
+          } else if (activeCategory === 'alsn') {
             noteEl.innerHTML = 'По регламенту приборы безопасности (ПБ) должны проходить периодическую поверку в установленные сроки. Красным выделены приборы, у которых <strong>истек срок очередной поверки</strong>.';
           } else {
             noteEl.innerHTML = 'По регламенту повторный замер параметров колесных пар тепловозов выполняется <strong>не реже 1 раза в 30 дней</strong>. Красным выделены тепловозы, у которых превышен допустимый межзамерный интервал.';
@@ -663,6 +687,8 @@
         renderKpCategory(container, kpCategory);
       } else if (activeCategory === 'alsn') {
         renderAlsnCategory(container, alsnCategory);
+      } else if (activeCategory === 'equipment') {
+        renderEquipmentCategory(container, equipmentCategory);
       }
     }
 
@@ -829,6 +855,83 @@
             <summary style="cursor:pointer; font-weight:600; color:#334155;">Приборы без установленной даты поверки (${noData.length})</summary>
             <div style="margin-top:8px; line-height:1.8;">
               ${noData.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)} (${esc(l.location)})</a>`).join('')}
+            </div>
+          </details>
+        `;
+      }
+
+      container.innerHTML = tableHtml;
+    }
+
+    // Отрисовка таблицы для оборудования и инструмента
+    function renderEquipmentCategory(container, category) {
+      const isUpcoming = activeMode === 'upcoming';
+      const items = (isUpcoming ? category.upcoming_items : category.items) || [];
+      const inRepair = category.repair_items || [];
+      const noData = category.no_data_items || [];
+
+      if (items.length === 0) {
+        let emptyMsg = isUpcoming
+          ? '✅ До конца следующего месяца проверок и испытаний оборудования не ожидается.'
+          : '✅ Все оборудование и инструмент проверены вовремя! Просроченных проверок нет.';
+        let html = `<div class="empty-state">${emptyMsg}</div>`;
+        if (inRepair.length > 0) {
+          html += `
+            <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
+              <summary style="cursor:pointer; font-weight:600; color:#334155;">Оборудование в ремонте (${inRepair.length})</summary>
+              <div style="margin-top:8px; line-height:1.8;">
+                ${inRepair.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)} (${esc(l.location)})</a>`).join('')}
+              </div>
+            </details>
+          `;
+        }
+        container.innerHTML = html;
+        return;
+      }
+
+      const colLabel = isUpcoming ? 'Осталось' : 'Просрочено';
+
+      let rowsHtml = items.map(item => `
+        <tr>
+          <td style="font-weight:700; color:#0f172a;">${esc(item.full_title)}</td>
+          <td style="color:#475569;">${esc(item.location || 'Участок РТПС')}</td>
+          <td style="color:#475569; font-size:12px;">${esc(item.test_type || 'Техническое освидетельствование')}</td>
+          <td style="${isUpcoming ? 'color:#b45309; font-weight:600;' : 'color:#b91c1c; font-weight:600;'}">${esc(item.limit_date_str)}</td>
+          <td>
+            ${isUpcoming 
+              ? `<span class="upcoming-badge-pill">${item.days_remaining} дн.</span>` 
+              : `<span class="overdue-badge-pill">${item.days_overdue} дн.</span>`}
+          </td>
+          <td style="text-align:right;">
+            <a class="overdue-action-btn" href="${item.url}">Открыть модуль &rarr;</a>
+          </td>
+        </tr>
+      `).join('');
+
+      let tableHtml = `
+        <table class="overdue-table">
+          <thead>
+            <tr>
+              <th>Оборудование</th>
+              <th>Местонахождение</th>
+              <th>Вид проверки</th>
+              <th>Срок проверки</th>
+              <th>${colLabel}</th>
+              <th style="text-align:right;">Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+
+      if (inRepair.length > 0) {
+        tableHtml += `
+          <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
+            <summary style="cursor:pointer; font-weight:600; color:#334155;">Оборудование в ремонте (${inRepair.length})</summary>
+            <div style="margin-top:8px; line-height:1.8;">
+              ${inRepair.map(l => `<a href="${l.url}" style="display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 8px; border-radius:4px; background:#fff; border:1px solid #cbd5e1; color:#276ef1; text-decoration:none; font-weight:600;">${esc(l.full_title)} (${esc(l.location)})</a>`).join('')}
             </div>
           </details>
         `;
