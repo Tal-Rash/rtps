@@ -24,22 +24,22 @@
       <div class="topbar-row">
         <div class="titlebox">
           <div class="title-with-badge">
-            <h1>Оборудование и инструмент</h1>
+            <h1 id="pageTitle">Оборудование и инструмент</h1>
             <span class="user-role-badge">{{ USER_NAME }} ({{ USER_ROLE }})</span>
           </div>
-          <div class="sub">Периодические проверки, испытания домкратов, электроинструмента и оснастки</div>
+          <div class="sub" id="pageSubtitle">Журналы проверок и периодических испытаний домкратов, инструмента и оснастки</div>
         </div>
         <div class="controls">
           <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
           <div class="toolbar">
             {% if CAN_EDIT == "true" %}
-            <button type="button" class="btn-tool" onclick="addRow()" title="Добавить новую единицу оборудования">+ Добавить</button>
+            <button type="button" class="btn-tool" onclick="addRow()" title="Добавить новую строку">+ Добавить</button>
             <button type="button" class="btn-tool" onclick="removeSelectedRow()" title="Удалить выбранную строку">- Удалить</button>
             <button id="cancelBtn" type="button" class="btn-tool" title="Отмена действия (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
             <button id="restoreBtn" type="button" class="btn-tool" title="Вернуть действие (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
             {% endif %}
-            <button type="button" class="btn-tool" onclick="copySelectedRows()" title="Копировать выделенные строки в буфер обмена">Копировать</button>
-            <a class="btn-tool link-button" href="{{APP_PREFIX}}/export/csv" title="Скачать таблицу в формате Excel CSV">Экспорт CSV</a>
+            <button type="button" class="btn-tool" onclick="copySelectedRows()" title="Копировать выделенные строки в буфер обмена для Excel">Копировать</button>
+            <button type="button" class="btn-tool" onclick="exportActiveCsv()" title="Скачать таблицу в формате Excel CSV">Экспорт CSV</button>
             <button type="button" class="btn-tool" onclick="loadData()" title="Перезагрузить данные из базы">Обновить</button>
             {% if CAN_EDIT == "true" %}
             <button id="saveBtn" type="button" class="btn-tool primary" onclick="saveData()" title="Сохранить изменения (Ctrl+S)">Сохранить</button>
@@ -51,31 +51,28 @@
       <!-- Разделитель -->
       <div class="topbar-divider"></div>
 
-      <!-- Категории оборудования (вкладки быстрого переключения) -->
-      <div class="tabs" role="tablist" aria-label="Категории оборудования">
-        <button class="tab active" type="button" data-category="" onclick="selectCategoryTab(this, '')">Все категории</button>
-        <button class="tab" type="button" data-category="Домкраты и гидрооборудование" onclick="selectCategoryTab(this, 'Домкраты и гидрооборудование')">Домкраты и гидравлика</button>
-        <button class="tab" type="button" data-category="Электроинструмент" onclick="selectCategoryTab(this, 'Электроинструмент')">Электроинструмент</button>
-        <button class="tab" type="button" data-category="Пневмоинструмент" onclick="selectCategoryTab(this, 'Пневмоинструмент')">Пневмоинструмент</button>
-        <button class="tab" type="button" data-category="Грузоподъемные механизмы и стропы" onclick="selectCategoryTab(this, 'Грузоподъемные механизмы и стропы')">Грузоподъемные мех-мы</button>
-        <button class="tab" type="button" data-category="Лестницы и стремянки" onclick="selectCategoryTab(this, 'Лестницы и стремянки')">Лестницы и стремянки</button>
-        <button class="tab" type="button" data-category="Диэлектрические средства защиты" onclick="selectCategoryTab(this, 'Диэлектрические средства защиты')">Средства защиты</button>
-        <button class="tab" type="button" data-category="Сварочное оборудование" onclick="selectCategoryTab(this, 'Сварочное оборудование')">Сварочное оборуд.</button>
-        <button class="tab" type="button" data-category="Прочее" onclick="selectCategoryTab(this, 'Прочее')">Прочее</button>
+      <!-- Главные разделы журнала (Вкладки) -->
+      <div class="tabs" role="tablist" aria-label="Разделы учета оборудования">
+        <button id="tabJacks" class="tab active" type="button" onclick="switchMainTab('jacks')">
+          <span class="tab-icon">🏗️</span> Домкраты (Журнал учета и осмотра)
+        </button>
+        <button id="tabTools" class="tab" type="button" onclick="switchMainTab('tools')">
+          <span class="tab-icon">⚡</span> Электроинструмент и оснастка
+        </button>
       </div>
     </div>
 
     <!-- Информационные KPI-карточки со статусами контроля -->
     <div class="kpi-grid">
-      <div class="kpi-card" onclick="filterByKpi('')" title="Показать всё оборудование">
+      <div class="kpi-card" onclick="filterByKpi('')" title="Показать все записи">
         <div class="kpi-title">Всего единиц</div>
         <div class="kpi-value" id="kpiTotal">0</div>
-        <div class="kpi-sub">в реестре участка</div>
+        <div class="kpi-sub" id="kpiTotalSub">в текущем журнале</div>
       </div>
       <div class="kpi-card kpi-card-ok" onclick="filterByKpi('ok')" title="Нажмите для фильтрации по действующим проверкам">
         <div class="kpi-title">В норме</div>
         <div class="kpi-value" id="kpiOk">0</div>
-        <div class="kpi-sub">проверки пройдены</div>
+        <div class="kpi-sub">освидетельствование пройдено</div>
       </div>
       <div class="kpi-card kpi-card-warning" onclick="filterByKpi('upcoming')" title="Нажмите для фильтрации по наступающим срокам">
         <div class="kpi-title">Внимание</div>
@@ -90,7 +87,7 @@
       <div class="kpi-card kpi-card-repair" onclick="filterByKpi('repair')" title="Нажмите для фильтрации оборудования в ремонте">
         <div class="kpi-title">В ремонте</div>
         <div class="kpi-value" id="kpiRepair">0</div>
-        <div class="kpi-sub">исключено из работы</div>
+        <div class="kpi-sub">выведено из эксплуатации</div>
       </div>
     </div>
 
@@ -98,23 +95,23 @@
     <div class="panel">
       <!-- Панель фильтров и поиска -->
       <div class="filters-bar">
-        <div class="filter-group">
+        <div class="filter-group" style="flex: 2; min-width: 220px;">
           <label for="searchFilter">Быстрый поиск</label>
-          <input type="text" id="searchFilter" placeholder="Поиск по наименованию, номеру, акту..." oninput="applyFilters()">
+          <input type="text" id="searchFilter" placeholder="Поиск по наименованию, хоз. номеру, ФИО..." oninput="applyFilters()">
         </div>
-        <div class="filter-group">
+        <div class="filter-group" id="categoryFilterGroup" style="display: none;">
           <label for="categoryFilter">Категория</label>
-          <select id="categoryFilter" onchange="onCategorySelectChange(this.value)">
+          <select id="categoryFilter" onchange="applyFilters()">
             <option value="">Все категории</option>
           </select>
         </div>
         <div class="filter-group">
-          <label for="statusFilter">Состояние поверки</label>
+          <label for="statusFilter">Состояние освидетельствования</label>
           <select id="statusFilter" onchange="applyFilters()">
             <option value="">Все состояния</option>
             <option value="overdue">🔴 Только просроченные</option>
             <option value="upcoming">🟡 Скоро срок (след. месяц)</option>
-            <option value="ok">🟢 Действующие (в норме)</option>
+            <option value="ok">🟢 В норме (действует)</option>
             <option value="repair">🔧 В ремонте</option>
           </select>
         </div>
@@ -124,41 +121,91 @@
             <option value="">Все месяцы</option>
           </select>
         </div>
-        <div class="filter-group">
-          <label for="locationFilter">Место / Участок</label>
-          <select id="locationFilter" onchange="applyFilters()">
-            <option value="">Все места</option>
-          </select>
-        </div>
         <button type="button" class="btn-secondary" onclick="resetFilters()">Сбросить</button>
       </div>
 
-      <!-- Таблица оборудования -->
-      <div class="table-container">
-        <table class="equipment-table" id="equipmentTable">
+      <!-- ТАБЛИЦА 1: ДОМКРАТЫ (Официальный журнал «ДОМКРАТЫ») -->
+      <div class="table-container" id="jacksTableContainer">
+        <table class="equipment-table jacks-table" id="jacksTable">
           <thead>
             <tr>
-              <th style="width: 44px;">№</th>
-              <th style="width: 170px;">Категория</th>
-              <th style="width: 260px;">Наименование оборудования</th>
-              <th style="width: 120px;">Инв. / Зав. №</th>
-              <th style="width: 170px;">Место / Участок</th>
-              <th style="width: 160px;">Ответственный</th>
-              <th style="width: 220px;">Вид проверки / испытания</th>
-              <th style="width: 90px;" title="Периодичность проверки в месяцах">Период. (мес.)</th>
-              <th style="width: 120px;">Дата проверки</th>
-              <th style="width: 125px;">След. дата проверки</th>
-              <th style="width: 140px;">Срок проверки</th>
-              <th style="width: 80px;" title="Отметить, если оборудование выведено в ремонт">В ремонте</th>
-              <th style="width: 140px;">№ акта / результат</th>
-              <th style="width: 200px;">Примечание</th>
+              <th rowspan="2" style="width: 44px;">№</th>
+              <th rowspan="2" style="width: 220px;">Наименование грузоподъемных механизмов и приспособлений, такелажных средств</th>
+              <th rowspan="2" style="width: 95px;">Хоз. №</th>
+              <th rowspan="2" style="width: 95px;">Грузоподъемность, тн.</th>
+              <th rowspan="2" style="width: 115px;">Дата последнего испытания</th>
+              <th rowspan="2" style="width: 130px;">Причина испытания (осмотра)</th>
+              <th rowspan="2" style="width: 160px;">Сведения о произведенном ремонте с указанием даты</th>
+              <th colspan="3">Техническое освидетельствование</th>
+              <th rowspan="2" style="width: 125px;">Дата и результат испытания (осмотра)</th>
+              <th rowspan="2" style="width: 125px;">Дата следующего технического освидетельствования</th>
+              <th rowspan="2" style="width: 135px;">Срок проверки</th>
+              <th rowspan="2" style="width: 75px;" title="Оборудование находится в ремонте">В ремонте</th>
+              <th rowspan="2" style="width: 160px;">Председатель комиссии или работник, проводивший испытание (осмотр) Ф.И.О.</th>
+              <th rowspan="2" style="width: 160px;">Примечание</th>
               {% if CAN_EDIT == "true" %}
-              <th style="width: 50px;" title="Действия">✕</th>
+              <th rowspan="2" style="width: 44px;" title="Удалить строку">✕</th>
+              {% endif %}
+            </tr>
+            <tr class="sub-header">
+              <th style="width: 85px;">Осмотр</th>
+              <th style="width: 100px;">Статическое испытание</th>
+              <th style="width: 110px;">Динамическое испытание</th>
+            </tr>
+            <tr class="col-numbers">
+              <th></th>
+              <th>1</th>
+              <th>2</th>
+              <th>3</th>
+              <th>4</th>
+              <th>5</th>
+              <th>6</th>
+              <th>7</th>
+              <th>8</th>
+              <th>9</th>
+              <th>10</th>
+              <th>11</th>
+              <th></th>
+              <th></th>
+              <th>12</th>
+              <th></th>
+              {% if CAN_EDIT == "true" %}
+              <th></th>
               {% endif %}
             </tr>
           </thead>
-          <tbody id="tableBody">
-            <!-- Строки генерируются динамически -->
+          <tbody id="jacksTableBody">
+            <!-- Строки домкратов генерируются динамически -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ТАБЛИЦА 2: ЭЛЕКТРОИНСТРУМЕНТ И ПРОЧЕЕ ОБОРУДОВАНИЕ -->
+      <div class="table-container" id="toolsTableContainer" style="display: none;">
+        <table class="equipment-table tools-table" id="toolsTable">
+          <thead>
+            <tr>
+              <th style="width: 44px;">№</th>
+              <th style="width: 160px;">Категория</th>
+              <th style="width: 240px;">Наименование оборудования</th>
+              <th style="width: 110px;">Инв. / Зав. №</th>
+              <th style="width: 160px;">Место / Участок</th>
+              <th style="width: 150px;">Ответственный</th>
+              <th style="width: 200px;">Вид проверки / испытания</th>
+              <th style="width: 85px;" title="Периодичность проверки в месяцах">Период. (мес.)</th>
+              <th style="width: 115px;">Дата проверки</th>
+              <th style="width: 120px;">След. дата проверки</th>
+              <th style="width: 135px;">Срок проверки</th>
+              <th style="width: 75px;" title="Оборудование находится в ремонте">В ремонте</th>
+              <th style="width: 130px;">№ акта / результат</th>
+              <th style="width: 180px;">Примечание</th>
+              {% if CAN_EDIT == "true" %}
+              <th style="width: 44px;" title="Удалить строку">✕</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody id="toolsTableBody">
+            <!-- Строки инструмента генерируются динамически -->
           </tbody>
         </table>
       </div>
@@ -176,7 +223,7 @@
   <div id="unsavedChangesModal" class="modal-overlay" style="display:none;">
     <div class="modal-dialog">
       <h3>Несохранённые изменения</h3>
-      <p>В таблице есть несохранённые изменения. Сохранить их перед переходом?</p>
+      <p>В текущем журнале есть несохранённые изменения. Сохранить их перед переходом?</p>
       <div class="modal-actions">
         <button type="button" class="btn-tool primary" onclick="confirmSaveAndLeave()">Сохранить</button>
         <button type="button" class="btn-tool" onclick="confirmLeaveWithoutSaving()">Не сохранять</button>

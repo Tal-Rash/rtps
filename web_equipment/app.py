@@ -44,8 +44,10 @@ try:
     )
     from .storage import (
         init_db,
-        load_equipment_from_db,
-        save_equipment_to_db,
+        load_jacks_from_db,
+        load_tools_from_db,
+        save_jacks_to_db,
+        save_tools_to_db,
     )
 except (ImportError, ValueError):
     from constants import (
@@ -62,8 +64,10 @@ except (ImportError, ValueError):
     )
     from storage import (
         init_db,
-        load_equipment_from_db,
-        save_equipment_to_db,
+        load_jacks_from_db,
+        load_tools_from_db,
+        save_jacks_to_db,
+        save_tools_to_db,
     )
 
 
@@ -156,27 +160,32 @@ async def index(request: Request):
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 
+@app.get("/api/state")
+@app.get(f"{APP_PREFIX}/api/state", include_in_schema=False)
 @app.get("/api/items")
 @app.get(f"{APP_PREFIX}/api/items", include_in_schema=False)
-async def api_items(request: Request):
-    """Получение списка оборудования, справочников и текущей даты сервера."""
+async def api_state(request: Request):
+    """Получение данных домкратов, инструмента и справочников."""
     session = get_session(request)
     if not session:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    items = await asyncio.to_thread(load_equipment_from_db)
+    jacks = await asyncio.to_thread(load_jacks_from_db)
+    tools = await asyncio.to_thread(load_tools_from_db)
+
     return {
-        "items": items,
+        "jacks": jacks,
+        "tools": tools,
         "categories": DEFAULT_CATEGORIES,
         "test_types": DEFAULT_TEST_TYPES,
         "today": dt.date.today().strftime("%d.%m.%Y"),
     }
 
 
-@app.post("/api/items")
-@app.post(f"{APP_PREFIX}/api/items", include_in_schema=False)
-async def api_save_items(request: Request):
-    """Сохранение изменений списка оборудования с поддержкой прямого JSON и gzip."""
+@app.post("/api/jacks")
+@app.post(f"{APP_PREFIX}/api/jacks", include_in_schema=False)
+async def api_save_jacks(request: Request):
+    """Сохранение изменений журнала домкратов."""
     t0 = time.perf_counter()
     session = get_session(request)
     if not session or not session["can_edit"]:
@@ -199,62 +208,132 @@ async def api_save_items(request: Request):
     if not isinstance(items, list):
         items = []
 
-    await asyncio.to_thread(save_equipment_to_db, items)
+    await asyncio.to_thread(save_jacks_to_db, items)
     elapsed = time.perf_counter() - t0
-    print(f"[SAVE_EQUIPMENT] Успешно сохранено {len(items)} единиц за {elapsed:.3f}с")
+    print(f"[SAVE_JACKS] Успешно сохранено {len(items)} домкратов за {elapsed:.3f}с")
+    return {"ok": True, "count": len(items)}
+
+
+@app.post("/api/tools")
+@app.post(f"{APP_PREFIX}/api/tools", include_in_schema=False)
+@app.post("/api/items")
+@app.post(f"{APP_PREFIX}/api/items", include_in_schema=False)
+async def api_save_tools(request: Request):
+    """Сохранение изменений электроинструмента и прочего оборудования."""
+    t0 = time.perf_counter()
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        raw_body = await request.body()
+        if request.headers.get("content-encoding") == "gzip":
+            try:
+                decompressed = gzip.decompress(raw_body).decode("utf-8")
+                payload = json.loads(decompressed)
+            except Exception:
+                payload = json.loads(raw_body.decode("utf-8"))
+        else:
+            payload = json.loads(raw_body.decode("utf-8"))
+    except Exception as exc:
+        return JSONResponse({"error": f"Некорректный JSON в теле запроса: {exc}"}, status_code=400)
+
+    items = payload.get("items")
+    if not isinstance(items, list):
+        items = []
+
+    await asyncio.to_thread(save_tools_to_db, items)
+    elapsed = time.perf_counter() - t0
+    print(f"[SAVE_TOOLS] Успешно сохранено {len(items)} единиц инструмента за {elapsed:.3f}с")
     return {"ok": True, "count": len(items)}
 
 
 @app.get(f"{APP_PREFIX}/export/csv")
-async def export_csv(request: Request):
-    """Экспорт перечня оборудования в формате CSV (Excel-совместимый UTF-8 с BOM)."""
+async def export_csv(request: Request, tab: str = "jacks"):
+    """Экспорт данных в формате CSV (Excel-совместимый UTF-8 с BOM)."""
     session = get_session(request)
     if not session:
         return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/equipment", status_code=303)
 
-    items = await asyncio.to_thread(load_equipment_from_db)
-
     output = io.StringIO()
-    # Записываем UTF-8 BOM для корректного открытия в русском Microsoft Excel
     output.write("\ufeff")
     writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
 
-    writer.writerow([
-        "№ п/п",
-        "Категория",
-        "Наименование оборудования",
-        "Инв. / Зав. №",
-        "Местонахождение / Участок",
-        "Ответственный",
-        "Вид проверки / испытания",
-        "Периодичность (мес.)",
-        "Дата последней проверки",
-        "Дата следующей проверки",
-        "В ремонте",
-        "Результат проверки",
-        "№ акта / протокола",
-        "Примечание",
-    ])
-
-    for idx, item in enumerate(items, 1):
+    if tab == "jacks":
+        items = await asyncio.to_thread(load_jacks_from_db)
         writer.writerow([
-            idx,
-            item.get("category", ""),
-            item.get("name", ""),
-            item.get("inv_number", ""),
-            item.get("location", ""),
-            item.get("responsible", ""),
-            item.get("test_type", ""),
-            item.get("periodicity", ""),
-            item.get("last_test_date", ""),
-            item.get("next_test_date", ""),
-            "Да" if item.get("in_repair") else "Нет",
-            item.get("test_result", ""),
-            item.get("protocol_num", ""),
-            item.get("notes", ""),
+            "№ п/п",
+            "Наименование грузоподъемных механизмов и приспособлений, такелажных средств (1)",
+            "Хоз. № (2)",
+            "Грузоподъемность, тн. (3)",
+            "Дата последнего испытания (4)",
+            "Причина испытания (осмотра) (5)",
+            "Сведения о произведенном ремонте с указанием даты (6)",
+            "Освидетельствование: Осмотр (7)",
+            "Освидетельствование: Статическое испытание (8)",
+            "Освидетельствование: Динамическое испытание (9)",
+            "Дата и результат испытания (осмотра) (10)",
+            "Дата следующего технического освидетельствования (11)",
+            "В ремонте",
+            "Ф.И.О. лица, проводившего испытание (осмотр) (12)",
+            "Примечание",
         ])
+        for idx, item in enumerate(items, 1):
+            writer.writerow([
+                idx,
+                item.get("name", ""),
+                item.get("inv_number", ""),
+                item.get("capacity", ""),
+                item.get("prev_test_date", ""),
+                item.get("test_reason", ""),
+                item.get("repair_info", ""),
+                item.get("inspection_result", ""),
+                item.get("static_test_result", ""),
+                item.get("dynamic_test_result", ""),
+                item.get("test_date", ""),
+                item.get("next_test_date", ""),
+                "Да" if item.get("in_repair") else "Нет",
+                item.get("inspector", ""),
+                item.get("notes", ""),
+            ])
+        filename = f"domkraty_{dt.date.today().strftime('%Y%m%d')}.csv"
+    else:
+        items = await asyncio.to_thread(load_tools_from_db)
+        writer.writerow([
+            "№ п/п",
+            "Категория",
+            "Наименование оборудования",
+            "Инв. / Зав. №",
+            "Местонахождение / Участок",
+            "Ответственный",
+            "Вид проверки / испытания",
+            "Периодичность (мес.)",
+            "Дата последней проверки",
+            "Дата следующей проверки",
+            "В ремонте",
+            "Результат проверки",
+            "№ акта / протокола",
+            "Примечание",
+        ])
+        for idx, item in enumerate(items, 1):
+            writer.writerow([
+                idx,
+                item.get("category", ""),
+                item.get("name", ""),
+                item.get("inv_number", ""),
+                item.get("location", ""),
+                item.get("responsible", ""),
+                item.get("test_type", ""),
+                item.get("periodicity", ""),
+                item.get("last_test_date", ""),
+                item.get("next_test_date", ""),
+                "Да" if item.get("in_repair") else "Нет",
+                item.get("test_result", ""),
+                item.get("protocol_num", ""),
+                item.get("notes", ""),
+            ])
+        filename = f"instrument_{dt.date.today().strftime('%Y%m%d')}.csv"
 
-    filename = f"equipment_{dt.date.today().strftime('%Y%m%d')}.csv"
     return Response(
         content=output.getvalue().encode("utf-8"),
         media_type="text/csv",

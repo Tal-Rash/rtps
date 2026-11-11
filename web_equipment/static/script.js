@@ -1,11 +1,13 @@
 /**
  * Клиентский скрипт модуля «Оборудование и инструмент» (РТПС).
- * Реализует интерактивную таблицу, фильтрацию, авторасчет сроков испытаний,
- * историю изменений (Undo/Redo), копирование в буфер и сохранение в базу данных.
+ * Поддерживает официальный журнал «ДОМКРАТЫ» со всеми столбцами и периодическими испытаниями,
+ * а также журнал электроинструмента и оснастки.
  */
 
-// Глобальное состояние приложения
-let equipmentItems = [];
+// Глобальное состояние
+let currentTab = "jacks"; // 'jacks' или 'tools'
+let jacksItems = [];
+let toolsItems = [];
 let undoStack = [];
 let redoStack = [];
 let hasUnsavedChanges = false;
@@ -23,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /**
- * Инициализация работы с датами и определение текущей даты
+ * Инициализация работы с датами
  */
 function initDateHelpers() {
   serverToday = new Date();
@@ -31,7 +33,7 @@ function initDateHelpers() {
 }
 
 /**
- * Заполнение селекта категорий начальными данными
+ * Заполнение селекта категорий для вкладки инструмента
  */
 function initCategoryFilterOptions() {
   const catSelect = document.getElementById("categoryFilter");
@@ -47,11 +49,64 @@ function initCategoryFilterOptions() {
 }
 
 /**
- * Загрузка актуальных данных из базы через API
+ * Переключение главного раздела (Домкраты / Инструмент)
+ */
+function switchMainTab(tab) {
+  if (currentTab === tab) return;
+
+  if (hasUnsavedChanges) {
+    if (!confirm("В текущем журнале есть несохранённые изменения. Переключить без сохранения?")) {
+      return;
+    }
+    setUnsavedChanges(false);
+  }
+
+  currentTab = tab;
+  selectedRowIndex = null;
+  undoStack = [];
+  redoStack = [];
+  updateUndoRedoButtons();
+
+  const tabJacks = document.getElementById("tabJacks");
+  const tabTools = document.getElementById("tabTools");
+  const jacksContainer = document.getElementById("jacksTableContainer");
+  const toolsContainer = document.getElementById("toolsTableContainer");
+  const catGroup = document.getElementById("categoryFilterGroup");
+  const pageTitle = document.getElementById("pageTitle");
+  const pageSub = document.getElementById("pageSubtitle");
+  const kpiSub = document.getElementById("kpiTotalSub");
+
+  if (tab === "jacks") {
+    tabJacks.classList.add("active");
+    tabTools.classList.remove("active");
+    jacksContainer.style.display = "block";
+    toolsContainer.style.display = "none";
+    if (catGroup) catGroup.style.display = "none";
+    if (pageTitle) pageTitle.textContent = "Журнал учета домкратов";
+    if (pageSub) pageSub.textContent = "Учет, периодические статические и динамические испытания домкратов (1 раз в 12 месяцев)";
+    if (kpiSub) kpiSub.textContent = "домкратов на участке";
+  } else {
+    tabJacks.classList.remove("active");
+    tabTools.classList.add("active");
+    jacksContainer.style.display = "none";
+    toolsContainer.style.display = "block";
+    if (catGroup) catGroup.style.display = "flex";
+    if (pageTitle) pageTitle.textContent = "Электроинструмент и оснастка";
+    if (pageSub) pageSub.textContent = "Учет проверок изоляции электроинструмента и испытаний оснастки";
+    if (kpiSub) kpiSub.textContent = "единиц инструмента";
+  }
+
+  populateFilterDropdowns();
+  renderTable();
+  updateKpis();
+}
+
+/**
+ * Загрузка актуальных данных из базы
  */
 async function loadData() {
   try {
-    const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/items`);
+    const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/state`);
     if (!res.ok) {
       if (res.status === 401) {
         window.location.href = `${window.APP_CONFIG.MAIN_SITE_URL}/login?next=/equipment`;
@@ -60,21 +115,20 @@ async function loadData() {
       throw new Error(`Ошибка сервера: ${res.status}`);
     }
     const data = await res.json();
-    equipmentItems = Array.isArray(data.items) ? data.items : [];
-    
-    // Сбрасываем историю изменений после загрузки
+    jacksItems = Array.isArray(data.jacks) ? data.jacks : [];
+    toolsItems = Array.isArray(data.tools) ? data.tools : [];
+
     undoStack = [];
     redoStack = [];
     setUnsavedChanges(false);
     updateUndoRedoButtons();
 
-    // Обновляем фильтры, KPI и таблицу
     populateFilterDropdowns();
     renderTable();
     updateKpis();
     showToast("Данные успешно загружены", "info");
   } catch (err) {
-    console.error("Ошибка загрузки данных оборудования:", err);
+    console.error("Ошибка загрузки:", err);
     showToast("Ошибка при загрузке данных: " + err.message, "error");
   }
 }
@@ -92,7 +146,9 @@ function parseDate(dateStr) {
     if (parts.length === 3) {
       const d = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10) - 1;
-      const y = parseInt(parts[2], 10);
+      let y = parseInt(parts[2], 10);
+      // Поддержка короткого года из журнала (например '25' -> 2025)
+      if (y < 100) y += 2000;
       if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
         return new Date(y, m, d);
       }
@@ -147,7 +203,7 @@ function getEndOfNextMonth(date) {
 }
 
 /**
- * Расчет статуса проверки для единицы оборудования
+ * Расчет статуса проверки для единицы
  */
 function calculateItemStatus(item) {
   const isRepair = item.in_repair === 1 || item.in_repair === "1" || item.in_repair === true;
@@ -206,16 +262,24 @@ function calculateItemStatus(item) {
 }
 
 /**
+ * Получение текущего рабочего массива данных
+ */
+function getCurrentItems() {
+  return currentTab === "jacks" ? jacksItems : toolsItems;
+}
+
+/**
  * Пересчет и отображение индикаторов KPI в шапке
  */
 function updateKpis() {
-  let total = equipmentItems.length;
+  const items = getCurrentItems();
+  let total = items.length;
   let okCount = 0;
   let upcomingCount = 0;
   let overdueCount = 0;
   let repairCount = 0;
 
-  equipmentItems.forEach(item => {
+  items.forEach(item => {
     const st = calculateItemStatus(item);
     if (st.status === "repair") {
       repairCount++;
@@ -236,23 +300,17 @@ function updateKpis() {
 }
 
 /**
- * Заполнение выпадающих списков фильтров по местонахождению и месяцам
+ * Заполнение выпадающих списков фильтров
  */
 function populateFilterDropdowns() {
-  const locSelect = document.getElementById("locationFilter");
   const monthSelect = document.getElementById("monthFilter");
-  if (!locSelect || !monthSelect) return;
+  if (!monthSelect) return;
 
-  const currentLoc = locSelect.value;
   const currentMonth = monthSelect.value;
-
-  const locations = new Set();
+  const items = getCurrentItems();
   const months = new Set();
 
-  equipmentItems.forEach(item => {
-    if (item.location && item.location.trim()) {
-      locations.add(item.location.trim());
-    }
+  items.forEach(item => {
     const nd = parseDate(item.next_test_date);
     if (nd) {
       const monthKey = `${String(nd.getMonth() + 1).padStart(2, "0")}.${nd.getFullYear()}`;
@@ -260,17 +318,6 @@ function populateFilterDropdowns() {
     }
   });
 
-  // Заполняем места
-  locSelect.innerHTML = '<option value="">Все места</option>';
-  Array.from(locations).sort().forEach(loc => {
-    const opt = document.createElement("option");
-    opt.value = loc;
-    opt.textContent = loc;
-    locSelect.appendChild(opt);
-  });
-  locSelect.value = currentLoc;
-
-  // Заполняем месяцы
   monthSelect.innerHTML = '<option value="">Все месяцы</option>';
   Array.from(months).sort().forEach(m => {
     const opt = document.createElement("option");
@@ -282,34 +329,41 @@ function populateFilterDropdowns() {
 }
 
 /**
- * Отрисовка основной таблицы оборудования с учетом фильтров
+ * Отрисовка активной таблицы
  */
 function renderTable() {
-  const tbody = document.getElementById("tableBody");
+  if (currentTab === "jacks") {
+    renderJacksTable();
+  } else {
+    renderToolsTable();
+  }
+}
+
+/**
+ * Отрисовка журнала домкратов (13 столбцов строго по журналу)
+ */
+function renderJacksTable() {
+  const tbody = document.getElementById("jacksTableBody");
   if (!tbody) return;
   tbody.innerHTML = "";
 
   const searchVal = (document.getElementById("searchFilter")?.value || "").toLowerCase().trim();
-  const catVal = (document.getElementById("categoryFilter")?.value || "").trim();
   const statusVal = activeKpiFilter || (document.getElementById("statusFilter")?.value || "").trim();
   const monthVal = (document.getElementById("monthFilter")?.value || "").trim();
-  const locVal = (document.getElementById("locationFilter")?.value || "").trim();
 
   let visibleCount = 0;
+  const canEdit = window.APP_CONFIG.CAN_EDIT;
+  const disabledAttr = canEdit ? "" : "disabled";
 
-  equipmentItems.forEach((item, index) => {
+  jacksItems.forEach((item, index) => {
     const st = calculateItemStatus(item);
 
-    // Фильтрация по поисковой строке
+    // Фильтрация
     if (searchVal) {
-      const combined = `${item.name || ""} ${item.inv_number || ""} ${item.location || ""} ${item.responsible || ""} ${item.protocol_num || ""} ${item.notes || ""}`.toLowerCase();
+      const combined = `${item.name || ""} ${item.inv_number || ""} ${item.capacity || ""} ${item.inspector || ""} ${item.notes || ""}`.toLowerCase();
       if (!combined.includes(searchVal)) return;
     }
 
-    // Фильтрация по категории
-    if (catVal && item.category !== catVal) return;
-
-    // Фильтрация по статусу
     if (statusVal) {
       if (statusVal === "repair" && st.status !== "repair") return;
       if (statusVal === "overdue" && st.status !== "overdue") return;
@@ -317,16 +371,12 @@ function renderTable() {
       if (statusVal === "ok" && st.status !== "ok") return;
     }
 
-    // Фильтрация по месяцу следующей проверки
     if (monthVal) {
       const nd = parseDate(item.next_test_date);
       if (!nd) return;
       const itemMonth = `${String(nd.getMonth() + 1).padStart(2, "0")}.${nd.getFullYear()}`;
       if (itemMonth !== monthVal) return;
     }
-
-    // Фильтрация по месту нахождения
-    if (locVal && (item.location || "").trim() !== locVal) return;
 
     visibleCount++;
     const row = document.createElement("tr");
@@ -336,64 +386,66 @@ function renderTable() {
 
     row.onclick = (e) => onRowClick(index, e);
 
-    const canEdit = window.APP_CONFIG.CAN_EDIT;
-    const disabledAttr = canEdit ? "" : "disabled";
-
-    // Формируем HTML колонок таблицы
     row.innerHTML = `
       <td style="text-align: center; color: var(--muted); font-weight: 600;">${visibleCount}</td>
       <td>
-        <select class="cell-editable" ${disabledAttr} onchange="updateItemField(${index}, 'category', this.value)">
-          ${getCategoriesOptionsHtml(item.category)}
-        </select>
-      </td>
-      <td>
         <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.name)}" 
-               placeholder="Наименование..." onchange="updateItemField(${index}, 'name', this.value)">
+               placeholder="УДС-160(1)..." onchange="updateJackField(${index}, 'name', this.value)">
       </td>
       <td>
         <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.inv_number)}" 
-               placeholder="№..." onchange="updateItemField(${index}, 'inv_number', this.value)">
+               placeholder="Хоз. №" onchange="updateJackField(${index}, 'inv_number', this.value)">
       </td>
       <td>
-        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.location)}" 
-               placeholder="Место / цех..." onchange="updateItemField(${index}, 'location', this.value)">
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.capacity)}" 
+               placeholder="тн." onchange="updateJackField(${index}, 'capacity', this.value)">
       </td>
       <td>
-        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.responsible)}" 
-               placeholder="Ответственный..." onchange="updateItemField(${index}, 'responsible', this.value)">
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.prev_test_date)}" 
+               placeholder="ДД.ММ.ГГГГ" onchange="updateJackField(${index}, 'prev_test_date', this.value)">
       </td>
       <td>
-        <input type="text" list="testTypesList" class="cell-editable" ${disabledAttr} value="${esc(item.test_type)}" 
-               placeholder="Вид испытания..." onchange="updateItemField(${index}, 'test_type', this.value)">
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.test_reason)}" 
+               placeholder="очередное..." onchange="updateJackField(${index}, 'test_reason', this.value)">
       </td>
       <td>
-        <input type="number" min="1" max="120" class="cell-editable cell-center" ${disabledAttr} 
-               value="${esc(item.periodicity || '12')}" 
-               onchange="onPeriodicityChange(${index}, this.value)">
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.repair_info)}" 
+               placeholder="Сведения о ремонте..." onchange="updateJackField(${index}, 'repair_info', this.value)">
       </td>
       <td>
-        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.last_test_date)}" 
-               placeholder="ДД.ММ.ГГГГ" onchange="onLastDateChange(${index}, this.value)">
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.inspection_result || 'удовл.')}" 
+               placeholder="удовл." onchange="updateJackField(${index}, 'inspection_result', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.static_test_result || 'удовл.')}" 
+               placeholder="удовл." onchange="updateJackField(${index}, 'static_test_result', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.dynamic_test_result || 'удовл.')}" 
+               placeholder="удовл." onchange="updateJackField(${index}, 'dynamic_test_result', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.test_date)}" 
+               placeholder="ДД.ММ.ГГГГ" onchange="onJackTestDateChange(${index}, this.value)">
       </td>
       <td>
         <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.next_test_date)}" 
-               placeholder="ДД.ММ.ГГГГ" onchange="updateItemField(${index}, 'next_test_date', this.value)">
+               placeholder="ДД.ММ.ГГГГ" onchange="updateJackField(${index}, 'next_test_date', this.value)">
       </td>
       <td style="text-align: center;">
         <span class="status-badge ${st.badgeClass}">${st.text}</span>
       </td>
       <td style="text-align: center;">
         <input type="checkbox" class="repair-check" ${disabledAttr} ${item.in_repair ? "checked" : ""} 
-               onchange="onRepairChange(${index}, this.checked)">
+               onchange="onJackRepairChange(${index}, this.checked)">
       </td>
       <td>
-        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.protocol_num)}" 
-               placeholder="№ протокола..." onchange="updateItemField(${index}, 'protocol_num', this.value)">
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.inspector)}" 
+               placeholder="Ф.И.О." onchange="updateJackField(${index}, 'inspector', this.value)">
       </td>
       <td>
         <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.notes)}" 
-               placeholder="Примечание..." onchange="updateItemField(${index}, 'notes', this.value)">
+               placeholder="Примечание..." onchange="updateJackField(${index}, 'notes', this.value)">
       </td>
       ${canEdit ? `
       <td style="text-align: center;">
@@ -405,14 +457,13 @@ function renderTable() {
   });
 
   document.getElementById("visibleRowCount").textContent = visibleCount;
-  document.getElementById("totalRowCount").textContent = equipmentItems.length;
+  document.getElementById("totalRowCount").textContent = jacksItems.length;
 
-  // Если нет строк — отображаем заглушку
   if (visibleCount === 0) {
     const emptyTr = document.createElement("tr");
     emptyTr.innerHTML = `
-      <td colspan="${window.APP_CONFIG.CAN_EDIT ? 15 : 14}" style="text-align: center; padding: 30px; color: var(--muted);">
-        Нет записей, соответствующих выбранным критериям фильтрации
+      <td colspan="${canEdit ? 17 : 16}" style="text-align: center; padding: 30px; color: var(--muted);">
+        В журнале домкратов нет записей, соответствующих критериям фильтрации
       </td>
     `;
     tbody.appendChild(emptyTr);
@@ -420,7 +471,133 @@ function renderTable() {
 }
 
 /**
- * Генерация HTML опций для выбора категории
+ * Отрисовка журнала инструмента
+ */
+function renderToolsTable() {
+  const tbody = document.getElementById("toolsTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const searchVal = (document.getElementById("searchFilter")?.value || "").toLowerCase().trim();
+  const catVal = (document.getElementById("categoryFilter")?.value || "").trim();
+  const statusVal = activeKpiFilter || (document.getElementById("statusFilter")?.value || "").trim();
+  const monthVal = (document.getElementById("monthFilter")?.value || "").trim();
+
+  let visibleCount = 0;
+  const canEdit = window.APP_CONFIG.CAN_EDIT;
+  const disabledAttr = canEdit ? "" : "disabled";
+
+  toolsItems.forEach((item, index) => {
+    const st = calculateItemStatus(item);
+
+    if (searchVal) {
+      const combined = `${item.name || ""} ${item.inv_number || ""} ${item.location || ""} ${item.responsible || ""}`.toLowerCase();
+      if (!combined.includes(searchVal)) return;
+    }
+
+    if (catVal && item.category !== catVal) return;
+
+    if (statusVal) {
+      if (statusVal === "repair" && st.status !== "repair") return;
+      if (statusVal === "overdue" && st.status !== "overdue") return;
+      if (statusVal === "upcoming" && st.status !== "upcoming") return;
+      if (statusVal === "ok" && st.status !== "ok") return;
+    }
+
+    if (monthVal) {
+      const nd = parseDate(item.next_test_date);
+      if (!nd) return;
+      const itemMonth = `${String(nd.getMonth() + 1).padStart(2, "0")}.${nd.getFullYear()}`;
+      if (itemMonth !== monthVal) return;
+    }
+
+    visibleCount++;
+    const row = document.createElement("tr");
+    row.dataset.index = index;
+    if (st.rowClass) row.classList.add(st.rowClass);
+    if (selectedRowIndex === index) row.classList.add("row-selected");
+
+    row.onclick = (e) => onRowClick(index, e);
+
+    row.innerHTML = `
+      <td style="text-align: center; color: var(--muted); font-weight: 600;">${visibleCount}</td>
+      <td>
+        <select class="cell-editable" ${disabledAttr} onchange="updateToolField(${index}, 'category', this.value)">
+          ${getCategoriesOptionsHtml(item.category)}
+        </select>
+      </td>
+      <td>
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.name)}" 
+               placeholder="Наименование..." onchange="updateToolField(${index}, 'name', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.inv_number)}" 
+               placeholder="Инв. №" onchange="updateToolField(${index}, 'inv_number', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.location)}" 
+               placeholder="Место / участок..." onchange="updateToolField(${index}, 'location', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.responsible)}" 
+               placeholder="Ответственный..." onchange="updateToolField(${index}, 'responsible', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.test_type)}" 
+               placeholder="Вид проверки..." onchange="updateToolField(${index}, 'test_type', this.value)">
+      </td>
+      <td>
+        <input type="number" min="1" max="60" class="cell-editable cell-center" ${disabledAttr} 
+               value="${esc(item.periodicity || '6')}" onchange="onToolPeriodicityChange(${index}, this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.last_test_date)}" 
+               placeholder="ДД.ММ.ГГГГ" onchange="onToolLastDateChange(${index}, this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable cell-center" ${disabledAttr} value="${esc(item.next_test_date)}" 
+               placeholder="ДД.ММ.ГГГГ" onchange="updateToolField(${index}, 'next_test_date', this.value)">
+      </td>
+      <td style="text-align: center;">
+        <span class="status-badge ${st.badgeClass}">${st.text}</span>
+      </td>
+      <td style="text-align: center;">
+        <input type="checkbox" class="repair-check" ${disabledAttr} ${item.in_repair ? "checked" : ""} 
+               onchange="onToolRepairChange(${index}, this.checked)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.protocol_num)}" 
+               placeholder="№ протокола..." onchange="updateToolField(${index}, 'protocol_num', this.value)">
+      </td>
+      <td>
+        <input type="text" class="cell-editable" ${disabledAttr} value="${esc(item.notes)}" 
+               placeholder="Примечание..." onchange="updateToolField(${index}, 'notes', this.value)">
+      </td>
+      ${canEdit ? `
+      <td style="text-align: center;">
+        <button type="button" class="row-delete-btn" title="Удалить строку" onclick="deleteRowByIndex(${index}, event)">✕</button>
+      </td>` : ""}
+    `;
+
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("visibleRowCount").textContent = visibleCount;
+  document.getElementById("totalRowCount").textContent = toolsItems.length;
+
+  if (visibleCount === 0) {
+    const emptyTr = document.createElement("tr");
+    emptyTr.innerHTML = `
+      <td colspan="${canEdit ? 15 : 14}" style="text-align: center; padding: 30px; color: var(--muted);">
+        В журнале инструмента нет записей, соответствующих критериям фильтрации
+      </td>
+    `;
+    tbody.appendChild(emptyTr);
+  }
+}
+
+/**
+ * Опции селекта категорий
  */
 function getCategoriesOptionsHtml(selectedCat) {
   const categories = window.APP_CONFIG.CATEGORIES || [];
@@ -431,7 +608,7 @@ function getCategoriesOptionsHtml(selectedCat) {
 }
 
 /**
- * Экранирование спецсимволов HTML
+ * Экранирование HTML
  */
 function esc(str) {
   if (str === null || str === undefined) return "";
@@ -448,12 +625,12 @@ function esc(str) {
  */
 function onRowClick(index, event) {
   if (event.target.tagName === "INPUT" || event.target.tagName === "SELECT" || event.target.tagName === "BUTTON") {
-    // Не сбиваем фокус инпута
     selectedRowIndex = index;
     return;
   }
   selectedRowIndex = index;
-  document.querySelectorAll(".equipment-table tbody tr").forEach(tr => {
+  const tableSelector = currentTab === "jacks" ? "#jacksTable tbody tr" : "#toolsTable tbody tr";
+  document.querySelectorAll(tableSelector).forEach(tr => {
     tr.classList.remove("row-selected");
     if (parseInt(tr.dataset.index, 10) === index) {
       tr.classList.add("row-selected");
@@ -462,34 +639,7 @@ function onRowClick(index, event) {
 }
 
 /**
- * Обработка изменения категории через верхние вкладки
- */
-function selectCategoryTab(btn, cat) {
-  document.querySelectorAll(".tabs .tab").forEach(t => t.classList.remove("active"));
-  btn.classList.add("active");
-
-  const catSelect = document.getElementById("categoryFilter");
-  if (catSelect) catSelect.value = cat;
-
-  applyFilters();
-}
-
-/**
- * Синхронизация верхних вкладок при выборе категории из выпадающего списка
- */
-function onCategorySelectChange(cat) {
-  document.querySelectorAll(".tabs .tab").forEach(t => {
-    if (t.dataset.category === cat) {
-      t.classList.add("active");
-    } else {
-      t.classList.remove("active");
-    }
-  });
-  applyFilters();
-}
-
-/**
- * Быстрая фильтрация кликом по KPI карточкам
+ * Фильтрация по KPI
  */
 function filterByKpi(status) {
   document.querySelectorAll(".kpi-card").forEach(c => c.classList.remove("active-kpi"));
@@ -498,9 +648,7 @@ function filterByKpi(status) {
     activeKpiFilter = "";
   } else {
     activeKpiFilter = status;
-    const cardMap = {
-      "": 0, "ok": 1, "upcoming": 2, "overdue": 3, "repair": 4
-    };
+    const cardMap = { "": 0, "ok": 1, "upcoming": 2, "overdue": 3, "repair": 4 };
     const idx = cardMap[status];
     const cards = document.querySelectorAll(".kpi-card");
     if (cards[idx]) cards[idx].classList.add("active-kpi");
@@ -513,37 +661,37 @@ function filterByKpi(status) {
 }
 
 /**
- * Применение фильтров и перерисовка таблицы
+ * Применение фильтров
  */
 function applyFilters() {
   renderTable();
 }
 
 /**
- * Сброс всех фильтров
+ * Сброс фильтров
  */
 function resetFilters() {
   document.getElementById("searchFilter").value = "";
-  document.getElementById("categoryFilter").value = "";
+  const catSel = document.getElementById("categoryFilter");
+  if (catSel) catSel.value = "";
   document.getElementById("statusFilter").value = "";
   document.getElementById("monthFilter").value = "";
-  document.getElementById("locationFilter").value = "";
   activeKpiFilter = "";
 
   document.querySelectorAll(".kpi-card").forEach(c => c.classList.remove("active-kpi"));
-  document.querySelectorAll(".tabs .tab").forEach((t, i) => {
-    if (i === 0) t.classList.add("active");
-    else t.classList.remove("active");
-  });
-
   renderTable();
 }
 
 /**
- * Фиксация состояния в стеке отмены (Undo) перед изменениями
+ * Сохранение в стек отмены (Undo)
  */
 function pushHistory() {
-  undoStack.push(JSON.parse(JSON.stringify(equipmentItems)));
+  const stateCopy = {
+    tab: currentTab,
+    jacks: JSON.parse(JSON.stringify(jacksItems)),
+    tools: JSON.parse(JSON.stringify(toolsItems)),
+  };
+  undoStack.push(stateCopy);
   if (undoStack.length > 50) undoStack.shift();
   redoStack = [];
   setUnsavedChanges(true);
@@ -567,7 +715,7 @@ function setUnsavedChanges(val) {
 }
 
 /**
- * Обновление доступности кнопок ↺ и ↻
+ * Обновление кнопок Undo / Redo
  */
 function updateUndoRedoButtons() {
   const cancelBtn = document.getElementById("cancelBtn");
@@ -577,12 +725,19 @@ function updateUndoRedoButtons() {
 }
 
 /**
- * Отмена последнего действия (Ctrl+Z)
+ * Отмена (Ctrl+Z)
  */
 function cancelChanges() {
   if (undoStack.length === 0) return;
-  redoStack.push(JSON.parse(JSON.stringify(equipmentItems)));
-  equipmentItems = undoStack.pop();
+  const curState = {
+    tab: currentTab,
+    jacks: JSON.parse(JSON.stringify(jacksItems)),
+    tools: JSON.parse(JSON.stringify(toolsItems)),
+  };
+  redoStack.push(curState);
+  const prevState = undoStack.pop();
+  jacksItems = prevState.jacks;
+  toolsItems = prevState.tools;
   setUnsavedChanges(true);
   updateUndoRedoButtons();
   renderTable();
@@ -591,12 +746,19 @@ function cancelChanges() {
 }
 
 /**
- * Повтор отмененного действия (Ctrl+Y)
+ * Повтор (Ctrl+Y)
  */
 function restoreChanges() {
   if (redoStack.length === 0) return;
-  undoStack.push(JSON.parse(JSON.stringify(equipmentItems)));
-  equipmentItems = redoStack.pop();
+  const curState = {
+    tab: currentTab,
+    jacks: JSON.parse(JSON.stringify(jacksItems)),
+    tools: JSON.parse(JSON.stringify(toolsItems)),
+  };
+  undoStack.push(curState);
+  const nextState = redoStack.pop();
+  jacksItems = nextState.jacks;
+  toolsItems = nextState.tools;
   setUnsavedChanges(true);
   updateUndoRedoButtons();
   renderTable();
@@ -605,110 +767,162 @@ function restoreChanges() {
 }
 
 /**
- * Обновление значения произвольного поля объекта
+ * Изменение поля домкрата
  */
-function updateItemField(index, field, value) {
-  if (!equipmentItems[index]) return;
-  if (equipmentItems[index][field] === value) return;
+function updateJackField(index, field, value) {
+  if (!jacksItems[index]) return;
+  if (jacksItems[index][field] === value) return;
 
   pushHistory();
-  equipmentItems[index][field] = value;
-  equipmentItems[index].updated_at = new Date().toLocaleString("ru-RU");
+  jacksItems[index][field] = value;
+  jacksItems[index].updated_at = new Date().toLocaleString("ru-RU");
 
   renderTable();
   updateKpis();
 }
 
 /**
- * Автоматический пересчет следующей даты при изменении даты последней проверки
+ * Автоматический пересчет следующего освидетельствования домкрата (+12 месяцев)
  */
-function onLastDateChange(index, newLastDateStr) {
-  if (!equipmentItems[index]) return;
+function onJackTestDateChange(index, newTestDateStr) {
+  if (!jacksItems[index]) return;
   pushHistory();
-  equipmentItems[index].last_test_date = newLastDateStr;
+  jacksItems[index].test_date = newTestDateStr;
 
-  const lastDate = parseDate(newLastDateStr);
-  const periodicity = parseInt(equipmentItems[index].periodicity || "12", 10) || 12;
-
-  if (lastDate) {
-    const nextDate = addMonths(lastDate, periodicity);
-    equipmentItems[index].next_test_date = formatDate(nextDate);
+  const d = parseDate(newTestDateStr);
+  if (d) {
+    const nextDate = addMonths(d, 12);
+    jacksItems[index].next_test_date = formatDate(nextDate);
   }
-  equipmentItems[index].updated_at = new Date().toLocaleString("ru-RU");
+  jacksItems[index].updated_at = new Date().toLocaleString("ru-RU");
+
+  renderTable();
+  updateKpis();
+}
+
+function onJackRepairChange(index, isChecked) {
+  if (!jacksItems[index]) return;
+  pushHistory();
+  jacksItems[index].in_repair = isChecked ? 1 : 0;
+  jacksItems[index].updated_at = new Date().toLocaleString("ru-RU");
 
   renderTable();
   updateKpis();
 }
 
 /**
- * Автоматический пересчет следующей даты при изменении периодичности
+ * Функции изменения инструмента
  */
-function onPeriodicityChange(index, newPeriodicityStr) {
-  if (!equipmentItems[index]) return;
+function updateToolField(index, field, value) {
+  if (!toolsItems[index]) return;
+  if (toolsItems[index][field] === value) return;
+
   pushHistory();
-  equipmentItems[index].periodicity = newPeriodicityStr;
+  toolsItems[index][field] = value;
+  toolsItems[index].updated_at = new Date().toLocaleString("ru-RU");
 
-  const lastDate = parseDate(equipmentItems[index].last_test_date);
-  const periodicity = parseInt(newPeriodicityStr || "12", 10) || 12;
+  renderTable();
+  updateKpis();
+}
 
-  if (lastDate) {
-    const nextDate = addMonths(lastDate, periodicity);
-    equipmentItems[index].next_test_date = formatDate(nextDate);
+function onToolLastDateChange(index, newDateStr) {
+  if (!toolsItems[index]) return;
+  pushHistory();
+  toolsItems[index].last_test_date = newDateStr;
+
+  const d = parseDate(newDateStr);
+  const p = parseInt(toolsItems[index].periodicity || "6", 10) || 6;
+  if (d) {
+    toolsItems[index].next_test_date = formatDate(addMonths(d, p));
   }
-  equipmentItems[index].updated_at = new Date().toLocaleString("ru-RU");
+  toolsItems[index].updated_at = new Date().toLocaleString("ru-RU");
 
   renderTable();
   updateKpis();
 }
 
-/**
- * Обработка изменения признака нахождения в ремонте
- */
-function onRepairChange(index, isChecked) {
-  if (!equipmentItems[index]) return;
+function onToolPeriodicityChange(index, newPeriodicity) {
+  if (!toolsItems[index]) return;
   pushHistory();
-  equipmentItems[index].in_repair = isChecked ? 1 : 0;
-  equipmentItems[index].updated_at = new Date().toLocaleString("ru-RU");
+  toolsItems[index].periodicity = newPeriodicity;
+
+  const d = parseDate(toolsItems[index].last_test_date);
+  const p = parseInt(newPeriodicity || "6", 10) || 6;
+  if (d) {
+    toolsItems[index].next_test_date = formatDate(addMonths(d, p));
+  }
+  toolsItems[index].updated_at = new Date().toLocaleString("ru-RU");
+
+  renderTable();
+  updateKpis();
+}
+
+function onToolRepairChange(index, isChecked) {
+  if (!toolsItems[index]) return;
+  pushHistory();
+  toolsItems[index].in_repair = isChecked ? 1 : 0;
+  toolsItems[index].updated_at = new Date().toLocaleString("ru-RU");
 
   renderTable();
   updateKpis();
 }
 
 /**
- * Добавление новой строки оборудования
+ * Добавление новой строки
  */
 function addRow() {
   if (!window.APP_CONFIG.CAN_EDIT) return;
   pushHistory();
 
-  const currentCat = document.getElementById("categoryFilter")?.value || "Домкраты и гидрооборудование";
+  const nowFormatted = formatDate(serverToday);
+  const nextYearFormatted = formatDate(addMonths(serverToday, 12));
 
-  const newItem = {
-    sort_order: equipmentItems.length + 1,
-    category: currentCat,
-    name: "",
-    inv_number: "",
-    location: "Участок РТПС",
-    responsible: "",
-    test_type: "Техническое освидетельствование (под нагрузкой)",
-    periodicity: "12",
-    last_test_date: formatDate(serverToday),
-    next_test_date: formatDate(addMonths(serverToday, 12)),
-    in_repair: 0,
-    test_result: "Годен",
-    protocol_num: "",
-    notes: "",
-    updated_at: new Date().toLocaleString("ru-RU"),
-  };
+  if (currentTab === "jacks") {
+    const newJack = {
+      sort_order: jacksItems.length + 1,
+      name: "",
+      inv_number: "",
+      capacity: "40",
+      prev_test_date: nowFormatted,
+      test_reason: "очередное",
+      repair_info: "",
+      inspection_result: "удовл.",
+      static_test_result: "удовл.",
+      dynamic_test_result: "удовл.",
+      test_date: nowFormatted,
+      next_test_date: nextYearFormatted,
+      inspector: "Шварчков С. А.",
+      in_repair: 0,
+      notes: "",
+      updated_at: new Date().toLocaleString("ru-RU"),
+    };
+    jacksItems.unshift(newJack);
+  } else {
+    const newTool = {
+      sort_order: toolsItems.length + 1,
+      category: "Электроинструмент",
+      name: "",
+      inv_number: "",
+      location: "Участок РТПС",
+      responsible: "",
+      test_type: "Проверка изоляции (мегомметром)",
+      periodicity: "6",
+      last_test_date: nowFormatted,
+      next_test_date: formatDate(addMonths(serverToday, 6)),
+      in_repair: 0,
+      test_result: "Годен",
+      protocol_num: "",
+      notes: "",
+      updated_at: new Date().toLocaleString("ru-RU"),
+    };
+    toolsItems.unshift(newTool);
+  }
 
-  equipmentItems.unshift(newItem);
   selectedRowIndex = 0;
-
   renderTable();
   updateKpis();
   populateFilterDropdowns();
-
-  showToast("Добавлена новая строка", "info");
+  showToast("Добавлена новая строка в журнал", "info");
 }
 
 /**
@@ -716,37 +930,33 @@ function addRow() {
  */
 function removeSelectedRow() {
   if (!window.APP_CONFIG.CAN_EDIT) return;
-  if (selectedRowIndex === null || !equipmentItems[selectedRowIndex]) {
+  if (selectedRowIndex === null) {
     showToast("Выберите строку для удаления кликом", "info");
     return;
   }
   deleteRowByIndex(selectedRowIndex);
 }
 
-/**
- * Удаление строки по индексу
- */
 function deleteRowByIndex(index, event) {
   if (event) event.stopPropagation();
   if (!window.APP_CONFIG.CAN_EDIT) return;
-  if (!equipmentItems[index]) return;
 
-  const item = equipmentItems[index];
-  const name = item.name || item.inv_number || "выбранную единицу";
+  const items = getCurrentItems();
+  if (!items[index]) return;
 
-  if (!confirm(`Удалить оборудование «${name}»?`)) {
+  const name = items[index].name || items[index].inv_number || "выбранную запись";
+  if (!confirm(`Удалить из журнала «${name}»?`)) {
     return;
   }
 
   pushHistory();
-  equipmentItems.splice(index, 1);
+  items.splice(index, 1);
   selectedRowIndex = null;
 
   renderTable();
   updateKpis();
   populateFilterDropdowns();
-
-  showToast("Строка удалена", "info");
+  showToast("Запись удалена", "info");
 }
 
 /**
@@ -761,21 +971,23 @@ async function saveData() {
   }
 
   try {
-    const payload = { items: equipmentItems };
-    const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}/api/items`, {
+    const endpoint = currentTab === "jacks" ? "/api/jacks" : "/api/tools";
+    const items = getCurrentItems();
+
+    const res = await fetch(`${window.APP_CONFIG.APP_PREFIX}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ items }),
     });
 
     if (!res.ok) {
-      throw new Error(`Ошибка сохранения: ${res.status}`);
+      throw new Error(`Ошибка сервера: ${res.status}`);
     }
 
     setUnsavedChanges(false);
-    showToast("Все изменения успешно сохранены!", "success");
+    showToast("Журнал успешно сохранён!", "success");
   } catch (err) {
-    console.error("Ошибка при сохранении оборудования:", err);
+    console.error("Ошибка сохранения:", err);
     showToast("Не удалось сохранить: " + err.message, "error");
   } finally {
     if (saveBtn) {
@@ -786,27 +998,60 @@ async function saveData() {
 }
 
 /**
- * Копирование выделенных или всех видимых строк в буфер обмена (TSV для Excel)
+ * Экспорт активного журнала в CSV (Excel)
+ */
+function exportActiveCsv() {
+  window.location.href = `${window.APP_CONFIG.APP_PREFIX}/export/csv?tab=${currentTab}`;
+}
+
+/**
+ * Копирование выделенной или всех строк в буфер обмена (TSV для Excel)
  */
 function copySelectedRows() {
-  if (equipmentItems.length === 0) {
-    showToast("Нет данных для копирования", "info");
+  const items = getCurrentItems();
+  if (items.length === 0) {
+    showToast("Нет записей для копирования", "info");
     return;
   }
 
-  const rowsToCopy = (selectedRowIndex !== null && equipmentItems[selectedRowIndex]) 
-    ? [equipmentItems[selectedRowIndex]] 
-    : equipmentItems;
+  const rowsToCopy = (selectedRowIndex !== null && items[selectedRowIndex])
+    ? [items[selectedRowIndex]]
+    : items;
 
-  const headers = [
-    "Категория", "Наименование", "Инв. №", "Место", "Ответственный",
-    "Вид проверки", "Периодичность (мес.)", "Дата проверки", "След. дата",
-    "В ремонте", "Результат", "№ акта", "Примечание"
-  ];
+  let headers = [];
+  let tsvRows = [];
 
-  let tsv = headers.join("\t") + "\n";
-  rowsToCopy.forEach(item => {
-    tsv += [
+  if (currentTab === "jacks") {
+    headers = [
+      "Наименование грузоподъемных механизмов (1)", "Хоз. № (2)", "Грузоподъемность, тн. (3)",
+      "Дата посл. испытания (4)", "Причина (5)", "Сведения о ремонте (6)",
+      "Осмотр (7)", "Статическое испытание (8)", "Динамическое испытание (9)",
+      "Дата испытания (10)", "Дата след. освидетельствования (11)", "В ремонте",
+      "Ф.И.О. (12)", "Примечание"
+    ];
+    tsvRows = rowsToCopy.map(item => [
+      item.name || "",
+      item.inv_number || "",
+      item.capacity || "",
+      item.prev_test_date || "",
+      item.test_reason || "",
+      item.repair_info || "",
+      item.inspection_result || "",
+      item.static_test_result || "",
+      item.dynamic_test_result || "",
+      item.test_date || "",
+      item.next_test_date || "",
+      item.in_repair ? "Да" : "Нет",
+      item.inspector || "",
+      item.notes || "",
+    ]);
+  } else {
+    headers = [
+      "Категория", "Наименование", "Инв. №", "Место", "Ответственный",
+      "Вид проверки", "Периодичность (мес.)", "Дата проверки", "След. дата",
+      "В ремонте", "Результат", "№ акта", "Примечание"
+    ];
+    tsvRows = rowsToCopy.map(item => [
       item.category || "",
       item.name || "",
       item.inv_number || "",
@@ -820,38 +1065,36 @@ function copySelectedRows() {
       item.test_result || "",
       item.protocol_num || "",
       item.notes || "",
-    ].join("\t") + "\n";
+    ]);
+  }
+
+  let tsv = headers.join("\t") + "\n";
+  tsvRows.forEach(r => {
+    tsv += r.join("\t") + "\n";
   });
 
   navigator.clipboard.writeText(tsv).then(() => {
-    showToast(`Скопировано в буфер (${rowsToCopy.length} строк). Можно вставить в Excel!`, "success");
+    showToast(`Скопировано (${rowsToCopy.length} строк). Можно вставить в Excel!`, "success");
   }).catch(() => {
     showToast("Не удалось скопировать в буфер обмена", "error");
   });
 }
 
 /**
- * Настройка горячих клавиш: Ctrl+S, Ctrl+Z, Ctrl+Y, Delete
+ * Горячие клавиши
  */
 function setupKeyboardShortcuts() {
   document.addEventListener("keydown", (e) => {
-    // Ctrl+S: Сохранение
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       saveData();
-    }
-    // Ctrl+Z: Отмена
-    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+    } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
       e.preventDefault();
       cancelChanges();
-    }
-    // Ctrl+Y: Повтор
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
       e.preventDefault();
       restoreChanges();
-    }
-    // Delete: Удаление выбранной строки, если фокус не в текстовом поле
-    else if (e.key === "Delete" && selectedRowIndex !== null) {
+    } else if (e.key === "Delete" && selectedRowIndex !== null) {
       if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
         e.preventDefault();
         removeSelectedRow();
@@ -860,9 +1103,6 @@ function setupKeyboardShortcuts() {
   });
 }
 
-/**
- * Предупреждение о несохраненных данных при закрытии страницы
- */
 function setupWindowUnloadWarning() {
   window.addEventListener("beforeunload", (e) => {
     if (hasUnsavedChanges) {
@@ -872,9 +1112,6 @@ function setupWindowUnloadWarning() {
   });
 }
 
-/**
- * Запрос подтверждения при клике «На главную» при наличии несохраненных изменений
- */
 let targetNavUrl = "";
 function requestHomeClick(event) {
   if (!hasUnsavedChanges) return true;
@@ -902,9 +1139,6 @@ function confirmLeaveWithoutSaving() {
   window.location.href = targetNavUrl || `${window.APP_CONFIG.MAIN_SITE_URL}/`;
 }
 
-/**
- * Всплывающие уведомления (Toast)
- */
 let toastTimeout = null;
 function showToast(message, type = "info") {
   const toast = document.getElementById("toastNotification");

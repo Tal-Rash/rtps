@@ -485,18 +485,48 @@ def _check_equipment_overdues(db_path: Path, today: dt.date) -> dict:
             conn.row_factory = None
             cur = conn.cursor()
 
-            # Получаем все единицы оборудования из базы
-            rows = cur.execute(
-                """
-                SELECT category, name, inv_number, location, responsible,
-                       test_type, periodicity, last_test_date, next_test_date,
-                       in_repair, protocol_num, notes
-                FROM equipment
-                ORDER BY sort_order ASC, id ASC
-                """
-            ).fetchall()
+            # Проверяем наличие таблиц jacks и tools
+            existing_tables = [r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+            all_records = []
 
-            for row in rows:
+            # 1. Загрузка домкратов
+            if "jacks" in existing_tables:
+                j_rows = cur.execute(
+                    """
+                    SELECT 'Домкраты', name, inv_number, 'Участок РТПС', inspector,
+                           'Техническое освидетельствование', '12', test_date, next_test_date,
+                           in_repair, capacity, notes
+                    FROM jacks
+                    ORDER BY sort_order ASC, id ASC
+                    """
+                ).fetchall()
+                all_records.extend(j_rows)
+
+            # 2. Загрузка электроинструмента и прочего оборудования
+            if "tools" in existing_tables:
+                t_rows = cur.execute(
+                    """
+                    SELECT category, name, inv_number, location, responsible,
+                           test_type, periodicity, last_test_date, next_test_date,
+                           in_repair, protocol_num, notes
+                    FROM tools
+                    ORDER BY sort_order ASC, id ASC
+                    """
+                ).fetchall()
+                all_records.extend(t_rows)
+            elif "equipment" in existing_tables and not all_records:
+                e_rows = cur.execute(
+                    """
+                    SELECT category, name, inv_number, location, responsible,
+                           test_type, periodicity, last_test_date, next_test_date,
+                           in_repair, protocol_num, notes
+                    FROM equipment
+                    ORDER BY sort_order ASC, id ASC
+                    """
+                ).fetchall()
+                all_records.extend(e_rows)
+
+            for row in all_records:
                 cat = str(row[0] or "Прочее").strip()
                 name = str(row[1] or "").strip()
                 inv_num = str(row[2] or "").strip()
