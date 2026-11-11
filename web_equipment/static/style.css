@@ -479,6 +479,8 @@ select.cell-editable {
 input.cell-center,
 select.cell-center {
   text-align: center;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 /* Бейджи состояния проверки */

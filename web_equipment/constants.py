@@ -15,7 +15,7 @@ WEB_SECRET_FILE = SHARED_DATA_DIR / "web_secret.txt"
 # Настройки авторизации и сессий
 SESSION_COOKIE = "rtps_session"
 APP_PREFIX = "/equipment"
-APP_VERSION = "web-equipment-1.02"
+APP_VERSION = "web-equipment-1.03"
 DB_LOCK = Lock()
 
 # URL-адреса для перенаправления и навигации
