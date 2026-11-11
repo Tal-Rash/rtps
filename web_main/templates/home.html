@@ -40,6 +40,32 @@
       background: #dcfce7 !important;
       transform: translateY(-1px);
     }
+    .badge-warning-btn {
+      background: #f59e0b !important;
+      color: #fff !important;
+      border: 1px solid #d97706 !important;
+      cursor: pointer;
+      font-weight: 700;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .badge-warning-btn:hover {
+      background: #d97706 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45);
+    }
+    .badge-warning-ok-btn {
+      background: var(--soft) !important;
+      color: #b45309 !important;
+      border: 1px solid #fde68a !important;
+      cursor: pointer;
+      font-weight: 700;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    .badge-warning-ok-btn:hover {
+      background: #fef3c7 !important;
+      transform: translateY(-1px);
+    }
     .badge-counter {
       display: inline-flex;
       align-items: center;
@@ -54,6 +80,20 @@
       line-height: 1;
       font-weight: 800;
       animation: pulseAlert 2s infinite ease-in-out;
+    }
+    .badge-warning-counter {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: #fff;
+      color: #d97706;
+      font-size: 11px;
+      line-height: 1;
+      font-weight: 800;
     }
     @keyframes pulseAlert {
       0%, 100% { transform: scale(1); }
@@ -123,6 +163,44 @@
       border-bottom: 1px solid var(--line);
       background: #f8fbff;
     }
+    .modal-mode-tabs {
+      display: flex;
+      gap: 10px;
+      padding: 14px 24px 10px;
+      background: #fff;
+      border-bottom: 1px solid #eef2f7;
+      flex-wrap: wrap;
+    }
+    .modal-mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .modal-mode-btn:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+    .modal-mode-btn.active-overdue {
+      background: #fee2e2 !important;
+      color: #b91c1c !important;
+      border-color: #f87171 !important;
+      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.2);
+    }
+    .modal-mode-btn.active-upcoming {
+      background: #fef3c7 !important;
+      color: #b45309 !important;
+      border-color: #f59e0b !important;
+      box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);
+    }
     .modal-tab {
       background: none;
       border: none;
@@ -189,6 +267,16 @@
       border-radius: 6px;
       background: #fee2e2;
       color: #b91c1c;
+      font-weight: 700;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .upcoming-badge-pill {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #fef3c7;
+      color: #b45309;
       font-weight: 700;
       font-size: 12px;
       white-space: nowrap;
@@ -261,6 +349,7 @@
       </div>
       <div class="top-right">
         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
+          {{ UPCOMING_BUTTON | safe }}
           {{ OVERDUE_BUTTON | safe }}
           {{ USERS_LINK | safe }}
           {{ LOGS_LINK | safe }}
@@ -338,16 +427,25 @@
     <div class="status">Сервер запущен: {{STARTED_AT}}</div>
   </div>
 
-  <!-- Модальное окно контроля просрочек -->
+  <!-- Модальное окно контроля просрочек и приближающихся сроков -->
   <div id="overdueModal" class="modal-backdrop" style="display:none;" onclick="handleModalBackdropClick(event)">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="overdueModalTitle">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:22px;">⚠️</span>
+          <span id="modalHeaderIcon" style="font-size:22px;">⚠️</span>
           <h2 id="overdueModalTitle" style="margin:0; font-size:20px; font-weight:700;">Контроль просрочек</h2>
           <span id="modalTotalBadge" class="modal-total-badge"></span>
         </div>
         <button class="modal-close-btn" type="button" onclick="closeOverdueModal()" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-mode-tabs">
+        <button id="modeUpcomingBtn" class="modal-mode-btn" type="button" onclick="switchOverdueMode('upcoming')">
+          🟡 Скоро срок (&le; 1 мес): <span id="modalModeUpcomingCount">0</span>
+        </button>
+        <button id="modeOverdueBtn" class="modal-mode-btn active-overdue" type="button" onclick="switchOverdueMode('overdue')">
+          🔴 Просрочено: <span id="modalModeOverdueCount">0</span>
+        </button>
       </div>
 
       <div class="modal-tabs">
@@ -385,6 +483,7 @@
   <script>
     // Начальное состояние сводки просрочек, переданное с бэкенда
     let overdueData = {{ OVERDUE_SUMMARY_JSON | safe }};
+    let activeMode = 'overdue';
     let activeCategory = 'kp';
 
     // Экранирование спецсимволов HTML
@@ -398,17 +497,19 @@
         .replace(/'/g, '&#39;');
     }
 
-    // Открытие модального окна просрочек
-    function openOverdueModal() {
-      // Если по КП просрочек нет, а по АЛСН есть — сразу переключаемся на вкладку АЛСН
+    // Открытие модального окна контроля сроков
+    function openOverdueModal(mode = 'overdue') {
+      activeMode = mode;
+      // Если по КП элементов нет, а по АЛСН есть — сразу переключаемся на вкладку АЛСН
       if (overdueData) {
-        const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0 };
-        const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0 };
-        if (kpCategory.count === 0 && alsnCategory.count > 0) {
+        const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, upcoming_count: 0 };
+        const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, upcoming_count: 0 };
+        const kpCount = activeMode === 'upcoming' ? (kpCategory.upcoming_count || 0) : (kpCategory.count || 0);
+        const alsnCount = activeMode === 'upcoming' ? (alsnCategory.upcoming_count || 0) : (alsnCategory.count || 0);
+        if (kpCount === 0 && alsnCount > 0) {
           activeCategory = 'alsn';
-          document.querySelectorAll('.modal-tab').forEach(btn => btn.classList.remove('active'));
-          const alsnBtn = document.getElementById('tabAlsnBtn');
-          if (alsnBtn) alsnBtn.classList.add('active');
+        } else {
+          activeCategory = 'kp';
         }
       }
       renderOverdueModal();
@@ -417,6 +518,23 @@
         modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
       }
+    }
+
+    // Переключение режима (просрочено / скоро срок)
+    function switchOverdueMode(mode) {
+      activeMode = mode;
+      if (overdueData) {
+        const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, upcoming_count: 0 };
+        const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, upcoming_count: 0 };
+        const kpCount = activeMode === 'upcoming' ? (kpCategory.upcoming_count || 0) : (kpCategory.count || 0);
+        const alsnCount = activeMode === 'upcoming' ? (alsnCategory.upcoming_count || 0) : (alsnCategory.count || 0);
+        if (kpCount === 0 && alsnCount > 0) {
+          activeCategory = 'alsn';
+        } else if (kpCount > 0 && alsnCount === 0) {
+          activeCategory = 'kp';
+        }
+      }
+      renderOverdueModal();
     }
 
     // Закрытие модального окна просрочек
@@ -438,26 +556,63 @@
     // Переключение категории просрочек
     function switchOverdueCategory(catId) {
       activeCategory = catId;
-      document.querySelectorAll('.modal-tab').forEach(btn => btn.classList.remove('active'));
-      const activeBtn = document.getElementById('tab' + catId.charAt(0).toUpperCase() + catId.slice(1) + 'Btn');
-      if (activeBtn) activeBtn.classList.add('active');
       renderOverdueModal();
     }
 
     // Отрисовка содержимого модального окна
     function renderOverdueModal() {
       if (!overdueData) return;
-      const total = overdueData.total_overdue || 0;
+
+      const totalOverdue = overdueData.total_overdue || 0;
+      const totalUpcoming = overdueData.total_upcoming || 0;
+
+      // Обновляем кнопки переключения режима (просрочено / скоро срок)
+      const modeUpcomingBtn = document.getElementById('modeUpcomingBtn');
+      const modeOverdueBtn = document.getElementById('modeOverdueBtn');
+      if (modeUpcomingBtn) {
+        modeUpcomingBtn.classList.toggle('active-upcoming', activeMode === 'upcoming');
+      }
+      if (modeOverdueBtn) {
+        modeOverdueBtn.classList.toggle('active-overdue', activeMode === 'overdue');
+      }
+
+      const modeUpcomingCountEl = document.getElementById('modalModeUpcomingCount');
+      if (modeUpcomingCountEl) modeUpcomingCountEl.textContent = totalUpcoming;
+      const modeOverdueCountEl = document.getElementById('modalModeOverdueCount');
+      if (modeOverdueCountEl) modeOverdueCountEl.textContent = totalOverdue;
+
+      // Обновляем заголовок, иконку и общий бейдж
+      const titleEl = document.getElementById('overdueModalTitle');
+      const iconEl = document.getElementById('modalHeaderIcon');
       const totalBadge = document.getElementById('modalTotalBadge');
-      if (totalBadge) {
-        if (total > 0) {
-          totalBadge.textContent = `${total} просроч.`;
-          totalBadge.style.background = '#fee2e2';
-          totalBadge.style.color = '#b91c1c';
-        } else {
-          totalBadge.textContent = 'Все в норме';
-          totalBadge.style.background = '#dcfce7';
-          totalBadge.style.color = '#15803d';
+
+      if (activeMode === 'upcoming') {
+        if (titleEl) titleEl.textContent = 'Приближение сроков (за 1 месяц)';
+        if (iconEl) iconEl.textContent = '🟡';
+        if (totalBadge) {
+          if (totalUpcoming > 0) {
+            totalBadge.textContent = `${totalUpcoming} прибл.`;
+            totalBadge.style.background = '#fef3c7';
+            totalBadge.style.color = '#b45309';
+          } else {
+            totalBadge.textContent = 'Сроков нет';
+            totalBadge.style.background = '#dcfce7';
+            totalBadge.style.color = '#15803d';
+          }
+        }
+      } else {
+        if (titleEl) titleEl.textContent = 'Контроль просрочек';
+        if (iconEl) iconEl.textContent = '🚨';
+        if (totalBadge) {
+          if (totalOverdue > 0) {
+            totalBadge.textContent = `${totalOverdue} просроч.`;
+            totalBadge.style.background = '#fee2e2';
+            totalBadge.style.color = '#b91c1c';
+          } else {
+            totalBadge.textContent = 'Все в норме';
+            totalBadge.style.background = '#dcfce7';
+            totalBadge.style.color = '#15803d';
+          }
         }
       }
 
@@ -466,22 +621,38 @@
         asOf.textContent = overdueData.today_str || new Date().toLocaleDateString('ru-RU');
       }
 
-      const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, items: [], no_data_items: [] };
-      const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, items: [], no_data_items: [], repair_items: [] };
+      // Обновляем состояние вкладок категорий
+      document.querySelectorAll('.modal-tab').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById('tab' + activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1) + 'Btn');
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const kpCategory = (overdueData.categories || []).find(c => c.id === 'kp') || { count: 0, upcoming_count: 0, items: [], upcoming_items: [], no_data_items: [] };
+      const alsnCategory = (overdueData.categories || []).find(c => c.id === 'alsn') || { count: 0, upcoming_count: 0, items: [], upcoming_items: [], no_data_items: [], repair_items: [] };
+
+      const kpCount = activeMode === 'upcoming' ? (kpCategory.upcoming_count || 0) : (kpCategory.count || 0);
+      const alsnCount = activeMode === 'upcoming' ? (alsnCategory.upcoming_count || 0) : (alsnCategory.count || 0);
 
       const kpCountEl = document.getElementById('modalKpCount');
-      if (kpCountEl) kpCountEl.textContent = kpCategory.count || 0;
+      if (kpCountEl) kpCountEl.textContent = kpCount;
 
       const alsnCountEl = document.getElementById('modalAlsnCount');
-      if (alsnCountEl) alsnCountEl.textContent = alsnCategory.count || 0;
+      if (alsnCountEl) alsnCountEl.textContent = alsnCount;
 
-      // Обновляем пояснительную записку под выбранную категорию
+      // Обновляем пояснительную записку под выбранную категорию и режим
       const noteEl = document.getElementById('overdueNote');
       if (noteEl) {
-        if (activeCategory === 'alsn') {
-          noteEl.innerHTML = 'По регламенту приборы безопасности (ПБ) должны проходить периодическую поверку в установленные сроки. Красным выделены приборы, у которых <strong>истек срок очередной поверки</strong>.';
+        if (activeMode === 'upcoming') {
+          if (activeCategory === 'alsn') {
+            noteEl.innerHTML = 'Внимание: приборы безопасности (ПБ), у которых срок очередной поверки наступает <strong>в течение 1 месяца (до 30 дней)</strong>.';
+          } else {
+            noteEl.innerHTML = 'Внимание: тепловозы, у которых срок очередного замера параметров колесных пар наступает <strong>в течение 1 месяца (до 30 дней)</strong>.';
+          }
         } else {
-          noteEl.innerHTML = 'По регламенту повторный замер параметров колесных пар тепловозов выполняется <strong>не реже 1 раза в 30 дней</strong>. Красным выделены тепловозы, у которых превышен допустимый межзамерный интервал.';
+          if (activeCategory === 'alsn') {
+            noteEl.innerHTML = 'По регламенту приборы безопасности (ПБ) должны проходить периодическую поверку в установленные сроки. Красным выделены приборы, у которых <strong>истек срок очередной поверки</strong>.';
+          } else {
+            noteEl.innerHTML = 'По регламенту повторный замер параметров колесных пар тепловозов выполняется <strong>не реже 1 раза в 30 дней</strong>. Красным выделены тепловозы, у которых превышен допустимый межзамерный интервал.';
+          }
         }
       }
 
@@ -497,11 +668,15 @@
 
     // Отрисовка таблицы для замеров колесных пар
     function renderKpCategory(container, category) {
-      const items = category.items || [];
+      const isUpcoming = activeMode === 'upcoming';
+      const items = (isUpcoming ? category.upcoming_items : category.items) || [];
       const noData = category.no_data_items || [];
       
       if (items.length === 0) {
-        let html = `<div class="empty-state">✅ Все замеры колесных пар тепловозов выполнены вовремя! Просроченных замеров нет.</div>`;
+        let emptyMsg = isUpcoming
+          ? '✅ В ближайший месяц замеров колесных пар тепловозов не ожидается.'
+          : '✅ Все замеры колесных пар тепловозов выполнены вовремя! Просроченных замеров нет.';
+        let html = `<div class="empty-state">${emptyMsg}</div>`;
         if (noData.length > 0) {
           html += `
             <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
@@ -515,13 +690,17 @@
         return;
       }
 
+      const colLabel = isUpcoming ? 'Осталось' : 'Просрочено';
+
       let rowsHtml = items.map(item => `
         <tr>
           <td style="font-weight:700; color:#0f172a;">${esc(item.full_title)}</td>
           <td style="color:#475569;">${esc(item.last_date_str)}</td>
-          <td style="color:#b91c1c; font-weight:600;">${esc(item.limit_date_str)}</td>
+          <td style="${isUpcoming ? 'color:#b45309; font-weight:600;' : 'color:#b91c1c; font-weight:600;'}">${esc(item.limit_date_str)}</td>
           <td>
-            <span class="overdue-badge-pill">${item.days_overdue} дн.</span>
+            ${isUpcoming 
+              ? `<span class="upcoming-badge-pill">${item.days_remaining} дн.</span>` 
+              : `<span class="overdue-badge-pill">${item.days_overdue} дн.</span>`}
           </td>
           <td style="text-align:right;">
             <a class="overdue-action-btn" href="${item.url}">Внести замер &rarr;</a>
@@ -536,7 +715,7 @@
               <th>Тепловоз</th>
               <th>Предыдущий замер</th>
               <th>Крайний срок</th>
-              <th>Просрочено</th>
+              <th>${colLabel}</th>
               <th style="text-align:right;">Действие</th>
             </tr>
           </thead>
@@ -562,12 +741,16 @@
 
     // Отрисовка таблицы для приборов безопасности АЛСН
     function renderAlsnCategory(container, category) {
-      const items = category.items || [];
+      const isUpcoming = activeMode === 'upcoming';
+      const items = (isUpcoming ? category.upcoming_items : category.items) || [];
       const noData = category.no_data_items || [];
       const inRepair = category.repair_items || [];
 
       if (items.length === 0) {
-        let html = `<div class="empty-state">✅ Все приборы безопасности АЛСН поверены вовремя! Просроченных приборов нет.</div>`;
+        let emptyMsg = isUpcoming
+          ? '✅ В ближайший месяц очередных поверок приборов безопасности не ожидается.'
+          : '✅ Все приборы безопасности АЛСН поверены вовремя! Просроченных приборов нет.';
+        let html = `<div class="empty-state">${emptyMsg}</div>`;
         if (inRepair.length > 0) {
           html += `
             <details style="margin-top:16px; font-size:13px; color:var(--muted); background:#f8fafc; padding:10px 14px; border-radius:10px; border:1px solid #e2e8f0;">
@@ -590,15 +773,19 @@
         return;
       }
 
+      const colLabel = isUpcoming ? 'Осталось' : 'Просрочено';
+
       let rowsHtml = items.map(item => `
         <tr>
           <td style="font-weight:700; color:#0f172a;">${esc(item.type || 'ПБ')}</td>
           <td style="font-weight:600; color:#1e293b;">${esc(item.number)}</td>
           <td style="color:#475569;">${esc(item.location || 'Депо')}</td>
           <td style="color:#475569;">${esc(item.verification_date_str || '-')}</td>
-          <td style="color:#b91c1c; font-weight:600;">${esc(item.limit_date_str)}</td>
+          <td style="${isUpcoming ? 'color:#b45309; font-weight:600;' : 'color:#b91c1c; font-weight:600;'}">${esc(item.limit_date_str)}</td>
           <td>
-            <span class="overdue-badge-pill">${item.days_overdue} дн.</span>
+            ${isUpcoming 
+              ? `<span class="upcoming-badge-pill">${item.days_remaining} дн.</span>` 
+              : `<span class="overdue-badge-pill">${item.days_overdue} дн.</span>`}
           </td>
           <td style="text-align:right;">
             <a class="overdue-action-btn" href="${item.url}">Открыть АЛСН &rarr;</a>
@@ -615,7 +802,7 @@
               <th>Местонахождение</th>
               <th>Дата поверки</th>
               <th>Срок поверки</th>
-              <th>Просрочено</th>
+              <th>${colLabel}</th>
               <th style="text-align:right;">Действие</th>
             </tr>
           </thead>
@@ -659,25 +846,42 @@
         if (!res.ok) throw new Error('Ошибка при загрузке данных с сервера');
         overdueData = await res.json();
         renderOverdueModal();
-        updateOverdueButton(overdueData);
+        updateOverdueButtons(overdueData);
       } catch (err) {
         if (container) container.innerHTML = `<div style="color:#b91c1c; padding:20px; text-align:center;">Не удалось обновить: ${esc(err.message)}</div>`;
       }
     }
 
-    // Обновление состояния кнопки в шапке
-    function updateOverdueButton(data) {
-      const btn = document.getElementById('overdueBtn');
-      if (!btn) return;
-      const count = data.total_overdue || 0;
-      if (count > 0) {
-        btn.className = 'badge badge-alert-btn';
-        btn.title = 'Есть просрочки! Нажмите для просмотра';
-        btn.innerHTML = `Просрочки <span class="badge-counter">${count}</span>`;
-      } else {
-        btn.className = 'badge badge-ok-btn';
-        btn.title = 'Все показатели в норме, просрочек нет';
-        btn.innerHTML = 'Просрочки: 0';
+    // Обновление состояния кнопок в шапке
+    function updateOverdueButtons(data) {
+      if (!data) return;
+
+      const overdueBtn = document.getElementById('overdueBtn');
+      if (overdueBtn) {
+        const count = data.total_overdue || 0;
+        if (count > 0) {
+          overdueBtn.className = 'badge badge-alert-btn';
+          overdueBtn.title = 'Есть просрочки! Нажмите для просмотра';
+          overdueBtn.innerHTML = `Просрочки <span class="badge-counter">${count}</span>`;
+        } else {
+          overdueBtn.className = 'badge badge-ok-btn';
+          overdueBtn.title = 'Все показатели в норме, просрочек нет';
+          overdueBtn.innerHTML = 'Просрочки: 0';
+        }
+      }
+
+      const upcomingBtn = document.getElementById('upcomingBtn');
+      if (upcomingBtn) {
+        const uCount = data.total_upcoming || 0;
+        if (uCount > 0) {
+          upcomingBtn.className = 'badge badge-warning-btn';
+          upcomingBtn.title = 'Срок поверки/замера наступает в течение 1 месяца! Нажмите для просмотра';
+          upcomingBtn.innerHTML = `Внимание <span class="badge-warning-counter">${uCount}</span>`;
+        } else {
+          upcomingBtn.className = 'badge badge-warning-ok-btn';
+          upcomingBtn.title = 'Сроков в течение ближайшего месяца нет';
+          upcomingBtn.innerHTML = 'Внимание: 0';
+        }
       }
     }
 

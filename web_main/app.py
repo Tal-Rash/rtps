@@ -254,19 +254,35 @@ async def home_page(request: Request):
         users_link = f'<a class="badge badge-users" href="/users" style="background:#276ef1; color:#fff; border-color:#276ef1;">Управление доступом{pending_badge}</a>'
         logs_link = '<a class="badge" href="/logs" style="background:#475569; color:#fff; border-color:#475569;">Журнал</a>'
         
-    # Формируем кнопку контроля просрочек
+    # Формируем кнопки контроля приближающихся сроков и просрочек
     overdue_summary = get_overdue_summary(COMMON_DB_FILE, ALSN_DB_FILE)
+
+    if overdue_summary["has_upcoming"]:
+        upcoming_button = (
+            f'<button id="upcomingBtn" class="badge badge-warning-btn" type="button" '
+            f'onclick="openOverdueModal(\'upcoming\')" title="Срок поверки/замера наступает в течение 1 месяца">'
+            f'Внимание <span class="badge-warning-counter">{overdue_summary["total_upcoming"]}</span>'
+            f'</button>'
+        )
+    else:
+        upcoming_button = (
+            f'<button id="upcomingBtn" class="badge badge-warning-ok-btn" type="button" '
+            f'onclick="openOverdueModal(\'upcoming\')" title="Сроков в течение ближайшего месяца нет">'
+            f'Внимание: 0'
+            f'</button>'
+        )
+
     if overdue_summary["has_overdue"]:
         overdue_button = (
             f'<button id="overdueBtn" class="badge badge-alert-btn" type="button" '
-            f'onclick="openOverdueModal()" title="Есть просрочки! Нажмите для просмотра">'
+            f'onclick="openOverdueModal(\'overdue\')" title="Есть просрочки! Нажмите для просмотра">'
             f'Просрочки <span class="badge-counter">{overdue_summary["total_overdue"]}</span>'
             f'</button>'
         )
     else:
         overdue_button = (
             f'<button id="overdueBtn" class="badge badge-ok-btn" type="button" '
-            f'onclick="openOverdueModal()" title="Все показатели в норме, просрочек нет">'
+            f'onclick="openOverdueModal(\'overdue\')" title="Все показатели в норме, просрочек нет">'
             f'Просрочки: 0'
             f'</button>'
         )
@@ -290,6 +306,7 @@ async def home_page(request: Request):
         "USERS_LINK": users_link,
         "PENDING_USERS_COUNT": pending_users_count,
         "LOGS_LINK": logs_link,
+        "UPCOMING_BUTTON": upcoming_button,
         "OVERDUE_BUTTON": overdue_button,
         "OVERDUE_SUMMARY": overdue_summary,
         "OVERDUE_SUMMARY_JSON": json.dumps(overdue_summary, ensure_ascii=False),

@@ -79,23 +79,28 @@ def get_overdue_summary(
 
     # Подсчет общего числа просрочек по всем категориям
     total_overdue = sum(cat.get("count", 0) for cat in categories)
+    total_upcoming = sum(cat.get("upcoming_count", 0) for cat in categories)
 
     return {
         "today": today.isoformat(),
         "today_str": today.strftime("%d.%m.%Y"),
         "total_overdue": total_overdue,
         "has_overdue": total_overdue > 0,
+        "total_upcoming": total_upcoming,
+        "has_upcoming": total_upcoming > 0,
         "categories": categories,
     }
 
 
 def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
     """
-    Проверяет просрочки замеров колесных пар по всем активным локомотивам.
+    Проверяет просрочки и приближающиеся сроки замеров колесных пар по всем активным локомотивам.
     Крайний срок = дата последнего замера + 30 дней.
     Если крайний срок меньше сегодняшнего числа — замер считается просроченным.
+    Если до крайнего срока остается 1 месяц (до 30 дней) — замер считается приближающимся к просрочке.
     """
     overdue_items = []
+    upcoming_items = []
     no_data_items = []
     up_to_date_items = []
 
@@ -104,8 +109,10 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
             "id": "kp",
             "title": "Замеры колесных пар тепловозов",
             "count": 0,
+            "upcoming_count": 0,
             "unit_label": "тепловозов",
             "items": [],
+            "upcoming_items": [],
             "no_data_items": [],
             "up_to_date_items": [],
         }
@@ -167,6 +174,9 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
                         limit_date = last_date + dt.timedelta(days=KP_RECHECK_DAYS)
                         is_overdue = limit_date < today
                         days_diff = (today - limit_date).days
+                        days_remaining = (limit_date - today).days if not is_overdue else 0
+                        month_ahead = add_months_to_date(today, 1)
+                        is_upcoming = not is_overdue and (limit_date <= month_ahead or days_remaining <= 30)
 
                         item = {
                             "series": ser,
@@ -177,14 +187,17 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
                             "limit_date": limit_date.isoformat(),
                             "limit_date_str": limit_date.strftime("%d.%m.%Y"),
                             "days_overdue": days_diff if is_overdue else 0,
-                            "days_remaining": (limit_date - today).days if not is_overdue else 0,
+                            "days_remaining": days_remaining,
                             "is_overdue": is_overdue,
+                            "is_upcoming": is_upcoming,
                             "url": f"/zamer-kp?locomotive={num}",
                         }
 
                         if is_overdue:
                             overdue_items.append(item)
                         else:
+                            if is_upcoming:
+                                upcoming_items.append(item)
                             up_to_date_items.append(item)
                     except Exception:
                         # В случае ошибки парсинга даты добавляем в список без данных
@@ -204,6 +217,8 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
 
         # Сортируем просроченные локомотивы по убыванию дней просрочки (наиболее критичные вверху)
         overdue_items.sort(key=lambda x: x["days_overdue"], reverse=True)
+        # Сортируем приближающиеся сроки по возрастанию оставшихся дней (скоро наступающие вверху)
+        upcoming_items.sort(key=lambda x: x["days_remaining"])
 
     except Exception as exc:
         print(f"[overdue] Ошибка при проверке замеров КП: {exc}")
@@ -212,8 +227,10 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
         "id": "kp",
         "title": "Замеры колесных пар тепловозов",
         "count": len(overdue_items),
+        "upcoming_count": len(upcoming_items),
         "unit_label": "тепловозов",
         "items": overdue_items,
+        "upcoming_items": upcoming_items,
         "no_data_items": no_data_items,
         "up_to_date_items": up_to_date_items,
     }
@@ -221,10 +238,12 @@ def _check_kp_overdues(db_path: Path, today: dt.date) -> dict:
 
 def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
     """
-    Проверяет просрочки поверки приборов безопасности АЛСН из базы данных alsn.db.
+    Проверяет просрочки и приближающиеся сроки поверки приборов безопасности АЛСН из базы данных alsn.db.
     Прибор считается просроченным, если следующая дата поверки меньше сегодняшней даты.
+    Прибор считается приближающимся к просрочке, если до следующей даты поверки остается 1 месяц (до 30 дней).
     """
     overdue_items = []
+    upcoming_items = []
     no_data_items = []
     up_to_date_items = []
     repair_items = []
@@ -234,8 +253,10 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
             "id": "alsn",
             "title": "Приборы безопасности АЛСН",
             "count": 0,
+            "upcoming_count": 0,
             "unit_label": "приборов",
             "items": [],
+            "upcoming_items": [],
             "no_data_items": [],
             "up_to_date_items": [],
             "repair_items": [],
@@ -349,6 +370,9 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
                 if next_date:
                     is_overdue = next_date < today
                     days_diff = (today - next_date).days
+                    days_remaining = (next_date - today).days if not is_overdue else 0
+                    month_ahead = add_months_to_date(today, 1)
+                    is_upcoming = not is_overdue and (next_date <= month_ahead or days_remaining <= 30)
 
                     item = {
                         "type": dev_type,
@@ -360,14 +384,17 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
                         "limit_date": next_date.isoformat(),
                         "limit_date_str": next_date.strftime("%d.%m.%Y"),
                         "days_overdue": days_diff if is_overdue else 0,
-                        "days_remaining": (next_date - today).days if not is_overdue else 0,
+                        "days_remaining": days_remaining,
                         "is_overdue": is_overdue,
+                        "is_upcoming": is_upcoming,
                         "url": "/alsn",
                     }
 
                     if is_overdue:
                         overdue_items.append(item)
                     else:
+                        if is_upcoming:
+                            upcoming_items.append(item)
                         up_to_date_items.append(item)
                 else:
                     no_data_items.append({
@@ -380,6 +407,8 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
 
         # Сортируем просроченные приборы по убыванию дней просрочки (наиболее критичные вверху)
         overdue_items.sort(key=lambda x: x["days_overdue"], reverse=True)
+        # Сортируем приближающиеся сроки по возрастанию оставшихся дней (скоро наступающие вверху)
+        upcoming_items.sort(key=lambda x: x["days_remaining"])
 
     except Exception as exc:
         print(f"[overdue] Ошибка при проверке приборов АЛСН: {exc}")
@@ -388,8 +417,10 @@ def _check_alsn_overdues(db_path: Path, today: dt.date) -> dict:
         "id": "alsn",
         "title": "Приборы безопасности АЛСН",
         "count": len(overdue_items),
+        "upcoming_count": len(upcoming_items),
         "unit_label": "приборов",
         "items": overdue_items,
+        "upcoming_items": upcoming_items,
         "no_data_items": no_data_items,
         "up_to_date_items": up_to_date_items,
         "repair_items": repair_items,
