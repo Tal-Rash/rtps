@@ -444,6 +444,8 @@ button.btn-secondary:hover,
 /* Ячейки с инпутами для редактирования */
 .cell-editable {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 4px 6px;
