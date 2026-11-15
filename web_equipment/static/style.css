@@ -385,7 +385,8 @@ button.btn-secondary:hover,
   background: #f1f5f9;
   border-bottom: 1px solid #cbd5e1;
   font-size: 11px;
-  padding: 6px 6px;
+  padding: 6px 2px;
+  line-height: 1.2;
 }
 
 .equipment-table thead tr.col-numbers th {
