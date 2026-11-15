@@ -212,6 +212,7 @@ function calculateItemStatus(item) {
       status: "repair",
       badgeClass: "badge-repair",
       text: "🔧 В ремонте",
+      title: "Оборудование находится в ремонте",
       rowClass: "row-repair",
       daysDiff: 0,
     };
@@ -222,7 +223,8 @@ function calculateItemStatus(item) {
     return {
       status: "no_date",
       badgeClass: "badge-repair",
-      text: "⚪ Дата не задана",
+      text: "⚪ —",
+      title: "Дата следующей проверки не задана",
       rowClass: "",
       daysDiff: 9999,
     };
@@ -238,7 +240,8 @@ function calculateItemStatus(item) {
     return {
       status: "overdue",
       badgeClass: "badge-overdue",
-      text: `🔴 Просрочено (${overdueDays} дн.)`,
+      text: `🔴 ${overdueDays} дн.`,
+      title: `Просрочено на ${overdueDays} дн. (срок: ${item.next_test_date || ""})`,
       rowClass: "row-overdue",
       daysDiff: diffDays,
     };
@@ -246,7 +249,8 @@ function calculateItemStatus(item) {
     return {
       status: "upcoming",
       badgeClass: "badge-upcoming",
-      text: `🟡 Срок через ${diffDays} дн.`,
+      text: `🟡 ${diffDays} дн.`,
+      title: `Срок наступает через ${diffDays} дн. (до конца след. месяца, срок: ${item.next_test_date || ""})`,
       rowClass: "row-upcoming",
       daysDiff: diffDays,
     };
@@ -254,7 +258,8 @@ function calculateItemStatus(item) {
     return {
       status: "ok",
       badgeClass: "badge-ok",
-      text: `🟢 В норме (${diffDays} дн.)`,
+      text: `🟢 ${diffDays} дн.`,
+      title: `В норме, до следующей проверки ${diffDays} дн. (срок: ${item.next_test_date || ""})`,
       rowClass: "",
       daysDiff: diffDays,
     };
@@ -433,7 +438,7 @@ function renderJacksTable() {
                placeholder="ДД.ММ.ГГГГ" onchange="updateJackField(${index}, 'next_test_date', this.value)">
       </td>
       <td style="text-align: center;">
-        <span class="status-badge ${st.badgeClass}">${st.text}</span>
+        <span class="status-badge ${st.badgeClass}" title="${esc(st.title || st.text)}">${st.text}</span>
       </td>
       <td style="text-align: center;">
         <input type="checkbox" class="repair-check" ${disabledAttr} ${item.in_repair ? "checked" : ""} 
@@ -559,7 +564,7 @@ function renderToolsTable() {
                placeholder="ДД.ММ.ГГГГ" onchange="updateToolField(${index}, 'next_test_date', this.value)">
       </td>
       <td style="text-align: center;">
-        <span class="status-badge ${st.badgeClass}">${st.text}</span>
+        <span class="status-badge ${st.badgeClass}" title="${esc(st.title || st.text)}">${st.text}</span>
       </td>
       <td style="text-align: center;">
         <input type="checkbox" class="repair-check" ${disabledAttr} ${item.in_repair ? "checked" : ""} 
