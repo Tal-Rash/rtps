@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="ru">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,6 +18,7 @@
     };
   </script>
 </head>
+
 <body>
   <div class="shell">
     <div class="topbar">
@@ -27,22 +29,30 @@
             <h1 id="pageTitle">Оборудование и инструмент</h1>
             <span class="user-role-badge">{{ USER_NAME }} ({{ USER_ROLE }})</span>
           </div>
-          <div class="sub" id="pageSubtitle">Журналы проверок и периодических испытаний домкратов, инструмента и оснастки</div>
+          <div class="sub" id="pageSubtitle">Журналы проверок и периодических испытаний домкратов, инструмента и
+            оснастки</div>
         </div>
         <div class="controls">
           <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return requestHomeClick(event)">На главную</a>
           <div class="toolbar">
             {% if CAN_EDIT == "true" %}
             <button type="button" class="btn-tool" onclick="addRow()" title="Добавить новую строку">+ Добавить</button>
-            <button type="button" class="btn-tool" onclick="removeSelectedRow()" title="Удалить выбранную строку">- Удалить</button>
-            <button id="cancelBtn" type="button" class="btn-tool" title="Отмена действия (Ctrl+Z)" aria-label="Отмена" onclick="cancelChanges()" disabled>↺</button>
-            <button id="restoreBtn" type="button" class="btn-tool" title="Вернуть действие (Ctrl+Y)" aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
+            <button type="button" class="btn-tool" onclick="removeSelectedRow()" title="Удалить выбранную строку">-
+              Удалить</button>
+            <button id="cancelBtn" type="button" class="btn-tool" title="Отмена действия (Ctrl+Z)" aria-label="Отмена"
+              onclick="cancelChanges()" disabled>↺</button>
+            <button id="restoreBtn" type="button" class="btn-tool" title="Вернуть действие (Ctrl+Y)"
+              aria-label="Вернуть" onclick="restoreChanges()" disabled>↻</button>
             {% endif %}
-            <button type="button" class="btn-tool" onclick="copySelectedRows()" title="Копировать выделенные строки в буфер обмена для Excel">Копировать</button>
-            <button type="button" class="btn-tool" onclick="exportActiveCsv()" title="Скачать таблицу в формате Excel CSV">Экспорт CSV</button>
-            <button type="button" class="btn-tool" onclick="loadData()" title="Перезагрузить данные из базы">Обновить</button>
+            <button type="button" class="btn-tool" onclick="copySelectedRows()"
+              title="Копировать выделенные строки в буфер обмена для Excel">Копировать</button>
+            <button type="button" class="btn-tool" onclick="exportActiveCsv()"
+              title="Скачать таблицу в формате Excel CSV">Экспорт CSV</button>
+            <button type="button" class="btn-tool" onclick="loadData()"
+              title="Перезагрузить данные из базы">Обновить</button>
             {% if CAN_EDIT == "true" %}
-            <button id="saveBtn" type="button" class="btn-tool primary" onclick="saveData()" title="Сохранить изменения (Ctrl+S)">Сохранить</button>
+            <button id="saveBtn" type="button" class="btn-tool primary" onclick="saveData()"
+              title="Сохранить изменения (Ctrl+S)">Сохранить</button>
             {% endif %}
           </div>
         </div>
@@ -69,22 +79,26 @@
         <div class="kpi-value" id="kpiTotal">0</div>
         <div class="kpi-sub" id="kpiTotalSub">в текущем журнале</div>
       </div>
-      <div class="kpi-card kpi-card-ok" onclick="filterByKpi('ok')" title="Нажмите для фильтрации по действующим проверкам">
+      <div class="kpi-card kpi-card-ok" onclick="filterByKpi('ok')"
+        title="Нажмите для фильтрации по действующим проверкам">
         <div class="kpi-title">В норме</div>
         <div class="kpi-value" id="kpiOk">0</div>
         <div class="kpi-sub">освидетельствование пройдено</div>
       </div>
-      <div class="kpi-card kpi-card-warning" onclick="filterByKpi('upcoming')" title="Нажмите для фильтрации по наступающим срокам">
+      <div class="kpi-card kpi-card-warning" onclick="filterByKpi('upcoming')"
+        title="Нажмите для фильтрации по наступающим срокам">
         <div class="kpi-title">Внимание</div>
         <div class="kpi-value" id="kpiUpcoming">0</div>
         <div class="kpi-sub">срок до конца след. месяца</div>
       </div>
-      <div class="kpi-card kpi-card-alert" onclick="filterByKpi('overdue')" title="Нажмите для фильтрации по просроченным">
+      <div class="kpi-card kpi-card-alert" onclick="filterByKpi('overdue')"
+        title="Нажмите для фильтрации по просроченным">
         <div class="kpi-title">Просрочено</div>
         <div class="kpi-value" id="kpiOverdue">0</div>
         <div class="kpi-sub">требуется испытание</div>
       </div>
-      <div class="kpi-card kpi-card-repair" onclick="filterByKpi('repair')" title="Нажмите для фильтрации оборудования в ремонте">
+      <div class="kpi-card kpi-card-repair" onclick="filterByKpi('repair')"
+        title="Нажмите для фильтрации оборудования в ремонте">
         <div class="kpi-title">В ремонте</div>
         <div class="kpi-value" id="kpiRepair">0</div>
         <div class="kpi-sub">выведено из эксплуатации</div>
@@ -97,7 +111,8 @@
       <div class="filters-bar">
         <div class="filter-group" style="flex: 2; min-width: 220px;">
           <label for="searchFilter">Быстрый поиск</label>
-          <input type="text" id="searchFilter" placeholder="Поиск по наименованию, хоз. номеру, ФИО..." oninput="applyFilters()">
+          <input type="text" id="searchFilter" placeholder="Поиск по наименованию, хоз. номеру, ФИО..."
+            oninput="applyFilters()">
         </div>
         <div class="filter-group" id="categoryFilterGroup" style="display: none;">
           <label for="categoryFilter">Категория</label>
@@ -130,18 +145,20 @@
           <thead>
             <tr>
               <th rowspan="2" style="width: 44px;">№</th>
-              <th rowspan="2" style="width: 220px;">Наименование грузоподъемных механизмов и приспособлений, такелажных средств</th>
+              <th rowspan="2" style="width: 220px;">Наименование грузоподъемных механизмов и приспособлений, такелажных
+                средств</th>
               <th rowspan="2" style="width: 110px; min-width: 95px;">Хоз. №</th>
               <th rowspan="2" style="width: 70px; min-width: 60px; max-width: 80px;">Грузоподъ-<br>емность,<br>тн.</th>
-              <th rowspan="2" style="width: 125px; min-width: 115px;">Дата последнего испытания</th>
+              <th rowspan="2" style="width: 110px; min-width: 100px;">Дата последнего<br>испытания</th>
               <th rowspan="2" style="width: 130px;">Причина испытания (осмотра)</th>
               <th rowspan="2" style="width: 160px;">Сведения о произведенном ремонте с указанием даты</th>
               <th colspan="3">Техническое освидетельствование</th>
-              <th rowspan="2" style="width: 140px; min-width: 130px;">Дата и результат испытания (осмотра)</th>
-              <th rowspan="2" style="width: 140px; min-width: 130px;">Дата следующего технического освидетельствования</th>
+              <th rowspan="2" style="width: 115px; min-width: 105px;">Дата и результат<br>испытания (осмотра)</th>
+              <th rowspan="2" style="width: 105px; min-width: 95px; max-width: 115px;">Дата следующего<br>технического<br>освидетель-<br>ствования</th>
               <th rowspan="2" style="width: 95px; min-width: 85px;">Срок проверки</th>
               <th rowspan="2" style="width: 75px;" title="Оборудование находится в ремонте">В ремонте</th>
-              <th rowspan="2" style="width: 160px;">Председатель комиссии или работник, проводивший испытание (осмотр) Ф.И.О.</th>
+              <th rowspan="2" style="width: 160px;">Председатель комиссии или работник, проводивший испытание (осмотр)
+                Ф.И.О.</th>
               <th rowspan="2" style="width: 160px;">Примечание</th>
               {% if CAN_EDIT == "true" %}
               <th rowspan="2" style="width: 44px;" title="Удалить строку">✕</th>
@@ -157,14 +174,14 @@
               <th>1</th>
               <th>2</th>
               <th>3</th>
-              <th style="min-width: 115px;">4</th>
+              <th style="width: 110px; min-width: 100px;">4</th>
               <th>5</th>
               <th>6</th>
               <th style="min-width: 100px;">7</th>
               <th style="min-width: 100px;">8</th>
               <th style="min-width: 105px;">9</th>
-              <th style="min-width: 130px;">10</th>
-              <th style="min-width: 130px;">11</th>
+              <th style="width: 115px; min-width: 105px;">10</th>
+              <th style="width: 105px; min-width: 95px; max-width: 115px;">11</th>
               <th></th>
               <th></th>
               <th>12</th>
@@ -211,9 +228,11 @@
       </div>
 
       <div class="table-footer">
-        <div class="rows-info">Показано строк: <span id="visibleRowCount">0</span> из <span id="totalRowCount">0</span></div>
+        <div class="rows-info">Показано строк: <span id="visibleRowCount">0</span> из <span id="totalRowCount">0</span>
+        </div>
         <div class="shortcuts-hint">
-          Горячие клавиши: <strong>Ctrl+S</strong> — сохранить, <strong>Ctrl+Z</strong> — отмена, <strong>Ctrl+Y</strong> — повтор, <strong>Delete</strong> — удалить строку
+          Горячие клавиши: <strong>Ctrl+S</strong> — сохранить, <strong>Ctrl+Z</strong> — отмена,
+          <strong>Ctrl+Y</strong> — повтор, <strong>Delete</strong> — удалить строку
         </div>
       </div>
     </div>
@@ -237,4 +256,5 @@
 
   <script src="{{APP_PREFIX}}/static/script.js?v={{APP_VERSION}}"></script>
 </body>
+
 </html>
