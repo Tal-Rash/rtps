@@ -361,75 +361,75 @@
 
     <div class="grid">
       <div class="card">
-        {% if not HIDE_GRAFIK_PPR %}
         <div>
           <h2>График ППР</h2>
+          {% if not HIDE_GRAFIK_PPR %}
           <p>Планирование и контроль ремонтов.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ GRAFIK_PPR_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_ZAMER_KP %}
         <div>
           <h2>Замер КП</h2>
+          {% if not HIDE_ZAMER_KP %}
           <p>Учет и анализ состояния колесных пар.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ ZAMER_KP_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_TABEL %}
         <div>
           <h2>Табель учета</h2>
+          {% if not HIDE_TABEL %}
           <p>Контроль рабочего времени сотрудников.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ TABEL_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_ALSN %}
         <div>
           <h2>АЛСН</h2>
+          {% if not HIDE_ALSN %}
           <p>Мониторинг и учет АЛСН.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ ALSN_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_EDU %}
         <div>
           <h2>Обучение</h2>
+          {% if not HIDE_EDU %}
           <p>Контроль обучения сотрудников.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ EDU_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_SPRAVOCHNIK %}
         <div>
           <h2>Справочник</h2>
+          {% if not HIDE_SPRAVOCHNIK %}
           <p>Базы данных.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ SPRAVOCHNIK_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_OTPUSK %}
         <div>
           <h2>График отпусков</h2>
+          {% if not HIDE_OTPUSK %}
           <p>Планирование и учет отпусков сотрудников.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ OTPUSK_LINK | safe }}
       </div>
       <div class="card">
-        {% if not HIDE_EQUIPMENT %}
         <div>
           <h2>Оборудование</h2>
+          {% if not HIDE_EQUIPMENT %}
           <p>Проверки и испытания оборудования и инструмента.</p>
+          {% endif %}
         </div>
-        {% endif %}
         {{ EQUIPMENT_LINK | safe }}
       </div>
     </div>

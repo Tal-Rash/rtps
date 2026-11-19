@@ -52,19 +52,28 @@ def _module_tokens(modules: str) -> list[str]:
 
 def module_role(role: str, modules: str, module_name: str) -> str | None:
     tokens = _module_tokens(modules)
+    # Администратор всегда имеет полный доступ ко всем модулям
     if role == "admin" or "admin" in tokens:
         return "admin"
 
+    # Проверяем явные правила для конкретного модуля в списке разрешений
     for token in tokens:
         base, sep, access = token.partition(":")
         if base != module_name:
             continue
-        return access or role
+        if access in ("none", "no"):
+            return None
+        if access:
+            return access
+        if role in ("edit", "editor"):
+            return "edit"
+        return "view"
 
-    if role in ("edit", "editor") and (
-        module_name in tokens or f"{module_name}:view" in tokens
-    ):
-        return role
+    # Если для модуля нет явного правила в tokens, права наследуются от глобальной роли
+    if role in ("edit", "editor"):
+        return "edit"
+    if role in ("view", "viewer"):
+        return "view"
 
     return None
 

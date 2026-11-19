@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))
-from rtps_common import connect_sqlite, resolve_user_access
+from rtps_common import connect_sqlite, resolve_user_access, module_has_access, module_role
 from overdue import get_overdue_summary
 
 DATA_DIR = ROOT / "data"
@@ -208,10 +208,18 @@ def parse_mods(modules_str):
     return mods
 
 def get_mod_role(mods, mod_name, user_role):
-    r = mods.get(mod_name, "none")
-    if r == "legacy":
-        r = "edit" if user_role in ("edit", "editor", "admin") else "view"
-    return r
+    # Определение роли пользователя для отдельного модуля
+    r = mods.get(mod_name, None)
+    if r is not None:
+        if r == "legacy":
+            return "edit" if user_role in ("edit", "editor", "admin") else "view"
+        return r
+    # Если в mods нет явного правила для модуля, доступ наследуется от глобальной роли
+    if user_role in ("edit", "editor"):
+        return "edit"
+    if user_role in ("view", "viewer"):
+        return "view"
+    return "none"
 
 def get_client_ip(request: Request):
     x_real = request.headers.get("X-Real-IP")
@@ -289,10 +297,9 @@ async def home_page(request: Request):
         )
 
     def has_access_to(mod_name):
-        mods = session["modules"]
-        role = session["role"]
-        if role == "admin" or "admin" in mods: return True
-        return f"{mod_name}:edit" in mods or f"{mod_name}:view" in mods or mod_name in mods.split(",")
+        mods = session.get("modules", "")
+        role = session.get("role", "")
+        return module_has_access(role, mods, mod_name)
 
     def link_for(mod_name, url):
         if has_access_to(mod_name):
@@ -311,14 +318,14 @@ async def home_page(request: Request):
         "OVERDUE_BUTTON": overdue_button,
         "OVERDUE_SUMMARY": overdue_summary,
         "OVERDUE_SUMMARY_JSON": json.dumps(overdue_summary, ensure_ascii=False),
-        "HIDE_GRAFIK_PPR": ("hide_grafik_ppr:yes" in session["modules"]) or not has_access_to("grafik_ppr"),
-        "HIDE_ZAMER_KP": ("hide_zamer_kp:yes" in session["modules"]) or not has_access_to("zamer_kp"),
-        "HIDE_SPRAVOCHNIK": ("hide_spravochnik:yes" in session["modules"]) or not has_access_to("spravochnik"),
-        "HIDE_TABEL": ("hide_tabel:yes" in session["modules"]) or not has_access_to("tabel"),
-        "HIDE_EDU": ("hide_edu:yes" in session["modules"]) or not has_access_to("edu"),
-        "HIDE_ALSN": ("hide_alsn:yes" in session["modules"]) or not has_access_to("alsn"),
-        "HIDE_OTPUSK": ("hide_otpusk:yes" in session["modules"]) or not has_access_to("otpusk"),
-        "HIDE_EQUIPMENT": ("hide_equipment:yes" in session["modules"]) or not has_access_to("equipment"),
+        "HIDE_GRAFIK_PPR": "hide_grafik_ppr:yes" in session.get("modules", ""),
+        "HIDE_ZAMER_KP": "hide_zamer_kp:yes" in session.get("modules", ""),
+        "HIDE_SPRAVOCHNIK": "hide_spravochnik:yes" in session.get("modules", ""),
+        "HIDE_TABEL": "hide_tabel:yes" in session.get("modules", ""),
+        "HIDE_EDU": "hide_edu:yes" in session.get("modules", ""),
+        "HIDE_ALSN": "hide_alsn:yes" in session.get("modules", ""),
+        "HIDE_OTPUSK": "hide_otpusk:yes" in session.get("modules", ""),
+        "HIDE_EQUIPMENT": "hide_equipment:yes" in session.get("modules", ""),
         "GRAFIK_PPR_LINK": link_for("grafik_ppr", "/grafik-ppr"),
         "ZAMER_KP_LINK": link_for("zamer_kp", "/zamer-kp"),
         "ALSN_LINK": link_for("alsn", "/alsn"),
@@ -490,6 +497,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if form.get("hide_alsn") == "yes": modules.append("hide_alsn:yes")
     if form.get("hide_otpusk") == "yes": modules.append("hide_otpusk:yes")
     if form.get("hide_equipment") == "yes": modules.append("hide_equipment:yes")
+    mod_tokens = [m for m in modules if not m.startswith("hide_")]
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -502,6 +510,33 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
             "equipment:edit",
             "admin",
         ]
+        for m in form:
+            if m.startswith("hide_") and form.get(m) == "yes":
+                modules.append(f"{m}:yes")
+    elif not mod_tokens:
+        # Если модули не были выбраны вручную, назначаем права по глобальной роли
+        if role in ("edit", "editor"):
+            modules.extend([
+                "grafik_ppr:edit",
+                "zamer_kp:edit",
+                "spravochnik:edit",
+                "tabel:edit",
+                "edu:edit",
+                "alsn:edit",
+                "otpusk:edit",
+                "equipment:edit",
+            ])
+        elif role in ("view", "viewer"):
+            modules.extend([
+                "grafik_ppr:view",
+                "zamer_kp:view",
+                "spravochnik:view",
+                "tabel:view",
+                "edu:view",
+                "alsn:view",
+                "otpusk:view",
+                "equipment:view",
+            ])
     
     try:
         with sqlite3.connect(DB_FILE) as conn:
@@ -580,6 +615,7 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if hide_otpusk: modules.append("hide_otpusk:yes")
     if hide_equipment: modules.append("hide_equipment:yes")
     
+    mod_tokens = [m for m in modules if not m.startswith("hide_")]
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -592,6 +628,33 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
             "equipment:edit",
             "admin",
         ]
+        for m in form:
+            if m.startswith("hide_") and form.get(m) == "yes":
+                modules.append(f"{m}:yes")
+    elif not mod_tokens:
+        # Если модули не были выбраны вручную, назначаем права по глобальной роли
+        if role in ("edit", "editor"):
+            modules.extend([
+                "grafik_ppr:edit",
+                "zamer_kp:edit",
+                "spravochnik:edit",
+                "tabel:edit",
+                "edu:edit",
+                "alsn:edit",
+                "otpusk:edit",
+                "equipment:edit",
+            ])
+        elif role in ("view", "viewer"):
+            modules.extend([
+                "grafik_ppr:view",
+                "zamer_kp:view",
+                "spravochnik:view",
+                "tabel:view",
+                "edu:view",
+                "alsn:view",
+                "otpusk:view",
+                "equipment:view",
+            ])
     
     try:
         with sqlite3.connect(DB_FILE) as conn:

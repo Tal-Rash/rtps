@@ -34,7 +34,7 @@
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <input name="full_name" placeholder="Фамилия И.О." required style="flex:2; min-width:180px;">
           <input name="password" placeholder="Пароль (ПИН)" required style="flex:1; min-width:120px;">
-          <select name="role" style="flex:1; min-width:140px;">
+          <select name="role" onchange="onRoleChange(this)" style="flex:1; min-width:140px;">
               <option value="pending">Ожидает подтверждения</option>
               <option value="viewer" selected>Зритель</option>
               <option value="editor">Редактор</option>
@@ -70,7 +70,7 @@
           <td><input form="form_{{ u.id }}" name="full_name" value="{{ u.full_name }}" required style="min-width:160px; max-width:200px;"></td>
           <td><input form="form_{{ u.id }}" name="password" value="{{ u.password }}" required style="min-width:120px; max-width:160px;"></td>
           <td>
-            <select form="form_{{ u.id }}" name="role">
+            <select form="form_{{ u.id }}" name="role" onchange="onRoleChange(this)">
               <option value="pending" {% if u.role == 'pending' %}selected{% endif %}>Ожидает</option>
               <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>Зритель</option>
               <option value="editor" {% if u.role == 'editor' %}selected{% endif %}>Редактор</option>
@@ -142,5 +142,22 @@
     </table>
     </div>
   </div>
+  <script>
+    // Автоматическое переключение прав модулей при смене роли пользователя
+    function onRoleChange(roleSelect) {
+      const container = roleSelect.closest('tr') || roleSelect.closest('form');
+      if (!container) return;
+      const role = roleSelect.value;
+      let targetVal = 'none';
+      if (role === 'admin' || role === 'editor') {
+        targetVal = 'edit';
+      } else if (role === 'viewer') {
+        targetVal = 'view';
+      }
+      container.querySelectorAll('select[name^="module_"]').forEach(sel => {
+        sel.value = targetVal;
+      });
+    }
+  </script>
 </body>
 </html>
