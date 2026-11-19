@@ -2482,13 +2482,47 @@ function renderTu28(){
 // Возвращает отображаемое имя сотрудника с учетом локального словаря деанонимизации
 function getEmpDisplayName(name) {
   if (!name) return '';
+  const s = String(name).trim();
+  if (!s) return '';
   const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
-  let val = String(name);
+  if (!pairs || !pairs.length) return s;
+
+  // 1. Точное прямое совпадение по табельному номеру, ID или метке Работник №X
   for (let i = 0; i < pairs.length; i++) {
-    if (val.indexOf(pairs[i].from) !== -1) {
-      val = val.split(pairs[i].from).join(pairs[i].to);
+    if (pairs[i].from === s && pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
+      return pairs[i].to;
     }
   }
+
+  // 2. Подстановка по подстрокам (если внутри name содержится Работник №X и т.д.)
+  let val = s;
+  for (let i = 0; i < pairs.length; i++) {
+    if (val.indexOf(pairs[i].from) !== -1) {
+      if (pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
+        val = val.split(pairs[i].from).join(pairs[i].to);
+      }
+    }
+  }
+
+  // 3. Защита от сохранения табельного номера: если результат состоит только из цифр, ищем сопоставленное ФИО
+  if (/^\d+$/.test(val) || val.startsWith('ID_') || val.startsWith('Работник №')) {
+    for (let i = 0; i < pairs.length; i++) {
+      if (pairs[i].from === val && pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
+        return pairs[i].to;
+      }
+    }
+    const clean = val.replace(/ID_/g, '').replace(/Работник\s*№?\s*/g, '').trim();
+    const num = parseInt(clean, 10);
+    if (!isNaN(num)) {
+      const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+      for (let i = 0; i < pairs.length; i++) {
+        if ((pairs[i].from === ('Работник №' + num) || pairs[i].from === ('ID_' + pNum)) && pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
+          return pairs[i].to;
+        }
+      }
+    }
+  }
+
   return val;
 }
 
@@ -2508,8 +2542,12 @@ function renderTu28Staff(){
   const isCur = (name, current) => {
     if (!current) return false;
     if (name === current) return true;
-    const disp = getEmpDisplayName(name);
-    return disp === current;
+    const dispN = getEmpDisplayName(name);
+    const dispC = getEmpDisplayName(current);
+    if (dispN && dispN === current) return true;
+    if (dispC && name === dispC) return true;
+    if (dispN && dispC && dispN === dispC) return true;
+    return false;
   };
 
   const optionHtml = (current) => ['<option value=""></option>'].concat(
@@ -2756,9 +2794,11 @@ function openTu28StaffModal(){
   if (!rowObj.tu28_staff) {
     rowObj.tu28_staff = ["", "", "", "", "", "", ""];
   }
-  // Инициализируем ui.tu28Staff из сохраненного состояния строки, если еще не задано
+  // Инициализируем ui.tu28Staff из сохраненного состояния строки с разрешением в ФИО
   if (!ui.tu28Staff[ui.tu28RowIndex]) {
-    ui.tu28Staff[ui.tu28RowIndex] = (rowObj.tu28_staff || []).slice();
+    ui.tu28Staff[ui.tu28RowIndex] = (rowObj.tu28_staff || []).map((x) => getEmpDisplayName(x) || x);
+  } else {
+    ui.tu28Staff[ui.tu28RowIndex] = ui.tu28Staff[ui.tu28RowIndex].map((x) => getEmpDisplayName(x) || x);
   }
   ui.modal = 'tu28staff';
   render();
@@ -3315,13 +3355,6 @@ document.addEventListener('focusout', function(e) {
  * Получает словарь замен из localStorage для автоподстановки реальных ФИО и табельных номеров.
  */
 function getEmpReplacementPairs() {
-  const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
-  if (!raw) return [];
-  
-  let map = null;
-  try { map = JSON.parse(raw); } catch (e) { return []; }
-  if (!map) return [];
-
   const flatMap = {};
 
   // Извлекает порядковый номер из строки вида ID_001, Работник №1 и т.д.
@@ -3351,65 +3384,110 @@ function getEmpReplacementPairs() {
     flatMap[prefix + " № " + pNum] = valStr;
   }
 
-  // Добавляет варианты написания ID (ID_001, ID_1 и т.д.)
-  function addIdVariants(num, val) {
-    const sNum = String(num);
-    const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
-    const valStr = String(val);
+  // 1. Сначала обрабатываем подробный массив rtps_employees_full_dict
+  try {
+    const rawFull = localStorage.getItem('rtps_employees_full_dict');
+    if (rawFull) {
+      const arr = JSON.parse(rawFull);
+      if (Array.isArray(arr)) {
+        for (let i = 0; i < arr.length; i++) {
+          const rec = arr[i];
+          if (!rec) continue;
+          let num = extractNum(rec.id || rec.tab || rec.tab_num);
+          if (num === null) num = i + 1;
 
-    flatMap["ID_" + pNum] = valStr;
-    flatMap["ID_" + sNum] = valStr;
-    flatMap["ID_" + num] = valStr;
-  }
+          let shortF = String(rec.shortFio || rec.fio || rec.name || rec.short_name || '').trim();
+          let fullF = String(rec.fullFio || rec.full_name || rec.fio || rec.name || '').trim();
+          let pos = String(rec.pos || rec.position || '').trim();
+          let tab = String(rec.tab || rec.tab_num || '').trim();
 
-  if (Array.isArray(map)) {
-    for (let i = 0; i < map.length; i++) {
-      let rec = map[i];
-      if (!rec) continue;
+          // Защита: ФИО не должно быть числовым табельным номером
+          if (shortF && /^\d+$/.test(shortF)) {
+            shortF = (fullF && !/^\d+$/.test(fullF)) ? fullF : '';
+          }
+          if (fullF && /^\d+$/.test(fullF)) {
+            fullF = (shortF && !/^\d+$/.test(shortF)) ? shortF : '';
+          }
+          const bestFio = shortF || fullF;
 
-      let num = extractNum(rec.id || rec.tab || rec.tab_num);
-      if (num === null) num = i + 1;
-
-      let shortF = rec.shortFio || rec.fio || rec.name || rec.short_name || '';
-      let fullF = rec.fullFio || rec.full_name || rec.fio || rec.name || '';
-      let pos = rec.pos || rec.position || '';
-      let tab = rec.tab || rec.tab_num || rec.id || '';
-
-      if (shortF) addFieldVariants("Работник", num, shortF);
-      if (fullF) {
-        addFieldVariants("СотрудникПолн", num, fullF);
-        addFieldVariants("Сотрудник", num, fullF);
-      }
-      if (pos) addFieldVariants("Должность", num, pos);
-      if (tab) {
-        addIdVariants(num, tab);
-        if (rec.id) flatMap[String(rec.id)] = String(tab);
+          if (bestFio && !/^\d+$/.test(bestFio)) {
+            addFieldVariants("Работник", num, bestFio);
+            addFieldVariants("СотрудникПолн", num, fullF || bestFio);
+            addFieldVariants("Сотрудник", num, fullF || bestFio);
+            // Если задан табельный номер сотрудника, связываем его с ФИО
+            if (tab) {
+              flatMap[tab] = bestFio;
+            }
+            // Связываем анонимные ID с реальным ФИО
+            const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
+            flatMap["ID_" + pNum] = bestFio;
+            flatMap["ID_" + num] = bestFio;
+            if (rec.id) flatMap[String(rec.id)] = bestFio;
+          }
+          if (pos) addFieldVariants("Должность", num, pos);
+        }
       }
     }
-  } else if (typeof map === 'object') {
-    for (let k in map) {
-      if (map.hasOwnProperty(k) && k && map[k]) {
-        const valStr = String(map[k]);
-        flatMap[k] = valStr;
-        let num = extractNum(k);
-        if (num !== null) {
-          if (k.startsWith("Работник")) {
-            addFieldVariants("Работник", num, valStr);
-          } else if (k.startsWith("СотрудникПолн")) {
-            addFieldVariants("СотрудникПолн", num, valStr);
-            addFieldVariants("Сотрудник", num, valStr);
-          } else if (k.startsWith("Сотрудник")) {
-            addFieldVariants("Сотрудник", num, valStr);
-            addFieldVariants("СотрудникПолн", num, valStr);
-          } else if (k.startsWith("Должность")) {
-            addFieldVariants("Должность", num, valStr);
-          } else if (k.startsWith("ID_") || /^\d+$/.test(k)) {
-            addIdVariants(num, valStr);
+  } catch (e) {}
+
+  // 2. Затем обрабатываем словарь замен rtps_emp_dict
+  try {
+    const rawDict = localStorage.getItem('rtps_emp_dict');
+    if (rawDict) {
+      const map = JSON.parse(rawDict);
+      if (map && typeof map === 'object') {
+        for (let k in map) {
+          if (map.hasOwnProperty(k) && k && map[k]) {
+            let valStr = String(map[k]).trim();
+            let num = extractNum(k);
+            if (num !== null) {
+              if (k.startsWith("Работник")) {
+                if (/^\d+$/.test(valStr)) {
+                  const altFio = String(map["СотрудникПолн №" + num] || map["Сотрудник №" + num] || '').trim();
+                  if (altFio && !/^\d+$/.test(altFio)) {
+                    valStr = altFio;
+                  }
+                }
+                if (!/^\d+$/.test(valStr)) {
+                  addFieldVariants("Работник", num, valStr);
+                  flatMap[k] = valStr;
+                }
+              } else if (k.startsWith("СотрудникПолн")) {
+                if (!/^\d+$/.test(valStr)) {
+                  addFieldVariants("СотрудникПолн", num, valStr);
+                  addFieldVariants("Сотрудник", num, valStr);
+                  flatMap[k] = valStr;
+                }
+              } else if (k.startsWith("Сотрудник")) {
+                if (!/^\d+$/.test(valStr)) {
+                  addFieldVariants("Сотрудник", num, valStr);
+                  addFieldVariants("СотрудникПолн", num, valStr);
+                  flatMap[k] = valStr;
+                }
+              } else if (k.startsWith("Должность")) {
+                addFieldVariants("Должность", num, valStr);
+                flatMap[k] = valStr;
+              } else if (k.startsWith("ID_")) {
+                if (/^\d+$/.test(valStr)) {
+                  const altFio = String(map["СотрудникПолн №" + num] || map["Сотрудник №" + num] || map["Работник №" + num] || '').trim();
+                  if (altFio && !/^\d+$/.test(altFio)) {
+                    flatMap[valStr] = altFio;
+                    flatMap[k] = altFio;
+                  }
+                } else {
+                  flatMap[k] = valStr;
+                }
+              } else {
+                flatMap[k] = valStr;
+              }
+            } else {
+              flatMap[k] = valStr;
+            }
           }
         }
       }
     }
-  }
+  } catch (e) {}
 
   const pairs = [];
   for (let k in flatMap) {
