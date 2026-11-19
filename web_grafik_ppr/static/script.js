@@ -2564,23 +2564,6 @@ function renderTu28Staff(){
     </div>
   `;
 }
-        <colgroup>
-          <col style="width:40px;">
-          <col style="width:auto;">
-          <col style="width:260px;">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Вид работ (узел)</th>
-            <th>ФИО</th>
-          </tr>
-        </thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-    </div>
-  `;
-}
 async function saveTu28ExtraLocal() {
   const m = appState.months[ui.tu28MonthIndex];
   if (!m || ui.tu28RowIndex == null) return;
