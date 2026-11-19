@@ -265,10 +265,13 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
     start_date_str = f"{year}-{month_num:02d}-{repair_days[0]:02d}"
     end_date_str = f"{year}-{month_num:02d}-{repair_days[-1]:02d}"
 
+    # Словарь замеров колесных пар (инициализируем пустым, чтобы избежать UnboundLocalError)
+    measurements: dict[int, dict[int, str]] = {}
     db_path = Path(__file__).resolve().parent.parent / "base" / "common_database.db"
     if db_path.exists() and number and start_date_str and end_date_str:
         try:
             conn = connect_sqlite(db_path)
+            db_rows = []
             try:
                 cur = conn.cursor()
                 db_rows = cur.execute(
@@ -282,21 +285,22 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
                 ).fetchall()
             finally:
                 conn.close()
-                dates_dict = {}
-                for d_str, r, c, v in db_rows:
-                    if d_str not in dates_dict:
-                        dates_dict[d_str] = {}
-                    try:
-                        r_int = int(r)
-                        c_int = int(c)
-                    except Exception:
-                        continue
-                    dates_dict[d_str].setdefault(r_int, {})[c_int] = str(v).strip() if v else ""
-                if dates_dict:
-                    best_date = sorted(dates_dict.keys(), reverse=True)[0]
-                    measurements = dates_dict[best_date]
-                    print(f"DEBUG: ZAMER KP: best_date={best_date} measurements dict: {measurements}", flush=True)
-                    print(f"DEBUG: ZAMER KP: best_date={best_date} measurements size={len(measurements)}", flush=True)
+
+            dates_dict: dict[str, dict[int, dict[int, str]]] = {}
+            for d_str, r, c, v in db_rows:
+                if d_str not in dates_dict:
+                    dates_dict[d_str] = {}
+                try:
+                    r_int = int(r)
+                    c_int = int(c)
+                except Exception:
+                    continue
+                dates_dict[d_str].setdefault(r_int, {})[c_int] = str(v).strip() if v else ""
+            if dates_dict:
+                best_date = sorted(dates_dict.keys(), reverse=True)[0]
+                measurements = dates_dict[best_date]
+                print(f"DEBUG: ZAMER KP: best_date={best_date} measurements dict: {measurements}", flush=True)
+                print(f"DEBUG: ZAMER KP: best_date={best_date} measurements size={len(measurements)}", flush=True)
         except Exception as e:
             print("Error reading Zamer KP archive db:", e, flush=True)
     tags = {

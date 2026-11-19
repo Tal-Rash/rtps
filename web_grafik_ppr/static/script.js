@@ -2734,6 +2734,18 @@ function downloadTu28(){
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
   const rowObj = appState.months[ui.tu28MonthIndex].fact[row.rowIndex] || {};
   const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff[row.rowIndex] || [], extra_repairs: rowObj.tu28_extra || [] };
+
+  // Блокируем кнопку на время формирования файла для исключения повторных нажатий
+  const btnOk = document.querySelector('#tu28StaffModal .section-modal-actions button.primary');
+  const origText = btnOk ? btnOk.textContent : 'OK';
+  if (btnOk) {
+    btnOk.disabled = true;
+    btnOk.textContent = 'Формирование...';
+  }
+
+  // Ссылка для резервного прямого скачивания через браузер в случае сетевого сбоя fetch
+  const fallbackUrl = `${window.APP_CONFIG.APP_PREFIX}/api/tu28-export?year=${encodeURIComponent(appState.year)}&month=${encodeURIComponent(month.name)}&row=${encodeURIComponent(row.rowIndex)}&staff=${encodeURIComponent(JSON.stringify(payload.staff))}&extra_repairs=${encodeURIComponent(JSON.stringify(payload.extra_repairs))}`;
+
   fetch(`${window.APP_CONFIG.APP_PREFIX}/api/tu28-export`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -2784,11 +2796,33 @@ function downloadTu28(){
     const a = document.createElement('a');
     a.href = url;
     a.download = `ТУ-28_${row.number}_${row.code}_${month.name}_${appState.year}.xlsx`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
     closeTu28StaffModal();
     closeTu28Modal();
-  }).catch((err) => showErrorModal(err && err.stack ? err.stack : 'Не удалось сформировать ТУ-28'));
+  }).catch((err) => {
+    console.warn('downloadTu28 error:', err);
+    // При ошибке сетевого запроса fetch (например, блокировка расширением или сброс потока HTTP/2) используем прямой переход
+    if (err && (String(err).includes('Failed to fetch') || String(err).includes('NetworkError'))) {
+      const a = document.createElement('a');
+      a.href = fallbackUrl;
+      a.download = `ТУ-28_${row.number}_${row.code}_${month.name}_${appState.year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      closeTu28StaffModal();
+      closeTu28Modal();
+      return;
+    }
+    showErrorModal(err && err.stack ? err.stack : 'Не удалось сформировать ТУ-28');
+  }).finally(() => {
+    if (btnOk) {
+      btnOk.disabled = false;
+      btnOk.textContent = origText;
+    }
+  });
 }
 function confirmTu28Staff(){
   downloadTu28();

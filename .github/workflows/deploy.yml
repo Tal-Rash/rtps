@@ -67,6 +67,7 @@ jobs:
           backup_path web_alsn/data
           backup_path web_otpusk/data
           backup_path web_equipment/data
+          backup_path web_grafik_ppr/data
 
           git fetch origin main
           git reset --hard origin/main
@@ -82,6 +83,7 @@ jobs:
           restore_path web_alsn/data
           restore_path web_otpusk/data
           restore_path web_equipment/data
+          restore_path web_grafik_ppr/data
 
           python3 -m pip install openpyxl || pip3 install openpyxl --break-system-packages || true
 

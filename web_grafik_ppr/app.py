@@ -443,15 +443,39 @@ async def post_tu28_extra(request: Request):
     return json_response({"status": "ok"})
 
 
-@app.post("/api/tu28-export")
+@app.api_route("/api/tu28-export", methods=["GET", "POST"])
 async def export_tu28(request: Request):
+    # Экспорт акта формы ТУ-28 в Excel (поддерживает POST и GET)
     auth_ok, session = require_auth_fastapi(request)
     if not auth_ok:
         return Response("Unauthorized", status_code=401)
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
+
+    payload = {}
+    if request.method == "POST":
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    else:
+        # Получение параметров из GET-запроса (резервный вариант)
+        payload = {
+            "year": request.query_params.get("year"),
+            "month": request.query_params.get("month"),
+            "row": request.query_params.get("row"),
+        }
+        staff_raw = request.query_params.get("staff")
+        if staff_raw:
+            try:
+                payload["staff"] = json.loads(staff_raw)
+            except Exception:
+                payload["staff"] = []
+        extra_raw = request.query_params.get("extra_repairs")
+        if extra_raw:
+            try:
+                payload["extra_repairs"] = json.loads(extra_raw)
+            except Exception:
+                payload["extra_repairs"] = []
+
     year = int(payload.get("year") or dt.date.today().year)
     month = str(payload.get("month", "")).strip() or MONTHS_RU[dt.date.today().month - 1]
     row_raw = payload.get("row", None)
@@ -474,12 +498,17 @@ async def export_tu28(request: Request):
             build_tu28_workbook, year, month, row_idx, staff_list, extra_repairs=extra_repairs
         )
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         return json_response({"error": str(exc)}, status_code=400)
 
     return Response(
         content=body,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": content_disposition_attachment(filename)}
+        headers={
+            "Content-Disposition": content_disposition_attachment(filename),
+            "Access-Control-Allow-Origin": "*",
+        }
     )
 
 
