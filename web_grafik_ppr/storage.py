@@ -20,6 +20,7 @@ from rtps_common import connect_sqlite
 
 try:
     from .constants import (
+        ROOT,
         DATA_DIR,
         DB_FILE,
         SOURCE_DB,
@@ -31,6 +32,7 @@ try:
     )
     from .calculations import (
         s,
+        format_fio_initials,
         normalize_repair_code,
         compute_repair_schedule_derived,
         default_repair_schedule_state,
@@ -41,6 +43,7 @@ try:
     )
 except (ImportError, ValueError):
     from constants import (
+        ROOT,
         DATA_DIR,
         DB_FILE,
         SOURCE_DB,
@@ -52,6 +55,7 @@ except (ImportError, ValueError):
     )
     from calculations import (
         s,
+        format_fio_initials,
         normalize_repair_code,
         compute_repair_schedule_derived,
         default_repair_schedule_state,
@@ -600,11 +604,82 @@ def get_act_inventory_item(year: int, number: str) -> tuple[str, str]:
         return "", ""
 
 
+def load_private_emp_dict() -> dict[str, dict[str, str]]:
+    """
+    Загружает локальный справочник реальных сотрудников из employees_private.csv или employees_private.xlsx при наличии.
+    Возвращает маппинг по анонимным ID, табельным номерам и порядковым номерам.
+    """
+    csv_file = ROOT.parent / "employees_private.csv"
+    xlsx_file = ROOT.parent / "employees_private.xlsx"
+
+    mapping: dict[str, dict[str, str]] = {}
+    rows: list[list[str]] = []
+
+    if csv_file.exists():
+        try:
+            import csv
+            with open(csv_file, "r", encoding="utf-8-sig") as f:
+                reader = csv.reader(f, delimiter=";")
+                for r in reader:
+                    if r and len(r) >= 3 and not str(r[0]).startswith("Код"):
+                        rows.append([s(x).strip() for x in r])
+        except Exception:
+            pass
+    elif xlsx_file.exists():
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(xlsx_file, data_only=True)
+            ws = wb.active
+            for r in ws.iter_rows(values_only=True):
+                if r and r[0] and not str(r[0]).startswith("Код"):
+                    rows.append([s(x).strip() for x in r])
+        except Exception:
+            pass
+
+    for r in rows:
+        anon_id = r[0] if len(r) > 0 else ""
+        pos = r[1] if len(r) > 1 else ""
+        full_fio = r[2] if len(r) > 2 else ""
+        short_fio = r[3] if len(r) > 3 and r[3] else full_fio
+        tab_num = r[4] if len(r) > 4 else anon_id
+
+        info = {
+            "anon_id": anon_id,
+            "pos": pos,
+            "name": short_fio,
+            "full_name": full_fio,
+            "tab_num": tab_num,
+        }
+
+        if anon_id:
+            mapping[anon_id] = info
+            mapping[anon_id.upper()] = info
+            digits = "".join(ch for ch in anon_id if ch.isdigit())
+            if digits:
+                num = int(digits)
+                mapping[f"Работник №{num}"] = info
+                mapping[f"СотрудникПолн №{num}"] = info
+                mapping[f"Сотрудник №{num}"] = info
+                mapping[f"ID_{num:03d}"] = info
+                mapping[str(num)] = info
+
+        if tab_num:
+            mapping[tab_num] = info
+
+        if short_fio:
+            mapping[short_fio] = info
+        if full_fio:
+            mapping[full_fio] = info
+
+    return mapping
+
+
 def get_all_employee_names() -> list[str]:
-    """Возвращает список анонимизированных меток сотрудников (Работник №1, Работник №2...) для безопасного отображения без закладки"""
+    """Возвращает список сотрудников (с подстановкой реальных ФИО при наличии локального справочника)."""
     try:
         if not SOURCE_DB.exists():
             return []
+        private_map = load_private_emp_dict()
         db = connect_sqlite(SOURCE_DB)
         try:
             cur = db.cursor()
@@ -620,7 +695,19 @@ def get_all_employee_names() -> list[str]:
                 digits = "".join(ch for ch in raw_tab if ch.isdigit())
                 if digits:
                     num_part = int(digits)
-            names.append(f"Работник №{num_part}")
+            anon_label = f"Работник №{num_part}"
+            emp = (
+                private_map.get(raw_tab)
+                or private_map.get(anon_label)
+                or private_map.get(f"ID_{num_part:03d}")
+                or private_map.get(str(num_part))
+            )
+            if emp and emp.get("name"):
+                names.append(emp["name"])
+            elif emp and emp.get("full_name"):
+                names.append(format_fio_initials(emp["full_name"]))
+            else:
+                names.append(anon_label)
         # Удаляем дубликаты с сохранением порядка
         seen = set()
         unique_names = []
@@ -638,6 +725,7 @@ def get_employee_dates() -> dict[str, dict]:
     try:
         if not SOURCE_DB.exists():
             return {}
+        private_map = load_private_emp_dict()
         db = connect_sqlite(SOURCE_DB)
         try:
             db.row_factory = sqlite3.Row
@@ -679,6 +767,22 @@ def get_employee_dates() -> dict[str, dict]:
             if full_name_val:
                 result[full_name_val] = info
 
+            # Также индексируем по реальным именам из справочника
+            emp = (
+                private_map.get(raw_tab)
+                or private_map.get(f"Работник №{num_part}")
+                or private_map.get(f"ID_{num_part:03d}")
+                or private_map.get(str(num_part))
+            )
+            if emp:
+                if emp.get("name"):
+                    result[emp["name"]] = info
+                if emp.get("full_name"):
+                    result[emp["full_name"]] = info
+                    result[format_fio_initials(emp["full_name"])] = info
+                if emp.get("tab_num"):
+                    result[emp["tab_num"]] = info
+
         return result
     except Exception:
         return {}
@@ -705,6 +809,7 @@ def _parse_tabel_date(value: str, year: int | None = None) -> dt.date | None:
 def get_employee_vacations() -> dict[str, list[dict]]:
     if not SOURCE_DB.exists():
         return {}
+    private_map = load_private_emp_dict()
     try:
         db = connect_sqlite(SOURCE_DB)
         try:
@@ -746,6 +851,21 @@ def get_employee_vacations() -> dict[str, list[dict]]:
             name_values.add(f"Работник №{num}")
             name_values.add(f"СотрудникПолн №{num}")
             name_values.add(f"ID_{num:03d}")
+        # Добавляем реальные имена сотрудников из справочника для отпусков
+        emp = (
+            private_map.get(tab_num)
+            or (private_map.get(f"Работник №{int(digits)}") if digits else None)
+            or (private_map.get(f"ID_{int(digits):03d}") if digits else None)
+        )
+        if emp:
+            if emp.get("name"):
+                name_values.add(emp["name"])
+            if emp.get("full_name"):
+                name_values.add(emp["full_name"])
+                name_values.add(format_fio_initials(emp["full_name"]))
+            if emp.get("tab_num"):
+                name_values.add(emp["tab_num"])
+
         names.setdefault(key, set()).update(item for item in name_values if item)
 
     result: dict[str, list[dict]] = {}
@@ -831,6 +951,21 @@ def get_employee_vacations() -> dict[str, list[dict]]:
                     name_values.add(f"Работник №{num}")
                     name_values.add(f"СотрудникПолн №{num}")
                     name_values.add(f"ID_{num:03d}")
+
+                # Добавляем реальные имена сотрудников из справочника для табеля
+                emp = (
+                    private_map.get(tab_num)
+                    or (private_map.get(f"Работник №{int(digits)}") if digits else None)
+                    or (private_map.get(f"ID_{int(digits):03d}") if digits else None)
+                )
+                if emp:
+                    if emp.get("name"):
+                        name_values.add(emp["name"])
+                    if emp.get("full_name"):
+                        name_values.add(emp["full_name"])
+                        name_values.add(format_fio_initials(emp["full_name"]))
+                    if emp.get("tab_num"):
+                        name_values.add(emp["tab_num"])
 
                 for name in name_values:
                     if name:

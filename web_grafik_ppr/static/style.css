@@ -367,7 +367,28 @@
     #tu28StaffModal .acts-table { width:max-content; table-layout:auto; }
     #tu28StaffModal .acts-table th,
     #tu28StaffModal .acts-table td { padding:4px 10px; }
-    #tu28StaffModal .tu28-staff-select { width:100%; min-width:240px; padding:6px 10px; }
+    #tu28StaffModal .tu28-staff-select {
+      width:100%;
+      min-width:240px;
+      padding:6px 10px;
+      font-size:14px;
+      line-height:1.4;
+      color:#102033;
+      background-color:#ffffff;
+      border:1px solid #cbd5e1;
+      border-radius:6px;
+      box-sizing:border-box;
+      outline:none;
+    }
+    #tu28StaffModal .tu28-staff-select:focus {
+      border-color:var(--accent, #0056b3);
+      box-shadow:0 0 0 2px rgba(0, 86, 179, 0.2);
+    }
+    #tu28StaffModal .tu28-staff-select option {
+      color:#102033;
+      background-color:#ffffff;
+      font-size:14px;
+    }
     #tu28StaffModal .tu28-vacation-row > td { background:#fff1f4; }
     #tu28StaffModal .tu28-vacation-note { margin-top:4px; color:#b42318; font-weight:700; font-size:13px; text-align:left; }
     .acts-table input[type="checkbox"] { display:block; margin:0 auto; transform:scale(1.15); }

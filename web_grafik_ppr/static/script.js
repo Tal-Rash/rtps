@@ -2479,6 +2479,19 @@ function renderTu28(){
     </div>
   `;
 }
+// Возвращает отображаемое имя сотрудника с учетом локального словаря деанонимизации
+function getEmpDisplayName(name) {
+  if (!name) return '';
+  const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+  let val = String(name);
+  for (let i = 0; i < pairs.length; i++) {
+    if (val.indexOf(pairs[i].from) !== -1) {
+      val = val.split(pairs[i].from).join(pairs[i].to);
+    }
+  }
+  return val;
+}
+
 function renderTu28Staff(){
   const rows = [
     "Дизель, топливная, вспом. оборуд.",
@@ -2491,20 +2504,30 @@ function renderTu28Staff(){
   ];
   const range = selectedTu28RepairRange();
   const currentStaff = ui.tu28Staff[ui.tu28RowIndex] || [];
+
+  const isCur = (name, current) => {
+    if (!current) return false;
+    if (name === current) return true;
+    const disp = getEmpDisplayName(name);
+    return disp === current;
+  };
+
   const optionHtml = (current) => ['<option value=""></option>'].concat(
     EMPLOYEE_NAMES.filter((name) => {
       // Исключаем работников, которые уже уволены или еще не приняты на дату ремонта
-      return name === current || isEmployeeActiveDuringRange(name, range);
+      return isCur(name, current) || isEmployeeActiveDuringRange(name, range);
     }).map((name) => {
-      const vacation = employeeVacationHit(name, range);
-      const selected = name === current ? ' selected' : '';
-      const label = vacation ? `${name} - отпуск ${vacation.label || ''}` : name;
-      return `<option value="${esc(name)}"${selected}>${esc(label)}</option>`;
+      const dispName = getEmpDisplayName(name);
+      const vacation = employeeVacationHit(name, range) || employeeVacationHit(dispName, range);
+      const selected = isCur(name, current) ? ' selected' : '';
+      const label = vacation ? `${dispName} - отпуск ${vacation.label || ''}` : dispName;
+      return `<option value="${esc(dispName)}"${selected}>${esc(label)}</option>`;
     })
   ).join('');
   const tableRows = rows.map((label, idx) => {
     const current = currentStaff[idx] || '';
-    const vacation = employeeVacationHit(current, range);
+    const dispCur = getEmpDisplayName(current);
+    const vacation = employeeVacationHit(current, range) || employeeVacationHit(dispCur, range);
     return `
       <tr class="${vacation ? 'tu28-vacation-row' : ''}">
         <td>${idx + 1}</td>
@@ -2522,6 +2545,25 @@ function renderTu28Staff(){
     <div style="margin-bottom:10px; font-weight:700;">Выберите ФИО исполнителей из списка:</div>
     <div class="table-wrap" style="margin:0 auto; width:fit-content; max-width:100%;">
       <table class="acts-table" style="width:max-content; table-layout:auto;">
+        <colgroup>
+          <col style="width: 40px;">
+          <col style="width: 280px;">
+          <col style="width: 280px;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Вид работ (узел)</th>
+            <th>ФИО</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
         <colgroup>
           <col style="width:40px;">
           <col style="width:auto;">
@@ -2598,16 +2640,41 @@ function openTu28Modal(){
   render();
 }
 function bindTu28StaffSelects(){
-  const tu28StaffBody = document.getElementById('tu28StaffModalBody');
   const selects = document.querySelectorAll('.tu28-staff-select');
   selects.forEach((sel) => {
     sel.onchange = (e) => {
       const idx = Number(e.target.dataset.index);
+      const val = e.target.value;
       if (!ui.tu28Staff[ui.tu28RowIndex]) ui.tu28Staff[ui.tu28RowIndex] = [];
-      ui.tu28Staff[ui.tu28RowIndex][idx] = e.target.value;
-      if (tu28StaffBody) {
-        tu28StaffBody.innerHTML = renderTu28Staff();
-        requestAnimationFrame(bindTu28StaffSelects);
+      ui.tu28Staff[ui.tu28RowIndex][idx] = val;
+
+      // Синхронизируем с состоянием строки и отмечаем признак изменений
+      const rowObj = (appState.months && appState.months[ui.tu28MonthIndex] && appState.months[ui.tu28MonthIndex].fact)
+        ? appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex]
+        : null;
+      if (rowObj) {
+        rowObj.tu28_staff = ui.tu28Staff[ui.tu28RowIndex].slice();
+        dirty = true;
+      }
+
+      // Обновляем визуальное предупреждение об отпуске для текущей строки без перерисовки всей таблицы
+      const range = selectedTu28RepairRange();
+      const tr = sel.closest('tr');
+      const dispVal = getEmpDisplayName(val);
+      const vacation = employeeVacationHit(val, range) || employeeVacationHit(dispVal, range);
+      if (tr) {
+        tr.classList.toggle('tu28-vacation-row', Boolean(vacation));
+        let note = tr.querySelector('.tu28-vacation-note');
+        if (vacation) {
+          if (!note) {
+            note = document.createElement('div');
+            note.className = 'tu28-vacation-note';
+            sel.parentNode.appendChild(note);
+          }
+          note.textContent = `Отпуск ${vacation.label || ''}`;
+        } else if (note) {
+          note.remove();
+        }
       }
     };
   });
@@ -2705,6 +2772,10 @@ function openTu28StaffModal(){
   const rowObj = appState.months[ui.tu28MonthIndex].fact[ui.tu28RowIndex];
   if (!rowObj.tu28_staff) {
     rowObj.tu28_staff = ["", "", "", "", "", "", ""];
+  }
+  // Инициализируем ui.tu28Staff из сохраненного состояния строки, если еще не задано
+  if (!ui.tu28Staff[ui.tu28RowIndex]) {
+    ui.tu28Staff[ui.tu28RowIndex] = (rowObj.tu28_staff || []).slice();
   }
   ui.modal = 'tu28staff';
   render();
@@ -3207,7 +3278,8 @@ document.addEventListener('focusout', function(e) {
             if (newVal !== val) el.textContent = newVal;
           }
         }
-        if (el.value) {
+        // Не изменяем value для select и option, чтобы не сбрасывать выбранные элементы в выпадающих списках
+        if (el.tagName !== 'SELECT' && el.tagName !== 'OPTION' && el.value) {
           let val = el.value, newVal = val;
           for (let p = 0; p < pairs.length; p++) {
             if (newVal.indexOf(pairs[p].from) !== -1) {

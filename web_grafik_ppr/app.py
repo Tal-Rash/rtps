@@ -493,6 +493,21 @@ async def export_tu28(request: Request):
     if not isinstance(extra_repairs, list):
         extra_repairs = []
 
+    if staff_list:
+        def save_staff():
+            # Сохранение ответственных за ремонт в базе данных
+            with DB_LOCK, conn() as db:
+                cur = db.cursor()
+                with db:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO tu28_data VALUES (?,?,?,?,?)",
+                        (year, month, row_idx, "tu28_staff", json.dumps(staff_list, ensure_ascii=False))
+                    )
+        try:
+            await asyncio.to_thread(save_staff)
+        except Exception as e:
+            print("Предупреждение: не удалось сохранить tu28_staff в БД:", e)
+
     try:
         body, filename = await asyncio.to_thread(
             build_tu28_workbook, year, month, row_idx, staff_list, extra_repairs=extra_repairs

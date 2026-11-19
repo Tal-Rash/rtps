@@ -342,10 +342,30 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         "ЭЛАП",
         "ТОРМОЗ",
     ]
+    private_map = {}
+    try:
+        from .storage import load_private_emp_dict
+        private_map = load_private_emp_dict()
+    except Exception:
+        try:
+            from storage import load_private_emp_dict
+            private_map = load_private_emp_dict()
+        except Exception:
+            pass
+
     for idx, name in enumerate(staff_list or []):
         if idx >= len(components):
             break
-        tags[f"[{components[idx]}]"] = format_fio_initials(name)
+        raw_name = s(name).strip()
+        # Подставляем реальные ФИО сотрудников при наличии справочника
+        emp = private_map.get(raw_name)
+        if emp and emp.get("name"):
+            resolved_name = emp["name"]
+        elif emp and emp.get("full_name"):
+            resolved_name = format_fio_initials(emp["full_name"])
+        else:
+            resolved_name = format_fio_initials(raw_name)
+        tags[f"[{components[idx]}]"] = resolved_name
 
     extra_repairs = extra_repairs or []
     print(f"DEBUG: build_tu28_workbook received extra_repairs={extra_repairs}", flush=True)
