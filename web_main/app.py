@@ -45,7 +45,7 @@ COMMON_DB_FILE = ROOT.parent / "base" / "common_database.db"
 ALSN_DB_FILE = ROOT.parent / "web_alsn" / "data" / "alsn.db"
 EQUIPMENT_DB_FILE = ROOT.parent / "web_equipment" / "data" / "equipment.db"
 # Идентификатор сборки веб-сервиса
-BUILD_ID = "web-main-2026-11-11"
+BUILD_ID = "web-main-2026-11-19"
 
 app = FastAPI(title="RTPS Web Main")
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
@@ -479,15 +479,17 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
         
     form = await request.form()
     
-    modules = []
-    if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
-    if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
-    if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
-    if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
-    if module_edu != "none": modules.append(f"edu:{module_edu}")
-    if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
-    if module_otpusk != "none": modules.append(f"otpusk:{module_otpusk}")
-    if module_equipment != "none": modules.append(f"equipment:{module_equipment}")
+    # Явно сохраняем выбранные права для всех модулей, включая значение none (нет доступа)
+    modules = [
+        f"grafik_ppr:{module_grafik_ppr}",
+        f"zamer_kp:{module_zamer_kp}",
+        f"spravochnik:{module_spravochnik}",
+        f"tabel:{module_tabel}",
+        f"edu:{module_edu}",
+        f"alsn:{module_alsn}",
+        f"otpusk:{module_otpusk}",
+        f"equipment:{module_equipment}",
+    ]
     
     if form.get("hide_grafik_ppr") == "yes": modules.append("hide_grafik_ppr:yes")
     if form.get("hide_zamer_kp") == "yes": modules.append("hide_zamer_kp:yes")
@@ -497,7 +499,7 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
     if form.get("hide_alsn") == "yes": modules.append("hide_alsn:yes")
     if form.get("hide_otpusk") == "yes": modules.append("hide_otpusk:yes")
     if form.get("hide_equipment") == "yes": modules.append("hide_equipment:yes")
-    mod_tokens = [m for m in modules if not m.startswith("hide_")]
+
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -513,30 +515,6 @@ async def add_user(request: Request, full_name: str = Form(""), password: str = 
         for m in form:
             if m.startswith("hide_") and form.get(m) == "yes":
                 modules.append(f"{m}:yes")
-    elif not mod_tokens:
-        # Если модули не были выбраны вручную, назначаем права по глобальной роли
-        if role in ("edit", "editor"):
-            modules.extend([
-                "grafik_ppr:edit",
-                "zamer_kp:edit",
-                "spravochnik:edit",
-                "tabel:edit",
-                "edu:edit",
-                "alsn:edit",
-                "otpusk:edit",
-                "equipment:edit",
-            ])
-        elif role in ("view", "viewer"):
-            modules.extend([
-                "grafik_ppr:view",
-                "zamer_kp:view",
-                "spravochnik:view",
-                "tabel:view",
-                "edu:view",
-                "alsn:view",
-                "otpusk:view",
-                "equipment:view",
-            ])
     
     try:
         with sqlite3.connect(DB_FILE) as conn:
@@ -596,15 +574,17 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     hide_otpusk = posted_or_existing_hide("hide_otpusk")
     hide_equipment = posted_or_existing_hide("hide_equipment")
 
-    modules = []
-    if module_grafik_ppr != "none": modules.append(f"grafik_ppr:{module_grafik_ppr}")
-    if module_zamer_kp != "none": modules.append(f"zamer_kp:{module_zamer_kp}")
-    if module_spravochnik != "none": modules.append(f"spravochnik:{module_spravochnik}")
-    if module_tabel != "none": modules.append(f"tabel:{module_tabel}")
-    if module_edu != "none": modules.append(f"edu:{module_edu}")
-    if module_alsn != "none": modules.append(f"alsn:{module_alsn}")
-    if module_otpusk != "none": modules.append(f"otpusk:{module_otpusk}")
-    if module_equipment != "none": modules.append(f"equipment:{module_equipment}")
+    # Явно сохраняем выбранные права для всех модулей, включая значение none (нет доступа)
+    modules = [
+        f"grafik_ppr:{module_grafik_ppr}",
+        f"zamer_kp:{module_zamer_kp}",
+        f"spravochnik:{module_spravochnik}",
+        f"tabel:{module_tabel}",
+        f"edu:{module_edu}",
+        f"alsn:{module_alsn}",
+        f"otpusk:{module_otpusk}",
+        f"equipment:{module_equipment}",
+    ]
     
     if hide_grafik_ppr: modules.append("hide_grafik_ppr:yes")
     if hide_zamer_kp: modules.append("hide_zamer_kp:yes")
@@ -615,7 +595,6 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
     if hide_otpusk: modules.append("hide_otpusk:yes")
     if hide_equipment: modules.append("hide_equipment:yes")
     
-    mod_tokens = [m for m in modules if not m.startswith("hide_")]
     if role == "admin":
         modules = [
             "grafik_ppr:edit",
@@ -631,30 +610,6 @@ async def update_user(request: Request, id: int = Form(...), full_name: str = Fo
         for m in form:
             if m.startswith("hide_") and form.get(m) == "yes":
                 modules.append(f"{m}:yes")
-    elif not mod_tokens:
-        # Если модули не были выбраны вручную, назначаем права по глобальной роли
-        if role in ("edit", "editor"):
-            modules.extend([
-                "grafik_ppr:edit",
-                "zamer_kp:edit",
-                "spravochnik:edit",
-                "tabel:edit",
-                "edu:edit",
-                "alsn:edit",
-                "otpusk:edit",
-                "equipment:edit",
-            ])
-        elif role in ("view", "viewer"):
-            modules.extend([
-                "grafik_ppr:view",
-                "zamer_kp:view",
-                "spravochnik:view",
-                "tabel:view",
-                "edu:view",
-                "alsn:view",
-                "otpusk:view",
-                "equipment:view",
-            ])
     
     try:
         with sqlite3.connect(DB_FILE) as conn:
