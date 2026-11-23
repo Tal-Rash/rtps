@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 import datetime as dt
+import re
 try:
     from .constants import (
         MONTHS_RU,
@@ -621,16 +622,30 @@ def build_report_preview(month_name: str, data: dict, saved_notes: dict[str, str
 
 
 def format_fio_initials(full_name: str) -> str:
-    """Форматирует ФИО в виде Фамилия И. О. Для анонимизированных меток (Работник №1) сохраняет исходный вид."""
+    # Форматирует ФИО в виде Фамилия И. О. Для анонимизированных меток сохраняет исходный вид
     text = s(full_name).strip()
-    if text.startswith("Работник") or text.startswith("Сотрудник") or text.startswith("ID_"):
+    if not text:
+        return ""
+    if text.startswith("Работник") or text.startswith("Сотрудник") or text.startswith("ID_") or text.isdigit():
         return text
+    # Проверка формата Фамилия И. О. или соединенных инициалов (Фамилия И.О.)
+    m = re.match(r"^(\S+)\s+([А-ЯЁA-Z])\.?\s*([А-ЯЁA-Z])\.?$", text, re.IGNORECASE)
+    if m:
+        return f"{m.group(1)} {m.group(2).upper()}. {m.group(3).upper()}."
+    m_single = re.match(r"^(\S+)\s+([А-ЯЁA-Z])\.?$", text, re.IGNORECASE)
+    if m_single:
+        return f"{m_single.group(1)} {m_single.group(2).upper()}."
     parts = text.split()
     if len(parts) >= 3:
-        return f"{parts[0]} {parts[1][0]}. {parts[2][0]}."
+        return f"{parts[0]} {parts[1][0].upper()}. {parts[2][0].upper()}."
     if len(parts) == 2:
         if parts[1].startswith("№") or parts[1].isdigit():
             return text
-        return f"{parts[0]} {parts[1][0]}."
+        letters = [ch.upper() for ch in parts[1] if ch.isalpha()]
+        if len(letters) >= 2:
+            return f"{parts[0]} {letters[0]}. {letters[1]}."
+        elif len(letters) == 1:
+            return f"{parts[0]} {letters[0]}."
+        return f"{parts[0]} {parts[1][0].upper()}."
     return text
 

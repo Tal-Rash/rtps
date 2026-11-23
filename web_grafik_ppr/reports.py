@@ -357,10 +357,10 @@ def build_tu28_workbook(year: int, month_name: str, row_idx: int, staff_list: li
         if idx >= len(components):
             break
         raw_name = s(name).strip()
-        # Подставляем реальные ФИО сотрудников при наличии справочника
+        # Подставляем реальные ФИО сотрудников при наличии справочника (в формате Фамилия И. О.)
         emp = private_map.get(raw_name)
         if emp and emp.get("name"):
-            resolved_name = emp["name"]
+            resolved_name = format_fio_initials(emp["name"])
         elif emp and emp.get("full_name"):
             resolved_name = format_fio_initials(emp["full_name"])
         else:

@@ -47,6 +47,7 @@ try:
     from .calculations import (
         calculate_report_data_from_state,
         build_report_preview,
+        format_fio_initials,
     )
     from .storage import (
         ensure_database,
@@ -84,6 +85,7 @@ except (ImportError, ValueError):
     from calculations import (
         calculate_report_data_from_state,
         build_report_preview,
+        format_fio_initials,
     )
     from storage import (
         ensure_database,
@@ -489,6 +491,8 @@ async def export_tu28(request: Request):
     staff_list = payload.get("staff") or []
     if not isinstance(staff_list, list):
         staff_list = []
+    # Приводим ФИО ответственных за ремонт к формату Фамилия и инициалы (Фамилия И. О.)
+    staff_list = [format_fio_initials(x) for x in staff_list]
     extra_repairs = payload.get("extra_repairs") or []
     if not isinstance(extra_repairs, list):
         extra_repairs = []

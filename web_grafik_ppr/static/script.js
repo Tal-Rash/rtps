@@ -2479,18 +2479,54 @@ function renderTu28(){
     </div>
   `;
 }
-// Возвращает отображаемое имя сотрудника с учетом локального словаря деанонимизации
+// Форматирует ФИО в виде Фамилия И. О. Для анонимизированных меток сохраняет исходный вид
+function formatFioInitials(fullName) {
+  if (!fullName) return '';
+  const text = String(fullName).trim();
+  if (!text) return '';
+  if (text.startsWith('Работник') || text.startsWith('Сотрудник') || text.startsWith('ID_') || /^\d+$/.test(text)) {
+    return text;
+  }
+  // Проверка формата Фамилия И. О., Фамилия И.О., Фамилия И.О
+  const m = text.match(/^(\S+)\s+([А-ЯЁA-Z])\.?\s*([А-ЯЁA-Z])\.?$/i);
+  if (m) {
+    return `${m[1]} ${m[2].toUpperCase()}. ${m[3].toUpperCase()}.`;
+  }
+  const mSingle = text.match(/^(\S+)\s+([А-ЯЁA-Z])\.?$/i);
+  if (mSingle) {
+    return `${mSingle[1]} ${mSingle[2].toUpperCase()}.`;
+  }
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length >= 3) {
+    return `${parts[0]} ${parts[1][0].toUpperCase()}. ${parts[2][0].toUpperCase()}.`;
+  }
+  if (parts.length === 2) {
+    if (parts[1].startsWith('№') || /^\d+$/.test(parts[1])) {
+      return text;
+    }
+    const letters = (parts[1].match(/[А-ЯЁA-Z]/gi) || []).map((ch) => ch.toUpperCase());
+    if (letters.length >= 2) {
+      return `${parts[0]} ${letters[0]}. ${letters[1]}.`;
+    } else if (letters.length === 1) {
+      return `${parts[0]} ${letters[0]}.`;
+    }
+    return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
+  }
+  return text;
+}
+
+// Возвращает отображаемое имя сотрудника с учетом локального словаря деанонимизации и формата (Фамилия И. О.)
 function getEmpDisplayName(name) {
   if (!name) return '';
   const s = String(name).trim();
   if (!s) return '';
   const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
-  if (!pairs || !pairs.length) return s;
+  if (!pairs || !pairs.length) return formatFioInitials(s);
 
   // 1. Точное прямое совпадение по табельному номеру, ID или метке Работник №X
   for (let i = 0; i < pairs.length; i++) {
     if (pairs[i].from === s && pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
-      return pairs[i].to;
+      return formatFioInitials(pairs[i].to);
     }
   }
 
@@ -2508,7 +2544,7 @@ function getEmpDisplayName(name) {
   if (/^\d+$/.test(val) || val.startsWith('ID_') || val.startsWith('Работник №')) {
     for (let i = 0; i < pairs.length; i++) {
       if (pairs[i].from === val && pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
-        return pairs[i].to;
+        return formatFioInitials(pairs[i].to);
       }
     }
     const clean = val.replace(/ID_/g, '').replace(/Работник\s*№?\s*/g, '').trim();
@@ -2517,13 +2553,13 @@ function getEmpDisplayName(name) {
       const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
       for (let i = 0; i < pairs.length; i++) {
         if ((pairs[i].from === ('Работник №' + num) || pairs[i].from === ('ID_' + pNum)) && pairs[i].to && !/^\d+$/.test(pairs[i].to)) {
-          return pairs[i].to;
+          return formatFioInitials(pairs[i].to);
         }
       }
     }
   }
 
-  return val;
+  return formatFioInitials(val);
 }
 
 function renderTu28Staff(){
@@ -2665,7 +2701,7 @@ function bindTu28StaffSelects(){
   selects.forEach((sel) => {
     sel.onchange = (e) => {
       const idx = Number(e.target.dataset.index);
-      const val = e.target.value;
+      const val = formatFioInitials(e.target.value);
       if (!ui.tu28Staff[ui.tu28RowIndex]) ui.tu28Staff[ui.tu28RowIndex] = [];
       ui.tu28Staff[ui.tu28RowIndex][idx] = val;
 
@@ -2827,7 +2863,8 @@ function downloadTu28(){
   const row = candidates.find((x) => x.rowIndex === ui.tu28RowIndex) || candidates[0];
   if (!row) { alert('В месяце нет ремонтов для ТУ-28'); return; }
   const rowObj = appState.months[ui.tu28MonthIndex].fact[row.rowIndex] || {};
-  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: ui.tu28Staff[row.rowIndex] || [], extra_repairs: rowObj.tu28_extra || [] };
+  const staffInitials = (ui.tu28Staff[row.rowIndex] || []).map((x) => formatFioInitials(getEmpDisplayName(x)) || x);
+  const payload = { month: month.name, year: appState.year, row: row.rowIndex, staff: staffInitials, extra_repairs: rowObj.tu28_extra || [] };
 
   // Блокируем кнопку на время формирования файла для исключения повторных нажатий
   const btnOk = document.querySelector('#tu28StaffModal .section-modal-actions button.primary');
@@ -2857,7 +2894,15 @@ function downloadTu28(){
     }
     const arrayBuffer = await res.arrayBuffer();
     let finalBuffer = arrayBuffer;
-    const pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+    let pairs = typeof getEmpReplacementPairs === 'function' ? getEmpReplacementPairs() : [];
+    // Для ТУ-28 приводим подстановки к формату Фамилия и инициалы
+    if (pairs.length > 0) {
+      pairs = pairs.map((p) => {
+        if (p.from && p.from.startsWith('Должность')) return p;
+        return { from: p.from, to: formatFioInitials(p.to) };
+      });
+      pairs.sort((a, b) => b.from.length - a.from.length);
+    }
     if (pairs.length > 0 && window.JSZip) {
       try {
         const zip = await JSZip.loadAsync(arrayBuffer);
@@ -3409,20 +3454,21 @@ function getEmpReplacementPairs() {
             fullF = (shortF && !/^\d+$/.test(shortF)) ? shortF : '';
           }
           const bestFio = shortF || fullF;
+          const initFio = formatFioInitials(bestFio);
 
           if (bestFio && !/^\d+$/.test(bestFio)) {
-            addFieldVariants("Работник", num, bestFio);
-            addFieldVariants("СотрудникПолн", num, fullF || bestFio);
-            addFieldVariants("Сотрудник", num, fullF || bestFio);
+            addFieldVariants("Работник", num, initFio);
+            addFieldVariants("СотрудникПолн", num, fullF || initFio);
+            addFieldVariants("Сотрудник", num, fullF || initFio);
             // Если задан табельный номер сотрудника, связываем его с ФИО
             if (tab) {
-              flatMap[tab] = bestFio;
+              flatMap[tab] = initFio;
             }
             // Связываем анонимные ID с реальным ФИО
             const pNum = (num < 10 ? '00' : (num < 100 ? '0' : '')) + num;
-            flatMap["ID_" + pNum] = bestFio;
-            flatMap["ID_" + num] = bestFio;
-            if (rec.id) flatMap[String(rec.id)] = bestFio;
+            flatMap["ID_" + pNum] = initFio;
+            flatMap["ID_" + num] = initFio;
+            if (rec.id) flatMap[String(rec.id)] = initFio;
           }
           if (pos) addFieldVariants("Должность", num, pos);
         }
@@ -3449,8 +3495,9 @@ function getEmpReplacementPairs() {
                   }
                 }
                 if (!/^\d+$/.test(valStr)) {
-                  addFieldVariants("Работник", num, valStr);
-                  flatMap[k] = valStr;
+                  const initStr = formatFioInitials(valStr);
+                  addFieldVariants("Работник", num, initStr);
+                  flatMap[k] = initStr;
                 }
               } else if (k.startsWith("СотрудникПолн")) {
                 if (!/^\d+$/.test(valStr)) {
@@ -3471,11 +3518,12 @@ function getEmpReplacementPairs() {
                 if (/^\d+$/.test(valStr)) {
                   const altFio = String(map["СотрудникПолн №" + num] || map["Сотрудник №" + num] || map["Работник №" + num] || '').trim();
                   if (altFio && !/^\d+$/.test(altFio)) {
-                    flatMap[valStr] = altFio;
-                    flatMap[k] = altFio;
+                    const initStr = formatFioInitials(altFio);
+                    flatMap[valStr] = initStr;
+                    flatMap[k] = initStr;
                   }
                 } else {
-                  flatMap[k] = valStr;
+                  flatMap[k] = formatFioInitials(valStr);
                 }
               } else {
                 flatMap[k] = valStr;
