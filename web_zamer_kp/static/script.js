@@ -3073,7 +3073,11 @@ document.addEventListener('mousedown', (event) => {
   if (typeof clearSelection === 'function') clearSelection();
 });
 
-// Schedule fetch
+// Кэшированные данные для графика замеров
+let lastScheduleGrafikState = null;
+let lastScheduleArchiveRows = null;
+
+// Загрузка графика замеров с сервера
 async function loadSchedule() {
   const statusEl = document.getElementById('scheduleStatus');
   const tbody = document.getElementById('scheduleBody');
@@ -3086,13 +3090,23 @@ async function loadSchedule() {
     ]);
     if (!resGrafik.ok) throw new Error('Ошибка загрузки графика ППР');
     if (!resArchive.ok) throw new Error('Ошибка загрузки архива замеров');
-    const grafikState = await resGrafik.json();
-    const archiveState = await resArchive.json();
-    renderSchedule(grafikState, archiveState.rows || []);
+    lastScheduleGrafikState = await resGrafik.json();
+    const archiveJson = await resArchive.json();
+    lastScheduleArchiveRows = archiveJson.rows || [];
+    renderSchedule(lastScheduleGrafikState, lastScheduleArchiveRows);
     if (statusEl) statusEl.textContent = '';
   } catch (err) {
     if (statusEl) statusEl.textContent = err.message;
     console.error(err);
+  }
+}
+
+// Применение фильтра по типу локомотива на вкладке графика замеров
+function applyScheduleFilter() {
+  if (lastScheduleGrafikState && lastScheduleArchiveRows) {
+    renderSchedule(lastScheduleGrafikState, lastScheduleArchiveRows);
+  } else {
+    loadSchedule();
   }
 }
 
@@ -3236,8 +3250,18 @@ function renderSchedule(grafikState, archiveRows) {
     });
   });
 
+  // Фильтрация локомотивов по выбранному типу (все / тепловозы ТЭМ / электровозы ПЭ-2М)
+  const filterChoice = (document.getElementById('scheduleEmailFilter')?.value || 'all').toLowerCase();
   const rows = [];
-  bestByUnit.forEach((data, key) => rows.push(data));
+  bestByUnit.forEach((data, key) => {
+    const ser = String(data.series || '').toUpperCase();
+    if (filterChoice === 'tem') {
+      if (!ser.includes('ТЭМ') && !ser.includes('TEM')) return;
+    } else if (filterChoice === 'pe2m') {
+      if (!ser.includes('ПЭ') && !ser.includes('PE')) return;
+    }
+    rows.push(data);
+  });
   
   const choices = LOCOMOTIVE_CHOICES || state?.locomotives || [];
   const locoOrderMap = new Map();
@@ -3253,6 +3277,11 @@ function renderSchedule(grafikState, archiveRows) {
     const idxB = locoOrderMap.has(b.number) ? locoOrderMap.get(b.number) : 9999;
     return idxA - idxB;
   });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = "<tr><td colspan='5' class='cell center' style='padding:24px; color:#6c757d;'>Нет локомотивов по выбранному фильтру</td></tr>";
+    return;
+  }
 
   tbody.innerHTML = rows.map(r => {
     const limitStr = r.limitDate ? r.limitDate.toLocaleDateString("ru-RU") : "-";

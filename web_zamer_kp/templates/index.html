@@ -317,7 +317,7 @@
     <div id="panelSchedule" class="panel">
       <div class="wear-controls" style="margin-top:0; display:flex; align-items:center; gap:8px;">
         <button id="scheduleRefreshBtn" type="button" onclick="loadSchedule()">Обновить график</button>
-        <select id="scheduleEmailFilter" style="height:38px; padding:0 12px; border:1px solid #ced4da; border-radius:10px; font-size:14px; background:#fff; cursor:pointer;">
+        <select id="scheduleEmailFilter" style="height:38px; padding:0 12px; border:1px solid #ced4da; border-radius:10px; font-size:14px; background:#fff; cursor:pointer;" onchange="applyScheduleFilter()" title="Фильтр локомотивов в графике">
           <option value="all">Все локомотивы</option>
           <option value="tem">Тепловозы ТЭМ</option>
           <option value="pe2m">Электровозы ПЭ-2М</option>
