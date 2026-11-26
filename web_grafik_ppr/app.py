@@ -415,6 +415,9 @@ def preview_report(request: Request, year: int = None, month: str = ""):
 
 @app.post("/api/tu28_extra")
 async def post_tu28_extra(request: Request):
+    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    if not auth_ok:
+        return json_response({"error": "Unauthorized"}, status_code=401)
     try:
         payload = await request.json()
     except Exception:
@@ -497,7 +500,9 @@ async def export_tu28(request: Request):
     if not isinstance(extra_repairs, list):
         extra_repairs = []
 
-    if staff_list:
+    role = get_mod_role(session, "grafik_ppr")
+    can_edit = not AUTH_ENABLED or (role in ("edit", "editor", "admin"))
+    if staff_list and can_edit:
         def save_staff():
             # Сохранение ответственных за ремонт в базе данных
             with DB_LOCK, conn() as db:

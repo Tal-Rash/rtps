@@ -23,8 +23,10 @@
                 </div>
                 <div class="actions">
                     <a class="home-link" href="{{MAIN_SITE_URL}}/" onclick="return handleHomeClick(event)">На главную</a>
+                    {% if CAN_EDIT == "true" %}
                     <button id="undoBtn" type="button" title="Отменить последнее действие (Ctrl+Z)" disabled>↺</button>
                     <button id="redoBtn" type="button" title="Повторить отменённое действие (Ctrl+Y)" disabled>↻</button>
+                    {% endif %}
                     <div class="year-selector">
                         <label for="yearSelect"><strong>Год:</strong></label>
                         <select id="yearSelect" class="year-select">
@@ -37,7 +39,9 @@
                             <option value="2030">2030</option>
                         </select>
                     </div>
+                    {% if CAN_EDIT == "true" %}
                     <button id="saveBtn" type="button">Сохранить</button>
+                    {% endif %}
                 </div>
             </div>
 
@@ -52,7 +56,9 @@
                     <button id="historyMatrixBtn" class="tab tab-btn" type="button">История по годам</button>
                 </div>
                 <div id="scheduleActions" class="tabs-actions">
+                    {% if CAN_EDIT == "true" %}
                     <button id="clearSelectedBtn" type="button" title="Очистить выделенные ячейки (Delete / Backspace)" disabled>Очистить</button>
+                    {% endif %}
                     <!-- Выпадающий список фильтров -->
                     <div class="filters-menu" id="filtersMenuWrap">
                         <button id="filtersMenuBtn" type="button" class="dropdown-toggle" onclick="toggleFiltersMenu(event)" title="Фильтры отображения графика">Фильтры ▾</button>
@@ -117,15 +123,19 @@
         <div id="panelArchive" class="panel" style="display: none;">
             <div class="archive-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+                    {% if CAN_EDIT == "true" %}
                     <button id="addArchiveRowBtn" type="button">Добавить запись</button>
                     <button id="deleteArchiveRowBtn" type="button" style="color:#b00020; border-color:#fca5a5;">Удалить выбранную</button>
                     <button id="saveArchiveBtn" class="primary" type="button">Сохранить архив</button>
+                    {% endif %}
                 </div>
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
                     <a href="{{APP_PREFIX}}/api/vacations/archive/template" download="vacations_archive_template.xlsx" class="home-link" style="text-decoration:none;">Шаблон Excel</a>
                     <a href="#" onclick="downloadAndUnAnonymizeExcel('{{APP_PREFIX}}/api/vacations/archive/export', 'vacations_archive.xlsx'); return false;" class="home-link" style="text-decoration:none;">Экспорт в Excel</a>
+                    {% if CAN_EDIT == "true" %}
                     <button id="importArchiveBtn" type="button">Импорт из Excel</button>
                     <input type="file" id="importArchiveFileInput" accept=".xlsx,.xls" style="display: none;">
+                    {% endif %}
                 </div>
             </div>
             <div class="table-shell" style="margin-top: 10px;">
@@ -177,8 +187,10 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="cancelHolidaysBtn" type="button">Отмена</button>
+                <button id="cancelHolidaysBtn" type="button">Закрыть</button>
+                {% if CAN_EDIT == "true" %}
                 <button id="saveHolidaysBtn" class="primary" type="button">Сохранить праздники</button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -191,10 +203,12 @@
                 <button id="closeVersionsModal" class="modal-close-btn">&times;</button>
             </div>
             <div class="modal-body">
+                {% if CAN_EDIT == "true" %}
                 <div style="display:flex; gap:10px; margin-bottom: 16px; flex-wrap: wrap;">
                     <input type="text" id="newVersionNameInput" class="holiday-input" placeholder="Название новой версии (например: Вариант 2 или Проект №1)" style="flex:1; min-width: 260px;">
                     <button id="createVersionBtn" class="primary" type="button">Сохранить текущую версию</button>
                 </div>
+                {% endif %}
                 <div class="holidays-grid-container" style="max-height: 360px; overflow-y: auto;">
                     <table class="holidays-table">
                         <thead>

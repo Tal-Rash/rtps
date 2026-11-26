@@ -2607,7 +2607,7 @@ function renderTu28Staff(){
         <td>${idx + 1}</td>
         <td>${esc(label)}</td>
         <td>
-          <select data-index="${idx}" class="tu28-staff-select">
+          <select data-index="${idx}" class="tu28-staff-select" ${CAN_EDIT ? '' : 'disabled'}>
             ${optionHtml(current)}
           </select>
           ${vacation ? `<div class="tu28-vacation-note">Отпуск ${esc(vacation.label || '')}</div>` : ''}
@@ -2700,6 +2700,7 @@ function bindTu28StaffSelects(){
   const selects = document.querySelectorAll('.tu28-staff-select');
   selects.forEach((sel) => {
     sel.onchange = (e) => {
+      if (!CAN_EDIT) return;
       const idx = Number(e.target.dataset.index);
       const val = formatFioInitials(e.target.value);
       if (!ui.tu28Staff[ui.tu28RowIndex]) ui.tu28Staff[ui.tu28RowIndex] = [];

@@ -52,6 +52,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleBadges = document.getElementById('toggleBadges');
     const toggleCarriedOverFact = document.getElementById('toggleCarriedOverFact');
 
+    // Если у пользователя роль "Зритель", скрываем кнопки управления и редактирования
+    if (!CAN_EDIT) {
+        if (saveBtn) saveBtn.style.display = 'none';
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        const clearSelectedBtn = document.getElementById('clearSelectedBtn');
+        if (undoBtn) undoBtn.style.display = 'none';
+        if (redoBtn) redoBtn.style.display = 'none';
+        if (clearSelectedBtn) clearSelectedBtn.style.display = 'none';
+    }
+
     // Modal elements
     const holidaysBtn = document.getElementById('holidaysBtn');
     const holidaysModal = document.getElementById('holidaysModal');
@@ -419,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const holidaysBtn = document.getElementById('holidaysBtn');
                 if (holidaysBtn) holidaysBtn.style.display = '';
                 const saveBtn = document.getElementById('saveBtn');
-                if (saveBtn) saveBtn.style.display = '';
+                if (saveBtn) saveBtn.style.display = CAN_EDIT ? '' : 'none';
 
                 const holidaysModalTitle = document.getElementById('holidaysModalTitle');
                 if (holidaysModalTitle) {
@@ -663,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearSelectedCells() {
+        if (!CAN_EDIT) return;
         let inputsToClear = Array.from(selectedInputs).filter(inp => inp && !inp.readOnly && inp.isConnected);
         
         if (inputsToClear.length === 0 && document.activeElement && document.activeElement.classList.contains('day-input') && !document.activeElement.readOnly) {
@@ -730,6 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (tableBody) {
         tableBody.addEventListener('mousedown', (e) => {
+            if (!CAN_EDIT) return;
             if (!e.target.classList.contains('day-input') || e.target.classList.contains('allowed-days-input')) {
                 return;
             }
@@ -768,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', (e) => {
+        if (!CAN_EDIT) return;
         if (e.key === 'Delete' || e.key === 'Backspace') {
             const isEditingInput = document.activeElement && document.activeElement.classList.contains('day-input');
             if (selectedInputs.size > 1 || (selectedInputs.size === 1 && isEditingInput)) {
@@ -786,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Обработка вставки (Paste) из буфера обмена (даты, диапазоны дат, таблицы Excel)
     function handleVacationTablePaste(targetInput, text) {
-        if (!targetInput || !text) return;
+        if (!CAN_EDIT || !targetInput || !text) return;
         const tr = targetInput.closest('tr[data-emp-id]');
         if (!tr) return;
 
@@ -964,7 +978,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><strong>${item.name}</strong></td>
                 <td>${totalD} дн.</td>
                 <td>
-                    <input type="text" class="holiday-input" data-index="${index}" placeholder="1, 9 или 1-8" value="${datesStr}">
+                    <input type="text" class="holiday-input" data-index="${index}" placeholder="1, 9 или 1-8" value="${datesStr}" ${CAN_EDIT ? '' : 'readonly'}>
                 </td>
                 <td class="holiday-count-cell" data-index="${index}">${hCount} дн.</td>
                 <td class="vacation-days-cell" data-index="${index}" style="font-weight:600; color: var(--accent-color);">${vacationDays} дн.</td>
@@ -989,6 +1003,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
+        if (saveHolidaysBtn) {
+            saveHolidaysBtn.style.display = CAN_EDIT ? '' : 'none';
+        }
+
         holidaysModal.classList.add('active');
     }
 
@@ -1002,6 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (saveHolidaysBtn) {
         saveHolidaysBtn.addEventListener('click', () => {
+            if (!CAN_EDIT) return;
             const inputs = holidaysTableBody.querySelectorAll('.holiday-input');
             inputs.forEach(input => {
                 const idx = parseInt(input.dataset.index);
@@ -1048,6 +1067,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!versionsModal) return;
         if (versionModalYear) versionModalYear.textContent = currentYear;
         if (newVersionNameInput) newVersionNameInput.value = '';
+        const versionCreateWrap = newVersionNameInput ? newVersionNameInput.closest('div') : null;
+        if (versionCreateWrap) {
+            versionCreateWrap.style.display = CAN_EDIT ? 'flex' : 'none';
+        }
         loadVersionsList();
         versionsModal.classList.add('active');
     }
@@ -1096,10 +1119,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         </td>
                         <td style="font-size: 12px; color: ${isActive ? '#15803d' : 'var(--muted)'}; font-weight: ${isActive ? '600' : 'normal'};">${escapeHtml(ver.created_at)}</td>
                         <td style="text-align: center;">
+                            ${CAN_EDIT ? `
                             <div style="display: flex; gap: 6px; justify-content: center;">
                                 <button type="button" class="btn-load-version ${isActive ? 'is-current-active' : ''}" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; ${isActive ? 'background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 600;' : 'background: #eaf1ff;'}">${isActive ? 'Активна' : 'Загрузить'}</button>
                                 <button type="button" class="btn-delete-version" data-id="${ver.id}" data-name="${escapeHtml(ver.version_name)}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">Удалить</button>
-                            </div>
+                            </div>` : (isActive ? '<span style="color:#15803d; font-weight:600; font-size:12px;">Активна</span>' : '<span style="color:var(--muted); font-size:12px;">—</span>')}
                         </td>
                     `;
                     versionsTableBody.appendChild(tr);
@@ -1453,7 +1477,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="employee-pos">${empPos}</div>
                     ${isQuitting ? `
                         <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; color: #64748b; cursor: pointer; user-select: none; white-space: nowrap;" title="Исключить сотрудника из расчета графика (приглушить строку)">
-                            <input type="checkbox" class="exclude-row-checkbox" style="width: 13px; height: 13px; cursor: pointer;">
+                            <input type="checkbox" class="exclude-row-checkbox" style="width: 13px; height: 13px; cursor: pointer;" ${CAN_EDIT ? '' : 'disabled'}>
                             <span>исключить</span>
                         </label>
                     ` : ''}
@@ -1491,8 +1515,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 td.innerHTML = `
                     <div class="cell-input-wrapper">
                         <div class="inputs-row">
-                            <input type="text" class="day-input c-input" data-month="${m}">
-                            <input type="text" class="day-input po-input" data-month="${m}">
+                            <input type="text" class="day-input c-input" data-month="${m}" ${CAN_EDIT ? '' : 'readonly'}>
+                            <input type="text" class="day-input po-input" data-month="${m}" ${CAN_EDIT ? '' : 'readonly'}>
                         </div>
                         <div class="day-result"></div>
                     </div>
@@ -1557,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const inputs = tr.querySelectorAll('.day-input, .allowed-days-input');
             inputs.forEach(input => {
                 input.addEventListener('focus', () => {
-                    pushUndoState();
+                    if (CAN_EDIT) pushUndoState();
                     setTimeout(() => {
                         if (document.activeElement === input) {
                             input.select();
@@ -1593,6 +1617,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const startM = parseInt(cInput.dataset.month, 10);
 
                 const triggerAutoCalc = (shouldFormat = false) => {
+                    if (!CAN_EDIT) return;
                     const val = cInput.value.trim();
                     if (val === '') {
                         clearAssociatedVacationEnd(tr, startM);
@@ -1632,6 +1657,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const m = parseInt(poInput.dataset.month, 10);
 
                 const triggerPoUpdate = (shouldFormat = false) => {
+                    if (!CAN_EDIT) return;
                     const val = poInput.value.trim();
                     if (val === '') {
                         calculateRow(tr);
@@ -2563,7 +2589,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (scheduleActions) scheduleActions.style.display = '';
             if (badgeToggleLabel) badgeToggleLabel.style.display = '';
             if (holidaysBtn) holidaysBtn.style.display = '';
-            if (saveBtn) saveBtn.style.display = '';
+            if (saveBtn) saveBtn.style.display = CAN_EDIT ? '' : 'none';
 
             // При переключении на годовой график перезагружаем данные с сервера
             if (typeof loadYearData === 'function' && typeof currentYear !== 'undefined') {
