@@ -317,74 +317,45 @@ function renderTable() {
   });
   ebody.innerHTML = eHTML;
 
-  // Отрисовка вкладки «Отпуска» (только просмотр из Графика отпусков)
+  // Render Vacations
   const vbody = document.getElementById("vacationsBody");
-  const curYear = parseInt(appState.year);
   let vHTML = "";
   (appState.employees || []).forEach((emp, r) => {
     const tabNum = emp.tab_num || `empty_${r}`;
     const empName = emp.name || "";
     const trClass = emp.exclude_date ? "excluded" : "";
-    const vacAllowed = emp.vacation_days || 28;
+    vHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
+    vHTML += `<td class="col-idx" style="cursor: grab;"><div class="rownum"><span>${r + 1}</span></div></td>`;
+    vHTML += `<td style="text-align: left;">${escapeHtml(emp.tab_num || '')}</td>`;
+    vHTML += `<td style="text-align: left;">${escapeHtml(empName)}</td>`;
+
+    // Приоритет отдаем актуальным периодам из Графика отпусков; если там пусто — берем ручные записи табеля
+    const manualVac = (appState.vacations && appState.vacations[tabNum]) || {};
     const schedVacs = (appState.schedule_vacations && (appState.schedule_vacations[tabNum] || appState.schedule_vacations[empName])) || [];
-
-    // Распределяем отпуска по строкам (основная + доп. подстроки при пересечении месяцев)
-    const empRows = [{ c: {}, po: {} }];
-    schedVacs.forEach(vac => {
-      if (!vac || !vac.start || !vac.end) return;
-      const sDate = parseVacationDate(vac.start, curYear);
-      const eDate = parseVacationDate(vac.end, curYear);
-      if (!sDate || !eDate || eDate < sDate) return;
-
-      const sY = sDate.getFullYear();
-      const sM = sDate.getMonth();
-      const eY = eDate.getFullYear();
-      const eM = eDate.getMonth();
-
-      if (sY !== curYear && eY !== curYear) return;
-
-      const startM = sY === curYear ? sM : 0;
-      const endM = eY === curYear ? eM : (eY === curYear + 1 && eM === 0 ? 12 : 11);
-      if (startM < 0 || startM > 12 || endM < 0 || endM > 12) return;
-
-      const sLabel = sY === curYear ? `${String(sDate.getDate()).padStart(2, '0')}.${String(sM + 1).padStart(2, '0')}` : "";
-      const eLabel = `${String(eDate.getDate()).padStart(2, '0')}.${String(eM + 1).padStart(2, '0')}`;
-
-      let targetRow = empRows.find(rowObj => {
-        for (let m = startM; m <= endM; m++) {
-          if (rowObj.c[m] || rowObj.po[m]) return false;
-        }
-        return true;
+    const yearStr = String(appState.year);
+    const currentYearVacs = schedVacs.filter(v => v && v.start && (String(v.start).startsWith(yearStr) || String(v.end).startsWith(yearStr)));
+    const hasSched = currentYearVacs.length > 0;
+    const schedMapped = {};
+    if (hasSched) {
+      const baseCols = [[1, 2, 3], [5, 6, 7], [9, 10, 11]];
+      currentYearVacs.slice(0, 3).forEach((v, idx) => {
+        const [cStart, cEnd, cDays] = baseCols[idx];
+        schedMapped[cStart] = formatIsoToRu(v.start);
+        schedMapped[cEnd] = formatIsoToRu(v.end);
+        schedMapped[cDays] = v.days ? String(v.days) : "";
       });
-      if (!targetRow) {
-        targetRow = { c: {}, po: {} };
-        empRows.push(targetRow);
-      }
-      if (sLabel) targetRow.c[startM] = sLabel;
-      targetRow.po[endM] = eLabel;
-    });
-
-    empRows.forEach((rowObj, subIdx) => {
-      const isSub = subIdx > 0;
-      vHTML += `<tr class="${trClass} ${isSub ? 'vac-subrow' : ''}">`;
-      if (!isSub) {
-        vHTML += `<td class="col-idx">${r + 1}</td>`;
-        vHTML += `<td class="vac-emp-cell">${escapeHtml(empName)}</td>`;
-        vHTML += `<td>${vacAllowed}</td>`;
+    }
+    
+    const cols = [1, 2, 3, 'sep', 5, 6, 7, 'sep', 9, 10, 11];
+    cols.forEach(c => {
+      if (c === 'sep') {
+        vHTML += `<td style="background:#f0f0f0;"></td>`; // separator
       } else {
-        vHTML += `<td class="col-idx"></td>`;
-        vHTML += `<td class="vac-emp-cell">↳ доп. период</td>`;
-        vHTML += `<td>—</td>`;
+        const val = hasSched ? (schedMapped[c] || "") : (manualVac[c] || "");
+        vHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited('${tabNum}', ${c}, this)">${escapeHtml(val)}</div></td>`;
       }
-
-      for (let m = 0; m < 13; m++) {
-        const cVal = rowObj.c[m] || "";
-        const poVal = rowObj.po[m] || "";
-        vHTML += `<td class="${cVal ? 'vac-date-filled' : ''}">${escapeHtml(cVal)}</td>`;
-        vHTML += `<td class="${poVal ? 'vac-date-filled' : ''}">${escapeHtml(poVal)}</td>`;
-      }
-      vHTML += `</tr>`;
     });
+    vHTML += `</tr>`;
   });
   vbody.innerHTML = vHTML;
 

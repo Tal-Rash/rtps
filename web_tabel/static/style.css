@@ -1947,47 +1947,4 @@ html body .table-wrap table td.active-td .cell {
   caret-color: white !important;
 }
 
-/* Таблица просмотра графика отпусков внутри табеля (только чтение) */
-.vac-schedule-view th,
-.vac-schedule-view td {
-  text-align: center;
-  white-space: nowrap;
-  font-size: 12px;
-  padding: 5px 6px !important;
-  height: 30px;
-}
-
-.vac-schedule-view td.vac-emp-cell {
-  text-align: left;
-  font-weight: 500;
-  position: sticky;
-  left: 0;
-  background: #ffffff;
-  z-index: 2;
-}
-
-.vac-schedule-view thead tr:first-child th:nth-child(2) {
-  position: sticky;
-  left: 0;
-  z-index: 4;
-}
-
-.vac-schedule-view td.vac-date-filled {
-  background-color: #eff6ff;
-  color: #1e40af;
-  font-weight: 600;
-}
-
-.vac-schedule-view tr.vac-subrow {
-  background-color: #f8fafc;
-}
-
-.vac-schedule-view tr.vac-subrow td.vac-emp-cell {
-  color: #64748b;
-  font-style: italic;
-  font-weight: 400;
-  padding-left: 16px !important;
-  background-color: #f8fafc;
-}
-
 
