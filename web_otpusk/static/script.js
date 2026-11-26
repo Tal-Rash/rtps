@@ -2761,8 +2761,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             tr.addEventListener('click', () => {
+                // Переключаем выделение строки без перерисовки таблицы, чтобы не сбивать фокус и ввод в input
                 selectedArchiveIndex = index;
-                renderArchiveTable();
+                archiveTableBody.querySelectorAll('tr.selected-row').forEach(el => el.classList.remove('selected-row'));
+                tr.classList.add('selected-row');
             });
 
             tr.innerHTML = `
@@ -2781,13 +2783,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><input type="text" class="archive-input archive-note" value="${escapeHtml(row.note || '')}" placeholder="Примечание" ${disAttr}></td>
             `;
 
+            const yearInp = tr.querySelector('.archive-year');
             const startInp = tr.querySelector('.archive-start');
             const endInp = tr.querySelector('.archive-end');
             const daysInp = tr.querySelector('.archive-days');
             const nameInp = tr.querySelector('.archive-name');
             const tabInp = tr.querySelector('.archive-tab');
+            const noteInp = tr.querySelector('.archive-note');
 
             const calcDays = () => {
+                row.start_date = startInp.value;
+                row.end_date = endInp.value;
                 if (startInp.value && endInp.value) {
                     const s = new Date(startInp.value);
                     const e = new Date(endInp.value);
@@ -2800,11 +2806,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
+            yearInp.addEventListener('change', () => { row.y = parseInt(yearInp.value) || 2025; });
             startInp.addEventListener('change', calcDays);
             endInp.addEventListener('change', calcDays);
+            daysInp.addEventListener('change', () => { row.days = parseInt(daysInp.value) || 0; });
+            tabInp.addEventListener('input', () => { row.tab_num = tabInp.value.trim(); });
+            noteInp.addEventListener('input', () => { row.note = noteInp.value.trim(); });
 
             nameInp.addEventListener('change', (e) => {
                 const val = e.target.value;
+                row.name = val.trim();
                 const match = allData.find(x => x.name === val);
                 if (match && match.tab_num) {
                     tabInp.value = match.tab_num;
