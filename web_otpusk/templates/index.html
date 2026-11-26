@@ -121,6 +121,22 @@
 
         <!-- Panel 2: Archive -->
         <div id="panelArchive" class="panel" style="display: none;">
+            <!-- Строка фильтров архива -->
+            <div class="archive-filters" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:8px; padding:8px 10px; background:var(--surface,#f8fafc); border:1px solid var(--border,#e2e8f0); border-radius:8px;">
+                <label style="display:flex; align-items:center; gap:6px; font-size:0.88rem;">
+                    Год:
+                    <select id="archiveYearFilter" style="height:28px; padding:0 6px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.88rem;" onchange="applyArchiveFilters()">
+                        <option value="">Все</option>
+                    </select>
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-size:0.88rem;">
+                    Сотрудник:
+                    <input type="text" id="archiveNameFilter" placeholder="Поиск по ФИО…" oninput="applyArchiveFilters()"
+                        style="height:28px; padding:0 8px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.88rem; min-width:180px;">
+                </label>
+                <button type="button" onclick="clearArchiveFilters()" style="height:28px; padding:0 10px; font-size:0.85rem;">Сбросить</button>
+                <span id="archiveFilterCount" style="font-size:0.82rem; color:var(--muted,#64748b); margin-left:4px;"></span>
+            </div>
             <div class="archive-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
                     {% if CAN_EDIT == "true" %}

@@ -2814,7 +2814,82 @@ document.addEventListener('DOMContentLoaded', () => {
 
             archiveTableBody.appendChild(tr);
         });
+
+        // Обновляем список лет в фильтре и применяем текущий фильтр
+        populateArchiveYearFilter();
+        applyArchiveFilters();
     }
+
+    // ─── Фильтры архива ───────────────────────────────────────────────────────
+
+    /**
+     * Заполняет выпадающий список лет из текущих данных archiveData.
+     * Сохраняет ранее выбранное значение если оно ещё есть.
+     */
+    function populateArchiveYearFilter() {
+        const sel = document.getElementById('archiveYearFilter');
+        if (!sel) return;
+        const current = sel.value;
+        // Собираем уникальные годы, сортируем по убыванию
+        const years = [...new Set(archiveData.map(r => r.y).filter(Boolean))].sort((a, b) => b - a);
+        sel.innerHTML = '<option value="">Все</option>';
+        years.forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            sel.appendChild(opt);
+        });
+        // Восстанавливаем выбор если год ещё есть в списке
+        if (current && years.includes(Number(current))) {
+            sel.value = current;
+        }
+    }
+
+    /**
+     * Применяет фильтры к строкам таблицы архива (скрывает/показывает tr).
+     * Не затрагивает archiveData — данные остаются полными.
+     */
+    function applyArchiveFilters() {
+        const yearVal = (document.getElementById('archiveYearFilter')?.value || '').trim();
+        const nameVal = (document.getElementById('archiveNameFilter')?.value || '').trim().toLowerCase();
+        const rows = document.querySelectorAll('#archiveTableBody tr');
+        let visible = 0;
+        rows.forEach(tr => {
+            const yearInp = tr.querySelector('.archive-year');
+            const nameInp = tr.querySelector('.archive-name');
+            const rowYear = yearInp ? yearInp.value.trim() : '';
+            const rowName = nameInp ? nameInp.value.trim().toLowerCase() : '';
+            const yearOk = !yearVal || rowYear === yearVal;
+            const nameOk = !nameVal || rowName.includes(nameVal);
+            const show = yearOk && nameOk;
+            tr.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        // Показываем счётчик отфильтрованных строк
+        const counter = document.getElementById('archiveFilterCount');
+        if (counter) {
+            if (yearVal || nameVal) {
+                counter.textContent = `Показано: ${visible} из ${archiveData.length}`;
+            } else {
+                counter.textContent = '';
+            }
+        }
+    }
+
+    /** Сбрасывает оба фильтра и показывает все строки. */
+    function clearArchiveFilters() {
+        const yearSel = document.getElementById('archiveYearFilter');
+        const nameInp = document.getElementById('archiveNameFilter');
+        if (yearSel) yearSel.value = '';
+        if (nameInp) nameInp.value = '';
+        applyArchiveFilters();
+    }
+
+    // Делаем функции глобальными чтобы onclick в HTML работал
+    window.applyArchiveFilters = applyArchiveFilters;
+    window.clearArchiveFilters = clearArchiveFilters;
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     function syncArchiveDataFromDOM() {
         if (!archiveTableBody) return;
