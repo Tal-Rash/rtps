@@ -258,6 +258,56 @@ def save_cert_entry(tab_num: str, training_type: str, cert: str | None) -> None:
                 )
 
 
+def save_edu_state(trainings: dict, order: list[str] | None = None) -> None:
+    """Пакетное сохранение всех записей обучения и порядка сотрудников."""
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            if isinstance(trainings, dict):
+                for tab_num, cols_map in trainings.items():
+                    if not isinstance(cols_map, dict):
+                        continue
+                    t_num = str(tab_num or "").strip()
+                    if not t_num:
+                        continue
+                    for t_type, entry in cols_map.items():
+                        if not isinstance(entry, dict):
+                            continue
+                        t_name = str(t_type or "").strip()
+                        if not t_name:
+                            continue
+                        last_date = entry.get("last")
+                        try:
+                            period_months = int(entry.get("period_months") or 12)
+                        except (TypeError, ValueError):
+                            period_months = 12
+                        protocol = str(entry.get("protocol") or "").strip()
+                        cert = str(entry.get("cert") or "").strip()
+
+                        cur.execute(
+                            "SELECT 1 FROM employee_trainings WHERE tab_num=? AND training_type=?",
+                            (t_num, t_name)
+                        )
+                        if cur.fetchone():
+                            cur.execute(
+                                "UPDATE employee_trainings SET last_date=?, period_months=?, protocol_num=?, cert_num=? WHERE tab_num=? AND training_type=?",
+                                (last_date, period_months, protocol, cert, t_num, t_name)
+                            )
+                        else:
+                            cur.execute(
+                                "INSERT INTO employee_trainings (tab_num, training_type, last_date, period_months, protocol_num, cert_num) VALUES (?, ?, ?, ?, ?, ?)",
+                                (t_num, t_name, last_date, period_months, protocol, cert)
+                            )
+
+            if isinstance(order, list):
+                cur.execute("DELETE FROM employee_row_order")
+                for idx, tab_num in enumerate(order):
+                    cur.execute(
+                        "INSERT OR REPLACE INTO employee_row_order (tab_num, sort_order) VALUES (?, ?)",
+                        (str(tab_num), idx)
+                    )
+
+
 def save_columns_settings(data: list[dict]) -> None:
     """Сохранение настроек колонок обучения и их периодичности."""
     with DB_LOCK, conn_ctx() as conn:

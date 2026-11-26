@@ -41,9 +41,10 @@ try:
         init_db,
         load_edu_state,
         save_categories_settings,
-        save_columns_settings,
-        save_employee_order_settings,
         save_cert_entry,
+        save_columns_settings,
+        save_edu_state,
+        save_employee_order_settings,
         save_protocol_entry,
         save_training_entry,
     )
@@ -62,9 +63,10 @@ except (ImportError, ValueError):
         init_db,
         load_edu_state,
         save_categories_settings,
-        save_columns_settings,
-        save_employee_order_settings,
         save_cert_entry,
+        save_columns_settings,
+        save_edu_state,
+        save_employee_order_settings,
         save_protocol_entry,
         save_training_entry,
     )
@@ -239,6 +241,20 @@ async def api_save_cert(request: Request, data: dict):
         return JSONResponse({"error": "Missing tab_num or training_type"}, status_code=400)
 
     await asyncio.to_thread(save_cert_entry, tab_num, t_type, cert)
+    return {"status": "ok"}
+
+
+@app.post("/api/save_state")
+@app.post(f"{APP_PREFIX}/api/save_state", include_in_schema=False)
+async def api_save_state(request: Request, data: dict):
+    """Пакетное сохранение всех изменений в модуле обучения."""
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    trainings = data.get("trainings")
+    order = data.get("order")
+    await asyncio.to_thread(save_edu_state, trainings, order)
     return {"status": "ok"}
 
 

@@ -15,6 +15,26 @@ let draggedRowTabNum = null;
 let resizeResetTimer = null;
 let undoStack = [];
 let redoStack = [];
+let savedSnapshot = "";
+let isDirty = false;
+
+/* Снимок сохраняемого состояния (обучение и порядок сотрудников) */
+function getEduSnapshot() {
+  return JSON.stringify({
+    trainings: appState.trainings || {},
+    order: (appState.employees || []).map((e) => e.tab_num)
+  });
+}
+
+/* Проверка наличия несохранённых изменений и подсветка кнопки Сохранить */
+function updateDirtyState(forceHasTypingDiff = false) {
+  isDirty = !!(CAN_EDIT && (forceHasTypingDiff || (savedSnapshot && getEduSnapshot() !== savedSnapshot)));
+  const btn = document.getElementById("saveBtn");
+  if (btn) {
+    btn.classList.toggle("primary", isDirty);
+    if (isDirty) btn.textContent = "Сохранить";
+  }
+}
 
 /* Обновление доступности кнопок отмены и возврата */
 function updateHistoryButtons() {
@@ -24,8 +44,8 @@ function updateHistoryButtons() {
   if (restoreBtn) restoreBtn.disabled = !CAN_EDIT || redoStack.length === 0;
 }
 
-/* Применение сохраненного порядка сотрудников при отмене/возврате */
-async function applyEmployeeOrder(order) {
+/* Применение порядка сотрудников локально в состоянии */
+function applyEmployeeOrder(order) {
   const map = new Map((appState.employees || []).map((e) => [e.tab_num, e]));
   const reordered = [];
   order.forEach((tab) => {
@@ -36,20 +56,19 @@ async function applyEmployeeOrder(order) {
   });
   map.forEach((e) => reordered.push(e));
   appState.employees = reordered;
-  await saveEmployeeOrder();
 }
 
 /* Отмена последнего действия */
-async function cancelChanges() {
+function cancelChanges() {
   if (!CAN_EDIT || undoStack.length === 0) return;
   const action = undoStack.pop();
   try {
     if (action.type === "cell") {
-      await saveCellValue(action.tab_num, action.col, action.oldText);
+      applyCellValueToState(action.tab_num, action.col, action.oldText);
       redoStack.push(action);
       renderMatrix();
     } else if (action.type === "reorder") {
-      await applyEmployeeOrder(action.oldOrder);
+      applyEmployeeOrder(action.oldOrder);
       redoStack.push(action);
       renderMatrix();
     }
@@ -58,19 +77,20 @@ async function cancelChanges() {
     undoStack.push(action);
   }
   updateHistoryButtons();
+  updateDirtyState();
 }
 
 /* Возврат отмененного действия */
-async function restoreChanges() {
+function restoreChanges() {
   if (!CAN_EDIT || redoStack.length === 0) return;
   const action = redoStack.pop();
   try {
     if (action.type === "cell") {
-      await saveCellValue(action.tab_num, action.col, action.newText);
+      applyCellValueToState(action.tab_num, action.col, action.newText);
       undoStack.push(action);
       renderMatrix();
     } else if (action.type === "reorder") {
-      await applyEmployeeOrder(action.newOrder);
+      applyEmployeeOrder(action.newOrder);
       undoStack.push(action);
       renderMatrix();
     }
@@ -79,6 +99,7 @@ async function restoreChanges() {
     redoStack.push(action);
   }
   updateHistoryButtons();
+  updateDirtyState();
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -157,11 +178,23 @@ async function requestJson(url, options = {}) {
 async function loadState() {
   try {
     appState = await requestJson(`${APP_PREFIX}/api/state`);
+    savedSnapshot = getEduSnapshot();
+    undoStack = [];
+    redoStack = [];
+    updateHistoryButtons();
+    updateDirtyState();
     renderMatrix();
   } catch (err) {
     console.error(err);
     alert(`Ошибка загрузки модуля обучения: ${err.message}`);
   }
+}
+
+/* Обновление данных с сервера с проверкой несохранённых изменений */
+function reloadEduState() {
+  checkUnsavedBeforeLeave(() => {
+    loadState();
+  }, "Есть несохранённые изменения. Сохранить их перед обновлением данных?");
 }
 
 function setMode(mode) {
@@ -427,11 +460,7 @@ function onCellInput(e) {
   const cell = e.target;
   const currentText = String(cell ? cell.innerText : "").trim();
   const originalText = String(cell && cell.dataset ? cell.dataset.original : "").trim();
-  const btn = document.getElementById("saveBtn");
-  if (btn) {
-    btn.textContent = "Сохранить";
-    btn.classList.toggle("primary", currentText !== originalText);
-  }
+  updateDirtyState(currentText !== originalText);
 }
 
 function attachRowDragListeners() {
@@ -491,7 +520,7 @@ async function saveEmployeeOrder() {
   });
 }
 
-async function moveEmployeeRow(sourceTabNum, targetTabNum, after) {
+function moveEmployeeRow(sourceTabNum, targetTabNum, after) {
   if (!sourceTabNum || !targetTabNum || sourceTabNum === targetTabNum) return;
 
   const oldOrder = (appState.employees || []).map((e) => e.tab_num);
@@ -509,17 +538,11 @@ async function moveEmployeeRow(sourceTabNum, targetTabNum, after) {
   appState.employees.splice(insertAt, 0, moved);
 
   const newOrder = (appState.employees || []).map((e) => e.tab_num);
+  undoStack.push({ type: "reorder", oldOrder, newOrder });
+  redoStack = [];
+  updateHistoryButtons();
   renderMatrix();
-  try {
-    await saveEmployeeOrder();
-    undoStack.push({ type: "reorder", oldOrder, newOrder });
-    redoStack = [];
-    updateHistoryButtons();
-  } catch (err) {
-    console.error(err);
-    alert(`Ошибка сохранения порядка строк: ${err.message}`);
-    await loadState();
-  }
+  updateDirtyState();
 }
 
 async function onRowDrop(e) {
@@ -540,44 +563,24 @@ function onCellKeydown(e) {
   }
 }
 
-async function saveCellValue(tabNum, cIdx, rawText) {
+/* Применение значения ячейки локально в appState (без отправки на сервер) */
+function applyCellValueToState(tabNum, cIdx, rawText) {
   const emp = (appState.employees || []).find((e) => e.tab_num === tabNum);
   const col = appState.columns[cIdx];
   if (!emp || !col) return;
 
-  if (currentMode === "protocols") {
-    const protocol = String(rawText || "").trim();
-    await requestJson(`${APP_PREFIX}/api/save_protocol`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tab_num: emp.tab_num,
-        training_type: col.name,
-        protocol
-      })
-    });
+  if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
+  if (!appState.trainings[emp.tab_num][col.name]) {
+    appState.trainings[emp.tab_num][col.name] = { last: null, period_months: col.period_months, protocol: "", cert: "" };
+  }
 
-    if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
-    if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
-    appState.trainings[emp.tab_num][col.name].protocol = protocol;
+  if (currentMode === "protocols") {
+    appState.trainings[emp.tab_num][col.name].protocol = String(rawText || "").trim();
     return;
   }
 
   if (currentMode === "certs") {
-    const cert = String(rawText || "").trim();
-    await requestJson(`${APP_PREFIX}/api/save_cert`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tab_num: emp.tab_num,
-        training_type: col.name,
-        cert
-      })
-    });
-
-    if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
-    if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
-    appState.trainings[emp.tab_num][col.name].cert = cert;
+    appState.trainings[emp.tab_num][col.name].cert = String(rawText || "").trim();
     return;
   }
 
@@ -585,34 +588,21 @@ async function saveCellValue(tabNum, cIdx, rawText) {
   if (isoDate === undefined) {
     throw new Error("Введите дату в формате ДД.ММ.ГГГГ");
   }
-
-  await requestJson(`${APP_PREFIX}/api/save_training`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      tab_num: emp.tab_num,
-      training_type: col.name,
-      last_date: isoDate,
-      period_months: col.period_months
-    })
-  });
-
-  if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
-  if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
   appState.trainings[emp.tab_num][col.name].last = isoDate;
+  appState.trainings[emp.tab_num][col.name].period_months = col.period_months;
 }
 
-async function onCellBlur(e) {
+function onCellBlur(e) {
   const cell = e.target;
   const newText = String(cell.innerText || "").trim();
   const oldText = String(cell.dataset.original || "").trim();
   if (newText === oldText) {
-    resetSaveBtn();
+    updateDirtyState();
     return;
   }
 
   try {
-    await saveCellValue(cell.dataset.tab, Number(cell.dataset.col), newText);
+    applyCellValueToState(cell.dataset.tab, Number(cell.dataset.col), newText);
     undoStack.push({
       type: "cell",
       tab_num: cell.dataset.tab,
@@ -624,12 +614,12 @@ async function onCellBlur(e) {
     updateHistoryButtons();
     cell.dataset.original = newText;
     renderMatrix();
-    resetSaveBtn("Сохранено!");
+    updateDirtyState();
   } catch (err) {
     console.error(err);
-    alert(`Ошибка сохранения: ${err.message}`);
+    alert(`Ошибка ввода: ${err.message}`);
     renderMatrix();
-    resetSaveBtn();
+    updateDirtyState();
   }
 }
 
@@ -763,21 +753,28 @@ document.addEventListener("paste", async (e) => {
   if (!pasteData) return;
 
   const lines = pasteData.replace(/\r/g, "").split("\n").filter((line) => line.length);
-  const startRow = Number(activeEl.dataset.row);
+  const startTr = activeEl.closest("tr");
   const startCol = Number(activeEl.dataset.col);
 
   try {
-    for (let i = 0; i < lines.length; i++) {
+    let currTr = startTr;
+    for (let i = 0; i < lines.length && currTr; i++) {
+      const tab = currTr.dataset.tab;
       const cells = lines[i].split("\t");
-      for (let j = 0; j < cells.length; j++) {
-        await saveCellValue(startRow + i, startCol + j, cells[j]);
+      if (tab) {
+        for (let j = 0; j < cells.length; j++) {
+          applyCellValueToState(tab, startCol + j, cells[j]);
+        }
       }
+      currTr = currTr.nextElementSibling;
     }
     renderMatrix();
+    updateDirtyState();
   } catch (err) {
     console.error(err);
     alert(`Ошибка вставки: ${err.message}`);
     renderMatrix();
+    updateDirtyState();
   }
 });
 
@@ -795,18 +792,68 @@ document.addEventListener("copy", (e) => {
   }
 });
 
-function forceSave() {
+async function forceSave() {
+  if (!CAN_EDIT) return false;
+
+  // Если фокус находится в ячейке, применяем текущее введенное значение
   const active = document.activeElement;
   if (active && active.classList.contains("cell")) {
-    active.blur();
-  } else {
+    const newText = String(active.innerText || "").trim();
+    const oldText = String(active.dataset.original || "").trim();
+    if (newText !== oldText) {
+      try {
+        applyCellValueToState(active.dataset.tab, Number(active.dataset.col), newText);
+        active.dataset.original = newText;
+        undoStack.push({
+          type: "cell",
+          tab_num: active.dataset.tab,
+          col: Number(active.dataset.col),
+          oldText,
+          newText
+        });
+        redoStack = [];
+        updateHistoryButtons();
+      } catch (err) {
+        alert(`Ошибка ввода: ${err.message}`);
+        return false;
+      }
+    }
+  }
+
+  const btn = document.getElementById("saveBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Сохранение...";
+  }
+
+  try {
+    const order = (appState.employees || []).map((e) => e.tab_num);
+    await requestJson(`${APP_PREFIX}/api/save_state`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trainings: appState.trainings || {},
+        order
+      })
+    });
+
+    savedSnapshot = getEduSnapshot();
+    updateDirtyState(false);
+    renderMatrix();
     resetSaveBtn("Сохранено!");
+    return true;
+  } catch (err) {
+    console.error(err);
+    alert(`Ошибка сохранения: ${err.message}`);
+    updateDirtyState();
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 function isEduDirty() {
-  const btn = document.getElementById("saveBtn");
-  return !!(btn && btn.classList.contains("primary"));
+  return !!(CAN_EDIT && (isDirty || (savedSnapshot && getEduSnapshot() !== savedSnapshot)));
 }
 
 let pendingLeaveAction = null;
@@ -840,9 +887,9 @@ function initUnsavedChangesModal() {
   const cancelBtn = document.getElementById('unsavedCancelBtn');
 
   if (saveBtn) {
-    saveBtn.onclick = () => {
-      forceSave();
-      resetSaveBtn();
+    saveBtn.onclick = async () => {
+      const ok = await forceSave();
+      if (!ok) return;
       if (modal) modal.style.display = 'none';
       const act = pendingLeaveAction;
       pendingLeaveAction = null;
@@ -852,6 +899,8 @@ function initUnsavedChangesModal() {
 
   if (discardBtn) {
     discardBtn.onclick = () => {
+      savedSnapshot = getEduSnapshot();
+      isDirty = false;
       resetSaveBtn();
       if (modal) modal.style.display = 'none';
       const act = pendingLeaveAction;
