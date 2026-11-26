@@ -841,17 +841,86 @@ function closeSettingsModal() {
   document.getElementById("settingsModal").style.display = "none";
 }
 
+let draggedSettingsIdx = null;
+
+function moveSettingsRow(idx, delta) {
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= tempColumns.length) return;
+  const [moved] = tempColumns.splice(idx, 1);
+  tempColumns.splice(newIdx, 0, moved);
+  renderSettingsTable();
+}
+
+function clearSettingsDropHints() {
+  document.querySelectorAll("#settingsTableBody tr.drop-before, #settingsTableBody tr.drop-after").forEach((tr) => {
+    tr.classList.remove("drop-before", "drop-after");
+  });
+}
+
 function renderSettingsTable() {
   const tbody = document.getElementById("settingsTableBody");
   let html = "";
   tempColumns.forEach((col, idx) => {
-    html += `<tr>
+    html += `<tr data-col-idx="${idx}">
+      <td style="text-align:center;"><button type="button" class="row-handle" draggable="true" data-col-idx="${idx}" title="Перетащить" aria-label="Перетащить колонку">☰</button></td>
       <td><input type="text" class="input" value="${escapeHtml(col.name)}" onchange="updateSettingsCol(${idx}, 'name', this.value)"></td>
       <td><input type="number" class="input input-number" min="1" max="1200" value="${escapeHtml(col.period_months)}" onchange="updateSettingsCol(${idx}, 'period_months', this.value)"></td>
-      <td><button class="btn btn-danger" onclick="deleteSettingsRow(${idx})" title="Удалить">×</button></td>
+      <td style="white-space:nowrap; display:flex; gap:4px; align-items:center; justify-content:flex-end;">
+        <button type="button" class="btn btn-outline" style="padding:4px 7px; font-size:12px;" onclick="moveSettingsRow(${idx}, -1)" ${idx === 0 ? "disabled" : ""} title="Выше">▲</button>
+        <button type="button" class="btn btn-outline" style="padding:4px 7px; font-size:12px;" onclick="moveSettingsRow(${idx}, 1)" ${idx === tempColumns.length - 1 ? "disabled" : ""} title="Ниже">▼</button>
+        <button type="button" class="btn btn-danger" onclick="deleteSettingsRow(${idx})" title="Удалить">×</button>
+      </td>
     </tr>`;
   });
   tbody.innerHTML = html;
+
+  // Привязка drag-and-drop для изменения порядка колонок перетаскиванием
+  tbody.querySelectorAll(".row-handle").forEach((handle) => {
+    handle.addEventListener("dragstart", (e) => {
+      draggedSettingsIdx = Number(handle.dataset.colIdx);
+      const tr = handle.closest("tr");
+      if (tr) tr.classList.add("dragging-row");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(draggedSettingsIdx));
+    });
+    handle.addEventListener("dragend", () => {
+      draggedSettingsIdx = null;
+      clearSettingsDropHints();
+      tbody.querySelectorAll("tr.dragging-row").forEach((tr) => tr.classList.remove("dragging-row"));
+    });
+  });
+
+  tbody.querySelectorAll("tr").forEach((tr) => {
+    tr.addEventListener("dragover", (e) => {
+      if (draggedSettingsIdx === null) return;
+      e.preventDefault();
+      const targetIdx = Number(tr.dataset.colIdx);
+      if (targetIdx === draggedSettingsIdx) return;
+      const rect = tr.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height / 2;
+      clearSettingsDropHints();
+      tr.classList.add(after ? "drop-after" : "drop-before");
+    });
+    tr.addEventListener("dragleave", () => {
+      tr.classList.remove("drop-before", "drop-after");
+    });
+    tr.addEventListener("drop", (e) => {
+      if (draggedSettingsIdx === null) return;
+      e.preventDefault();
+      const targetIdx = Number(tr.dataset.colIdx);
+      const rect = tr.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height / 2;
+      clearSettingsDropHints();
+      if (Number.isFinite(targetIdx) && targetIdx !== draggedSettingsIdx) {
+        const [moved] = tempColumns.splice(draggedSettingsIdx, 1);
+        let insertAt = targetIdx + (after ? 1 : 0);
+        if (draggedSettingsIdx < targetIdx) insertAt -= 1;
+        tempColumns.splice(insertAt, 0, moved);
+        draggedSettingsIdx = null;
+        renderSettingsTable();
+      }
+    });
+  });
 }
 
 function updateSettingsCol(idx, field, value) {
