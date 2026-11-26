@@ -1695,8 +1695,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tdInfo.style.minWidth = '250px';
             tdInfo.style.maxWidth = '250px';
             tdInfo.innerHTML = `
-                <div class="employee-name" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                    <span>${empName}</span>
+                <div class="employee-name" style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${empName}</span>
                     ${CAN_EDIT ? `
                         <button type="button" class="btn-add-subrow" title="Добавить дополнительную строку отпуска">+</button>
                     ` : ''}
