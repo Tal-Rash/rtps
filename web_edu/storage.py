@@ -72,15 +72,17 @@ def init_db() -> None:
                     last_date TEXT,
                     period_months INTEGER,
                     protocol_num TEXT,
+                    cert_num TEXT,
                     PRIMARY KEY (tab_num, training_type)
                 )
             """)
 
-            # Добавляем колонку protocol_num, если её еще нет
-            try:
-                cur.execute("ALTER TABLE employee_trainings ADD COLUMN protocol_num TEXT")
-            except sqlite3.OperationalError:
-                pass
+            # Добавляем колонки protocol_num и cert_num, если их еще нет
+            for col_name in ("protocol_num", "cert_num"):
+                try:
+                    cur.execute(f"ALTER TABLE employee_trainings ADD COLUMN {col_name} TEXT")
+                except sqlite3.OperationalError:
+                    pass
 
             # Индексы для быстрого поиска записей обучения
             cur.execute("CREATE TABLE IF NOT EXISTS position_categories (pos TEXT PRIMARY KEY, category TEXT)")
@@ -184,7 +186,7 @@ def load_edu_state() -> dict:
 
         # 3. Загрузка записей об обучении
         t_rows = cur.execute(
-            "SELECT tab_num, training_type, last_date, period_months, protocol_num FROM employee_trainings"
+            "SELECT tab_num, training_type, last_date, period_months, protocol_num, cert_num FROM employee_trainings"
         ).fetchall()
 
         trainings: dict[str, dict] = {}
@@ -195,7 +197,8 @@ def load_edu_state() -> dict:
             trainings[t_tab][r["training_type"]] = {
                 "last": r["last_date"],
                 "period_months": r["period_months"] or 12,
-                "protocol": r["protocol_num"] or ""
+                "protocol": r["protocol_num"] or "",
+                "cert": r["cert_num"] or "",
             }
 
     return {"columns": columns, "employees": employees, "trainings": trainings}
@@ -234,6 +237,24 @@ def save_protocol_entry(tab_num: str, training_type: str, protocol: str | None) 
                 cur.execute(
                     "INSERT INTO employee_trainings (tab_num, training_type, protocol_num) VALUES (?, ?, ?)",
                     (tab_num, training_type, protocol)
+                )
+
+
+def save_cert_entry(tab_num: str, training_type: str, cert: str | None) -> None:
+    """Сохранение или обновление номера удостоверения об обучении."""
+    with DB_LOCK, conn_ctx() as conn:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM employee_trainings WHERE tab_num=? AND training_type=?", (tab_num, training_type))
+            if cur.fetchone():
+                cur.execute(
+                    "UPDATE employee_trainings SET cert_num=? WHERE tab_num=? AND training_type=?",
+                    (cert, tab_num, training_type)
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO employee_trainings (tab_num, training_type, cert_num) VALUES (?, ?, ?)",
+                    (tab_num, training_type, cert)
                 )
 
 

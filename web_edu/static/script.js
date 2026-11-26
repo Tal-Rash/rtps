@@ -168,6 +168,7 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById("btnModeDates").classList.toggle("active", mode === "dates");
   document.getElementById("btnModeProtocols").classList.toggle("active", mode === "protocols");
+  document.getElementById("btnModeCerts").classList.toggle("active", mode === "certs");
   renderMatrix();
 }
 
@@ -313,13 +314,15 @@ function renderMatrix() {
 
     const empTrainings = appState.trainings[emp.tab_num] || {};
     appState.columns.forEach((col, cIdx) => {
-      const tInfo = empTrainings[col.name] || { last: null, period_months: col.period_months, protocol: "" };
+      const tInfo = empTrainings[col.name] || { last: null, period_months: col.period_months, protocol: "", cert: "" };
       let cellText = "";
       let autoText = "";
       let cellClass = "";
 
       if (currentMode === "protocols") {
         cellText = tInfo.protocol || "";
+      } else if (currentMode === "certs") {
+        cellText = tInfo.cert || "";
       } else if (tInfo.last) {
         const lastDate = parseDateStr(tInfo.last);
         if (lastDate) {
@@ -557,6 +560,24 @@ async function saveCellValue(tabNum, cIdx, rawText) {
     if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
     if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
     appState.trainings[emp.tab_num][col.name].protocol = protocol;
+    return;
+  }
+
+  if (currentMode === "certs") {
+    const cert = String(rawText || "").trim();
+    await requestJson(`${APP_PREFIX}/api/save_cert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tab_num: emp.tab_num,
+        training_type: col.name,
+        cert
+      })
+    });
+
+    if (!appState.trainings[emp.tab_num]) appState.trainings[emp.tab_num] = {};
+    if (!appState.trainings[emp.tab_num][col.name]) appState.trainings[emp.tab_num][col.name] = { period_months: col.period_months };
+    appState.trainings[emp.tab_num][col.name].cert = cert;
     return;
   }
 

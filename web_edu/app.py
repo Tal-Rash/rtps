@@ -43,6 +43,7 @@ try:
         save_categories_settings,
         save_columns_settings,
         save_employee_order_settings,
+        save_cert_entry,
         save_protocol_entry,
         save_training_entry,
     )
@@ -63,6 +64,7 @@ except (ImportError, ValueError):
         save_categories_settings,
         save_columns_settings,
         save_employee_order_settings,
+        save_cert_entry,
         save_protocol_entry,
         save_training_entry,
     )
@@ -219,6 +221,24 @@ async def api_save_protocol(request: Request, data: dict):
         return JSONResponse({"error": "Missing tab_num or training_type"}, status_code=400)
 
     await asyncio.to_thread(save_protocol_entry, tab_num, t_type, protocol)
+    return {"status": "ok"}
+
+
+@app.post("/api/save_cert")
+@app.post(f"{APP_PREFIX}/api/save_cert", include_in_schema=False)
+async def api_save_cert(request: Request, data: dict):
+    """Сохранение номера удостоверения об обучении."""
+    session = get_session(request)
+    if not session or not session["can_edit"]:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    tab_num = data.get("tab_num")
+    t_type = data.get("training_type")
+    cert = data.get("cert")
+    if not tab_num or not t_type:
+        return JSONResponse({"error": "Missing tab_num or training_type"}, status_code=400)
+
+    await asyncio.to_thread(save_cert_entry, tab_num, t_type, cert)
     return {"status": "ok"}
 
 
