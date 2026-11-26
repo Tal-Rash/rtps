@@ -464,7 +464,7 @@ function renderTabelBody() {
       }
       
 
-      bHTML += `<td class="${tdClass}"${extraTdStyle}><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
+      bHTML += `<td class="${tdClass}"${extraTdStyle}><div class="cell day-cell" ${contentEditable} oninput="cellEdited('${tabNum}', ${d}, this)" onblur="cellBlurred('${tabNum}', ${d}, this)"${extraStyle}>${escapeHtml(val)}</div></td>`;
     }
     
     bHTML += `</tr>`;
@@ -477,8 +477,11 @@ function cellEdited(tabNum, c, el) {
   if (!appState.timesheet[tabNum]) appState.timesheet[tabNum] = {};
   appState.timesheet[tabNum][c] = el.innerText.trim();
   markDirty(true);
-  
+}
 
+function cellBlurred(tabNum, c, el) {
+  // После завершения ввода в ячейку пересчитываем продление отпуска (на случай ввода или удаления 'Б'/'БН')
+  applyVacations();
 }
 
 function dataEdited(r, c, el) {
@@ -1052,56 +1055,130 @@ function applyVacations() {
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
   const days = daysInMonth(year, month);
-  
+
+  if (!appState._autoExtendedDays) appState._autoExtendedDays = {};
   let changed = false;
+
+  const isHolidayDate = (m, d) => {
+    return Boolean(appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d));
+  };
 
   appState.employees.forEach((emp, r) => {
     const tabNum = emp.tab_num || `empty_${r}`;
     const empName = emp.name || '';
     const vacData = appState.vacations && appState.vacations[tabNum];
     const schedVacs = (appState.schedule_vacations && (appState.schedule_vacations[tabNum] || appState.schedule_vacations[empName])) || [];
-    
-    const vacDays = new Set();
 
-    // Вспомогательная функция добавления периода дат в множество дней отпуска
-    const addPeriodDays = (sDateStr, eDateStr) => {
-      const sDate = parseVacationDate(sDateStr, year);
-      const eDate = parseVacationDate(eDateStr, year);
-      if (sDate && eDate && eDate >= sDate) {
-        let curr = new Date(sDate);
-        while (curr <= eDate) {
-          if (curr.getFullYear() === year) {
-            const m = curr.getMonth() + 1;
-            const d = curr.getDate();
-            const isH = appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d);
-            if (!isH) {
-              vacDays.add(`${m}-${d}`);
-            }
-          }
-          curr.setDate(curr.getDate() + 1);
-        }
+    if (!appState.timesheet[tabNum]) appState.timesheet[tabNum] = {};
+
+    // Собираем больничные дни ('Б', 'БН') сотрудника за весь год:
+    // для других месяцев — из загруженного с сервера sick_days, для текущего месяца — из актуального табеля
+    const empSickSet = new Set();
+    if (appState.sick_days && Array.isArray(appState.sick_days[tabNum])) {
+      appState.sick_days[tabNum].forEach(key => {
+        const mPart = parseInt(String(key).split('-')[0], 10);
+        if (mPart !== month) empSickSet.add(key);
+      });
+    }
+    for (let d = 1; d <= days; d++) {
+      const valUp = String(appState.timesheet[tabNum][d] || "").trim().toUpperCase();
+      if (valUp === "Б" || valUp === "БН") {
+        empSickSet.add(`${month}-${d}`);
       }
-    };
+    }
 
-    // 1. Отпуска из модуля «График отпусков»
-    schedVacs.forEach(vac => {
-      if (vac && vac.start && vac.end) {
-        addPeriodDays(vac.start, vac.end);
+    // Определяем базовые периоды отпуска (приоритет у Графика отпусков; если пусто — берем вкладку Отпуска)
+    const periods = [];
+    const yearStr = String(year);
+    const prevYearStr = String(year - 1);
+    const currentYearSched = schedVacs.filter(v => v && v.start && (String(v.start).startsWith(yearStr) || String(v.end).startsWith(yearStr) || String(v.start).startsWith(prevYearStr)));
+    if (currentYearSched.length > 0) {
+      currentYearSched.forEach(vac => {
+        const sDate = parseVacationDate(vac.start, year);
+        const eDate = parseVacationDate(vac.end, year);
+        if (sDate && eDate && eDate >= sDate) {
+          periods.push({ sDate, eDate });
+        }
+      });
+    } else if (vacData) {
+      const cols = [[1,2,3], [5,6,7], [9,10,11]];
+      cols.forEach(pair => {
+        const sDate = parseVacationDate(vacData[pair[0]], year);
+        const eDate = parseVacationDate(vacData[pair[1]], year);
+        if (sDate && eDate && eDate >= sDate) {
+          periods.push({ sDate, eDate });
+        }
+      });
+    }
+
+    const vacDays = new Set();
+    const newExtendedDays = new Set();
+
+    // 1. Заносим базовые отпускные дни по периодам (без праздников)
+    periods.forEach(p => {
+      let curr = new Date(p.sDate);
+      while (curr <= p.eDate) {
+        if (curr.getFullYear() === year) {
+          const m = curr.getMonth() + 1;
+          const d = curr.getDate();
+          if (!isHolidayDate(m, d)) {
+            vacDays.add(`${m}-${d}`);
+          }
+        }
+        curr.setDate(curr.getDate() + 1);
       }
     });
 
-    // 2. Ручные отпуска из внутренней вкладки «Отпуска» табеля
-    if (vacData) {
-      const cols = [[1,2,3], [5,6,7], [9,10,11]];
-      cols.forEach(pair => {
-        addPeriodDays(vacData[pair[0]], vacData[pair[1]]);
-      });
-    }
-    
-    if (!appState.timesheet[tabNum]) appState.timesheet[tabNum] = {};
+    // 2. Считаем больничные внутри каждого отпуска и продлеваем отпуск на это количество дней (только в табеле)
+    periods.forEach(p => {
+      let sickCount = 0;
+      let curr = new Date(p.sDate);
+      while (curr <= p.eDate) {
+        if (curr.getFullYear() === year) {
+          const m = curr.getMonth() + 1;
+          const d = curr.getDate();
+          const key = `${m}-${d}`;
+          if (!isHolidayDate(m, d) && empSickSet.has(key)) {
+            sickCount++;
+          }
+        }
+        curr.setDate(curr.getDate() + 1);
+      }
+
+      if (sickCount > 0) {
+        let extCurr = new Date(p.eDate);
+        extCurr.setDate(extCurr.getDate() + 1);
+        let extended = 0;
+        let safety = 0;
+        while (extended < sickCount && safety < 366) {
+          safety++;
+          if (extCurr.getFullYear() === year) {
+            const m = extCurr.getMonth() + 1;
+            const d = extCurr.getDate();
+            const key = `${m}-${d}`;
+            if (!isHolidayDate(m, d) && !vacDays.has(key)) {
+              vacDays.add(key);
+              newExtendedDays.add(key);
+              if (!empSickSet.has(key)) {
+                extended++;
+              }
+            }
+          } else if (extCurr.getFullYear() > year) {
+            break;
+          }
+          extCurr.setDate(extCurr.getDate() + 1);
+        }
+      }
+    });
+
+    const prevExtendedDays = appState._autoExtendedDays[tabNum] || new Set();
+    appState._autoExtendedDays[tabNum] = newExtendedDays;
+
     for (let d = 1; d <= days; d++) {
-      const isVac = vacDays.has(`${month}-${d}`);
-      const currVal = appState.timesheet[tabNum][d] || "";
+      const key = `${month}-${d}`;
+      const isVac = vacDays.has(key);
+      const currVal = String(appState.timesheet[tabNum][d] || "").trim();
+      const upperVal = currVal.toUpperCase();
       
       const date = new Date(year, month - 1, d);
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -1113,19 +1190,22 @@ function applyVacations() {
       const isRestDay = isWeekend || isH || isT;
       
       if (isVac) {
-        if (currVal !== "О" && currVal !== "ДО") {
+        // Ставим 'О' только в пустые ячейки или авто-выходные 'В', чтобы не затирать ручные правки ('Б', 'БН', 'ДО' и др.)
+        if (currVal === "" || upperVal === "В") {
           appState.timesheet[tabNum][d] = "О";
           changed = true;
         }
       } else {
-        
-        // Auto-fill "В" for empty rest days
-        if (isRestDay && (!appState.timesheet[tabNum][d] || appState.timesheet[tabNum][d] === "")) {
+        // Если больничный убрали и день перестал быть продлением — снимаем ранее выставленное 'О'
+        if (prevExtendedDays.has(key) && upperVal === "О") {
+          appState.timesheet[tabNum][d] = isRestDay ? "В" : "";
+          changed = true;
+        } else if (isRestDay && currVal === "") {
+          // Auto-fill "В" for empty rest days
           appState.timesheet[tabNum][d] = "В";
           changed = true;
-        }
-        // Auto-clear "В" if it's no longer a rest day (e.g. system_dates changed)
-        else if (!isRestDay && appState.timesheet[tabNum][d] === "В") {
+        } else if (!isRestDay && upperVal === "В") {
+          // Auto-clear "В" if it's no longer a rest day (e.g. system_dates changed)
           appState.timesheet[tabNum][d] = "";
           changed = true;
         }

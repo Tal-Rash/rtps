@@ -286,6 +286,22 @@ def load_state(year: int, month: int) -> dict:
         except Exception:
             pass
 
+        # Загружаем больничные дни ('Б', 'БН') за весь год для продления отпусков между месяцами
+        sick_days: dict[str, list[str]] = {}
+        try:
+            month_to_num = {name: idx for idx, name in enumerate(MONTH_NAMES) if idx > 0}
+            sick_rows = cur.execute(
+                "SELECT tab_num, m, c FROM timesheet WHERE y=? AND UPPER(TRIM(v)) IN ('Б', 'БН')",
+                (year,),
+            ).fetchall()
+            for r in sick_rows:
+                m_idx = month_to_num.get(text(r["m"]))
+                if m_idx:
+                    t_num = text(r["tab_num"])
+                    sick_days.setdefault(t_num, []).append(f"{m_idx}-{int(r['c'])}")
+        except Exception:
+            pass
+
         ts_norms_data = {}
         try:
             norms_rows = cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)).fetchall()
@@ -310,6 +326,7 @@ def load_state(year: int, month: int) -> dict:
         "timesheet": timesheet,
         "vacations": vacations,
         "schedule_vacations": schedule_vacations,
+        "sick_days": sick_days,
         "ts_norms_data": ts_norms_data,
         "month_hint": month_hint,
     }
