@@ -65,10 +65,16 @@
               </select>
             </label>
             <label>
-              След. месяц проверки
-              <select id="warehouseNextMonthFilter" onchange="setWarehouseFilter('nextMonth', this.value)">
-                <option value="">Все месяцы</option>
-              </select>
+              Период проверки (с — по)
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <select id="warehouseNextMonthFromFilter" onchange="setWarehouseFilter('nextMonthFrom', this.value)">
+                  <option value="">С любого</option>
+                </select>
+                <span>—</span>
+                <select id="warehouseNextMonthToFilter" onchange="setWarehouseFilter('nextMonthTo', this.value)">
+                  <option value="">По любой</option>
+                </select>
+              </div>
             </label>
             <label>
               Место нахождения

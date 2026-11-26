@@ -24,7 +24,8 @@ let selectionAnchor = null;
 let didWarehouseDrag = false;
 let warehouseFilters = {
   type: "",
-  nextMonth: "",
+  nextMonthFrom: "",
+  nextMonthTo: "",
   location: "",
   repair: "",
   number: ""
@@ -270,7 +271,8 @@ function getWarehouseNumberOptions(optionsData, type, currentNumber = "") {
 function normalizeWarehouseFilters() {
   warehouseFilters = {
     type: String(warehouseFilters?.type ?? ""),
-    nextMonth: String(warehouseFilters?.nextMonth ?? ""),
+    nextMonthFrom: String(warehouseFilters?.nextMonthFrom ?? ""),
+    nextMonthTo: String(warehouseFilters?.nextMonthTo ?? ""),
     location: String(warehouseFilters?.location ?? ""),
     repair: String(warehouseFilters?.repair ?? ""),
     number: String(warehouseFilters?.number ?? "")
@@ -306,21 +308,32 @@ function warehouseRowMatchesFilters(row) {
     const rowRepair = String(row?.in_repair ? 1 : 0);
     if (rowRepair !== filterRepair) return false;
   }
-  if (warehouseFilters.nextMonth) {
+  // Фильтрация по периоду следующей проверки (месяц с — по)
+  const filterFrom = String(warehouseFilters.nextMonthFrom ?? "").trim();
+  const filterTo = String(warehouseFilters.nextMonthTo ?? "").trim();
+  if (filterFrom || filterTo) {
     const parsed = parseDateDMY(nextValue);
-    if (!parsed || formatMonthKey(parsed) !== warehouseFilters.nextMonth) return false;
+    if (!parsed) return false;
+    const rowKey = formatMonthKey(parsed);
+    if (!rowKey) return false;
+    const minKey = (filterFrom && filterTo && filterFrom > filterTo) ? filterTo : filterFrom;
+    const maxKey = (filterFrom && filterTo && filterFrom > filterTo) ? filterFrom : filterTo;
+    if (minKey && rowKey < minKey) return false;
+    if (maxKey && rowKey > maxKey) return false;
   }
   return true;
 }
 
 function syncWarehouseFilterDom() {
   const typeFilter = document.getElementById("warehouseTypeFilter");
-  const nextDateFilter = document.getElementById("warehouseNextMonthFilter");
+  const nextFromFilter = document.getElementById("warehouseNextMonthFromFilter");
+  const nextToFilter = document.getElementById("warehouseNextMonthToFilter");
   const locationFilter = document.getElementById("warehouseLocationFilter");
   const repairFilter = document.getElementById("warehouseRepairFilter");
   const numberFilter = document.getElementById("warehouseNumberFilter");
   if (typeFilter) typeFilter.value = warehouseFilters.type;
-  if (nextDateFilter) nextDateFilter.value = warehouseFilters.nextMonth;
+  if (nextFromFilter) nextFromFilter.value = warehouseFilters.nextMonthFrom;
+  if (nextToFilter) nextToFilter.value = warehouseFilters.nextMonthTo;
   if (locationFilter) locationFilter.value = warehouseFilters.location;
   if (repairFilter) repairFilter.value = warehouseFilters.repair;
   if (numberFilter) numberFilter.value = warehouseFilters.number;
@@ -356,7 +369,7 @@ function setWarehouseFilter(field, value) {
 
 /* Сброс всех фильтров склада */
 function clearWarehouseFilters() {
-  warehouseFilters = { type: "", nextMonth: "", location: "", repair: "", number: "" };
+  warehouseFilters = { type: "", nextMonthFrom: "", nextMonthTo: "", location: "", repair: "", number: "" };
   syncWarehouseFilterDom();
   applyWarehouseFilters();
 }
@@ -1306,16 +1319,29 @@ function render() {
     locationFilter.value = currentLocation;
   }
 
-  const nextMonthFilter = document.getElementById("warehouseNextMonthFilter");
-  if (nextMonthFilter) {
-    const currentMonth = String(warehouseFilters.nextMonth ?? "");
-    nextMonthFilter.innerHTML = `
-      <option value="">Все месяцы</option>
+  // Заполнение выпадающих списков периода следующей проверки (с — по)
+  const nextFromFilter = document.getElementById("warehouseNextMonthFromFilter");
+  if (nextFromFilter) {
+    const currentFrom = String(warehouseFilters.nextMonthFrom ?? "");
+    nextFromFilter.innerHTML = `
+      <option value="">С любого</option>
       ${optionsData.nextMonths
-        .map((option) => `<option value="${escapeHtml(option.value)}"${currentMonth === option.value ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+        .map((option) => `<option value="${escapeHtml(option.value)}"${currentFrom === option.value ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
         .join("")}
     `;
-    nextMonthFilter.value = currentMonth;
+    nextFromFilter.value = currentFrom;
+  }
+
+  const nextToFilter = document.getElementById("warehouseNextMonthToFilter");
+  if (nextToFilter) {
+    const currentTo = String(warehouseFilters.nextMonthTo ?? "");
+    nextToFilter.innerHTML = `
+      <option value="">По любой</option>
+      ${optionsData.nextMonths
+        .map((option) => `<option value="${escapeHtml(option.value)}"${currentTo === option.value ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+        .join("")}
+    `;
+    nextToFilter.value = currentTo;
   }
 
   applyWarehouseFilters();
