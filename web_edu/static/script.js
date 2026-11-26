@@ -262,9 +262,16 @@ function parseDateStr(str) {
   return date;
 }
 
+/* Проверка особого статуса, который дублируется во все вкладки из удостоверений */
+function isSpecialEduStatus(val) {
+  const norm = String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return norm === "не годен" || norm === "не требуется";
+}
+
 function parseRuDate(value) {
   let dateStr = String(value || "").split("\n")[0].trim();
   if (!dateStr) return null;
+  if (isSpecialEduStatus(dateStr)) return dateStr;
 
   const cleanText = dateStr.replace(/\D/g, "");
   if (cleanText.length === 6) {
@@ -368,7 +375,7 @@ function renderMatrix() {
       let cellClass = "";
 
       if (currentMode === "protocols") {
-        cellText = tInfo.protocol || "";
+        cellText = tInfo.protocol || (isSpecialEduStatus(tInfo.cert) ? tInfo.cert : "");
       } else if (currentMode === "certs") {
         cellText = tInfo.cert || "";
       } else if (tInfo.last) {
@@ -389,7 +396,12 @@ function renderMatrix() {
             autoText += `<div class="auto-status">Действ.</div>`;
           }
           autoText += "</div>";
+        } else {
+          // Текстовый статус (например, "не годен" или "не требуется")
+          cellText = tInfo.last;
         }
+      } else if (isSpecialEduStatus(tInfo.cert)) {
+        cellText = tInfo.cert;
       }
 
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
@@ -756,7 +768,13 @@ function applyCellValueToState(tabNum, cIdx, rawText) {
   }
 
   if (currentMode === "certs") {
-    appState.trainings[emp.tab_num][col.name].cert = String(rawText || "").trim();
+    const certVal = String(rawText || "").trim();
+    appState.trainings[emp.tab_num][col.name].cert = certVal;
+    // Если во вкладке удостоверений указано "не годен" или "не требуется" — копируем во все остальные вкладки
+    if (isSpecialEduStatus(certVal)) {
+      appState.trainings[emp.tab_num][col.name].protocol = certVal;
+      appState.trainings[emp.tab_num][col.name].last = certVal;
+    }
     return;
   }
 
