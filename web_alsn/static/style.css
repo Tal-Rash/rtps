@@ -418,6 +418,32 @@ button.primary:hover, #saveBtn.primary:hover {
 
 .warehouse-repair-cell {
   text-align: center;
+}
+
+/* Стили сортируемых заголовков таблицы списка ПБ */
+.alsn-table th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.alsn-table th.sortable-th:hover {
+  background-color: #eef4ff;
+}
+
+.alsn-table th.sortable-th.sort-active {
+  background-color: #e6effd;
+  color: var(--accent, #2563eb);
+}
+
+.alsn-table th.sortable-th .sort-indicator {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 11px;
+  color: var(--accent, #2563eb);
+  min-width: 10px;
+}
   user-select: none;
 }
 

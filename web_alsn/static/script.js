@@ -30,6 +30,7 @@ let warehouseFilters = {
   repair: "",
   number: ""
 };
+let warehouseSort = { col: null, dir: "asc" };
 
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
@@ -365,6 +366,57 @@ function setWarehouseFilter(field, value) {
   warehouseFilters[field] = String(value ?? "");
   normalizeWarehouseFilters();
   applyWarehouseFilters();
+}
+
+/* Переключение сортировки таблицы списка ПБ по клику на заголовок */
+function toggleWarehouseSort(col) {
+  if (warehouseSort.col !== col) {
+    warehouseSort = { col, dir: "asc" };
+  } else if (warehouseSort.dir === "asc") {
+    warehouseSort.dir = "desc";
+  } else {
+    warehouseSort = { col: null, dir: "asc" };
+  }
+  render();
+}
+
+/* Обновление индикаторов сортировки (стрелок) в заголовках таблицы */
+function updateWarehouseSortIndicators() {
+  document.querySelectorAll(".alsn-table th.sortable-th").forEach((th) => {
+    const col = th.dataset.sortCol;
+    const ind = th.querySelector(".sort-indicator");
+    const isActive = warehouseSort.col === col;
+    th.classList.toggle("sort-active", isActive);
+    if (ind) {
+      ind.textContent = isActive ? (warehouseSort.dir === "asc" ? "▲" : "▼") : "";
+    }
+  });
+}
+
+/* Сравнение двух строк таблицы списка ПБ с учетом типа данных столбца */
+function compareWarehouseRows(a, b, col) {
+  if (col === "in_repair") {
+    return (a.in_repair ? 1 : 0) - (b.in_repair ? 1 : 0);
+  }
+  if (col === "periodicity") {
+    const na = parseFloat(String(a.periodicity ?? "").replace(",", "."));
+    const nb = parseFloat(String(b.periodicity ?? "").replace(",", "."));
+    const va = Number.isFinite(na) ? na : Number.POSITIVE_INFINITY;
+    const vb = Number.isFinite(nb) ? nb : Number.POSITIVE_INFINITY;
+    return va - vb;
+  }
+  if (col === "verification_date" || col === "next_verification_date" || col === "updated_at") {
+    const da = parseDateDMY(String(a[col] ?? "").trim().split(" ")[0]);
+    const db = parseDateDMY(String(b[col] ?? "").trim().split(" ")[0]);
+    const ta = da ? da.getTime() : Number.POSITIVE_INFINITY;
+    const tb = db ? db.getTime() : Number.POSITIVE_INFINITY;
+    return ta - tb;
+  }
+  const sa = String(a[col] ?? "").trim();
+  const sb = String(b[col] ?? "").trim();
+  if (!sa && sb) return 1;
+  if (sa && !sb) return -1;
+  return sa.localeCompare(sb, "ru", { numeric: true, sensitivity: "base" });
 }
 
 /* Сброс всех фильтров склада */
@@ -1265,7 +1317,13 @@ function render() {
     `;
   }).join("") || `<div class="empty-state">Нет строк</div>`;
 
-  whBody.innerHTML = appState.warehouse.map((row, idx) => `
+  const sortedWarehouse = appState.warehouse.map((row, idx) => ({ row, idx }));
+  if (warehouseSort.col) {
+    const factor = warehouseSort.dir === "desc" ? -1 : 1;
+    sortedWarehouse.sort((a, b) => compareWarehouseRows(a.row, b.row, warehouseSort.col) * factor);
+  }
+
+  whBody.innerHTML = sortedWarehouse.map(({ row, idx }) => `
     <tr data-warehouse-row="1" data-row-idx="${idx}" data-warehouse-type="${escapeHtml(row.type)}" data-warehouse-next="${escapeHtml(row.next_verification_date)}" data-warehouse-location="${escapeHtml(row.location || 'Депо')}" data-warehouse-repair="${row.in_repair ? '1' : '0'}" data-warehouse-number="${escapeHtml(row.number)}">
       <td class="warehouse-cell${warehouseSelected?.row === idx && warehouseSelected?.col === 0 ? " selected" : ""}"
           data-row="${idx}" data-col="0"
@@ -1345,6 +1403,7 @@ function render() {
   }
 
   applyWarehouseFilters();
+  updateWarehouseSortIndicators();
   applyWarehouseSelectionClasses();
   document.getElementById("saveBtn").style.display = CAN_EDIT ? "inline-block" : "none";
 }

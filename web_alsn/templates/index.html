@@ -107,14 +107,14 @@
             </colgroup>
             <thead>
               <tr>
-                <th>Тип прибора</th>
-                <th>№ прибора</th>
-                <th>Дата поверки</th>
-                <th>Периодичность</th>
-                <th>След. дата поверки</th>
-                <th>Место нахождения</th>
-                <th>В ремонте</th>
-                <th>Дата изменения</th>
+                <th class="sortable-th" data-sort-col="type" onclick="toggleWarehouseSort('type')">Тип прибора<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="number" onclick="toggleWarehouseSort('number')">№ прибора<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="verification_date" onclick="toggleWarehouseSort('verification_date')">Дата поверки<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="periodicity" onclick="toggleWarehouseSort('periodicity')">Периодичность<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="next_verification_date" onclick="toggleWarehouseSort('next_verification_date')">След. дата поверки<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="location" onclick="toggleWarehouseSort('location')">Место нахождения<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="in_repair" onclick="toggleWarehouseSort('in_repair')">В ремонте<span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-col="updated_at" onclick="toggleWarehouseSort('updated_at')">Дата изменения<span class="sort-indicator"></span></th>
               </tr>
             </thead>
             <tbody id="whBody"></tbody>
