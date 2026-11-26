@@ -398,6 +398,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    /**
+     * Проверяет совпадение двух ФИО с учётом сокращения инициалов (Иванов И. И. == Иванов Иван Иванович).
+     */
+    function isSamePersonFio(name1, name2) {
+        const s1 = String(name1 || '').trim().toLowerCase().replace(/\./g, ' ').split(/\s+/).filter(Boolean);
+        const s2 = String(name2 || '').trim().toLowerCase().replace(/\./g, ' ').split(/\s+/).filter(Boolean);
+        if (!s1.length || !s2.length) return false;
+        if (s1[0] !== s2[0]) return false;
+        if (s1.length > 1 && s2.length > 1) {
+            if (s1[1].length === 1 || s2[1].length === 1) {
+                if (s1[1][0] !== s2[1][0]) return false;
+            } else if (s1[1] !== s2[1]) {
+                return false;
+            }
+        }
+        if (s1.length > 2 && s2.length > 2) {
+            if (s1[2].length === 1 || s2[2].length === 1) {
+                if (s1[2][0] !== s2[2][0]) return false;
+            } else if (s1[2] !== s2[2]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Удаляет дубликаты сотрудников из архива, которые уже присутствуют в основном списке (после разанонимизации).
+     */
+    function deduplicateVacationsList(vacations) {
+        if (!Array.isArray(vacations)) return vacations;
+        // Основные сотрудники из штата (у них есть ID_xxx или должность/исключение)
+        const mainEmployees = vacations.filter(emp =>
+            String(emp.tab_num || '').startsWith('ID_') ||
+            Boolean(emp.position) ||
+            emp.exclude_date !== undefined
+        );
+        // Вычисляем реальные ФИО основных сотрудников
+        const mainResolved = mainEmployees.map(emp => {
+            const priv = (typeof resolveEmployeePrivateData === 'function')
+                ? resolveEmployeePrivateData(emp.id, emp.tab_num, emp.name, emp.full_name || emp.name, emp.position)
+                : { name: emp.name };
+            return { emp, realName: priv.name || emp.name || '' };
+        });
+
+        return vacations.filter(emp => {
+            const isExtraFromArchive = !String(emp.tab_num || '').startsWith('ID_') && !emp.position && emp.exclude_date === undefined;
+            if (!isExtraFromArchive) return true;
+            const match = mainResolved.find(m => isSamePersonFio(m.realName, emp.name));
+            if (match) {
+                // Если у основного сотрудника нет отпусков, можно подхватить из архивной записи
+                if ((!match.emp.vacations || match.emp.vacations.length === 0) && Array.isArray(emp.vacations) && emp.vacations.length > 0) {
+                    match.emp.vacations = emp.vacations;
+                }
+                return false;
+            }
+            return true;
+        });
+    }
+
     // Load Data (holidays & vacations for selected year)
     function loadYearData(year) {
         Promise.all([
@@ -407,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
             holidaysData = holidays;
             updateDaysInMonths();
             renderHeaders();
-            allData = vacations;
+            allData = deduplicateVacationsList(vacations);
             renderTable(allData);
             renderAnnualCalendar(year);
         }).catch(err => console.error(err));
@@ -2752,7 +2811,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const disAttr = CAN_EDIT ? '' : 'disabled';
-        const empOptions = allData.map(e => `<option value="${escapeHtml(e.name)}" data-tab="${escapeHtml(e.tab_num || '')}">${escapeHtml(e.name)}</option>`).join('');
+        // Формируем список сотрудников для подсказки с реальными ФИО (если есть словарь разанонимизации)
+        const resolvedEmps = allData.map(e => {
+            const priv = (typeof resolveEmployeePrivateData === 'function')
+                ? resolveEmployeePrivateData(e.id, e.tab_num, e.name, e.full_name || e.name, e.position)
+                : { name: e.name };
+            return { realName: priv.name || e.name || '', tab_num: e.tab_num || '' };
+        });
+        const empOptions = resolvedEmps.map(e => `<option value="${escapeHtml(e.realName)}" data-tab="${escapeHtml(e.tab_num)}">${escapeHtml(e.realName)}</option>`).join('');
 
         archiveData.forEach((row, index) => {
             const tr = document.createElement('tr');
@@ -2816,7 +2882,7 @@ document.addEventListener('DOMContentLoaded', () => {
             nameInp.addEventListener('change', (e) => {
                 const val = e.target.value;
                 row.name = val.trim();
-                const match = allData.find(x => x.name === val);
+                const match = resolvedEmps.find(x => isSamePersonFio(x.realName, val));
                 if (match && match.tab_num) {
                     tabInp.value = match.tab_num;
                     row.tab_num = match.tab_num;
@@ -2952,6 +3018,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveArchiveBtn) {
         saveArchiveBtn.addEventListener('click', () => {
             syncArchiveDataFromDOM();
+            // Привязываем tab_num (ID_xxx) из штатного списка по совпадению ФИО, чтобы на сервере не создавались дубликаты
+            const resolvedEmps = allData.map(e => {
+                const priv = (typeof resolveEmployeePrivateData === 'function')
+                    ? resolveEmployeePrivateData(e.id, e.tab_num, e.name, e.full_name || e.name, e.position)
+                    : { name: e.name };
+                return { realName: priv.name || e.name || '', tab_num: e.tab_num || '' };
+            });
+            archiveData.forEach(r => {
+                if (r.name && !String(r.tab_num || '').startsWith('ID_')) {
+                    const match = resolvedEmps.find(x => isSamePersonFio(x.realName, r.name));
+                    if (match && match.tab_num) {
+                        r.tab_num = match.tab_num;
+                    }
+                }
+            });
             saveArchiveBtn.textContent = 'Сохранение...';
 
             fetch(`${APP_PREFIX}/api/vacations/archive`, {
