@@ -425,13 +425,12 @@ def build_milk_report_excel(year: int, month: int, report_type: str) -> tuple[st
         return None
 
     def is_workday(y, m, d):
+        # Рабочий день: не выходной, не праздник и не перенесенный выходной день
         dt_obj = dt.date(y, m, d)
         is_we = dt_obj.weekday() >= 5
         is_hol = (m, d) in holiday_dates
         is_tr = (m, d) in transfer_dates
-        if is_tr:
-            return True
-        if is_hol:
+        if is_hol or is_tr:
             return False
         return not is_we
 
@@ -679,13 +678,12 @@ def build_milk_details_html(year: int, month: int, report_type: str) -> str:
         return None
 
     def is_workday(y, m, d):
+        # Рабочий день: не выходной, не праздник и не перенесенный выходной день
         dt_obj = dt.date(y, m, d)
         is_we = dt_obj.weekday() >= 5
         is_hol = (m, d) in holiday_dates
         is_tr = (m, d) in transfer_dates
-        if is_tr:
-            return True
-        if is_hol:
+        if is_hol or is_tr:
             return False
         return not is_we
 

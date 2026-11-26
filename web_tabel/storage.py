@@ -131,7 +131,7 @@ def init_db() -> None:
 
 
 def load_system_dates(year: int) -> dict[str, list[tuple[int, int]]]:
-    """Загрузка производственного календаря: праздничные и перенесенные рабочие дни."""
+    """Загрузка производственного календаря: праздничные и перенесенные выходные дни."""
     transfer_dates: set[tuple[int, int]] = set()
     holiday_dates: set[tuple[int, int]] = set(FIXED_HOLIDAYS)
     if not DB_FILE.exists():
