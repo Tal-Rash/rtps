@@ -163,6 +163,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const hideQuitting = Boolean(toggleQuitting && toggleQuitting.checked);
         const rows = tableBody ? tableBody.querySelectorAll('tr[data-emp-id]') : [];
         rows.forEach(tr => {
+            // Для подстрок состояние наследуется от основной строки сотрудника
+            if (tr.dataset.isSubrow === "true") {
+                const parentTr = tableBody.querySelector(`tr[data-emp-id="${tr.dataset.empId}"]:not([data-is-subrow="true"])`);
+                if (parentTr) {
+                    if (parentTr.classList.contains('row-excluded')) {
+                        tr.classList.add('row-excluded');
+                    } else {
+                        tr.classList.remove('row-excluded');
+                    }
+                    tr.style.display = parentTr.style.display;
+                }
+                return;
+            }
+
             const isQuitting = tr.dataset.isQuitting === "true";
             const rowChk = tr.querySelector('.exclude-row-checkbox');
             const rowExcluded = Boolean(rowChk && rowChk.checked);
@@ -556,6 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const rows = tableBody.querySelectorAll('tr[data-emp-id]');
         rows.forEach(tr => {
             const empId = tr.dataset.empId;
+            const isSubrow = tr.dataset.isSubrow === 'true';
             const allowedInp = tr.querySelector('.allowed-days-input');
             const allowedVal = allowedInp ? allowedInp.value : '';
             const inputs = {};
@@ -564,16 +579,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isC = inp.classList.contains('c-input');
                 inputs[`${isC ? 'c' : 'po'}_${m}`] = inp.value;
             });
-            snapshot.push({ empId, allowedVal, inputs });
+            snapshot.push({ empId, isSubrow, allowedVal, inputs });
         });
         return snapshot;
     }
 
     function applyTableState(snapshot) {
         if (!snapshot || !Array.isArray(snapshot) || !tableBody) return;
+        // Удаляем текущие подстроки перед восстановлением снимка
+        tableBody.querySelectorAll('tr[data-is-subrow="true"]').forEach(r => r.remove());
+
+        const touchedMainRows = new Set();
         snapshot.forEach(item => {
-            const tr = tableBody.querySelector(`tr[data-emp-id="${item.empId}"]`);
-            if (!tr) return;
+            const mainTr = tableBody.querySelector(`tr[data-emp-id="${item.empId}"]:not([data-is-subrow="true"])`);
+            if (!mainTr) return;
+
+            const tr = item.isSubrow ? createSubRow(mainTr, false) : mainTr;
             const allowedInp = tr.querySelector('.allowed-days-input');
             if (allowedInp && item.allowedVal !== undefined) {
                 allowedInp.value = item.allowedVal;
@@ -590,8 +611,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
-            calculateRow(tr);
+            touchedMainRows.add(mainTr);
         });
+        touchedMainRows.forEach(mainTr => calculateRow(mainTr));
         updateTotals();
         updateUndoRedoButtons();
     }
@@ -1304,9 +1326,11 @@ document.addEventListener('DOMContentLoaded', () => {
         createVersionBtn.addEventListener('click', () => {
             const vName = newVersionNameInput ? newVersionNameInput.value.trim() : '';
 
-            const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
+            const rows = document.querySelectorAll('#tableBody tr[data-emp-id]:not([data-is-subrow="true"])');
             rows.forEach(tr => {
                 const empId = parseInt(tr.dataset.empId);
+                const subRows = Array.from(document.querySelectorAll(`#tableBody tr[data-emp-id="${empId}"][data-is-subrow="true"]`));
+                const allRows = [tr, ...subRows];
                 const empTab = tr.dataset.empTab || '';
                 const empName = tr.dataset.empName || '';
                 const employee = (typeof findEmp === 'function' ? findEmp({ tab_num: empTab, name: empName }) : null) || allData.find(e => e.id === empId);
@@ -1315,45 +1339,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
                     const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
 
-                    let currentStart = null;
-                    let currentStartMonth = null;
                     let parsedVacations = [];
-
-                    for (let m = 0; m < 13; m++) {
-                        const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
-                        const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
-                        if (!cInp || !poInp) continue;
-
-                        const c_val = parseDayNumber(cInp.value);
-                        const po_val = parseDayNumber(poInp.value);
-
-                        if (!isNaN(c_val) && !isNaN(po_val)) {
-                            if (currentStart !== null) {
-                                parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
-                            }
-                            parsedVacations.push({ startMonth: m, startDay: c_val, endMonth: m, endDay: po_val });
-                            currentStart = null;
-                            currentStartMonth = null;
-                        } else if (!isNaN(c_val)) {
-                            if (currentStart !== null) {
-                                parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
-                            }
-                            currentStart = c_val;
-                            currentStartMonth = m;
-                        } else if (!isNaN(po_val)) {
-                            if (currentStart !== null) {
-                                parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
-                                currentStart = null;
-                                currentStartMonth = null;
-                            } else {
-                                parsedVacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
-                            }
-                        }
-                    }
-
-                    if (currentStart !== null) {
-                        parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: currentStartMonth, endDay: calendarDaysInMonths[currentStartMonth] });
-                    }
+                    allRows.forEach(r => {
+                        parsedVacations.push(...parseVacationsFromRow(r));
+                    });
 
                     parsedVacations = parsedVacations.filter(vac => {
                         if (isCarriedOverJan && vac.startMonth === 0 && vac.endMonth === 0 && vac.startDay === carriedStartD && vac.endDay === carriedEndD) {
@@ -1443,6 +1432,242 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Создание дополнительной строки отпуска для сотрудника
+    function createSubRow(mainTr, focus = false) {
+            const subTr = document.createElement('tr');
+            subTr.className = 'subrow-vacation';
+            subTr.dataset.empId = mainTr.dataset.empId;
+            subTr.dataset.empTab = mainTr.dataset.empTab || '';
+            subTr.dataset.empName = mainTr.dataset.empName || '';
+            subTr.dataset.isSubrow = 'true';
+            subTr.dataset.isQuitting = mainTr.dataset.isQuitting || 'false';
+            subTr.dataset.excludeDate = mainTr.dataset.excludeDate || '';
+
+            if (mainTr.classList.contains('row-excluded')) {
+                subTr.classList.add('row-excluded');
+            }
+            if (mainTr.style.display === 'none') {
+                subTr.style.display = 'none';
+            }
+
+            const tdInfo = document.createElement('td');
+            tdInfo.className = 'col-sticky-1';
+            tdInfo.style.width = '250px';
+            tdInfo.style.minWidth = '250px';
+            tdInfo.style.maxWidth = '250px';
+            tdInfo.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 2px 6px; font-size: 0.72rem; color: #64748b;">
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: #3b82f6; font-weight: bold;">↳</span> доп. период
+                    </span>
+                    ${CAN_EDIT ? `
+                        <button type="button" class="btn-del-subrow" title="Удалить эту строку отпуска">✕</button>
+                    ` : ''}
+                </div>
+            `;
+            subTr.appendChild(tdInfo);
+
+            const tdAllowed = document.createElement('td');
+            tdAllowed.className = 'col-sticky-2';
+            tdAllowed.style.width = '100px';
+            tdAllowed.style.minWidth = '100px';
+            tdAllowed.style.maxWidth = '100px';
+            tdAllowed.innerHTML = `
+                <div class="cell-input-wrapper" style="justify-content: center; height: 100%; display: flex; align-items: center;">
+                    <span style="color: #94a3b8; font-size: 0.8rem;">—</span>
+                </div>
+            `;
+            subTr.appendChild(tdAllowed);
+
+            for (let m = 0; m < 13; m++) {
+                const td = document.createElement('td');
+                td.className = 'month-cell';
+                td.dataset.month = m;
+                td.innerHTML = `
+                    <div class="cell-input-wrapper">
+                        <div class="inputs-row">
+                            <input type="text" class="day-input c-input" data-month="${m}" ${CAN_EDIT ? '' : 'readonly'}>
+                            <input type="text" class="day-input po-input" data-month="${m}" ${CAN_EDIT ? '' : 'readonly'}>
+                        </div>
+                        <div class="day-result"></div>
+                    </div>
+                `;
+                subTr.appendChild(td);
+            }
+
+            // Вставляем сразу после последней текущей строки сотрудника
+            const allEmpRows = Array.from(tableBody.querySelectorAll(`tr[data-emp-id="${mainTr.dataset.empId}"]`));
+            const lastRow = allEmpRows[allEmpRows.length - 1] || mainTr;
+            lastRow.after(subTr);
+
+            attachRowInputListeners(subTr);
+
+            const delBtn = tdInfo.querySelector('.btn-del-subrow');
+            if (delBtn) {
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!CAN_EDIT) return;
+                    pushUndoState();
+                    subTr.remove();
+                    calculateRow(mainTr);
+                });
+            }
+
+            if (focus) {
+                const firstC = subTr.querySelector('.c-input');
+                if (firstC) firstC.focus();
+                pushUndoState();
+            }
+
+            return subTr;
+        }
+
+        // Поиск свободной строки сотрудника (или создание новой) для размещения отпуска
+        function findOrTargetRowForVacation(mainTr, startM, endM) {
+            const canFit = (row) => {
+                for (let m = startM; m <= endM; m++) {
+                    const cInp = row.querySelector(`.c-input[data-month="${m}"]`);
+                    const poInp = row.querySelector(`.po-input[data-month="${m}"]`);
+                    if ((cInp && cInp.value.trim() !== '') || (poInp && poInp.value.trim() !== '')) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            if (canFit(mainTr)) {
+                return mainTr;
+            }
+
+            const empId = mainTr.dataset.empId;
+            const existingSubrows = Array.from(tableBody.querySelectorAll(`tr[data-emp-id="${empId}"][data-is-subrow="true"]`));
+            for (const sr of existingSubrows) {
+                if (canFit(sr)) {
+                    return sr;
+                }
+            }
+
+            return createSubRow(mainTr);
+        }
+
+        // Привязка обработчиков событий к полям ввода строки
+        function attachRowInputListeners(row) {
+            const inputs = row.querySelectorAll('.day-input, .allowed-days-input');
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    if (CAN_EDIT) pushUndoState();
+                    setTimeout(() => {
+                        if (document.activeElement === input) {
+                            input.select();
+                        }
+                    }, 20);
+                });
+            });
+
+            row.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const inp = e.target;
+                    if (inp && inp.classList.contains('c-input')) {
+                        e.preventDefault();
+                        inp.blur();
+                        const m = parseInt(inp.dataset.month);
+                        const poInp = row.querySelector(`.po-input[data-month="${m}"]`);
+                        if (poInp) poInp.focus();
+                    } else if (inp && inp.classList.contains('po-input')) {
+                        e.preventDefault();
+                        inp.blur();
+                        const m = parseInt(inp.dataset.month);
+                        if (m < 12) {
+                            const nextC = row.querySelector(`.c-input[data-month="${m + 1}"]`);
+                            if (nextC) nextC.focus();
+                        }
+                    }
+                }
+            });
+
+            row.querySelectorAll('.c-input').forEach(cInput => {
+                const startM = parseInt(cInput.dataset.month, 10);
+
+                const triggerAutoCalc = (shouldFormat = false) => {
+                    if (!CAN_EDIT) return;
+                    const val = cInput.value.trim();
+                    if (val === '') {
+                        clearAssociatedVacationEnd(row, startM);
+                        calculateRow(row);
+                        return;
+                    }
+                    const parsed = parseDateInput(val, startM);
+                    const startD = parsed.day;
+                    if (!isNaN(startD) && startD >= 1 && startD <= (calendarDaysInMonths[startM] || 31)) {
+                        if (shouldFormat) {
+                            cInput.value = formatDayWithMonth(startD, startM);
+                        }
+                        autoCompleteVacation(row, startM, startD);
+                    } else if (shouldFormat && isNaN(startD)) {
+                        cInput.value = '';
+                        clearAssociatedVacationEnd(row, startM);
+                        calculateRow(row);
+                    }
+                };
+
+                cInput.addEventListener('input', () => {
+                    const val = cInput.value.trim();
+                    if (val === '') {
+                        clearAssociatedVacationEnd(row, startM);
+                        calculateRow(row);
+                    }
+                });
+
+                cInput.addEventListener('change', () => triggerAutoCalc(true));
+                cInput.addEventListener('blur', () => triggerAutoCalc(true));
+            });
+
+            row.querySelectorAll('.po-input').forEach(poInput => {
+                const m = parseInt(poInput.dataset.month, 10);
+
+                const triggerPoUpdate = (shouldFormat = false) => {
+                    if (!CAN_EDIT) return;
+                    const val = poInput.value.trim();
+                    if (val === '') {
+                        calculateRow(row);
+                        return;
+                    }
+                    const parsed = parseDateInput(val, m);
+                    const endD = parsed.day;
+                    if (!isNaN(endD) && endD >= 1 && endD <= (calendarDaysInMonths[m] || 31)) {
+                        if (shouldFormat) {
+                            poInput.value = formatDayWithMonth(endD, m);
+                        }
+                        for (let f = m + 1; f < 13; f++) {
+                            const fC = row.querySelector(`.c-input[data-month="${f}"]`);
+                            const fPo = row.querySelector(`.po-input[data-month="${f}"]`);
+                            if (fC && fC.value.trim() !== '') break;
+                            if (fPo && fPo.value.trim() !== '') {
+                                fPo.value = '';
+                            }
+                        }
+                    } else if (shouldFormat && isNaN(endD)) {
+                        poInput.value = '';
+                    }
+                    calculateRow(row);
+                };
+
+                poInput.addEventListener('input', () => {
+                    const val = poInput.value.trim();
+                    if (val === '') {
+                        calculateRow(row);
+                    }
+                });
+
+                poInput.addEventListener('change', () => triggerPoUpdate(true));
+                poInput.addEventListener('blur', () => triggerPoUpdate(true));
+            });
+
+            row.querySelectorAll('.allowed-days-input').forEach(allowedInput => {
+                allowedInput.addEventListener('input', () => calculateRow(row));
+            });
+    }
+
     function renderTable(data) {
         if (!tableBody) return;
         tableBody.innerHTML = '';
@@ -1472,6 +1697,9 @@ document.addEventListener('DOMContentLoaded', () => {
             tdInfo.innerHTML = `
                 <div class="employee-name" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                     <span>${empName}</span>
+                    ${CAN_EDIT ? `
+                        <button type="button" class="btn-add-subrow" title="Добавить дополнительную строку отпуска">+ период</button>
+                    ` : ''}
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 2px;">
                     <div class="employee-pos">${empPos}</div>
@@ -1526,7 +1754,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             tableBody.appendChild(tr);
 
-            // Populate existing vacations
+            // Кнопка добавления доп. строки отпуска
+            const addSubBtn = tdInfo.querySelector('.btn-add-subrow');
+            if (addSubBtn) {
+                addSubBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!CAN_EDIT) return;
+                    createSubRow(tr, true);
+                });
+            }
+
+            // Заполнение отпусков сотрудника (с авто-размещением в доп. строки при пересечении месяцев)
             (employee.vacations || []).forEach(vac => {
                 if (!vac || !vac.start || !vac.end) return;
                 const sParts = String(vac.start).split('-');
@@ -1544,10 +1782,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 let startM = (sYear === currentYear + 1 && sMonth === 0) ? 12 : sMonth;
                 let endM = (eYear === currentYear + 1 && eMonth === 0) ? 12 : eMonth;
 
-                const cInput = tr.querySelector(`.c-input[data-month="${startM}"]`);
+                const targetRow = findOrTargetRowForVacation(tr, startM, endM);
+                const cInput = targetRow.querySelector(`.c-input[data-month="${startM}"]`);
                 if (cInput) cInput.value = formatDayWithMonth(startD, startM);
 
-                const poInput = tr.querySelector(`.po-input[data-month="${endM}"]`);
+                const poInput = targetRow.querySelector(`.po-input[data-month="${endM}"]`);
                 if (poInput) poInput.value = formatDayWithMonth(endD, endM);
             });
 
@@ -1574,131 +1813,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Расчет и отрисовка строки
+            // Привязка обработчиков событий к основной строке сотрудника
+            attachRowInputListeners(tr);
+
+            // Расчет и отрисовка всех строк сотрудника (основной и дочерних)
             calculateRow(tr);
-
-            // Привязка обработчиков фокуса ко всем полям (автовыделение текста и история отмены)
-            const inputs = tr.querySelectorAll('.day-input, .allowed-days-input');
-            inputs.forEach(input => {
-                input.addEventListener('focus', () => {
-                    if (CAN_EDIT) pushUndoState();
-                    setTimeout(() => {
-                        if (document.activeElement === input) {
-                            input.select();
-                        }
-                    }, 20);
-                });
-            });
-
-            // Навигация по клавише Enter в строке
-            tr.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const inp = e.target;
-                    if (inp && inp.classList.contains('c-input')) {
-                        e.preventDefault();
-                        inp.blur();
-                        const m = parseInt(inp.dataset.month);
-                        const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
-                        if (poInp) poInp.focus();
-                    } else if (inp && inp.classList.contains('po-input')) {
-                        e.preventDefault();
-                        inp.blur();
-                        const m = parseInt(inp.dataset.month);
-                        if (m < 12) {
-                            const nextC = tr.querySelector(`.c-input[data-month="${m + 1}"]`);
-                            if (nextC) nextC.focus();
-                        }
-                    }
-                }
-            });
-
-            // Обработка ввода даты начала отпуска (c-input) с добавлением месяца и автоматическим расчетом окончания
-            tr.querySelectorAll('.c-input').forEach(cInput => {
-                const startM = parseInt(cInput.dataset.month, 10);
-
-                const triggerAutoCalc = (shouldFormat = false) => {
-                    if (!CAN_EDIT) return;
-                    const val = cInput.value.trim();
-                    if (val === '') {
-                        clearAssociatedVacationEnd(tr, startM);
-                        calculateRow(tr);
-                        return;
-                    }
-                    const parsed = parseDateInput(val, startM);
-                    const startD = parsed.day;
-                    if (!isNaN(startD) && startD >= 1 && startD <= (calendarDaysInMonths[startM] || 31)) {
-                        if (shouldFormat) {
-                            cInput.value = formatDayWithMonth(startD, startM);
-                        }
-                        autoCompleteVacation(tr, startM, startD);
-                    } else if (shouldFormat && isNaN(startD)) {
-                        cInput.value = '';
-                        clearAssociatedVacationEnd(tr, startM);
-                        calculateRow(tr);
-                    }
-                };
-
-                // При вводе (input) НЕ форматируем значение, чтобы не перебивать набор пользователя (например, при вводе 15)
-                cInput.addEventListener('input', () => {
-                    const val = cInput.value.trim();
-                    if (val === '') {
-                        clearAssociatedVacationEnd(tr, startM);
-                        calculateRow(tr);
-                    }
-                });
-
-                // Форматирование и расчет запускаются при завершении ввода (blur или change)
-                cInput.addEventListener('change', () => triggerAutoCalc(true));
-                cInput.addEventListener('blur', () => triggerAutoCalc(true));
-            });
-
-            // Обработка ручной корректировки окончания отпуска (po-input) с добавлением месяца
-            tr.querySelectorAll('.po-input').forEach(poInput => {
-                const m = parseInt(poInput.dataset.month, 10);
-
-                const triggerPoUpdate = (shouldFormat = false) => {
-                    if (!CAN_EDIT) return;
-                    const val = poInput.value.trim();
-                    if (val === '') {
-                        calculateRow(tr);
-                        return;
-                    }
-                    const parsed = parseDateInput(val, m);
-                    const endD = parsed.day;
-                    if (!isNaN(endD) && endD >= 1 && endD <= (calendarDaysInMonths[m] || 31)) {
-                        if (shouldFormat) {
-                            poInput.value = formatDayWithMonth(endD, m);
-                        }
-                        // При установке даты окончания в текущем месяце очищаем висящие хвосты в последующих месяцах
-                        for (let f = m + 1; f < 13; f++) {
-                            const fC = tr.querySelector(`.c-input[data-month="${f}"]`);
-                            const fPo = tr.querySelector(`.po-input[data-month="${f}"]`);
-                            if (fC && fC.value.trim() !== '') break;
-                            if (fPo && fPo.value.trim() !== '') {
-                                fPo.value = '';
-                            }
-                        }
-                    } else if (shouldFormat && isNaN(endD)) {
-                        poInput.value = '';
-                    }
-                    calculateRow(tr);
-                };
-
-                // При вводе не перебиваем пользователя форматированием
-                poInput.addEventListener('input', () => {
-                    const val = poInput.value.trim();
-                    if (val === '') {
-                        calculateRow(tr);
-                    }
-                });
-
-                poInput.addEventListener('change', () => triggerPoUpdate(true));
-                poInput.addEventListener('blur', () => triggerPoUpdate(true));
-            });
-
-            tr.querySelectorAll('.allowed-days-input').forEach(allowedInput => {
-                allowedInput.addEventListener('input', () => calculateRow(tr));
-            });
         });
 
         undoStack = [];
@@ -1852,14 +1971,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return vacations;
     }
 
-    // Подсчет дней, уже использованных другими отпусками сотрудника в этой строке
+    // Подсчет дней, уже использованных другими отпусками сотрудника во всех его строках
     function getOtherVacationsUsedDays(tr, excludeStartMonth) {
-        const vacations = parseVacationsFromRow(tr);
+        const empId = tr.dataset.empId;
+        const allEmpRows = Array.from(tableBody.querySelectorAll(`tr[data-emp-id="${empId}"]`));
         let used = 0;
-        vacations.forEach(vac => {
-            if (vac.is_carried_over) return;
-            if (vac.startMonth === excludeStartMonth) return;
-            used += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+        allEmpRows.forEach(r => {
+            const vacations = parseVacationsFromRow(r);
+            vacations.forEach(vac => {
+                if (vac.is_carried_over) return;
+                if (r === tr && vac.startMonth === excludeStartMonth) return;
+                used += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+            });
         });
         return used;
     }
@@ -1882,7 +2005,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Автоматический расчет окончания отпуска и прорисовка
     function autoCompleteVacation(tr, startM, startD) {
-        const allowedInp = tr.querySelector('.allowed-days-input');
+        const empId = tr.dataset.empId;
+        const allEmpRows = Array.from(tableBody.querySelectorAll(`tr[data-emp-id="${empId}"]`));
+        const mainTr = allEmpRows.find(r => r.dataset.isSubrow !== "true") || tr;
+
+        const allowedInp = mainTr.querySelector('.allowed-days-input');
         const allowedDays = allowedInp ? (parseInt(allowedInp.value) || 28) : 28;
 
         const otherUsedDays = getOtherVacationsUsedDays(tr, startM);
@@ -1895,7 +2022,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const endM = endResult.endMonth;
         const endD = endResult.endDay;
 
-        // Очищаем старые поля окончания в других месяцах для этого отрезка
+        // Очищаем старые поля окончания в других месяцах для этого отрезка в текущей строке
         for (let m = startM; m < 13; m++) {
             if (m > startM) {
                 const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
@@ -1918,32 +2045,42 @@ document.addEventListener('DOMContentLoaded', () => {
         calculateRow(tr);
     }
 
-    function calculateRow(tr) {
-        if (!tr || !tr.dataset.empId) return;
+    function calculateRow(anyTr) {
+        if (!anyTr || !anyTr.dataset.empId) return;
 
-        // Очищаем предыдущие результаты, линии и бейджи
-        tr.querySelectorAll('.day-result').forEach(el => el.textContent = '');
-        tr.querySelectorAll('.vacation-line').forEach(el => el.remove());
-        tr.querySelectorAll('.total-days-badge').forEach(el => el.remove());
-        tr.querySelectorAll('.overflow-tag').forEach(el => el.remove());
+        const empId = anyTr.dataset.empId;
+        const allEmpRows = Array.from(tableBody.querySelectorAll(`tr[data-emp-id="${empId}"]`));
+        const mainTr = allEmpRows.find(r => r.dataset.isSubrow !== "true") || anyTr;
 
-        const vacations = parseVacationsFromRow(tr);
-
-        let allowedStr = tr.querySelector('.allowed-days-input') ? tr.querySelector('.allowed-days-input').value : '';
+        let allowedStr = mainTr.querySelector('.allowed-days-input') ? mainTr.querySelector('.allowed-days-input').value : '';
         let allowedDays = allowedStr ? parseInt(allowedStr) : Infinity;
 
-        // Calculate grand total for worker row excluding carried over vacations
+        // Сбор всех отпусков сотрудника по всем его строкам (основной и доп. строкам)
         let grandTotalDays = 0;
-        vacations.forEach(vac => {
-            if (!vac.is_carried_over) {
-                grandTotalDays += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
-            }
+        const rowVacationsMap = new Map();
+        let allVacationsList = [];
+
+        allEmpRows.forEach(r => {
+            // Очищаем предыдущие результаты, линии и бейджи в каждой строке
+            r.querySelectorAll('.day-result').forEach(el => el.textContent = '');
+            r.querySelectorAll('.vacation-line').forEach(el => el.remove());
+            r.querySelectorAll('.total-days-badge').forEach(el => el.remove());
+            r.querySelectorAll('.overflow-tag').forEach(el => el.remove());
+
+            const vacs = parseVacationsFromRow(r);
+            rowVacationsMap.set(r, vacs);
+            vacs.forEach(vac => {
+                if (!vac.is_carried_over) {
+                    grandTotalDays += getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+                }
+                allVacationsList.push({ vac, row: r });
+            });
         });
 
         let overflow = grandTotalDays > allowedDays ? grandTotalDays - allowedDays : 0;
         let isMatch = (grandTotalDays === allowedDays && allowedDays > 0 && allowedDays !== Infinity);
 
-        let allowedInput = tr.querySelector('.allowed-days-input');
+        let allowedInput = mainTr.querySelector('.allowed-days-input');
         if (allowedInput) {
             if (overflow > 0) {
                 allowedInput.style.color = '#ef4444';
@@ -1957,74 +2094,79 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Draw results
-        vacations.forEach((vac, index) => {
-            let totalDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
+        // Отрисовка линий и бейджей в соответствующих строках
+        allEmpRows.forEach(r => {
+            const vacations = rowVacationsMap.get(r) || [];
+            vacations.forEach(vac => {
+                let totalDays = getWorkingVacationDays(vac.startMonth, vac.startDay, vac.endMonth, vac.endDay);
 
-            // Draw line segments
-            for (let m = vac.startMonth; m <= vac.endMonth; m++) {
-                let daysInM = calendarDaysInMonths[m];
-                let cellWrapper = tr.querySelector(`.month-cell[data-month="${m}"] .cell-input-wrapper`);
+                // Отрисовка сегментов линии
+                for (let m = vac.startMonth; m <= vac.endMonth; m++) {
+                    let daysInM = calendarDaysInMonths[m];
+                    let cellWrapper = r.querySelector(`.month-cell[data-month="${m}"] .cell-input-wrapper`);
+                    if (!cellWrapper) continue;
 
-                if (!cellWrapper) continue;
+                    if (vac.startMonth === vac.endMonth) {
+                        let left = ((vac.startDay - 1) / daysInM) * 100;
+                        let width = ((vac.endDay - vac.startDay + 1) / daysInM) * 100;
+                        drawLine(cellWrapper, left, width, vac.is_carried_over);
+                    } else if (m === vac.startMonth) {
+                        let left = ((vac.startDay - 1) / daysInM) * 100;
+                        let width = 100 - left;
+                        drawLine(cellWrapper, left, width, vac.is_carried_over);
+                    } else if (m === vac.endMonth) {
+                        let width = (vac.endDay / daysInM) * 100;
+                        drawLine(cellWrapper, 0, width, vac.is_carried_over);
+                    } else {
+                        drawLine(cellWrapper, 0, 100, vac.is_carried_over);
+                    }
+                }
 
+                // Центральная точка для бейджа количества дней
+                let centerM, centerLeft;
                 if (vac.startMonth === vac.endMonth) {
-                    let left = ((vac.startDay - 1) / daysInM) * 100;
-                    let width = ((vac.endDay - vac.startDay + 1) / daysInM) * 100;
-                    drawLine(cellWrapper, left, width, vac.is_carried_over);
-                } else if (m === vac.startMonth) {
-                    let left = ((vac.startDay - 1) / daysInM) * 100;
-                    let width = 100 - left;
-                    drawLine(cellWrapper, left, width, vac.is_carried_over);
-                } else if (m === vac.endMonth) {
-                    let width = (vac.endDay / daysInM) * 100;
-                    drawLine(cellWrapper, 0, width, vac.is_carried_over);
+                    centerM = vac.startMonth;
+                    centerLeft = 50;
                 } else {
-                    drawLine(cellWrapper, 0, 100, vac.is_carried_over);
+                    let centerPoint = (vac.startMonth + vac.endMonth + 1) / 2;
+                    centerM = Math.floor(centerPoint);
+                    centerLeft = (centerPoint - centerM) * 100;
                 }
-            }
 
-            // Calculate center point in the gap between dates
-            let centerM, centerLeft;
-            if (vac.startMonth === vac.endMonth) {
-                centerM = vac.startMonth;
-                centerLeft = 50;
-            } else {
-                let centerPoint = (vac.startMonth + vac.endMonth + 1) / 2;
-                centerM = Math.floor(centerPoint);
-                centerLeft = (centerPoint - centerM) * 100;
-            }
-
-            // На самой линии всегда отображается только компактное число дней отпуска
-            let badgeText = totalDays;
-            let overflowClass = '';
-            if (vac.is_carried_over) {
-                overflowClass = 'badge-carried-over';
-            } else if (overflow > 0) {
-                overflowClass = 'badge-overflow';
-            } else if (isMatch) {
-                overflowClass = 'badge-success';
-            }
-
-            let centerCell = tr.querySelector(`.month-cell[data-month="${centerM}"] .cell-input-wrapper`);
-            if (centerCell) {
-                centerCell.insertAdjacentHTML('beforeend', `<div class="total-days-badge ${overflowClass}" style="left: ${centerLeft}%;">${badgeText}</div>`);
-            }
-
-            // При переборе нормы плашка «перебор +N» смещается в следующую ячейку справа от даты окончания отпуска
-            if (overflow > 0 && index === vacations.length - 1) {
-                let targetMonth = vac.endMonth < 12 ? (vac.endMonth + 1) : 12;
-                let targetCell = tr.querySelector(`.month-cell[data-month="${targetMonth}"] .cell-input-wrapper`);
-                if (targetCell) {
-                    let posStyle = vac.endMonth < 12 ? 'left: 6px;' : 'right: 6px;';
-                    targetCell.insertAdjacentHTML('beforeend', `<div class="overflow-tag" style="${posStyle}">перебор +${overflow}</div>`);
+                let badgeText = totalDays;
+                let overflowClass = '';
+                if (vac.is_carried_over) {
+                    overflowClass = 'badge-carried-over';
+                } else if (overflow > 0) {
+                    overflowClass = 'badge-overflow';
+                } else if (isMatch) {
+                    overflowClass = 'badge-success';
                 }
-            }
+
+                let centerCell = r.querySelector(`.month-cell[data-month="${centerM}"] .cell-input-wrapper`);
+                if (centerCell) {
+                    centerCell.insertAdjacentHTML('beforeend', `<div class="total-days-badge ${overflowClass}" style="left: ${centerLeft}%;">${badgeText}</div>`);
+                }
+            });
         });
 
-        const cInp0 = tr.querySelector('.c-input[data-month="0"]');
-        const poInp0 = tr.querySelector('.po-input[data-month="0"]');
-        const hasCarriedOver = vacations.some(v => v.is_carried_over);
+        // Плашка «перебор +N» у последнего отпуска сотрудника
+        if (overflow > 0 && allVacationsList.length > 0) {
+            const lastItem = allVacationsList[allVacationsList.length - 1];
+            const vac = lastItem.vac;
+            const r = lastItem.row;
+            let targetMonth = vac.endMonth < 12 ? (vac.endMonth + 1) : 12;
+            let targetCell = r.querySelector(`.month-cell[data-month="${targetMonth}"] .cell-input-wrapper`);
+            if (targetCell) {
+                let posStyle = vac.endMonth < 12 ? 'left: 6px;' : 'right: 6px;';
+                targetCell.insertAdjacentHTML('beforeend', `<div class="overflow-tag" style="${posStyle}">перебор +${overflow}</div>`);
+            }
+        }
+
+        // Подсветка перенесенного с прошлого года отпуска в mainTr
+        const cInp0 = mainTr.querySelector('.c-input[data-month="0"]');
+        const poInp0 = mainTr.querySelector('.po-input[data-month="0"]');
+        const hasCarriedOver = allVacationsList.some(item => item.vac.is_carried_over);
         if (cInp0 && poInp0) {
             if (hasCarriedOver) {
                 cInp0.classList.add('carried-over-input');
@@ -2133,9 +2275,11 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveScheduleData() {
         saveBtn.textContent = 'Сохранение...';
         
-        const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
+        const rows = document.querySelectorAll('#tableBody tr[data-emp-id]:not([data-is-subrow="true"])');
         rows.forEach(tr => {
             const empId = parseInt(tr.dataset.empId);
+            const subRows = Array.from(document.querySelectorAll(`#tableBody tr[data-emp-id="${empId}"][data-is-subrow="true"]`));
+            const allRows = [tr, ...subRows];
             const empTab = tr.dataset.empTab || '';
             const empName = tr.dataset.empName || '';
             const employee = (typeof findEmp === 'function' ? findEmp({ tab_num: empTab, name: empName }) : null) || allData.find(e => e.id === empId);
@@ -2146,62 +2290,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     employee.allowedDays = parseInt(allowedInput.value) || 0;
                 }
 
-                let currentStart = null;
-                let currentStartMonth = null;
                 let parsedVacations = [];
+                allRows.forEach(r => {
+                    parsedVacations.push(...parseVacationsFromRow(r));
+                });
 
-                for (let m = 0; m < 13; m++) {
-                    const cInp = tr.querySelector(`.c-input[data-month="${m}"]`);
-                    const poInp = tr.querySelector(`.po-input[data-month="${m}"]`);
-                    if (!cInp || !poInp) continue;
-
-                    const c_val = parseDayNumber(cInp.value);
-                    const po_val = parseDayNumber(poInp.value);
-
-                    if (!isNaN(c_val) && !isNaN(po_val)) {
-                        if (currentStart !== null) {
-                            parsedVacations.push({ 
-                                startMonth: currentStartMonth, 
-                                startDay: currentStart, 
-                                endMonth: currentStartMonth, 
-                                endDay: calendarDaysInMonths[currentStartMonth] 
-                            });
-                        }
-                        parsedVacations.push({ startMonth: m, startDay: c_val, endMonth: m, endDay: po_val });
-                        currentStart = null;
-                        currentStartMonth = null;
-                    } else if (!isNaN(c_val)) {
-                        if (currentStart !== null) {
-                            parsedVacations.push({ 
-                                startMonth: currentStartMonth, 
-                                startDay: currentStart, 
-                                endMonth: currentStartMonth, 
-                                endDay: calendarDaysInMonths[currentStartMonth] 
-                            });
-                        }
-                        currentStart = c_val;
-                        currentStartMonth = m;
-                    } else if (!isNaN(po_val)) {
-                        if (currentStart !== null) {
-                            parsedVacations.push({ startMonth: currentStartMonth, startDay: currentStart, endMonth: m, endDay: po_val });
-                            currentStart = null;
-                            currentStartMonth = null;
-                        } else {
-                            parsedVacations.push({ startMonth: m, startDay: 1, endMonth: m, endDay: po_val });
-                        }
-                    }
-                }
-
-                if (currentStart !== null) {
-                    parsedVacations.push({ 
-                        startMonth: currentStartMonth, 
-                        startDay: currentStart, 
-                        endMonth: currentStartMonth, 
-                        endDay: calendarDaysInMonths[currentStartMonth] 
-                    });
-                }
-
-                // Map back to absolute dates, filtering out carried over vacations from previous year
+                // Исключаем отпуска, перенесенные с прошлого года (Январь)
                 const isCarriedOverJan = tr.dataset.carriedOverJan === "true";
                 const carriedStartD = parseInt(tr.dataset.carriedOverStartD);
                 const carriedEndD = parseInt(tr.dataset.carriedOverEndD);
@@ -2371,7 +2465,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Сбор данных текущего графика из таблицы на странице для выгрузки в Excel
     function captureScheduleExportData() {
-        const rows = document.querySelectorAll('#tableBody tr[data-emp-id]');
+        const rows = document.querySelectorAll('#tableBody tr[data-emp-id]:not([data-is-subrow="true"])');
         const items = [];
         const hideQuitting = Boolean(toggleQuitting && toggleQuitting.checked);
 
@@ -2437,8 +2531,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Разбор отпусков из строки
-            const parsedVacations = parseVacationsFromRow(tr);
+            // Разбор отпусков из всех строк сотрудника (основной и дочерних)
+            const subRows = Array.from(document.querySelectorAll(`#tableBody tr[data-emp-id="${empId}"][data-is-subrow="true"]`));
+            const allRows = [tr, ...subRows];
+            const parsedVacations = [];
+            allRows.forEach(r => {
+                parsedVacations.push(...parseVacationsFromRow(r));
+            });
             const vacationsList = [];
             const carriedList = [];
 

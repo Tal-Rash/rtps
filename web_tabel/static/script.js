@@ -322,18 +322,36 @@ function renderTable() {
   let vHTML = "";
   (appState.employees || []).forEach((emp, r) => {
     const tabNum = emp.tab_num || `empty_${r}`;
+    const empName = emp.name || "";
     const trClass = emp.exclude_date ? "excluded" : "";
     vHTML += `<tr class="${trClass}" draggable="true" ondragstart="rowDragStart(event, ${r})" ondragover="rowDragOver(event, ${r})" ondrop="rowDrop(event, ${r})">`;
     vHTML += `<td class="col-idx" style="cursor: grab;"><div class="rownum"><span>${r + 1}</span></div></td>`;
     vHTML += `<td style="text-align: left;">${escapeHtml(emp.tab_num || '')}</td>`;
-    vHTML += `<td style="text-align: left;">${escapeHtml(emp.name || '')}</td>`;
+    vHTML += `<td style="text-align: left;">${escapeHtml(empName)}</td>`;
+
+    // Если во вкладке табеля нет ручных отпусков, подставляем периоды из Графика отпусков для просмотра
+    const manualVac = (appState.vacations && appState.vacations[tabNum]) || {};
+    const hasManual = [1, 2, 5, 6, 9, 10].some(idx => Boolean(manualVac[idx] && String(manualVac[idx]).trim()));
+    const schedVacs = (appState.schedule_vacations && (appState.schedule_vacations[tabNum] || appState.schedule_vacations[empName])) || [];
+    const schedMapped = {};
+    if (!hasManual && schedVacs.length > 0) {
+      const yearStr = String(appState.year);
+      const currentYearVacs = schedVacs.filter(v => v && v.start && (String(v.start).startsWith(yearStr) || String(v.end).startsWith(yearStr)));
+      const baseCols = [[1, 2, 3], [5, 6, 7], [9, 10, 11]];
+      currentYearVacs.slice(0, 3).forEach((v, idx) => {
+        const [cStart, cEnd, cDays] = baseCols[idx];
+        schedMapped[cStart] = formatIsoToRu(v.start);
+        schedMapped[cEnd] = formatIsoToRu(v.end);
+        schedMapped[cDays] = v.days ? String(v.days) : "";
+      });
+    }
     
     const cols = [1, 2, 3, 'sep', 5, 6, 7, 'sep', 9, 10, 11];
     cols.forEach(c => {
       if (c === 'sep') {
         vHTML += `<td style="background:#f0f0f0;"></td>`; // separator
       } else {
-        const val = (appState.vacations && appState.vacations[tabNum] && appState.vacations[tabNum][c]) || "";
+        const val = hasManual ? (manualVac[c] || "") : (schedMapped[c] || "");
         vHTML += `<td><div class="cell" ${CAN_EDIT ? 'contenteditable="true"' : ''} oninput="vacEdited('${tabNum}', ${c}, this)">${escapeHtml(val)}</div></td>`;
       }
     });
@@ -1001,9 +1019,22 @@ function generateSickEmail() {
 }
 
 
+function formatIsoToRu(isoStr) {
+  if (!isoStr) return "";
+  const m = String(isoStr).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return String(isoStr);
+  return `${m[3].padStart(2, '0')}.${m[2].padStart(2, '0')}.${m[1]}`;
+}
+
 function parseVacationDate(str, defaultYear) {
   if (!str) return null;
-  const parts = str.trim().split('.');
+  const s = String(str).trim();
+  // Поддержка ISO-формата YYYY-MM-DD (из Графика отпусков)
+  const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
+  }
+  const parts = s.split('.');
   if (parts.length < 2) return null;
   const d = parseInt(parts[0], 10);
   const m = parseInt(parts[1], 10);
@@ -1017,7 +1048,7 @@ function parseVacationDate(str, defaultYear) {
 }
 
 function applyVacations() {
-  if (!appState || !appState.vacations || !appState.employees) return;
+  if (!appState || !appState.employees) return;
   const year = parseInt(appState.year);
   const month = parseInt(appState.month);
   const days = daysInMonth(year, month);
@@ -1026,32 +1057,44 @@ function applyVacations() {
 
   appState.employees.forEach((emp, r) => {
     const tabNum = emp.tab_num || `empty_${r}`;
-    const vacData = appState.vacations[tabNum];
+    const empName = emp.name || '';
+    const vacData = appState.vacations && appState.vacations[tabNum];
+    const schedVacs = (appState.schedule_vacations && (appState.schedule_vacations[tabNum] || appState.schedule_vacations[empName])) || [];
     
     const vacDays = new Set();
+
+    // Вспомогательная функция добавления периода дат в множество дней отпуска
+    const addPeriodDays = (sDateStr, eDateStr) => {
+      const sDate = parseVacationDate(sDateStr, year);
+      const eDate = parseVacationDate(eDateStr, year);
+      if (sDate && eDate && eDate >= sDate) {
+        let curr = new Date(sDate);
+        while (curr <= eDate) {
+          if (curr.getFullYear() === year) {
+            const m = curr.getMonth() + 1;
+            const d = curr.getDate();
+            const isH = appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d);
+            if (!isH) {
+              vacDays.add(`${m}-${d}`);
+            }
+          }
+          curr.setDate(curr.getDate() + 1);
+        }
+      }
+    };
+
+    // 1. Отпуска из модуля «График отпусков»
+    schedVacs.forEach(vac => {
+      if (vac && vac.start && vac.end) {
+        addPeriodDays(vac.start, vac.end);
+      }
+    });
+
+    // 2. Ручные отпуска из внутренней вкладки «Отпуска» табеля
     if (vacData) {
       const cols = [[1,2,3], [5,6,7], [9,10,11]];
       cols.forEach(pair => {
-        const sDateStr = vacData[pair[0]];
-        const eDateStr = vacData[pair[1]];
-        
-        const sDate = parseVacationDate(sDateStr, year);
-        const eDate = parseVacationDate(eDateStr, year);
-        
-        if (sDate && eDate && eDate >= sDate) {
-          let curr = new Date(sDate);
-          while (curr <= eDate) {
-            if (curr.getFullYear() === year) {
-              const m = curr.getMonth() + 1;
-              const d = curr.getDate();
-              const isH = appState.system_dates && appState.system_dates.holiday && appState.system_dates.holiday.some(h => h[0] === m && h[1] === d);
-              if (!isH) {
-                vacDays.add(`${m}-${d}`);
-              }
-            }
-            curr.setDate(curr.getDate() + 1);
-          }
-        }
+        addPeriodDays(vacData[pair[0]], vacData[pair[1]]);
       });
     }
     

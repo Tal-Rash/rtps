@@ -1121,3 +1121,53 @@ tr.row-excluded .employee-pos {
     margin-top: 4px;
 }
 
+/* Дополнительные строки отпуска (подстроки для отпусков в том же месяце) */
+tr.subrow-vacation {
+    background-color: rgba(248, 250, 252, 0.7);
+    border-top: 1px dashed rgba(203, 213, 225, 0.6);
+}
+
+tr.subrow-vacation:hover {
+    background-color: rgba(241, 245, 249, 0.9);
+}
+
+.btn-add-subrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border: 1px dashed #93c5fd;
+    background: rgba(239, 246, 255, 0.85);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #2563eb;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.btn-add-subrow:hover {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+.btn-del-subrow {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 13px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.btn-del-subrow:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+

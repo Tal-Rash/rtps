@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import sqlite3
 from contextlib import contextmanager
 from typing import Generator
@@ -262,6 +263,29 @@ def load_state(year: int, month: int) -> dict:
         except Exception:
             pass
 
+        # Загружаем отпуска из модуля «График отпусков» (включая переходящие с прошлого года)
+        schedule_vacations: dict[str, list[dict]] = {}
+        try:
+            sched_rows = cur.execute(
+                "SELECT tab_num, name, vacations_json FROM vacations_schedule WHERE y IN (?, ?)",
+                (year - 1, year),
+            ).fetchall()
+            for r in sched_rows:
+                try:
+                    v_list = json.loads(r["vacations_json"] or "[]")
+                except Exception:
+                    v_list = []
+                if not isinstance(v_list, list):
+                    continue
+                t_key = text(r["tab_num"])
+                n_key = text(r["name"])
+                if t_key:
+                    schedule_vacations.setdefault(t_key, []).extend(v_list)
+                if n_key and n_key != t_key:
+                    schedule_vacations.setdefault(n_key, []).extend(v_list)
+        except Exception:
+            pass
+
         ts_norms_data = {}
         try:
             norms_rows = cur.execute("SELECT r, c, v FROM ts_norms_data WHERE y=?", (year,)).fetchall()
@@ -285,6 +309,7 @@ def load_state(year: int, month: int) -> dict:
         "employees": employees,
         "timesheet": timesheet,
         "vacations": vacations,
+        "schedule_vacations": schedule_vacations,
         "ts_norms_data": ts_norms_data,
         "month_hint": month_hint,
     }
