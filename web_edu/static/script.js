@@ -17,6 +17,9 @@ let undoStack = [];
 let redoStack = [];
 let savedSnapshot = "";
 let isDirty = false;
+let isEduSelecting = false;
+let eduSelectionStart = null;
+let eduSelectionEnd = null;
 
 /* Снимок сохраняемого состояния (обучение и порядок сотрудников) */
 function getEduSnapshot() {
@@ -67,6 +70,12 @@ function cancelChanges() {
       applyCellValueToState(action.tab_num, action.col, action.oldText);
       redoStack.push(action);
       renderMatrix();
+    } else if (action.type === "batch") {
+      action.changes.forEach((ch) => {
+        applyCellValueToState(ch.tab_num, ch.col, ch.oldText);
+      });
+      redoStack.push(action);
+      renderMatrix();
     } else if (action.type === "reorder") {
       applyEmployeeOrder(action.oldOrder);
       redoStack.push(action);
@@ -87,6 +96,12 @@ function restoreChanges() {
   try {
     if (action.type === "cell") {
       applyCellValueToState(action.tab_num, action.col, action.newText);
+      undoStack.push(action);
+      renderMatrix();
+    } else if (action.type === "batch") {
+      action.changes.forEach((ch) => {
+        applyCellValueToState(ch.tab_num, ch.col, ch.newText);
+      });
       undoStack.push(action);
       renderMatrix();
     } else if (action.type === "reorder") {
@@ -379,8 +394,8 @@ function renderMatrix() {
 
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
       const trainingClass = cIdx === 0 ? "col-training col-training-first" : "col-training";
-      bHTML += `<td class="${cellClass} ${trainingClass}">
-        <div class="cell" ${contentEditable} data-tab="${escapeHtml(emp.tab_num)}" data-col="${cIdx}" data-original="${escapeHtml(cellText)}">${escapeHtml(cellText)}</div>
+      bHTML += `<td class="${cellClass} ${trainingClass}" data-row="${rIdx}" data-col="${cIdx}" data-tab="${escapeHtml(emp.tab_num)}">
+        <div class="cell" ${contentEditable} data-row="${rIdx}" data-tab="${escapeHtml(emp.tab_num)}" data-col="${cIdx}" data-original="${escapeHtml(cellText)}">${escapeHtml(cellText)}</div>
         ${autoText}
       </td>`;
     });
@@ -393,6 +408,8 @@ function renderMatrix() {
     attachCellListeners();
     attachRowDragListeners();
   }
+  attachEduSelectionListeners();
+  applyEduSelectionClasses();
 
   resetTableScroll();
   requestAnimationFrame(updateStickyOffsets);
@@ -559,8 +576,167 @@ async function onRowDrop(e) {
 function onCellKeydown(e) {
   if (e.key === "Enter") {
     e.preventDefault();
+    const row = Number(this.dataset.row);
+    const col = Number(this.dataset.col);
     this.blur();
+    // Переход на строку ниже в том же столбце, как в Excel
+    const nextCell = document.querySelector(`#eduBody td.col-training[data-row="${row + 1}"][data-col="${col}"] .cell[contenteditable="true"]`);
+    if (nextCell) {
+      eduSelectionStart = { row: row + 1, col };
+      eduSelectionEnd = { row: row + 1, col };
+      applyEduSelectionClasses();
+      nextCell.focus();
+    }
   }
+}
+
+/* Границы выделенного диапазона ячеек таблицы обучения */
+function getEduSelectionBounds() {
+  if (!eduSelectionStart || !eduSelectionEnd) return null;
+  return {
+    minRow: Math.min(eduSelectionStart.row, eduSelectionEnd.row),
+    maxRow: Math.max(eduSelectionStart.row, eduSelectionEnd.row),
+    minCol: Math.min(eduSelectionStart.col, eduSelectionEnd.col),
+    maxCol: Math.max(eduSelectionStart.col, eduSelectionEnd.col)
+  };
+}
+
+function clearEduSelection() {
+  eduSelectionStart = null;
+  eduSelectionEnd = null;
+  applyEduSelectionClasses();
+}
+
+/* Подсветка и контурная рамка выделенного диапазона ячеек (как в Excel) */
+function applyEduSelectionClasses() {
+  document.querySelectorAll("#eduBody td.col-training").forEach((td) => {
+    td.classList.remove("edu-selected-range", "edu-selected-anchor");
+    td.style.removeProperty("box-shadow");
+  });
+
+  const bounds = getEduSelectionBounds();
+  if (!bounds) return;
+
+  const isMulti = bounds.maxRow > bounds.minRow || bounds.maxCol > bounds.minCol;
+  document.querySelectorAll("#eduBody td.col-training").forEach((td) => {
+    const r = Number(td.dataset.row);
+    const c = Number(td.dataset.col);
+    if (r >= bounds.minRow && r <= bounds.maxRow && c >= bounds.minCol && c <= bounds.maxCol) {
+      if (isMulti) {
+        td.classList.add("edu-selected-range");
+        const shadows = [];
+        if (r === bounds.minRow) shadows.push("inset 0 2px 0 0 #276ef1");
+        if (r === bounds.maxRow) shadows.push("inset 0 -2px 0 0 #276ef1");
+        if (c === bounds.minCol) shadows.push("inset 2px 0 0 0 #276ef1");
+        if (c === bounds.maxCol) shadows.push("inset -2px 0 0 0 #276ef1");
+        if (shadows.length) td.style.boxShadow = shadows.join(", ");
+      }
+      if (eduSelectionStart && r === eduSelectionStart.row && c === eduSelectionStart.col) {
+        td.classList.add("edu-selected-anchor");
+      }
+    }
+  });
+}
+
+let eduSelectionListenersBound = false;
+function attachEduSelectionListeners() {
+  const eduBody = document.getElementById("eduBody");
+  if (!eduBody || eduSelectionListenersBound) return;
+  eduSelectionListenersBound = true;
+
+  eduBody.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    const td = e.target.closest("td.col-training");
+    if (!td) return;
+    const row = Number(td.dataset.row);
+    const col = Number(td.dataset.col);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) return;
+
+    if (e.shiftKey && eduSelectionStart) {
+      e.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      if (document.activeElement && document.activeElement.classList.contains("cell")) {
+        document.activeElement.blur();
+      }
+      eduSelectionEnd = { row, col };
+      applyEduSelectionClasses();
+      return;
+    }
+
+    eduSelectionStart = { row, col };
+    eduSelectionEnd = { row, col };
+    isEduSelecting = true;
+    applyEduSelectionClasses();
+  });
+
+  eduBody.addEventListener("mouseover", (e) => {
+    if (!isEduSelecting) return;
+    const td = e.target.closest("td.col-training");
+    if (!td) return;
+    const row = Number(td.dataset.row);
+    const col = Number(td.dataset.col);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) return;
+
+    if (!eduSelectionStart || (row === eduSelectionStart.row && col === eduSelectionStart.col && (!eduSelectionEnd || (eduSelectionEnd.row === row && eduSelectionEnd.col === col)))) {
+      return;
+    }
+    window.getSelection()?.removeAllRanges();
+    if (document.activeElement && document.activeElement.classList.contains("cell")) {
+      document.activeElement.blur();
+    }
+    eduSelectionEnd = { row, col };
+    applyEduSelectionClasses();
+  });
+
+  window.addEventListener("mouseup", () => {
+    isEduSelecting = false;
+  });
+
+  document.addEventListener("mousedown", (e) => {
+    if (!e.target.closest("#eduTable") && !e.target.closest(".toolbar")) {
+      clearEduSelection();
+    }
+  });
+
+  // Очистка выделенного диапазона по клавише Delete / Backspace
+  document.addEventListener("keydown", (e) => {
+    if (!CAN_EDIT) return;
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    const activeEl = document.activeElement;
+    const bounds = getEduSelectionBounds();
+    if (!bounds) return;
+
+    const isMulti = bounds.maxRow > bounds.minRow || bounds.maxCol > bounds.minCol;
+    if (activeEl && activeEl.classList.contains("cell") && !isMulti) {
+      return;
+    }
+    if (activeEl && ["INPUT", "SELECT", "TEXTAREA"].includes(activeEl.tagName)) {
+      return;
+    }
+
+    e.preventDefault();
+    const changes = [];
+    for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+      for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+        const td = document.querySelector(`#eduBody td.col-training[data-row="${r}"][data-col="${c}"]`);
+        if (!td) continue;
+        const tab = td.dataset.tab;
+        const cellDiv = td.querySelector(".cell");
+        const oldText = cellDiv ? String(cellDiv.dataset.original ?? cellDiv.innerText ?? "").trim() : "";
+        if (oldText !== "") {
+          applyCellValueToState(tab, c, "");
+          changes.push({ tab_num: tab, col: c, oldText, newText: "" });
+        }
+      }
+    }
+    if (changes.length > 0) {
+      undoStack.push({ type: "batch", changes });
+      redoStack = [];
+      updateHistoryButtons();
+      renderMatrix();
+      updateDirtyState();
+    }
+  });
 }
 
 /* Применение значения ячейки локально в appState (без отправки на сервер) */
@@ -743,30 +919,86 @@ async function saveCategories() {
   }
 }
 
-document.addEventListener("paste", async (e) => {
+document.addEventListener("paste", (e) => {
   if (!CAN_EDIT) return;
   const activeEl = document.activeElement;
-  if (!activeEl || !activeEl.classList.contains("cell")) return;
+  if (activeEl && ["INPUT", "SELECT", "TEXTAREA"].includes(activeEl.tagName)) return;
 
-  e.preventDefault();
+  let bounds = getEduSelectionBounds();
+  if (!bounds && activeEl && activeEl.classList.contains("cell")) {
+    const r = Number(activeEl.dataset.row);
+    const c = Number(activeEl.dataset.col);
+    if (Number.isFinite(r) && Number.isFinite(c)) {
+      bounds = { minRow: r, maxRow: r, minCol: c, maxCol: c };
+    }
+  }
+  if (!bounds) return;
+
   const pasteData = (e.clipboardData || window.clipboardData).getData("text");
   if (!pasteData) return;
 
-  const lines = pasteData.replace(/\r/g, "").split("\n").filter((line) => line.length);
-  const startTr = activeEl.closest("tr");
-  const startCol = Number(activeEl.dataset.col);
+  const rawLines = pasteData.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (rawLines.length > 1 && rawLines[rawLines.length - 1] === "") {
+    rawLines.pop();
+  }
+  if (!rawLines.length) return;
 
+  const matrix = rawLines.map((line) => line.split("\t"));
+  const isSingleValue = matrix.length === 1 && matrix[0].length === 1;
+  const isMultiSelected = bounds.maxRow > bounds.minRow || bounds.maxCol > bounds.minCol;
+
+  // Если вставляем 1 значение внутри редактируемой ячейки без выделения диапазона — даём стандартную вставку текста
+  if (isSingleValue && !isMultiSelected && activeEl && activeEl.classList.contains("cell")) {
+    const selText = window.getSelection()?.toString();
+    if (selText) return;
+  }
+
+  e.preventDefault();
+  const changes = [];
   try {
-    let currTr = startTr;
-    for (let i = 0; i < lines.length && currTr; i++) {
-      const tab = currTr.dataset.tab;
-      const cells = lines[i].split("\t");
-      if (tab) {
-        for (let j = 0; j < cells.length; j++) {
-          applyCellValueToState(tab, startCol + j, cells[j]);
+    if (isSingleValue && isMultiSelected) {
+      const val = String(matrix[0][0] ?? "").trim();
+      for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+        for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+          const td = document.querySelector(`#eduBody td.col-training[data-row="${r}"][data-col="${c}"]`);
+          if (!td) continue;
+          const tab = td.dataset.tab;
+          const cellDiv = td.querySelector(".cell");
+          const oldText = cellDiv ? String(cellDiv.dataset.original ?? cellDiv.innerText ?? "").trim() : "";
+          applyCellValueToState(tab, c, val);
+          if (oldText !== val) {
+            changes.push({ tab_num: tab, col: c, oldText, newText: val });
+          }
         }
       }
-      currTr = currTr.nextElementSibling;
+    } else {
+      for (let i = 0; i < matrix.length; i++) {
+        for (let j = 0; j < matrix[i].length; j++) {
+          const r = bounds.minRow + i;
+          const c = bounds.minCol + j;
+          const td = document.querySelector(`#eduBody td.col-training[data-row="${r}"][data-col="${c}"]`);
+          if (!td) continue;
+          const tab = td.dataset.tab;
+          const val = String(matrix[i][j] ?? "").trim();
+          const cellDiv = td.querySelector(".cell");
+          const oldText = cellDiv ? String(cellDiv.dataset.original ?? cellDiv.innerText ?? "").trim() : "";
+          applyCellValueToState(tab, c, val);
+          if (oldText !== val) {
+            changes.push({ tab_num: tab, col: c, oldText, newText: val });
+          }
+        }
+      }
+      eduSelectionStart = { row: bounds.minRow, col: bounds.minCol };
+      eduSelectionEnd = {
+        row: bounds.minRow + matrix.length - 1,
+        col: bounds.minCol + Math.max(...matrix.map((row) => row.length)) - 1
+      };
+    }
+
+    if (changes.length > 0) {
+      undoStack.push({ type: "batch", changes });
+      redoStack = [];
+      updateHistoryButtons();
     }
     renderMatrix();
     updateDirtyState();
@@ -780,15 +1012,38 @@ document.addEventListener("paste", async (e) => {
 
 document.addEventListener("copy", (e) => {
   const activeEl = document.activeElement;
-  if (!activeEl || !activeEl.classList.contains("cell")) return;
+  if (activeEl && ["INPUT", "SELECT", "TEXTAREA"].includes(activeEl.tagName)) return;
 
-  const selection = window.getSelection().toString();
-  if (selection) return;
+  const textSelection = window.getSelection()?.toString();
+  if (textSelection && activeEl && activeEl.classList.contains("cell")) {
+    return;
+  }
 
-  e.preventDefault();
-  const text = String(activeEl.innerText || "").trim();
-  if (text) {
-    (e.clipboardData || window.clipboardData).setData("text/plain", text);
+  let bounds = getEduSelectionBounds();
+  if (!bounds && activeEl && activeEl.classList.contains("cell")) {
+    const r = Number(activeEl.dataset.row);
+    const c = Number(activeEl.dataset.col);
+    if (Number.isFinite(r) && Number.isFinite(c)) {
+      bounds = { minRow: r, maxRow: r, minCol: c, maxCol: c };
+    }
+  }
+  if (!bounds) return;
+
+  const lines = [];
+  for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+    const rowVals = [];
+    for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+      const td = document.querySelector(`#eduBody td.col-training[data-row="${r}"][data-col="${c}"]`);
+      const cellDiv = td ? td.querySelector(".cell") : null;
+      rowVals.push(cellDiv ? String(cellDiv.innerText || "").trim() : "");
+    }
+    lines.push(rowVals.join("\t"));
+  }
+
+  const tsv = lines.join("\n");
+  if (tsv || bounds.maxRow > bounds.minRow || bounds.maxCol > bounds.minCol) {
+    e.preventDefault();
+    (e.clipboardData || window.clipboardData).setData("text/plain", tsv);
   }
 });
 

@@ -680,3 +680,19 @@ td:has(.cell:focus) {
   margin-top: 4px;
 }
 
+/* Выделение диапазона ячеек как в Excel */
+td.col-training.edu-selected-range {
+  background: #e8f0fe !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+td.col-training.edu-selected-range .cell {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+td.col-training.edu-selected-anchor {
+  background: #d9ecff !important;
+}
+
