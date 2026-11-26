@@ -1116,6 +1116,13 @@ button.primary:hover:not(:disabled),
   padding: 4px 6px;
 }
 
+/* Расширение столбца ФИО во вкладке Отпуска */
+#vacationsGrid th:nth-child(3),
+#vacationsGrid td:nth-child(3) {
+  min-width: 220px;
+  white-space: nowrap;
+}
+
 #vacationsGrid .cell {
   padding: 6px 10px;
   line-height: 1.2;
