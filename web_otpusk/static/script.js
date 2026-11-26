@@ -1698,7 +1698,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="employee-name" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                     <span>${empName}</span>
                     ${CAN_EDIT ? `
-                        <button type="button" class="btn-add-subrow" title="Добавить дополнительную строку отпуска">+ период</button>
+                        <button type="button" class="btn-add-subrow" title="Добавить дополнительную строку отпуска">+</button>
                     ` : ''}
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 2px;">

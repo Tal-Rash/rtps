@@ -1132,25 +1132,40 @@ tr.subrow-vacation:hover {
 }
 
 .btn-add-subrow {
+    position: absolute;
+    right: 6px;
+    top: 6px;
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    border: 1px dashed #93c5fd;
-    background: rgba(239, 246, 255, 0.85);
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid #93c5fd;
+    background: rgba(239, 246, 255, 0.95);
     border-radius: 4px;
     cursor: pointer;
-    padding: 1px 6px;
-    font-size: 0.72rem;
-    font-weight: 500;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
     color: #2563eb;
-    transition: all 0.15s ease;
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
     user-select: none;
+    z-index: 5;
+}
+
+td.col-sticky-1:hover .btn-add-subrow,
+.btn-add-subrow:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .btn-add-subrow:hover {
-    background: #dbeafe;
-    border-color: #3b82f6;
-    color: #1d4ed8;
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
 }
 
 .btn-del-subrow {
