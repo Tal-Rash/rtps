@@ -346,8 +346,8 @@ function renderMatrix() {
     let fioTitle = "";
     if (isDismissed) {
       const dStr = emp.exclude_date ? formatDateStrRu(emp.exclude_date) : "";
-      fioTitle = emp.hire_date 
-        ? `Принят: ${formatDateStrRu(emp.hire_date)} | Уволен: ${dStr || 'да'}` 
+      fioTitle = emp.hire_date
+        ? `Принят: ${formatDateStrRu(emp.hire_date)} | Уволен: ${dStr || 'да'}`
         : `Уволен${dStr ? ' ' + dStr : ''}`;
     } else if (emp.is_pending_dismissal) {
       const dStr = emp.exclude_date ? formatDateStrRu(emp.exclude_date) : "";
@@ -402,6 +402,10 @@ function renderMatrix() {
         }
       } else if (isSpecialEduStatus(tInfo.cert)) {
         cellText = tInfo.cert;
+      }
+
+      if (isSpecialEduStatus(cellText)) {
+        cellClass = `${cellClass} edu-muted-status`.trim();
       }
 
       const contentEditable = CAN_EDIT ? 'contenteditable="true"' : "";
@@ -1270,7 +1274,7 @@ window.addEventListener('beforeunload', (e) => {
 function getEmpReplacementPairs() {
   const raw = localStorage.getItem('rtps_emp_dict') || localStorage.getItem('rtps_employees_full_dict');
   if (!raw) return [];
-  
+
   let map = null;
   try { map = JSON.parse(raw); } catch (e) { return []; }
   if (!map) return [];
@@ -1434,7 +1438,7 @@ function getEmpReplacementPairs() {
           if (newVal !== val) el.placeholder = newVal;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   window.applyCustomLabels = applyCustomLabels;

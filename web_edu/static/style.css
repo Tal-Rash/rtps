@@ -699,3 +699,9 @@ td.col-training.edu-selected-anchor {
   background: #d9ecff !important;
 }
 
+/* Приглушенный серый цвет для статусов "не годен" и "не требуется" */
+td.col-training.edu-muted-status .cell {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
