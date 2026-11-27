@@ -18,7 +18,7 @@
     table input, table select { padding:6px 8px; font-size:13px; border-radius:6px; }
     table button { padding:6px 14px; font-size:13px; }
     .mod-label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; color:#102033; }
-    .mod-label select { padding:4px 6px; font-size:13px; }
+    .mod-label select { padding:4px 6px; font-size:13px; max-width:145px; }
   </style>
 </head>
 <body>
@@ -43,7 +43,7 @@
         </div>
         <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; border:1px solid #e2e8f0; padding:12px 16px; border-radius:8px; background:#fff;">
           <div style="font-weight:600; font-size:14px; margin-right:8px; color:#475569;">Доступ:</div>
-          <label class="mod-label" style="cursor:pointer; margin:0;">ППР: <div style="display:flex; gap:6px; align-items:center;"><select name="module_grafik_ppr" style="padding:6px;"><option value="none">Нет доступа</option><option value="view" selected>Зритель</option><option value="view_tu28">Зритель (+ доп. ремонт ТУ-28)</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_grafik_ppr" value="yes" title="Скрыть текст на карточке"></div></label>
+          <label class="mod-label" style="cursor:pointer; margin:0;">ППР: <div style="display:flex; gap:6px; align-items:center;"><select name="module_grafik_ppr" style="padding:6px;"><option value="none">Нет доступа</option><option value="view" selected>Зритель</option><option value="view_tu28" title="Зритель с правом ввода доп. ремонта ТУ-28">Зритель (+ТУ-28)</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_grafik_ppr" value="yes" title="Скрыть текст на карточке"></div></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">Замер: <div style="display:flex; gap:6px; align-items:center;"><select name="module_zamer_kp" style="padding:6px;"><option value="none">Нет доступа</option><option value="view" selected>Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_zamer_kp" value="yes" title="Скрыть текст на карточке"></div></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">Справ: <div style="display:flex; gap:6px; align-items:center;"><select name="module_spravochnik" style="padding:6px;"><option value="none">Нет доступа</option><option value="view" selected>Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_spravochnik" value="yes" title="Скрыть текст на карточке"></div></label>
           <label class="mod-label" style="cursor:pointer; margin:0;">Табель: <div style="display:flex; gap:6px; align-items:center;"><select name="module_tabel" style="padding:6px;"><option value="none">Нет доступа</option><option value="view" selected>Зритель</option><option value="edit">Редактор</option></select> <input type="checkbox" name="hide_tabel" value="yes" title="Скрыть текст на карточке"></div></label>
@@ -82,7 +82,7 @@
               <label class="mod-label">ППР: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_grafik_ppr">
                 <option value="none" {% if u.g_r == 'none' %}selected{% endif %}>Нет доступа</option>
                 <option value="view" {% if u.g_r == 'view' %}selected{% endif %}>Зритель</option>
-                <option value="view_tu28" {% if u.g_r == 'view_tu28' %}selected{% endif %}>Зритель (+ доп. ремонт ТУ-28)</option>
+                <option value="view_tu28" title="Зритель с правом ввода доп. ремонта ТУ-28" {% if u.g_r == 'view_tu28' %}selected{% endif %}>Зритель (+ТУ-28)</option>
                 <option value="edit" {% if u.g_r == 'edit' %}selected{% endif %}>Редактор</option>
               </select> <input type="checkbox" form="form_{{ u.id }}" name="hide_grafik_ppr" value="yes" title="Скрыть текст на карточке" {{ u.h_g }}></div></label>
               <label class="mod-label">Замер: <div style="display:flex; gap:6px; align-items:center;"><select form="form_{{ u.id }}" name="module_zamer_kp">
