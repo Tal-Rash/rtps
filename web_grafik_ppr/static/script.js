@@ -33,6 +33,10 @@ let savedAppState = null;
 let savedMonthsState = null;
 let canceledMonthsState = null;
 const CAN_EDIT = window.APP_CONFIG.CAN_EDIT;
+const CAN_EDIT_TU28_EXTRA = Boolean(
+  window.APP_CONFIG &&
+  (window.APP_CONFIG.CAN_EDIT_TU28_EXTRA !== undefined ? window.APP_CONFIG.CAN_EDIT_TU28_EXTRA : window.APP_CONFIG.CAN_EDIT)
+);
 const TEM_NORM_ROWS = window.APP_CONFIG.TEM_NORM_ROWS;
 const AGR_NORM_ROWS = window.APP_CONFIG.AGR_NORM_ROWS;
 const REPAIR_AUTO_FILL_DAYS = {"ТО3": 1, "ТР1": 4, "ТР": 4, "ТР2": 9, "ТР3": 14};
@@ -2425,7 +2429,7 @@ function renderTu28(){
   const rowObj = m && ui.tu28RowIndex != null ? m.fact[ui.tu28RowIndex] : null;
   const extraList = rowObj && rowObj.tu28_extra ? rowObj.tu28_extra : [];
   const locked = rowObj && rowObj.tu28_locked ? true : false;
-  const disableExtra = !rowObj || locked;
+  const disableExtra = !rowObj || locked || !CAN_EDIT_TU28_EXTRA;
   const disableLock = !rowObj || !CAN_EDIT;
   const extraRows = extraList.map((txt, idx) => `
     <div style="display:flex; gap:8px; margin-top:8px;">
@@ -2639,6 +2643,7 @@ function renderTu28Staff(){
   `;
 }
 async function saveTu28ExtraLocal() {
+  if (!CAN_EDIT_TU28_EXTRA) return;
   const m = appState.months[ui.tu28MonthIndex];
   if (!m || ui.tu28RowIndex == null) return;
   const rowObj = m.fact[ui.tu28RowIndex];
@@ -2653,6 +2658,7 @@ async function saveTu28ExtraLocal() {
   if (CAN_EDIT) markDirty(true);
 }
 function addTu28Extra(){
+  if (!CAN_EDIT_TU28_EXTRA) return;
   const m = appState.months[ui.tu28MonthIndex];
   if (!m || ui.tu28RowIndex == null) return;
   const rowObj = m.fact[ui.tu28RowIndex];
@@ -2663,6 +2669,7 @@ function addTu28Extra(){
   render();
 }
 function updateTu28Extra(idx, val){
+  if (!CAN_EDIT_TU28_EXTRA) return;
   const m = appState.months[ui.tu28MonthIndex];
   if (!m || ui.tu28RowIndex == null) return;
   const rowObj = m.fact[ui.tu28RowIndex];
@@ -2681,6 +2688,7 @@ function toggleTu28Locked(checked) {
   document.getElementById('tu28ModalBody').innerHTML = renderTu28();
 }
 function removeTu28Extra(idx){
+  if (!CAN_EDIT_TU28_EXTRA) return;
   const m = appState.months[ui.tu28MonthIndex];
   if (!m || ui.tu28RowIndex == null) return;
   const rowObj = m.fact[ui.tu28RowIndex];

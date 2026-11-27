@@ -187,7 +187,7 @@ READONLY_TOOLBAR = """
 """
 
 
-def render_page(state: dict, can_edit: bool, username: str | None) -> str:
+def render_page(state: dict, can_edit: bool, username: str | None, can_edit_tu28_extra: bool = False) -> str:
     # Рендеринг основного HTML-шаблона со встроенным состоянием
     state_json = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     employees_json = json.dumps(get_all_employee_names(), ensure_ascii=False).replace("</", "<\\/")
@@ -206,6 +206,7 @@ def render_page(state: dict, can_edit: bool, username: str | None) -> str:
         .replace("{{APP_VERSION}}", APP_VERSION)
         .replace("{{TOOLBAR}}", toolbar)
         .replace("{{CAN_EDIT}}", "true" if can_edit else "false")
+        .replace("{{CAN_EDIT_TU28_EXTRA}}", "true" if can_edit_tu28_extra else "false")
         .replace("{{APP_PREFIX}}", APP_PREFIX)
         .replace("{{TEM_NORM_ROWS}}", json.dumps(TEM_NORM_ROWS, ensure_ascii=False))
         .replace("{{AGR_NORM_ROWS}}", json.dumps(AGR_NORM_ROWS, ensure_ascii=False))
@@ -276,8 +277,9 @@ def home_route(request: Request, year: int = None):
         return RedirectResponse(f"{MAIN_LOGIN_URL}?next=/grafik-ppr", status_code=303)
 
     can_edit = mod_role in ("edit", "editor", "admin") if AUTH_ENABLED else True
+    can_edit_tu28_extra = mod_role in ("edit", "editor", "admin", "view_tu28") if AUTH_ENABLED else True
 
-    html_content = render_page(load_state(year), can_edit, user)
+    html_content = render_page(load_state(year), can_edit, user, can_edit_tu28_extra)
     response = HTMLResponse(content=html_content)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -415,9 +417,14 @@ def preview_report(request: Request, year: int = None, month: str = ""):
 
 @app.post("/api/tu28_extra")
 async def post_tu28_extra(request: Request):
-    auth_ok, session = require_auth_fastapi(request, need_edit=True)
+    auth_ok, session = require_auth_fastapi(request, need_edit=False)
     if not auth_ok:
         return json_response({"error": "Unauthorized"}, status_code=401)
+    # Разрешаем редактирование доп. работ ТУ-28 редакторам и зрителям с ролью view_tu28
+    if AUTH_ENABLED:
+        mod_role = get_mod_role(session, "grafik_ppr")
+        if mod_role not in ("edit", "editor", "admin", "view_tu28"):
+            return json_response({"error": "Unauthorized"}, status_code=401)
     try:
         payload = await request.json()
     except Exception:
