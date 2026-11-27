@@ -123,15 +123,15 @@
             </div>
           </td>
           <td>
-            <div class="flex">
+            <div class="flex" style="flex-direction:column; gap:6px; align-items:stretch;">
               <form id="form_{{ u.id }}" method="post" action="/users/update" style="margin:0;">
                 <input type="hidden" name="id" value="{{ u.id }}">
                 <input type="hidden" name="is_full_update" value="1">
-                <button type="submit">Сохранить</button>
+                <button type="submit" style="width:100%;">Сохранить</button>
               </form>
               <form method="post" action="/users/delete" style="margin:0;">
                 <input type="hidden" name="id" value="{{ u.id }}">
-                <button class="btn-danger" type="submit">Удалить</button>
+                <button class="btn-danger" type="submit" style="width:100%;">Удалить</button>
               </form>
             </div>
           </td>
